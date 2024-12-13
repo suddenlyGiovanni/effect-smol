@@ -2,50 +2,48 @@
  * @since 2.0.0
  */
 import * as Context from "./Context.js"
-import { constVoid, identity } from "./Function.js"
-import { globalValue } from "./GlobalValue.js"
-import * as InternalContext from "./internal/context.js"
-import { hasProperty } from "./Predicate.js"
 import type { Covariant } from "./Types.js"
 import * as internal from "./internal/fiber.js"
+import { Exit } from "./Exit.js"
+import { Effect } from "./Effect.js"
+import * as core from "./internal/core.js"
+import { Pipeable } from "./Pipeable.js"
 
 /**
- * @since 3.11.0
- * @category Fiber
+ * @since 2.0.0
+ * @category type ids
  */
 export const TypeId: unique symbol = internal.TypeId
 
 /**
- * @since 3.11.0
- * @category Fiber
+ * @since 2.0.0
+ * @category type ids
  */
 export type TypeId = typeof TypeId
 
 /**
- * @since 3.11.0
- * @category Fiber
+ * @since 2.0.0
+ * @category models
  */
-export interface Fiber<out A, out E = never> {
+export interface Fiber<out A, out E = never> extends Pipeable {
   readonly [TypeId]: Fiber.Variance<A, E>
 
   readonly currentOpCount: number
   readonly getRef: <I, A>(ref: Context.Reference<I, A>) => A
   readonly context: Context.Context<never>
-  readonly addObserver: (cb: (exit: EffectExit<A, E>) => void) => () => void
+  readonly addObserver: (cb: (exit: Exit<A, E>) => void) => () => void
   readonly unsafeInterrupt: () => void
-  readonly unsafePoll: () => EffectExit<A, E> | undefined
+  readonly unsafePoll: () => Exit<A, E> | undefined
 }
 
 /**
- * @since 3.11.0
- * @experimental
- * @category Fiber
+ * @since 2.0.0
+ * @category models
  */
 export declare namespace Fiber {
   /**
-   * @since 3.11.0
-   * @experimental
-   * @category Fiber
+   * @since 2.0.0
+   * @category models
    */
   export interface Variance<out A, out E = never> {
     readonly _A: Covariant<A>
@@ -53,59 +51,32 @@ export declare namespace Fiber {
   }
 }
 
-/**
- * @since 3.11.0
- * @experimental
- * @category Fiber
- */
-export const fiberAwait = <A, E>(self: Fiber<A, E>): Effect<EffectExit<A, E>> =>
-  async((resume) => sync(self.addObserver((exit) => resume(succeed(exit)))))
+const await_: <A, E>(self: Fiber<A, E>) => Effect<Exit<A, E>> = core.fiberAwait
+export {
+  /**
+   * @since 2.0.0
+   * @category combinators
+   */
+  await_ as await,
+}
 
 /**
- * @since 3.11.2
- * @experimental
- * @category Fiber
+ * @since 2.0.0
+ * @category combinators
  */
-export const fiberJoin = <A, E>(self: Fiber<A, E>): Effect<A, E> =>
-  flatten(fiberAwait(self))
+export const join: <A, E>(self: Fiber<A, E>) => Effect<A, E> = core.fiberJoin
 
 /**
- * @since 3.11.0
- * @experimental
- * @category Fiber
+ * @since 2.0.0
+ * @category interruption
  */
-export const fiberInterrupt = <A, E>(self: Fiber<A, E>): Effect<void> =>
-  suspend(() => {
-    self.unsafeInterrupt()
-    return asVoid(fiberAwait(self))
-  })
+export const interrupt: <A, E>(self: Fiber<A, E>) => Effect<void> =
+  core.fiberInterrupt
 
 /**
- * @since 3.11.0
- * @experimental
- * @category Fiber
+ * @since 2.0.0
+ * @category interruption
  */
-export const fiberInterruptAll = <A extends Iterable<Fiber<any, any>>>(
+export const interruptAll: <A extends Iterable<Fiber<any, any>>>(
   fibers: A,
-): Effect<void> =>
-  suspend(() => {
-    for (const fiber of fibers) fiber.unsafeInterrupt()
-    const iter = fibers[Symbol.iterator]()
-    const wait: Effect<void> = suspend(() => {
-      let result = iter.next()
-      while (!result.done) {
-        if (result.value.unsafePoll()) {
-          result = iter.next()
-          continue
-        }
-        const fiber = result.value
-        return async((resume) => {
-          fiber.addObserver((_) => {
-            resume(wait)
-          })
-        })
-      }
-      return exitVoid
-    })
-    return wait
-  })
+) => Effect<void> = core.fiberInterruptAll

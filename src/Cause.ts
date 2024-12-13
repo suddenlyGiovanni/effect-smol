@@ -26,7 +26,7 @@ export type TypeId = typeof TypeId
  */
 export interface Cause<out E> extends Pipeable, Inspectable {
   readonly [TypeId]: TypeId
-  readonly failures: ReadonlyArray<Fail<E> | Die | Interrupt>
+  readonly failures: ReadonlyArray<Failure<E>>
 }
 
 /**
@@ -34,6 +34,12 @@ export interface Cause<out E> extends Pipeable, Inspectable {
  * @category guards
  */
 export const isCause: (self: unknown) => self is Cause<unknown> = core.isCause
+
+/**
+ * @since 4.0.0
+ * @category models
+ */
+export type Failure<E> = Fail<E> | Die | Interrupt
 
 /**
  * @since 2.0.0
@@ -53,6 +59,17 @@ export declare namespace Cause {
     readonly annotations: Context.Context<never>
     annotate<I, S>(tag: Context.Tag<I, S>, value: S): this
   }
+}
+
+/**
+ * @since 2.0.0
+ * @category models
+ */
+export declare namespace Failure {
+  /**
+   * @since 4.0.0
+   */
+  export type Error<T> = T extends Failure<infer E> ? E : never
 }
 
 /**
