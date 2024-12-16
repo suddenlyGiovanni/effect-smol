@@ -1,6 +1,7 @@
 import * as Equal from "../Equal.js"
 import * as Hash from "../Hash.js"
 import type * as Types from "../Types.js"
+import { StructuralPrototype } from "./effectable.js"
 
 /** @internal */
 export const ArrayProto: Equal.Equal = Object.assign(
@@ -18,31 +19,6 @@ export const ArrayProto: Equal.Equal = Object.assign(
     },
   },
 )
-
-/** @internal */
-export const StructuralPrototype: Equal.Equal = {
-  [Hash.symbol]() {
-    return Hash.cached(this, Hash.structure(this))
-  },
-  [Equal.symbol](this: Equal.Equal, that: Equal.Equal) {
-    const selfKeys = Object.keys(this)
-    const thatKeys = Object.keys(that as object)
-    if (selfKeys.length !== thatKeys.length) {
-      return false
-    }
-    for (const key of selfKeys) {
-      if (
-        !(
-          key in (that as object) &&
-          Equal.equals((this as any)[key], (that as any)[key])
-        )
-      ) {
-        return false
-      }
-    }
-    return true
-  },
-}
 
 /** @internal */
 export const Structural: new <A>(

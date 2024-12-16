@@ -3,26 +3,36 @@ import * as Context from "../Context.js"
 import * as Either from "../Either.js"
 import * as Equal from "../Equal.js"
 import type { LazyArg } from "../Function.js"
-import { constTrue, constVoid, dual, identity } from "../Function.js"
+import { constVoid, dual, identity } from "../Function.js"
 import { globalValue } from "../GlobalValue.js"
 import * as Hash from "../Hash.js"
-import type { Inspectable } from "../Inspectable.js"
 import { format, NodeInspectSymbol } from "../Inspectable.js"
 import * as InternalContext from "./context.js"
 import * as doNotation from "./doNotation.js"
 import * as Option from "../Option.js"
-import type { Pipeable } from "../Pipeable.js"
 import { pipeArguments } from "../Pipeable.js"
 import type { Predicate, Refinement } from "../Predicate.js"
 import { hasProperty, isIterable, isObject, isTagged } from "../Predicate.js"
 import type { Concurrency, Equals, NotFunction, Simplify } from "../Types.js"
-import { SingleShotGen, YieldWrap, yieldWrapGet } from "../Utils.js"
-import * as Data from "../Data.js"
+import { YieldWrap, yieldWrapGet } from "../Utils.js"
 import type * as Effect from "../Effect.js"
 import type * as Exit from "../Exit.js"
 import type * as Cause from "../Cause.js"
 import type * as Fiber from "../Fiber.js"
-import { CurrentConcurrency } from "../References.js"
+import { CurrentConcurrency, CurrentScheduler } from "../References.js"
+import * as Scope from "../Scope.js"
+import * as Scheduler from "../Scheduler.js"
+import {
+  identifier,
+  args,
+  evaluate,
+  successCont,
+  failureCont,
+  ensureCont,
+  Yield,
+  EffectProto,
+  StructuralPrototype,
+} from "./effectable.js"
 
 /** @internal */
 export const TypeId: Effect.TypeId = Symbol.for(
@@ -486,28 +496,8 @@ export const fiberInterruptAll = <A extends Iterable<Fiber.Fiber<any, any>>>(
     return wait
   })
 
-const identifier = Symbol.for("effect/Effect/identifier")
-type identifier = typeof identifier
-
-const args = Symbol.for("effect/Effect/args")
-type args = typeof args
-
-const evaluate = Symbol.for("effect/Effect/evaluate")
-type evaluate = typeof evaluate
-
-const successCont = Symbol.for("effect/Effect/successCont")
-type successCont = typeof successCont
-
-const failureCont = Symbol.for("effect/Effect/failureCont")
-type failureCont = typeof failureCont
-
-const ensureCont = Symbol.for("effect/Effect/ensureCont")
-type ensureCont = typeof ensureCont
-
-const Yield = Symbol.for("effect/Effect/Yield")
-type Yield = typeof Yield
-
-interface Primitive {
+/** @internal */
+export interface Primitive {
   readonly [identifier]: string
   readonly [successCont]:
     | ((value: unknown, fiber: FiberImpl) => Primitive | Yield)
@@ -523,35 +513,6 @@ interface Primitive {
         | undefined)
     | undefined
   [evaluate](fiber: FiberImpl): Primitive | Yield
-}
-
-const effectVariance = {
-  _A: identity,
-  _E: identity,
-  _R: identity,
-}
-
-const EffectProto = {
-  [TypeId]: effectVariance,
-  pipe() {
-    return pipeArguments(this, arguments)
-  },
-  [Symbol.iterator]() {
-    return new SingleShotGen(new YieldWrap(this)) as any
-  },
-  toJSON(this: Primitive) {
-    return {
-      _id: "Effect",
-      op: this[identifier],
-      ...(args in this ? { args: this[args] } : undefined),
-    }
-  },
-  toString() {
-    return format(this)
-  },
-  [NodeInspectSymbol]() {
-    return format(this)
-  },
 }
 
 function defaultEvaluate(_fiber: FiberImpl): Primitive | Yield {
@@ -694,7 +655,7 @@ export const failCause: <E>(cause: Cause.Cause<E>) => Effect.Effect<never, E> =
     prop: "cause",
     eval(fiber) {
       let cont = fiber.getCont(failureCont)
-      while (causeIsInterrupt(this[args]) && cont && fiber.interruptible) {
+      while (causeHasInterrupt(this[args]) && cont && fiber.interruptible) {
         cont = fiber.getCont(failureCont)
       }
       return cont ? cont[failureCont](this[args], fiber) : fiber.yieldWith(this)
@@ -900,7 +861,7 @@ const asyncFinalizer: (
     }
   },
   contE(cause, _fiber) {
-    return causeIsInterrupt(cause)
+    return causeHasInterrupt(cause)
       ? flatMap(this[args](), () => failCause(cause))
       : failCause(cause)
   },
@@ -1306,6 +1267,12 @@ export const exitIsFailure = <A, E>(
 ): self is Exit.Failure<A, E> => self._tag === "Failure"
 
 /** @internal */
+export const exitHasInterrupt = <A, E>(
+  self: Exit.Exit<A, E>,
+): self is Exit.Failure<A, E> =>
+  self._tag === "Failure" && causeHasInterrupt(self.cause)
+
+/** @internal */
 export const exitVoid: Exit.Exit<void> = exitSucceed(void 0)
 
 /** @internal */
@@ -1642,14 +1609,14 @@ export const repeatExit: {
   <A, E>(options: {
     while: Predicate<Exit.Exit<A, E>>
     times?: number | undefined
-    schedule?: EffectSchedule | undefined
+    // schedule?: EffectSchedule | undefined
   }): <R>(self: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
   <A, E, R>(
     self: Effect.Effect<A, E, R>,
     options: {
       while: Predicate<Exit.Exit<A, E>>
       times?: number | undefined
-      schedule?: EffectSchedule | undefined
+      // schedule?: EffectSchedule | undefined
     },
   ): Effect.Effect<A, E, R>
 } = dual(
@@ -1659,11 +1626,11 @@ export const repeatExit: {
     options: {
       while: Predicate<Exit.Exit<A, E>>
       times?: number | undefined
-      schedule?: EffectSchedule | undefined
+      // schedule?: EffectSchedule | undefined
     },
   ): Effect.Effect<A, E, R> =>
     suspend(() => {
-      const startedAt = options.schedule ? Date.now() : 0
+      // const startedAt = options.schedule ? Date.now() : 0
       let attempt = 0
 
       const loop: Effect.Effect<A, E, R> = flatMap(exit(self), (exit) => {
@@ -1674,14 +1641,14 @@ export const repeatExit: {
         }
         attempt++
         let delayEffect = yieldNow
-        if (options.schedule !== undefined) {
-          const elapsed = Date.now() - startedAt
-          const duration = options.schedule(attempt, elapsed)
-          if (Option.isNone(duration)) {
-            return exit
-          }
-          delayEffect = sleep(duration.value)
-        }
+        // if (options.schedule !== undefined) {
+        //   const elapsed = Date.now() - startedAt
+        //   const duration = options.schedule(attempt, elapsed)
+        //   if (Option.isNone(duration)) {
+        //     return exit
+        //   }
+        //   delayEffect = sleep(duration.value)
+        // }
         return flatMap(delayEffect, () => loop)
       })
 
@@ -1696,7 +1663,7 @@ export const repeat: {
       | {
           while?: Predicate<A> | undefined
           times?: number | undefined
-          schedule?: EffectSchedule | undefined
+          // schedule?: EffectSchedule | undefined
         }
       | undefined,
   ): <R>(self: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
@@ -1706,7 +1673,7 @@ export const repeat: {
       | {
           while?: Predicate<A> | undefined
           times?: number | undefined
-          schedule?: EffectSchedule | undefined
+          // schedule?: EffectSchedule | undefined
         }
       | undefined,
   ): Effect.Effect<A, E, R>
@@ -1718,7 +1685,7 @@ export const repeat: {
       | {
           while?: Predicate<A> | undefined
           times?: number | undefined
-          schedule?: EffectSchedule | undefined
+          // schedule?: EffectSchedule | undefined
         }
       | undefined,
   ): Effect.Effect<A, E, R> =>
@@ -2465,79 +2432,40 @@ export const timeoutOption: {
 // ----------------------------------------------------------------------------
 
 /** @internal */
-export const EffectScopeTypeId: unique symbol = Symbol.for(
-  "effect/Effect/EffectScope",
-)
+export const ScopeTypeId: Scope.TypeId = Symbol.for(
+  "effect/Scope",
+) as Scope.TypeId
 
-/**
- * @since 3.4.0
- * @experimental
- * @category resources & finalization
- */
-export type EffectScopeTypeId = typeof EffectScopeTypeId
+export const scopeTag: Context.Tag<Scope.Scope, Scope.Scope> =
+  Context.GenericTag<Scope.Scope>("effect/Scope")
 
-/**
- * @since 3.4.0
- * @experimental
- * @category resources & finalization
- */
-export interface EffectScope {
-  readonly [EffectScopeTypeId]: EffectScopeTypeId
-  readonly addFinalizer: (
-    finalizer: (exit: Exit<unknown, unknown>) => Effect.Effect<void>,
-  ) => Effect.Effect<void>
-  readonly fork: Effect.Effect<EffectScope.Closeable>
-}
-
-/**
- * @since 3.4.0
- * @experimental
- * @category resources & finalization
- */
-export declare namespace EffectScope {
-  /**
-   * @since 3.4.0
-   * @experimental
-   * @category resources & finalization
-   */
-  export interface Closeable extends EffectScope {
-    readonly close: (exit: Exit<any, any>) => Effect.Effect<void>
-  }
-}
-
-/**
- * @since 3.4.0
- * @experimental
- * @category resources & finalization
- */
-export const EffectScope: Context.Tag<EffectScope, EffectScope> =
-  Context.GenericTag<EffectScope>("effect/Effect/EffectScope")
-
-class EffectScopeImpl implements EffectScope.Closeable {
-  readonly [EffectScopeTypeId]: EffectScopeTypeId
+class ScopeImpl implements Scope.Scope.Closeable {
+  readonly [ScopeTypeId]: Scope.TypeId
   state:
     | {
         readonly _tag: "Open"
-        readonly finalizers: Set<(exit: Exit<any, any>) => Effect.Effect<void>>
+        readonly finalizers: Set<
+          (exit: Exit.Exit<any, any>) => Effect.Effect<void>
+        >
       }
     | {
         readonly _tag: "Closed"
-        readonly exit: Exit<any, any>
+        readonly exit: Exit.Exit<any, any>
       } = { _tag: "Open", finalizers: new Set() }
 
   constructor() {
-    this[EffectScopeTypeId] = EffectScopeTypeId
+    this[ScopeTypeId] = ScopeTypeId
   }
 
   unsafeAddFinalizer(
-    finalizer: (exit: Exit<any, any>) => Effect.Effect<void>,
+    finalizer: (exit: Exit.Exit<any, any>) => Effect.Effect<void>,
   ): void {
     if (this.state._tag === "Open") {
       this.state.finalizers.add(finalizer)
     }
   }
   addFinalizer(
-    finalizer: (exit: Exit<any, any>) => Effect.Effect<void>,
+    finalizer: (exit: Exit.Exit<any, any>) => Effect.Effect<void>,
   ): Effect.Effect<void> {
     return suspend(() => {
       if (this.state._tag === "Open") {
@@ -2548,13 +2476,13 @@ class EffectScopeImpl implements EffectScope.Closeable {
     })
   }
   unsafeRemoveFinalizer(
-    finalizer: (exit: Exit<any, any>) => Effect.Effect<void>,
+    finalizer: (exit: Exit.Exit<any, any>) => Effect.Effect<void>,
   ): void {
     if (this.state._tag === "Open") {
       this.state.finalizers.delete(finalizer)
     }
   }
-  close(microExit: Exit<any, any>): Effect.Effect<void> {
+  close(microExit: Exit.Exit<any, any>): Effect.Effect<void> {
     return suspend(() => {
       if (this.state._tag === "Open") {
         const finalizers = Array.from(this.state.finalizers).reverse()
@@ -2569,12 +2497,12 @@ class EffectScopeImpl implements EffectScope.Closeable {
   }
   get fork() {
     return sync(() => {
-      const newScope = new EffectScopeImpl()
+      const newScope = new ScopeImpl()
       if (this.state._tag === "Closed") {
         newScope.state = this.state
         return newScope
       }
-      function fin(exit: Exit<any, any>) {
+      function fin(exit: Exit.Exit<any, any>) {
         return newScope.close(exit)
       }
       this.state.finalizers.add(fin)
@@ -2586,128 +2514,80 @@ class EffectScopeImpl implements EffectScope.Closeable {
   }
 }
 
-/**
- * @since 3.4.0
- * @experimental
- * @category resources & finalization
- */
-export const scopeMake: Effect.Effect<EffectScope.Closeable> = sync(
-  () => new EffectScopeImpl(),
+/** @internal */
+export const scopeMake: Effect.Effect<Scope.Scope.Closeable> = sync(
+  () => new ScopeImpl(),
 )
 
-/**
- * @since 3.4.0
- * @experimental
- * @category resources & finalization
- */
-export const scopeUnsafeMake = (): EffectScope.Closeable =>
-  new EffectScopeImpl()
+/** @internal */
+export const scopeUnsafeMake = (): Scope.Scope.Closeable => new ScopeImpl()
 
-/**
- * Access the current `EffectScope`.
- *
- * @since 3.4.0
- * @experimental
- * @category resources & finalization
- */
-export const scope: Effect.Effect<EffectScope, never, EffectScope> =
-  service(EffectScope)
+/** @internal */
+export const scope: Effect.Effect<Scope.Scope, never, Scope.Scope> =
+  service(scopeTag)
 
-/**
- * Provide a `EffectScope` to an effect.
- *
- * @since 3.4.0
- * @experimental
- * @category resources & finalization
- */
+/** @internal */
 export const provideScope: {
   (
-    scope: EffectScope,
+    scope: Scope.Scope,
   ): <A, E, R>(
     self: Effect.Effect<A, E, R>,
-  ) => Effect.Effect<A, E, Exclude<R, EffectScope>>
+  ) => Effect.Effect<A, E, Exclude<R, Scope.Scope>>
   <A, E, R>(
     self: Effect.Effect<A, E, R>,
-    scope: EffectScope,
-  ): Effect.Effect<A, E, Exclude<R, EffectScope>>
+    scope: Scope.Scope,
+  ): Effect.Effect<A, E, Exclude<R, Scope.Scope>>
 } = dual(
   2,
   <A, E, R>(
     self: Effect.Effect<A, E, R>,
-    scope: EffectScope,
-  ): Effect.Effect<A, E, Exclude<R, EffectScope>> =>
-    provideService(self, EffectScope, scope),
+    scope: Scope.Scope,
+  ): Effect.Effect<A, E, Exclude<R, Scope.Scope>> =>
+    provideService(self, scopeTag, scope),
 )
 
-/**
- * Provide a `EffectScope` to the given effect, closing it after the effect has
- * finished executing.
- *
- * @since 3.4.0
- * @experimental
- * @category resources & finalization
- */
+/** @internal */
 export const scoped = <A, E, R>(
   self: Effect.Effect<A, E, R>,
-): Effect.Effect<A, E, Exclude<R, EffectScope>> =>
+): Effect.Effect<A, E, Exclude<R, Scope.Scope>> =>
   suspend(() => {
-    const scope = new EffectScopeImpl()
-    return onExit(provideService(self, EffectScope, scope), (exit) =>
+    const scope = new ScopeImpl()
+    return onExit(provideService(self, scopeTag, scope), (exit) =>
       scope.close(exit),
     )
   })
 
-/**
- * Create a resource with a cleanup `Effect` effect, ensuring the cleanup is
- * executed when the `EffectScope` is closed.
- *
- * @since 3.4.0
- * @experimental
- * @category resources & finalization
- */
+/** @internal */
 export const acquireRelease = <A, E, R>(
   acquire: Effect.Effect<A, E, R>,
-  release: (a: A, exit: Exit<unknown, unknown>) => Effect.Effect<void>,
-): Effect.Effect<A, E, R | EffectScope> =>
+  release: (a: A, exit: Exit.Exit<unknown, unknown>) => Effect.Effect<void>,
+): Effect.Effect<A, E, R | Scope.Scope> =>
   uninterruptible(
     flatMap(scope, (scope) =>
       tap(acquire, (a) => scope.addFinalizer((exit) => release(a, exit))),
     ),
   )
 
-/**
- * Add a finalizer to the current `EffectScope`.
- *
- * @since 3.4.0
- * @experimental
- * @category resources & finalization
- */
+/** @internal */
 export const addFinalizer = (
-  finalizer: (exit: Exit<unknown, unknown>) => Effect.Effect<void>,
-): Effect.Effect<void, never, EffectScope> =>
+  finalizer: (exit: Exit.Exit<unknown, unknown>) => Effect.Effect<void>,
+): Effect.Effect<void, never, Scope.Scope> =>
   flatMap(scope, (scope) => scope.addFinalizer(finalizer))
 
-/**
- * When the `Effect` effect is completed, run the given finalizer effect with the
- * `Exit` of the executed effect.
- *
- * @since 3.4.6
- * @experimental
- * @category resources & finalization
- */
+/** @internal */
 export const onExit: {
   <A, E, XE, XR>(
-    f: (exit: Exit<A, E>) => Effect.Effect<void, XE, XR>,
+    f: (exit: Exit.Exit<A, E>) => Effect.Effect<void, XE, XR>,
   ): <R>(self: Effect.Effect<A, E, R>) => Effect.Effect<A, E | XE, R | XR>
   <A, E, R, XE, XR>(
     self: Effect.Effect<A, E, R>,
-    f: (exit: Exit<A, E>) => Effect.Effect<void, XE, XR>,
+    f: (exit: Exit.Exit<A, E>) => Effect.Effect<void, XE, XR>,
   ): Effect.Effect<A, E | XE, R | XR>
 } = dual(
   2,
   <A, E, R, XE, XR>(
     self: Effect.Effect<A, E, R>,
-    f: (exit: Exit<A, E>) => Effect.Effect<void, XE, XR>,
+    f: (exit: Exit.Exit<A, E>) => Effect.Effect<void, XE, XR>,
   ): Effect.Effect<A, E | XE, R | XR> =>
     uninterruptibleMask((restore) =>
       matchCauseEffect(restore(self), {
@@ -2718,13 +2598,7 @@ export const onExit: {
     ),
 )
 
-/**
- * Regardless of the result of the this `Effect` effect, run the finalizer effect.
- *
- * @since 3.4.0
- * @experimental
- * @category resources & finalization
- */
+/** @internal */
 export const ensuring: {
   <XE, XR>(
     finalizer: Effect.Effect<void, XE, XR>,
@@ -2741,75 +2615,55 @@ export const ensuring: {
   ): Effect.Effect<A, E | XE, R | XR> => onExit(self, (_) => finalizer),
 )
 
-/**
- * When the `Effect` effect is completed, run the given finalizer effect if it
- * matches the specified predicate.
- *
- * @since 3.4.6
- * @experimental
- * @category resources & finalization
- */
+/** @internal */
 export const onExitIf: {
-  <A, E, XE, XR, B extends Exit<A, E>>(
-    refinement: Refinement<Exit<A, E>, B>,
+  <A, E, XE, XR, B extends Exit.Exit<A, E>>(
+    refinement: Refinement<Exit.Exit<A, E>, B>,
     f: (exit: B) => Effect.Effect<void, XE, XR>,
   ): <R>(self: Effect.Effect<A, E, R>) => Effect.Effect<A, E | XE, R | XR>
   <A, E, XE, XR>(
-    predicate: Predicate<Exit<NoInfer<A>, NoInfer<E>>>,
-    f: (exit: Exit<NoInfer<A>, NoInfer<E>>) => Effect.Effect<void, XE, XR>,
+    predicate: Predicate<Exit.Exit<NoInfer<A>, NoInfer<E>>>,
+    f: (exit: Exit.Exit<NoInfer<A>, NoInfer<E>>) => Effect.Effect<void, XE, XR>,
   ): <R>(self: Effect.Effect<A, E, R>) => Effect.Effect<A, E | XE, R | XR>
-  <A, E, R, XE, XR, B extends Exit<A, E>>(
+  <A, E, R, XE, XR, B extends Exit.Exit<A, E>>(
     self: Effect.Effect<A, E, R>,
-    refinement: Refinement<Exit<A, E>, B>,
+    refinement: Refinement<Exit.Exit<A, E>, B>,
     f: (exit: B) => Effect.Effect<void, XE, XR>,
   ): Effect.Effect<A, E | XE, R | XR>
   <A, E, R, XE, XR>(
     self: Effect.Effect<A, E, R>,
-    predicate: Predicate<Exit<NoInfer<A>, NoInfer<E>>>,
-    f: (exit: Exit<NoInfer<A>, NoInfer<E>>) => Effect.Effect<void, XE, XR>,
+    predicate: Predicate<Exit.Exit<NoInfer<A>, NoInfer<E>>>,
+    f: (exit: Exit.Exit<NoInfer<A>, NoInfer<E>>) => Effect.Effect<void, XE, XR>,
   ): Effect.Effect<A, E | XE, R | XR>
 } = dual(
   3,
-  <A, E, R, XE, XR, B extends Exit<A, E>>(
+  <A, E, R, XE, XR, B extends Exit.Exit<A, E>>(
     self: Effect.Effect<A, E, R>,
-    refinement: Refinement<Exit<A, E>, B>,
+    refinement: Refinement<Exit.Exit<A, E>, B>,
     f: (exit: B) => Effect.Effect<void, XE, XR>,
   ): Effect.Effect<A, E | XE, R | XR> =>
     onExit(self, (exit) => (refinement(exit) ? f(exit) : exitVoid)),
 )
 
-/**
- * When the `Effect` effect fails, run the given finalizer effect with the
- * `Cause` of the executed effect.
- *
- * @since 3.4.6
- * @experimental
- * @category resources & finalization
- */
+/** @internal */
 export const onError: {
   <A, E, XE, XR>(
-    f: (cause: Cause<NoInfer<E>>) => Effect.Effect<void, XE, XR>,
+    f: (cause: Cause.Cause<NoInfer<E>>) => Effect.Effect<void, XE, XR>,
   ): <R>(self: Effect.Effect<A, E, R>) => Effect.Effect<A, E | XE, R | XR>
   <A, E, R, XE, XR>(
     self: Effect.Effect<A, E, R>,
-    f: (cause: Cause<NoInfer<E>>) => Effect.Effect<void, XE, XR>,
+    f: (cause: Cause.Cause<NoInfer<E>>) => Effect.Effect<void, XE, XR>,
   ): Effect.Effect<A, E | XE, R | XR>
 } = dual(
   2,
   <A, E, R, XE, XR>(
     self: Effect.Effect<A, E, R>,
-    f: (cause: Cause<NoInfer<E>>) => Effect.Effect<void, XE, XR>,
+    f: (cause: Cause.Cause<NoInfer<E>>) => Effect.Effect<void, XE, XR>,
   ): Effect.Effect<A, E | XE, R | XR> =>
     onExitIf(self, exitIsFailure, (exit) => f(exit.cause)),
 )
 
-/**
- * If this `Effect` effect is aborted, run the finalizer effect.
- *
- * @since 3.4.6
- * @experimental
- * @category resources & finalization
- */
+/** @internal */
 export const onInterrupt: {
   <XE, XR>(
     finalizer: Effect.Effect<void, XE, XR>,
@@ -2824,21 +2678,14 @@ export const onInterrupt: {
     self: Effect.Effect<A, E, R>,
     finalizer: Effect.Effect<void, XE, XR>,
   ): Effect.Effect<A, E | XE, R | XR> =>
-    onExitIf(self, exitIsInterrupt, (_) => finalizer),
+    onExitIf(self, exitHasInterrupt, (_) => finalizer),
 )
 
-/**
- * Acquire a resource, use it, and then release the resource when the `use`
- * effect has completed.
- *
- * @since 3.4.0
- * @experimental
- * @category resources & finalization
- */
+/** @internal */
 export const acquireUseRelease = <Resource, E, R, A, E2, R2, E3, R3>(
   acquire: Effect.Effect<Resource, E, R>,
   use: (a: Resource) => Effect.Effect<A, E2, R2>,
-  release: (a: Resource, exit: Exit<A, E2>) => Effect.Effect<void, E3, R3>,
+  release: (a: Resource, exit: Exit.Exit<A, E2>) => Effect.Effect<void, E3, R3>,
 ): Effect.Effect<A, E | E2 | E3, R | R2 | R3> =>
   uninterruptibleMask((restore) =>
     flatMap(acquire, (a) =>
@@ -2850,23 +2697,10 @@ export const acquireUseRelease = <Resource, E, R, A, E2, R2, E3, R3>(
 // interruption
 // ----------------------------------------------------------------------------
 
-/**
- * Abort the current `Effect` effect.
- *
- * @since 3.4.6
- * @experimental
- * @category interruption
- */
-export const interrupt: Effect.Effect<never> = failCause(causeInterrupt())
+/** @internal */
+export const interrupt: Effect.Effect<never> = failCause(causeInterrupt)
 
-/**
- * Flag the effect as uninterruptible, which means that when the effect is
- * interrupted, it will be allowed to continue running until completion.
- *
- * @since 3.4.0
- * @experimental
- * @category flags
- */
+/** @internal */
 export const uninterruptible = <A, E, R>(
   self: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
@@ -2887,14 +2721,7 @@ const setInterruptible: (interruptible: boolean) => Primitive = makePrimitive({
   },
 })
 
-/**
- * Flag the effect as interruptible, which means that when the effect is
- * interrupted, it will be interrupted immediately.
- *
- * @since 3.4.0
- * @experimental
- * @category flags
- */
+/** @internal */
 export const interruptible = <A, E, R>(
   self: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
@@ -2906,28 +2733,7 @@ export const interruptible = <A, E, R>(
     return self
   })
 
-/**
- * Wrap the given `Effect` effect in an uninterruptible region, preventing the
- * effect from being aborted.
- *
- * You can use the `restore` function to restore a `Effect` effect to the
- * interruptibility state before the `uninterruptibleMask` was applied.
- *
- * @example
- * ```ts
- * import * as Effect from "effect/Effect"
- *
- * Effect.uninterruptibleMask((restore) =>
- *   Effect.sleep(1000).pipe( // uninterruptible
- *     Effect.andThen(restore(Effect.sleep(1000))) // interruptible
- *   )
- * )
- * ```
- *
- * @since 3.4.0
- * @experimental
- * @category interruption
- */
+/** @internal */
 export const uninterruptibleMask = <A, E, R>(
   f: (
     restore: <A, E, R>(
@@ -2946,136 +2752,11 @@ export const uninterruptibleMask = <A, E, R>(
 // collecting & elements
 // ========================================================================
 
-/**
- * @since 3.4.0
- * @experimental
- */
-export declare namespace All {
-  /**
-   * @since 3.4.0
-   * @experimental
-   */
-  export type EffectAny = Effect.Effect.Effect<any, any, any>
-
-  /**
-   * @since 3.4.0
-   * @experimental
-   */
-  export type ReturnIterable<
-    T extends Iterable<EffectAny>,
-    Discard extends boolean,
-  > = [T] extends [Iterable<Effect.Effect.Effect<infer A, infer E, infer R>>]
-    ? Effect.Effect.Effect<Discard extends true ? void : Array<A>, E, R>
-    : never
-
-  /**
-   * @since 3.4.0
-   * @experimental
-   */
-  export type ReturnTuple<
-    T extends ReadonlyArray<unknown>,
-    Discard extends boolean,
-  > =
-    Effect.Effect.Effect<
-      Discard extends true
-        ? void
-        : T[number] extends never
-          ? []
-          : {
-              -readonly [K in keyof T]: T[K] extends Effect.Effect.Effect<
-                infer _A,
-                infer _E,
-                infer _R
-              >
-                ? _A
-                : never
-            },
-      T[number] extends never
-        ? never
-        : T[number] extends Effect.Effect.Effect<infer _A, infer _E, infer _R>
-          ? _E
-          : never,
-      T[number] extends never
-        ? never
-        : T[number] extends Effect.Effect.Effect<infer _A, infer _E, infer _R>
-          ? _R
-          : never
-    > extends infer X
-      ? X
-      : never
-
-  /**
-   * @since 3.4.0
-   * @experimental
-   */
-  export type ReturnObject<T, Discard extends boolean> = [T] extends [
-    { [K: string]: EffectAny },
-  ]
-    ? Effect.Effect.Effect<
-        Discard extends true
-          ? void
-          : {
-              -readonly [K in keyof T]: [T[K]] extends [
-                Effect.Effect.Effect<infer _A, infer _E, infer _R>,
-              ]
-                ? _A
-                : never
-            },
-        keyof T extends never
-          ? never
-          : T[keyof T] extends Effect.Effect.Effect<
-                infer _A,
-                infer _E,
-                infer _R
-              >
-            ? _E
-            : never,
-        keyof T extends never
-          ? never
-          : T[keyof T] extends Effect.Effect.Effect<
-                infer _A,
-                infer _E,
-                infer _R
-              >
-            ? _R
-            : never
-      >
-    : never
-
-  /**
-   * @since 3.4.0
-   * @experimental
-   */
-  export type IsDiscard<A> = [Extract<A, { readonly discard: true }>] extends [
-    never,
-  ]
-    ? false
-    : true
-
-  /**
-   * @since 3.4.0
-   * @experimental
-   */
-  export type Return<
-    Arg extends Iterable<EffectAny> | Record<string, EffectAny>,
-    O extends {
-      readonly concurrency?: Concurrency | undefined
-      readonly discard?: boolean | undefined
-    },
-  > = [Arg] extends [ReadonlyArray<EffectAny>]
-    ? ReturnTuple<Arg, IsDiscard<O>>
-    : [Arg] extends [Iterable<EffectAny>]
-      ? ReturnIterable<Arg, IsDiscard<O>>
-      : [Arg] extends [Record<string, EffectAny>]
-        ? ReturnObject<Arg, IsDiscard<O>>
-        : never
-}
-
 /** @internal */
 export const all = <
   const Arg extends
-    | Iterable<Effect.Effect.Effect<any, any, any>>
-    | Record<string, Effect.Effect.Effect<any, any, any>>,
+    | Iterable<Effect.Effect<any, any, any>>
+    | Record<string, Effect.Effect<any, any, any>>,
   O extends {
     readonly concurrency?: Concurrency | undefined
     readonly discard?: boolean | undefined
@@ -3083,7 +2764,7 @@ export const all = <
 >(
   arg: Arg,
   options?: O,
-): All.Return<Arg, O> => {
+): Effect.All.Return<Arg, O> => {
   if (Array.isArray(arg) || isIterable(arg)) {
     return (forEach as any)(arg, identity, options)
   } else if (options?.discard) {
@@ -3111,9 +2792,9 @@ export const all = <
 /** @internal */
 export const whileLoop: <A, E, R>(options: {
   readonly while: LazyArg<boolean>
-  readonly body: LazyArg<Effect.Effect.Effect<A, E, R>>
+  readonly body: LazyArg<Effect.Effect<A, E, R>>
   readonly step: (a: A) => void
-}) => Effect.Effect.Effect<void, E, R> = makePrimitive({
+}) => Effect.Effect<void, E, R> = makePrimitive({
   op: "While",
   contA(value, fiber) {
     this[args].step(value)
@@ -3136,28 +2817,28 @@ export const whileLoop: <A, E, R>(options: {
 export const forEach: {
   <A, B, E, R>(
     iterable: Iterable<A>,
-    f: (a: A, index: number) => Effect.Effect.Effect<B, E, R>,
+    f: (a: A, index: number) => Effect.Effect<B, E, R>,
     options?: {
       readonly concurrency?: Concurrency | undefined
       readonly discard?: false | undefined
     },
-  ): Effect.Effect.Effect<Array<B>, E, R>
+  ): Effect.Effect<Array<B>, E, R>
   <A, B, E, R>(
     iterable: Iterable<A>,
-    f: (a: A, index: number) => Effect.Effect.Effect<B, E, R>,
+    f: (a: A, index: number) => Effect.Effect<B, E, R>,
     options: {
       readonly concurrency?: Concurrency | undefined
       readonly discard: true
     },
-  ): Effect.Effect.Effect<void, E, R>
+  ): Effect.Effect<void, E, R>
 } = <A, B, E, R>(
   iterable: Iterable<A>,
-  f: (a: A, index: number) => Effect.Effect.Effect<B, E, R>,
+  f: (a: A, index: number) => Effect.Effect<B, E, R>,
   options?: {
     readonly concurrency?: Concurrency | undefined
     readonly discard?: boolean | undefined
   },
-): Effect.Effect.Effect<any, E, R> =>
+): Effect.Effect<any, E, R> =>
   withFiber((parent) => {
     const concurrencyOption =
       options?.concurrency === "inherit"
@@ -3245,16 +2926,7 @@ export const forEach: {
     })
   })
 
-/**
- * Effectfully filter the elements of the provided iterable.
- *
- * Use the `concurrency` option to control how many elements are processed
- * concurrently.
- *
- * @since 3.4.0
- * @experimental
- * @category collecting & elements
- */
+/** @internal */
 export const filter = <A, E, R>(
   iterable: Iterable<A>,
   f: (a: NoInfer<A>) => Effect.Effect<boolean, E, R>,
@@ -3273,16 +2945,7 @@ export const filter = <A, E, R>(
     options,
   )
 
-/**
- * Effectfully filter the elements of the provided iterable.
- *
- * Use the `concurrency` option to control how many elements are processed
- * concurrently.
- *
- * @since 3.4.0
- * @experimental
- * @category collecting & elements
- */
+/** @internal */
 export const filterMap = <A, B, E, R>(
   iterable: Iterable<A>,
   f: (a: NoInfer<A>) => Effect.Effect<Option.Option<B>, E, R>,
@@ -3314,22 +2977,10 @@ export const filterMap = <A, B, E, R>(
 // do notation
 // ----------------------------------------------------------------------------
 
-/**
- * Start a do notation block.
- *
- * @since 3.4.0
- * @experimental
- * @category do notation
- */
+/** @internal */
 export const Do: Effect.Effect<{}> = succeed({})
 
-/**
- * Bind the success value of this `Effect` effect to the provided name.
- *
- * @since 3.4.0
- * @experimental
- * @category do notation
- */
+/** @internal */
 export const bindTo: {
   <N extends string>(
     name: N,
@@ -3340,15 +2991,9 @@ export const bindTo: {
     self: Effect.Effect<A, E, R>,
     name: N,
   ): Effect.Effect<{ [K in N]: A }, E, R>
-} = doNotation.bindTo<EffectTypeLambda>(map)
+} = doNotation.bindTo<Effect.EffectTypeLambda>(map)
 
-/**
- * Bind the success value of this `Effect` effect to the provided name.
- *
- * @since 3.4.0
- * @experimental
- * @category do notation
- */
+/** @internal */
 export const bind: {
   <N extends string, A extends Record<string, any>, B, E2, R2>(
     name: N,
@@ -3361,7 +3006,7 @@ export const bind: {
     name: N,
     f: (a: NoInfer<A>) => Effect.Effect<B, E2, R2>,
   ): Effect.Effect<Simplify<Omit<A, N> & { [K in N]: B }>, E | E2, R | R2>
-} = doNotation.bind<EffectTypeLambda>(map, flatMap)
+} = doNotation.bind<Effect.EffectTypeLambda>(map, flatMap)
 
 const let_: {
   <N extends string, A extends Record<string, any>, B>(
@@ -3375,16 +3020,10 @@ const let_: {
     name: N,
     f: (a: NoInfer<A>) => B,
   ): Effect.Effect<Simplify<Omit<A, N> & { [K in N]: B }>, E, R>
-} = doNotation.let_<EffectTypeLambda>(map)
+} = doNotation.let_<Effect.EffectTypeLambda>(map)
 
 export {
-  /**
-   * Bind the result of a synchronous computation to the given name.
-   *
-   * @since 3.4.0
-   * @experimental
-   * @category do notation
-   */
+  /** @internal */
   let_ as let,
 }
 
@@ -3392,19 +3031,10 @@ export {
 // fibers & forking
 // ----------------------------------------------------------------------------
 
-/**
- * Run the `Effect` effect in a new `Fiber` that can be awaited, joined, or
- * aborted.
- *
- * When the parent `Effect` finishes, this `Effect` will be aborted.
- *
- * @since 3.4.0
- * @experimental
- * @category fiber & forking
- */
+/** @internal */
 export const fork = <A, E, R>(
   self: Effect.Effect<A, E, R>,
-): Effect.Effect<Fiber<A, E>, never, R> =>
+): Effect.Effect<Fiber.Fiber<A, E>, never, R> =>
   withFiber((fiber) => {
     fiberMiddleware.interruptChildren ??= fiberInterruptChildren
     return succeed(unsafeFork(fiber, self))
@@ -3412,7 +3042,7 @@ export const fork = <A, E, R>(
 
 const unsafeFork = <FA, FE, A, E, R>(
   parent: FiberImpl<FA, FE>,
-  effect: Effect.Effect.Effect<A, E, R>,
+  effect: Effect.Effect<A, E, R>,
   immediate = false,
   daemon = false,
 ): Fiber.Fiber<A, E> => {
@@ -3431,47 +3061,29 @@ const unsafeFork = <FA, FE, A, E, R>(
   return child
 }
 
-/**
- * Run the `Effect` effect in a new `Fiber` that can be awaited, joined, or
- * aborted.
- *
- * It will not be aborted when the parent `Effect` finishes.
- *
- * @since 3.4.0
- * @experimental
- * @category fiber & forking
- */
+/** @internal */
 export const forkDaemon = <A, E, R>(
   self: Effect.Effect<A, E, R>,
-): Effect.Effect<Fiber<A, E>, never, R> =>
+): Effect.Effect<Fiber.Fiber<A, E>, never, R> =>
   withFiber((fiber) => succeed(unsafeFork(fiber, self, false, true)))
 
-/**
- * Run the `Effect` effect in a new `Fiber` that can be awaited, joined, or
- * aborted.
- *
- * The lifetime of the handle will be attached to the provided `EffectScope`.
- *
- * @since 3.4.0
- * @experimental
- * @category fiber & forking
- */
+/** @internal */
 export const forkIn: {
   (
-    scope: EffectScope,
+    scope: Scope.Scope,
   ): <A, E, R>(
     self: Effect.Effect<A, E, R>,
-  ) => Effect.Effect<Fiber<A, E>, never, R>
+  ) => Effect.Effect<Fiber.Fiber<A, E>, never, R>
   <A, E, R>(
     self: Effect.Effect<A, E, R>,
-    scope: EffectScope,
-  ): Effect.Effect<Fiber<A, E>, never, R>
+    scope: Scope.Scope,
+  ): Effect.Effect<Fiber.Fiber<A, E>, never, R>
 } = dual(
   2,
   <A, E, R>(
     self: Effect.Effect<A, E, R>,
-    scope: EffectScope,
-  ): Effect.Effect<Fiber<A, E>, never, R> =>
+    scope: Scope.Scope,
+  ): Effect.Effect<Fiber.Fiber<A, E>, never, R> =>
     uninterruptibleMask((restore) =>
       flatMap(scope.fork, (scope) =>
         tap(
@@ -3482,62 +3094,29 @@ export const forkIn: {
     ),
 )
 
-/**
- * Run the `Effect` effect in a new `Fiber` that can be awaited, joined, or
- * aborted.
- *
- * The lifetime of the handle will be attached to the current `EffectScope`.
- *
- * @since 3.4.0
- * @experimental
- * @category fiber & forking
- */
+/** @internal */
 export const forkScoped = <A, E, R>(
   self: Effect.Effect<A, E, R>,
-): Effect.Effect<Fiber<A, E>, never, R | EffectScope> =>
+): Effect.Effect<Fiber.Fiber<A, E>, never, R | Scope.Scope> =>
   flatMap(scope, (scope) => forkIn(self, scope))
 
 // ----------------------------------------------------------------------------
 // execution
 // ----------------------------------------------------------------------------
 
-/**
- * Execute the `Effect` effect and return a `Fiber` that can be awaited, joined,
- * or aborted.
- *
- * You can listen for the result by adding an observer using the handle's
- * `addObserver` method.
- *
- * @example
- * ```ts
- * import * as Effect from "effect/Effect"
- *
- * const handle = Effect.succeed(42).pipe(
- *   Effect.delay(1000),
- *   Effect.runFork
- * )
- *
- * handle.addObserver((exit) => {
- *   console.log(exit)
- * })
- * ```
- *
- * @since 3.4.0
- * @experimental
- * @category execution
- */
+/** @internal */
 export const runFork = <A, E>(
   effect: Effect.Effect<A, E>,
   options?:
     | {
         readonly signal?: AbortSignal | undefined
-        readonly scheduler?: EffectScheduler | undefined
+        readonly scheduler?: Scheduler.Scheduler | undefined
       }
     | undefined,
 ): FiberImpl<A, E> => {
   const fiber = new FiberImpl<A, E>(
     CurrentScheduler.context(
-      options?.scheduler ?? new EffectSchedulerDefault(),
+      options?.scheduler ?? new Scheduler.MixedScheduler(),
     ),
   )
   fiber.evaluate(effect as any)
@@ -3555,42 +3134,28 @@ export const runFork = <A, E>(
   return fiber
 }
 
-/**
- * Execute the `Effect` effect and return a `Promise` that resolves with the
- * `Exit` of the computation.
- *
- * @since 3.4.6
- * @experimental
- * @category execution
- */
+/** @internal */
 export const runPromiseExit = <A, E>(
   effect: Effect.Effect<A, E>,
   options?:
     | {
         readonly signal?: AbortSignal | undefined
-        readonly scheduler?: EffectScheduler | undefined
+        readonly scheduler?: Scheduler.Scheduler | undefined
       }
     | undefined,
-): Promise<Exit<A, E>> =>
+): Promise<Exit.Exit<A, E>> =>
   new Promise((resolve, _reject) => {
     const handle = runFork(effect, options)
     handle.addObserver(resolve)
   })
 
-/**
- * Execute the `Effect` effect and return a `Promise` that resolves with the
- * successful value of the computation.
- *
- * @since 3.4.0
- * @experimental
- * @category execution
- */
+/** @internal */
 export const runPromise = <A, E>(
   effect: Effect.Effect<A, E>,
   options?:
     | {
         readonly signal?: AbortSignal | undefined
-        readonly scheduler?: EffectScheduler | undefined
+        readonly scheduler?: Scheduler.Scheduler | undefined
       }
     | undefined,
 ): Promise<A> =>
@@ -3601,31 +3166,17 @@ export const runPromise = <A, E>(
     return exit.value
   })
 
-/**
- * Attempt to execute the `Effect` effect synchronously and return the `Exit`.
- *
- * If any asynchronous effects are encountered, the function will return a
- * `CauseDie` containing the `Fiber`.
- *
- * @since 3.4.6
- * @experimental
- * @category execution
- */
-export const runSyncExit = <A, E>(effect: Effect.Effect<A, E>): Exit<A, E> => {
-  const scheduler = new EffectSchedulerDefault()
+/** @internal */
+export const runSyncExit = <A, E>(
+  effect: Effect.Effect<A, E>,
+): Exit.Exit<A, E> => {
+  const scheduler = new Scheduler.MixedScheduler()
   const fiber = runFork(effect, { scheduler })
   scheduler.flush()
   return fiber._exit ?? exitDie(fiber)
 }
 
-/**
- * Attempt to execute the `Effect` effect synchronously and return the success
- * value.
- *
- * @since 3.4.0
- * @experimental
- * @category execution
- */
+/** @internal */
 export const runSync = <A, E>(effect: Effect.Effect<A, E>): A => {
   const exit = runSyncExit(effect)
   if (exit._tag === "Failure") throw exit.cause
@@ -3636,23 +3187,11 @@ export const runSync = <A, E>(effect: Effect.Effect<A, E>): A => {
 // Errors
 // ----------------------------------------------------------------------------
 
-/**
- * @since 3.4.0
- * @experimental
- * @category errors
- */
-export interface YieldableError extends Pipeable, Inspectable, Readonly<Error> {
-  readonly [TypeId]: Effect.Variance<never, this, never>
-  [Symbol.iterator](): EffectIterator<Effect.Effect<never, this, never>>
-}
-
-const YieldableError: new (message?: string) => YieldableError = (function () {
-  class YieldableError extends globalThis.Error {}
-  Object.assign(
-    YieldableError.prototype,
-    EffectProto,
-    Data.StructuralPrototype,
-    {
+/** @internal */
+export const YieldableError: new (message?: string) => Effect.YieldableError =
+  (function () {
+    class YieldableError extends globalThis.Error {}
+    Object.assign(YieldableError.prototype, EffectProto, StructuralPrototype, {
       [identifier]: "Failure",
       [evaluate]() {
         return fail(this)
@@ -3670,19 +3209,14 @@ const YieldableError: new (message?: string) => YieldableError = (function () {
         }
         return this.toString()
       },
-    },
-  )
-  return YieldableError as any
-})()
+    })
+    return YieldableError as any
+  })()
 
-/**
- * @since 3.4.0
- * @experimental
- * @category errors
- */
+/** @internal */
 export const Error: new <A extends Record<string, any> = {}>(
   args: Equals<A, {}> extends true ? void : { readonly [P in keyof A]: A[P] },
-) => YieldableError & Readonly<A> = (function () {
+) => Cause.YieldableError & Readonly<A> = (function () {
   return class extends YieldableError {
     constructor(args: any) {
       super()
@@ -3693,18 +3227,14 @@ export const Error: new <A extends Record<string, any> = {}>(
   } as any
 })()
 
-/**
- * @since 3.4.0
- * @experimental
- * @category errors
- */
+/** @internal */
 export const TaggedError = <Tag extends string>(
   tag: Tag,
 ): new <A extends Record<string, any> = {}>(
   args: Equals<A, {}> extends true
     ? void
     : { readonly [P in keyof A as P extends "_tag" ? never : P]: A[P] },
-) => YieldableError & { readonly _tag: Tag } & Readonly<A> => {
+) => Cause.YieldableError & { readonly _tag: Tag } & Readonly<A> => {
   class Base extends Error<{}> {
     readonly _tag = tag
   }
@@ -3712,23 +3242,10 @@ export const TaggedError = <Tag extends string>(
   return Base as any
 }
 
-/**
- * Represents a checked exception which occurs when an expected element was
- * unable to be found.
- *
- * @since 3.4.4
- * @experimental
- * @category errors
- */
+/** @internal */
 export class NoSuchElementException extends TaggedError(
   "NoSuchElementException",
 )<{ message?: string | undefined }> {}
 
-/**
- * Represents a checked exception which occurs when a timeout occurs.
- *
- * @since 3.4.4
- * @experimental
- * @category errors
- */
+/** @internal */
 export class TimeoutException extends TaggedError("TimeoutException") {}

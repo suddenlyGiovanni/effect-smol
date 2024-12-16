@@ -5,6 +5,7 @@ import * as core from "./internal/core.js"
 import type * as Context from "./Context.js"
 import { Pipeable } from "./Pipeable.js"
 import { Inspectable } from "./Inspectable.js"
+import type * as Effect from "./Effect.js"
 
 /**
  * @since 2.0.0
@@ -93,3 +94,18 @@ export interface Fail<out E> extends Cause.FailureProto<"Fail"> {
  * @category models
  */
 export interface Interrupt extends Cause.FailureProto<"Interrupt"> {}
+
+/**
+ * @since 2.0.0
+ * @category errors
+ */
+export interface YieldableError extends Pipeable, Inspectable, Readonly<Error> {
+  readonly [Effect.TypeId]: Effect.Effect.Variance<never, this, never>
+  [Symbol.iterator](): Effect.EffectIterator<Effect.Effect<never, this, never>>
+}
+
+/**
+ * @since 4.0.0
+ * @category errors
+ */
+export interface NoSuchElementError extends YieldableError {}

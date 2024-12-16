@@ -1,11 +1,13 @@
 /**
  * @since 2.0.0
  */
-import { Equal } from "./Equal.js"
 import * as internal from "./internal/data.js"
 import * as Predicate from "./Predicate.js"
 import type * as Types from "./Types.js"
 import type { Unify } from "./Unify.js"
+import * as core from "./internal/core.js"
+import type * as Cause from "./Cause.js"
+import { StructuralPrototype } from "./internal/effectable.js"
 
 /**
  * @since 2.0.0
@@ -54,7 +56,7 @@ export const struct: <A extends Record<string, any>>(
 export const unsafeStruct = <A extends Record<string, any>>(
   as: A,
 ): { readonly [P in keyof A]: A[P] } =>
-  Object.setPrototypeOf(as, internal.StructuralPrototype)
+  Object.setPrototypeOf(as, StructuralPrototype)
 
 /**
  * @example
@@ -77,12 +79,6 @@ export const unsafeStruct = <A extends Record<string, any>>(
  */
 export const tuple = <As extends ReadonlyArray<any>>(...as: As): Readonly<As> =>
   unsafeArray(as)
-
-/**
- * @since 4.0.0
- * @category prototypes
- */
-export const StructuralPrototype: Equal = internal.StructuralPrototype
 
 /**
  * @example
@@ -124,7 +120,7 @@ const _case =
   <A>(): Case.Constructor<A> =>
   (args) =>
     (args === undefined
-      ? Object.create(internal.StructuralPrototype)
+      ? Object.create(StructuralPrototype)
       : struct(args)) as any
 
 export {
@@ -186,9 +182,7 @@ export const tagged =
   ): Case.Constructor<A, "_tag"> =>
   (args) => {
     const value =
-      args === undefined
-        ? Object.create(internal.StructuralPrototype)
-        : struct(args)
+      args === undefined ? Object.create(StructuralPrototype) : struct(args)
     value._tag = tag
     return value
   }
@@ -605,39 +599,17 @@ export const Error: new <A extends Record<string, any> = {}>(
   args: Types.Equals<A, {}> extends true
     ? void
     : { readonly [P in keyof A]: A[P] },
-) => Cause.YieldableError & Readonly<A> = (function () {
-  const plainArgsSymbol = Symbol.for("effect/Data/Error/plainArgs")
-  return class Base extends core.YieldableError {
-    constructor(args: any) {
-      super(args?.message, args?.cause ? { cause: args.cause } : undefined)
-      if (args) {
-        Object.assign(this, args)
-        Object.defineProperty(this, plainArgsSymbol, {
-          value: args,
-          enumerable: false,
-        })
-      }
-    }
-    toJSON() {
-      return { ...(this as any)[plainArgsSymbol], ...this }
-    }
-  } as any
-})()
+) => Cause.YieldableError & Readonly<A> = core.Error
 
 /**
  * @since 2.0.0
  * @category constructors
  */
-export const TaggedError = <Tag extends string>(
+export const TaggedError: <Tag extends string>(
   tag: Tag,
-): new <A extends Record<string, any> = {}>(
+) => new <A extends Record<string, any> = {}>(
   args: Types.Equals<A, {}> extends true
     ? void
     : { readonly [P in keyof A as P extends "_tag" ? never : P]: A[P] },
-) => Cause.YieldableError & { readonly _tag: Tag } & Readonly<A> => {
-  class Base extends Error<{}> {
-    readonly _tag = tag
-  }
-  ;(Base.prototype as any).name = tag
-  return Base as any
-}
+) => Cause.YieldableError & { readonly _tag: Tag } & Readonly<A> =
+  core.TaggedError as any
