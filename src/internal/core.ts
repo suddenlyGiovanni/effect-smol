@@ -760,17 +760,16 @@ export const fail = <E>(error: E): Effect.Effect<never, E> =>
   failCause(causeFail(error))
 
 /** @internal */
-export const sync: <A>(evaluate: LazyArg<A>) => Effect.Effect<A> =
-  makePrimitive({
-    op: "Sync",
-    eval(fiber): Primitive | Yield {
-      const value = this[args]()
-      const cont = fiber.getCont(successCont)
-      return cont
-        ? cont[successCont](value, fiber)
-        : fiber.yieldWith(exitSucceed(value))
-    },
-  })
+export const sync: <A>(thunk: LazyArg<A>) => Effect.Effect<A> = makePrimitive({
+  op: "Sync",
+  eval(fiber): Primitive | Yield {
+    const value = this[args]()
+    const cont = fiber.getCont(successCont)
+    return cont
+      ? cont[successCont](value, fiber)
+      : fiber.yieldWith(exitSucceed(value))
+  },
+})
 
 /** @internal */
 export const suspend: <A, E, R>(
@@ -1974,7 +1973,7 @@ export const catchFailure: {
 )
 
 /** @internal */
-export const catchAll: {
+export const catch_: {
   <E, B, E2, R2>(
     f: (e: NoInfer<E>) => Effect.Effect<B, E2, R2>,
   ): <A, R>(self: Effect.Effect<A, E, R>) => Effect.Effect<A | B, E2, R | R2>
@@ -1992,7 +1991,7 @@ export const catchAll: {
 )
 
 /** @internal */
-export const catchAllDefect: {
+export const catchDefect: {
   <E, B, E2, R2>(
     f: (defect: unknown) => Effect.Effect<B, E2, R2>,
   ): <A, R>(
@@ -2216,13 +2215,13 @@ export const mapError: {
   <A, E, R, E2>(
     self: Effect.Effect<A, E, R>,
     f: (e: E) => E2,
-  ): Effect.Effect<A, E2, R> => catchAll(self, (error) => fail(f(error))),
+  ): Effect.Effect<A, E2, R> => catch_(self, (error) => fail(f(error))),
 )
 
 /** @internal */
 export const orDie = <A, E, R>(
   self: Effect.Effect<A, E, R>,
-): Effect.Effect<A, never, R> => catchAll(self, die)
+): Effect.Effect<A, never, R> => catch_(self, die)
 
 /** @internal */
 export const orElseSucceed: {
@@ -2238,7 +2237,7 @@ export const orElseSucceed: {
   <A, E, R, B>(
     self: Effect.Effect<A, E, R>,
     f: LazyArg<B>,
-  ): Effect.Effect<A | B, never, R> => catchAll(self, (_) => sync(f)),
+  ): Effect.Effect<A | B, never, R> => catch_(self, (_) => sync(f)),
 )
 
 /** @internal */
