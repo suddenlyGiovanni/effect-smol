@@ -79,12 +79,6 @@ export const failCause: <E>(cause: Cause.Cause<E>) => Exit<never, E> =
   core.exitFailCause
 
 /**
- * @since 4.0.0
- * @category constructors
- */
-export const interrupt: Exit<never> = core.exitInterrupt
-
-/**
  * @since 2.0.0
  * @category constructors
  */
@@ -123,4 +117,4 @@ export const exitVoid: Exit<void> = core.exitVoid
 export const exitVoidAll: <I extends Iterable<Exit<any, any>>>(
   exits: I,
 ) => Exit<void, I extends Iterable<Exit<infer _A, infer _E>> ? _E : never> =
-  core.exitVoidAll
+  core.exitAsVoidAll

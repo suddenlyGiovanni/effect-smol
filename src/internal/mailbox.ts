@@ -1,11 +1,7 @@
-import type { Scope } from "effect/Scope"
 import * as Arr from "../Array.js"
-import type { Cause } from "../Cause.js"
-import { NoSuchElementException } from "../Cause.js"
-import type { Channel } from "../Channel.js"
+import { Cause, NoSuchElementError } from "../Cause.js"
 import * as Chunk from "../Chunk.js"
 import type { Effect } from "../Effect.js"
-import * as Effectable from "../Effectable.js"
 import type { Exit } from "../Exit.js"
 import { dual } from "../Function.js"
 import * as Inspectable from "../Inspectable.js"
@@ -15,14 +11,8 @@ import * as Option from "../Option.js"
 import { pipeArguments } from "../Pipeable.js"
 import { hasProperty } from "../Predicate.js"
 import type { Scheduler } from "../Scheduler.js"
-import type { Stream } from "../Stream.js"
-import * as channel from "./channel.js"
-import * as channelExecutor from "./channel/channelExecutor.js"
-import * as coreChannel from "./core-stream.js"
 import * as core from "./core.js"
-import * as circular from "./effect/circular.js"
-import * as fiberRuntime from "./fiberRuntime.js"
-import * as stream from "./stream.js"
+import { CurrentScheduler } from "../References.js"
 
 /** @internal */
 export const TypeId: Api.TypeId = Symbol.for("effect/Mailbox") as Api.TypeId
@@ -79,13 +69,7 @@ const exitFalse = core.exitSucceed(false)
 const exitTrue = core.exitSucceed(true)
 const constDone = [empty, true] as const
 
-class MailboxImpl<A, E>
-  extends Effectable.Class<
-    readonly [messages: Chunk.Chunk<A>, done: boolean],
-    E
-  >
-  implements Api.Mailbox<A, E>
-{
+class MailboxImpl<A, E> implements Api.Mailbox<A, E> {
   readonly [TypeId]: Api.TypeId = TypeId
   readonly [ReadonlyTypeId]: Api.ReadonlyTypeId = ReadonlyTypeId
   private state: MailboxState<A, E> = {
@@ -100,9 +84,7 @@ class MailboxImpl<A, E>
     readonly scheduler: Scheduler,
     private capacity: number,
     readonly strategy: "suspend" | "dropping" | "sliding",
-  ) {
-    super()
-  }
+  ) {}
 
   offer(message: A): Effect<boolean> {
     return core.suspend(() => {
@@ -281,7 +263,7 @@ class MailboxImpl<A, E>
       }
       const messages = this.unsafeTakeAll()
       if (messages.length === 0) {
-        return core.zipRight(this.awaitTake, this.takeAll)
+        return core.andThen(this.awaitTake, this.takeAll)
       }
       return core.succeed([messages, this.releaseCapacity()])
     })
@@ -308,16 +290,16 @@ class MailboxImpl<A, E>
         messages = Chunk.take(this.messagesChunk, n)
         this.messagesChunk = Chunk.drop(this.messagesChunk, n)
       } else {
-        return core.zipRight(this.awaitTake, this.takeN(n))
+        return core.andThen(this.awaitTake, this.takeN(n))
       }
       return core.succeed([messages, this.releaseCapacity()])
     })
   }
-  unsafeTake(): Exit<A, E | NoSuchElementException> | undefined {
+  unsafeTake(): Exit<A, E | NoSuchElementError> | undefined {
     if (this.state._tag === "Done") {
       return core.exitZipRight(
         this.state.exit,
-        core.exitFail(new NoSuchElementException()),
+        core.exitFail(new NoSuchElementError()),
       )
     }
     let message: A
@@ -341,10 +323,10 @@ class MailboxImpl<A, E>
     this.releaseCapacity()
     return core.exitSucceed(message)
   }
-  take: Effect<A, E | NoSuchElementException> = core.suspend(
-    () => this.unsafeTake() ?? core.zipRight(this.awaitTake, this.take),
+  take: Effect<A, E | NoSuchElementError> = core.suspend(
+    () => this.unsafeTake() ?? core.andThen(this.awaitTake, this.take),
   )
-  await: Effect<void, E> = core.asyncInterrupt<void, E>((resume) => {
+  await: Effect<void, E> = core.async<void, E>((resume) => {
     if (this.state._tag === "Done") {
       return resume(this.state.exit)
     }
@@ -382,7 +364,7 @@ class MailboxImpl<A, E>
   }
 
   private offerRemainingSingle(message: A) {
-    return core.asyncInterrupt<boolean>((resume) => {
+    return core.async<boolean>((resume) => {
       if (this.state._tag !== "Open") {
         return resume(exitFalse)
       }
@@ -396,7 +378,7 @@ class MailboxImpl<A, E>
     })
   }
   private offerRemainingArray(remaining: Array<A>) {
-    return core.asyncInterrupt<Chunk.Chunk<A>>((resume) => {
+    return core.async<Chunk.Chunk<A>>((resume) => {
       if (this.state._tag !== "Open") {
         return resume(core.exitSucceed(Chunk.unsafeFromArray(remaining)))
       }
@@ -448,7 +430,7 @@ class MailboxImpl<A, E>
     }
     return false
   }
-  private awaitTake = core.asyncInterrupt<void, E>((resume) => {
+  private awaitTake = core.async<void, E>((resume) => {
     if (this.state._tag === "Done") {
       return resume(this.state.exit)
     }
@@ -532,10 +514,10 @@ export const make = <A, E = never>(
       }
     | undefined,
 ): Effect<Api.Mailbox<A, E>> =>
-  core.withFiberRuntime((fiber) =>
+  core.withFiber((fiber) =>
     core.succeed(
       new MailboxImpl<A, E>(
-        fiber.currentScheduler,
+        fiber.getRef(CurrentScheduler),
         typeof capacity === "number"
           ? capacity
           : (capacity?.capacity ?? Number.POSITIVE_INFINITY),
@@ -571,76 +553,76 @@ export const into: {
     ),
 )
 
-/** @internal */
-export const toChannel = <A, E>(
-  self: Api.ReadonlyMailbox<A, E>,
-): Channel<Chunk.Chunk<A>, unknown, E> => {
-  const loop: Channel<Chunk.Chunk<A>, unknown, E> = coreChannel.flatMap(
-    self.takeAll,
-    ([messages, done]) =>
-      done
-        ? messages.length === 0
-          ? coreChannel.void
-          : coreChannel.write(messages)
-        : channel.zipRight(coreChannel.write(messages), loop),
-  )
-  return loop
-}
-
-/** @internal */
-export const toStream = <A, E>(self: Api.ReadonlyMailbox<A, E>): Stream<A, E> =>
-  stream.fromChannel(toChannel(self))
-
-/** @internal */
-export const fromStream: {
-  (options?: {
-    readonly capacity?: number | undefined
-    readonly strategy?: "suspend" | "dropping" | "sliding" | undefined
-  }): <A, E, R>(
-    self: Stream<A, E, R>,
-  ) => Effect<Api.ReadonlyMailbox<A, E>, never, R | Scope>
-  <A, E, R>(
-    self: Stream<A, E, R>,
-    options?: {
-      readonly capacity?: number | undefined
-      readonly strategy?: "suspend" | "dropping" | "sliding" | undefined
-    },
-  ): Effect<Api.ReadonlyMailbox<A, E>, never, R | Scope>
-} = dual(
-  (args) => stream.isStream(args[0]),
-  <A, E, R>(
-    self: Stream<A, E, R>,
-    options?: {
-      readonly capacity?: number | undefined
-      readonly strategy?: "suspend" | "dropping" | "sliding" | undefined
-    },
-  ): Effect<Api.ReadonlyMailbox<A, E>, never, R | Scope> =>
-    core.tap(
-      fiberRuntime.acquireRelease(
-        make<A, E>(options),
-        (mailbox) => mailbox.shutdown,
-      ),
-      (mailbox) => {
-        const writer: Channel<
-          never,
-          Chunk.Chunk<A>,
-          never,
-          E
-        > = coreChannel.readWithCause({
-          onInput: (input: Chunk.Chunk<A>) =>
-            coreChannel.flatMap(mailbox.offerAll(input), () => writer),
-          onFailure: (cause: Cause<E>) => mailbox.failCause(cause),
-          onDone: () => mailbox.end,
-        })
-        return channel.unwrapScopedWith((scope) =>
-          stream
-            .toChannel(self)
-            .pipe(
-              coreChannel.pipeTo(writer),
-              channelExecutor.runIn(scope),
-              circular.forkIn(scope),
-            ),
-        )
-      },
-    ),
-)
+// /** @internal */
+// export const toChannel = <A, E>(
+//   self: Api.ReadonlyMailbox<A, E>,
+// ): Channel<Chunk.Chunk<A>, unknown, E> => {
+//   const loop: Channel<Chunk.Chunk<A>, unknown, E> = coreChannel.flatMap(
+//     self.takeAll,
+//     ([messages, done]) =>
+//       done
+//         ? messages.length === 0
+//           ? coreChannel.void
+//           : coreChannel.write(messages)
+//         : channel.zipRight(coreChannel.write(messages), loop),
+//   )
+//   return loop
+// }
+//
+// /** @internal */
+// export const toStream = <A, E>(self: Api.ReadonlyMailbox<A, E>): Stream<A, E> =>
+//   stream.fromChannel(toChannel(self))
+//
+// /** @internal */
+// export const fromStream: {
+//   (options?: {
+//     readonly capacity?: number | undefined
+//     readonly strategy?: "suspend" | "dropping" | "sliding" | undefined
+//   }): <A, E, R>(
+//     self: Stream<A, E, R>,
+//   ) => Effect<Api.ReadonlyMailbox<A, E>, never, R | Scope>
+//   <A, E, R>(
+//     self: Stream<A, E, R>,
+//     options?: {
+//       readonly capacity?: number | undefined
+//       readonly strategy?: "suspend" | "dropping" | "sliding" | undefined
+//     },
+//   ): Effect<Api.ReadonlyMailbox<A, E>, never, R | Scope>
+// } = dual(
+//   (args) => stream.isStream(args[0]),
+//   <A, E, R>(
+//     self: Stream<A, E, R>,
+//     options?: {
+//       readonly capacity?: number | undefined
+//       readonly strategy?: "suspend" | "dropping" | "sliding" | undefined
+//     },
+//   ): Effect<Api.ReadonlyMailbox<A, E>, never, R | Scope> =>
+//     core.tap(
+//       fiberRuntime.acquireRelease(
+//         make<A, E>(options),
+//         (mailbox) => mailbox.shutdown,
+//       ),
+//       (mailbox) => {
+//         const writer: Channel<
+//           never,
+//           Chunk.Chunk<A>,
+//           never,
+//           E
+//         > = coreChannel.readWithCause({
+//           onInput: (input: Chunk.Chunk<A>) =>
+//             coreChannel.flatMap(mailbox.offerAll(input), () => writer),
+//           onFailure: (cause: Cause<E>) => mailbox.failCause(cause),
+//           onDone: () => mailbox.end,
+//         })
+//         return channel.unwrapScopedWith((scope) =>
+//           stream
+//             .toChannel(self)
+//             .pipe(
+//               coreChannel.pipeTo(writer),
+//               channelExecutor.runIn(scope),
+//               circular.forkIn(scope),
+//             ),
+//         )
+//       },
+//     ),
+// )

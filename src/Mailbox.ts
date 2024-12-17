@@ -2,7 +2,7 @@
  * @since 3.8.0
  * @experimental
  */
-import type { Cause, NoSuchElementException } from "./Cause.js"
+import type { Cause, NoSuchElementError } from "./Cause.js"
 import type { Chunk } from "./Chunk.js"
 import type { Effect } from "./Effect.js"
 import type { Exit } from "./Exit.js"
@@ -124,9 +124,7 @@ export interface Mailbox<in out A, in out E = never>
  * @experimental
  * @category models
  */
-export interface ReadonlyMailbox<out A, out E = never>
-  extends Effect<readonly [messages: Chunk<A>, done: boolean], E>,
-    Inspectable {
+export interface ReadonlyMailbox<out A, out E = never> extends Inspectable {
   readonly [ReadonlyTypeId]: ReadonlyTypeId
   /**
    * Take all messages from the mailbox, returning an empty Chunk if the mailbox
@@ -157,7 +155,7 @@ export interface ReadonlyMailbox<out A, out E = never>
    * If the mailbox is done, it will fail with `NoSuchElementException`. If the
    * mailbox fails, the Effect will fail with the error.
    */
-  readonly take: Effect<A, E | NoSuchElementException>
+  readonly take: Effect<A, E | NoSuchElementError>
   /** Wait for the mailbox to be done. */
   readonly await: Effect<void, E>
   /**

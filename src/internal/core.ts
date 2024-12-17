@@ -83,6 +83,16 @@ class CauseImpl<E> implements Cause.Cause<E> {
   [NodeInspectSymbol]() {
     return this.toString()
   }
+  [Equal.symbol](that: any): boolean {
+    return (
+      isCause(that) &&
+      this.failures.length === that.failures.length &&
+      this.failures.every((e, i) => Equal.equals(e, that.failures[i]))
+    )
+  }
+  [Hash.symbol](): number {
+    return Hash.cached(this, Hash.array(this.failures))
+  }
 }
 
 const errorAnnotations = globalValue(
@@ -119,6 +129,8 @@ abstract class FailureBase<Tag extends string>
   }
 
   abstract toJSON(): unknown
+  abstract [Equal.symbol](that: any): boolean
+  abstract [Hash.symbol](): number
 
   toString() {
     return format(this)
@@ -148,6 +160,21 @@ class Fail<E> extends FailureBase<"Fail"> implements Cause.Fail<E> {
       Context.add(this.annotations, tag, value),
     ) as this
   }
+  [Equal.symbol](that: any): boolean {
+    return (
+      failureIsFail(that) &&
+      Equal.equals(this.error, that.error) &&
+      Equal.equals(this.annotations, that.annotations)
+    )
+  }
+  [Hash.symbol](): number {
+    return Hash.cached(
+      this,
+      Hash.combine(Hash.string(this._tag))(
+        Hash.combine(Hash.hash(this.error))(Hash.hash(this.annotations)),
+      ),
+    )
+  }
 }
 
 /** @internal */
@@ -173,6 +200,21 @@ class Die extends FailureBase<"Die"> implements Cause.Die {
       Context.add(this.annotations, tag, value),
     ) as this
   }
+  [Equal.symbol](that: any): boolean {
+    return (
+      failureIsDie(that) &&
+      Equal.equals(this.defect, that.defect) &&
+      Equal.equals(this.annotations, that.annotations)
+    )
+  }
+  [Hash.symbol](): number {
+    return Hash.cached(
+      this,
+      Hash.combine(Hash.string(this._tag))(
+        Hash.combine(Hash.hash(this.defect))(Hash.hash(this.annotations)),
+      ),
+    )
+  }
 }
 
 /** @internal */
@@ -181,7 +223,10 @@ export const causeDie = (defect: unknown): Cause.Cause<never> =>
 
 // TODO: add fiber ids?
 class Interrupt extends FailureBase<"Interrupt"> implements Cause.Interrupt {
-  constructor(annotations = Context.empty()) {
+  constructor(
+    readonly fiberId: Option.Option<number>,
+    annotations = Context.empty(),
+  ) {
     super("Interrupt", annotations, new Error("Interrupted"))
   }
   toJSON(): unknown {
@@ -190,14 +235,33 @@ class Interrupt extends FailureBase<"Interrupt"> implements Cause.Interrupt {
     }
   }
   annotate<I, S>(tag: Context.Tag<I, S>, value: S): this {
-    return new Interrupt(Context.add(this.annotations, tag, value)) as this
+    return new Interrupt(
+      this.fiberId,
+      Context.add(this.annotations, tag, value),
+    ) as this
+  }
+  [Equal.symbol](that: any): boolean {
+    return (
+      failureIsInterrupt(that) &&
+      Equal.equals(this.fiberId, that.fiberId) &&
+      Equal.equals(this.annotations, that.annotations)
+    )
+  }
+  [Hash.symbol](): number {
+    return Hash.cached(
+      this,
+      Hash.combine(Hash.string(this._tag))(
+        Hash.combine(Hash.hash(this.fiberId))(Hash.hash(this.annotations)),
+      ),
+    )
   }
 }
 
 /** @internal */
-export const causeInterrupt: Cause.Cause<never> = new CauseImpl([
-  new Interrupt(),
-])
+export const causeInterrupt = (
+  fiberId?: number | undefined,
+): Cause.Cause<never> =>
+  new CauseImpl([new Interrupt(Option.fromNullable(fiberId))])
 
 /** @internal */
 export const causeHasFail = <E>(self: Cause.Cause<E>): boolean =>
@@ -206,7 +270,7 @@ export const causeHasFail = <E>(self: Cause.Cause<E>): boolean =>
 /** @internal */
 export const failureIsFail = <E>(
   self: Cause.Failure<E>,
-): self is Cause.Fail<E> => self._tag === "Fail"
+): self is Cause.Fail<E> => isTagged(self, "Fail")
 
 /** @internal */
 export const causeHasDie = <E>(self: Cause.Cause<E>): boolean =>
@@ -214,7 +278,7 @@ export const causeHasDie = <E>(self: Cause.Cause<E>): boolean =>
 
 /** @internal */
 export const failureIsDie = <E>(self: Cause.Failure<E>): self is Cause.Die =>
-  self._tag === "Die"
+  isTagged(self, "Die")
 
 /** @internal */
 export const causeHasInterrupt = <E>(self: Cause.Cause<E>): boolean =>
@@ -227,7 +291,21 @@ export const causeIsOnlyInterrupt = <E>(self: Cause.Cause<E>): boolean =>
 /** @internal */
 export const failureIsInterrupt = <E>(
   self: Cause.Failure<E>,
-): self is Cause.Interrupt => self._tag === "Interrupt"
+): self is Cause.Interrupt => isTagged(self, "Interrupt")
+
+/** @internal */
+export const causeMerge: {
+  <E2>(that: Cause.Cause<E2>): <E>(self: Cause.Cause<E>) => Cause.Cause<E | E2>
+  <E, E2>(self: Cause.Cause<E>, that: Cause.Cause<E2>): Cause.Cause<E | E2>
+} = dual(
+  2,
+  <E, E2>(self: Cause.Cause<E>, that: Cause.Cause<E2>): Cause.Cause<E | E2> => {
+    const newCause = new CauseImpl<E | E2>(
+      Arr.union(self.failures, that.failures),
+    )
+    return self[Equal.symbol](newCause) ? self : newCause
+  },
+)
 
 /** @internal */
 export const causePartition = <E>(
@@ -296,9 +374,14 @@ const fiberVariance = {
   _E: identity,
 }
 
+const fiberIdStore = globalValue("effect/Fiber/fiberIdStore", () => ({
+  id: 0,
+}))
+
 class FiberImpl<in out A = any, in out E = any> implements Fiber.Fiber<A, E> {
   readonly [FiberTypeId]: Fiber.Fiber.Variance<A, E>
 
+  readonly id = ++fiberIdStore.id
   readonly _stack: Array<Primitive> = []
   readonly _observers: Array<(exit: Exit.Exit<A, E>) => void> = []
   _exit: Exit.Exit<A, E> | undefined
@@ -331,14 +414,18 @@ class FiberImpl<in out A = any, in out E = any> implements Fiber.Fiber<A, E> {
     }
   }
 
-  _interrupted = false
-  unsafeInterrupt(): void {
+  _interruptedCause: Cause.Cause<never> | undefined = undefined
+  unsafeInterrupt(fiberId?: number | undefined): void {
     if (this._exit) {
       return
     }
-    this._interrupted = true
-    if (this.interruptible) {
-      this.evaluate(exitInterrupt as any)
+    const interrupted = !!this._interruptedCause
+    this._interruptedCause =
+      this._interruptedCause && fiberId
+        ? causeMerge(this._interruptedCause, causeInterrupt(fiberId))
+        : causeInterrupt(fiberId)
+    if (!interrupted && this.interruptible) {
+      this.evaluate(failCause(this._interruptedCause) as any)
     }
   }
 
@@ -465,8 +552,8 @@ export const fiberJoin = <A, E>(self: Fiber.Fiber<A, E>): Effect.Effect<A, E> =>
 export const fiberInterrupt = <A, E>(
   self: Fiber.Fiber<A, E>,
 ): Effect.Effect<void> =>
-  suspend(() => {
-    self.unsafeInterrupt()
+  withFiber((fiber) => {
+    self.unsafeInterrupt(fiber.id)
     return asVoid(fiberAwait(self))
   })
 
@@ -474,8 +561,8 @@ export const fiberInterrupt = <A, E>(
 export const fiberInterruptAll = <A extends Iterable<Fiber.Fiber<any, any>>>(
   fibers: A,
 ): Effect.Effect<void> =>
-  suspend(() => {
-    for (const fiber of fibers) fiber.unsafeInterrupt()
+  withFiber((parent) => {
+    for (const fiber of fibers) fiber.unsafeInterrupt(parent.id)
     const iter = fibers[Symbol.iterator]()
     const wait: Effect.Effect<void> = suspend(() => {
       let result = iter.next()
@@ -732,10 +819,10 @@ export const failSync = <E>(error: LazyArg<E>): Effect.Effect<never, E> =>
 /** @internal */
 export const fromOption = <A>(
   option: Option.Option<A>,
-): Effect.Effect<A, NoSuchElementException> =>
+): Effect.Effect<A, NoSuchElementError> =>
   option._tag === "Some"
     ? succeed(option.value)
-    : fail(new NoSuchElementException({}))
+    : fail(new NoSuchElementError())
 
 /** @internal */
 export const fromEither = <R, L>(
@@ -1246,9 +1333,6 @@ export const exitFailCause: <E>(cause: Cause.Cause<E>) => Exit.Exit<never, E> =
   failCause as any
 
 /** @internal */
-export const exitInterrupt: Exit.Exit<never> = exitFailCause(causeInterrupt)
-
-/** @internal */
 export const exitFail = <E>(e: E): Exit.Exit<never, E> =>
   exitFailCause(causeFail(e))
 
@@ -1276,7 +1360,48 @@ export const exitHasInterrupt = <A, E>(
 export const exitVoid: Exit.Exit<void> = exitSucceed(void 0)
 
 /** @internal */
-export const exitVoidAll = <I extends Iterable<Exit.Exit<any, any>>>(
+export const exitMap: {
+  <A, B>(f: (a: A) => B): <E>(self: Exit.Exit<A, E>) => Exit.Exit<B, E>
+  <A, E, B>(self: Exit.Exit<A, E>, f: (a: A) => B): Exit.Exit<B, E>
+} = dual(
+  2,
+  <A, E, B>(self: Exit.Exit<A, E>, f: (a: A) => B): Exit.Exit<B, E> =>
+    exitIsSuccess(self) ? exitSucceed(f(self.value)) : (self as any),
+)
+
+/** @internal */
+export const exitAs: {
+  <B>(b: B): <A, E>(self: Exit.Exit<A, E>) => Exit.Exit<B, E>
+  <A, E, B>(self: Exit.Exit<A, E>, b: B): Exit.Exit<B, E>
+} = dual(
+  2,
+  <A, E, B>(self: Exit.Exit<A, E>, b: B): Exit.Exit<B, E> =>
+    exitIsSuccess(self) ? exitSucceed(b) : (self as any),
+)
+
+/** @internal */
+export const exitZipRight: {
+  <A2, E2>(
+    that: Exit.Exit<A2, E2>,
+  ): <A, E>(self: Exit.Exit<A, E>) => Exit.Exit<A2, E | E2>
+  <A, E, A2, E2>(
+    self: Exit.Exit<A, E>,
+    that: Exit.Exit<A2, E2>,
+  ): Exit.Exit<A2, E | E2>
+} = dual(
+  2,
+  <A, E, A2, E2>(
+    self: Exit.Exit<A, E>,
+    that: Exit.Exit<A2, E2>,
+  ): Exit.Exit<A2, E | E2> => (exitIsSuccess(self) ? that : (self as any)),
+)
+
+/** @internal */
+export const exitAsVoid: <A, E>(self: Exit.Exit<A, E>) => Exit.Exit<void, E> =
+  exitAs(void 0)
+
+/** @internal */
+export const exitAsVoidAll = <I extends Iterable<Exit.Exit<any, any>>>(
   exits: I,
 ): Exit.Exit<
   void,
@@ -2390,20 +2515,20 @@ export const timeout: {
     millis: number,
   ): <A, E, R>(
     self: Effect.Effect<A, E, R>,
-  ) => Effect.Effect<A, E | TimeoutException, R>
+  ) => Effect.Effect<A, E | TimeoutError, R>
   <A, E, R>(
     self: Effect.Effect<A, E, R>,
     millis: number,
-  ): Effect.Effect<A, E | TimeoutException, R>
+  ): Effect.Effect<A, E | TimeoutError, R>
 } = dual(
   2,
   <A, E, R>(
     self: Effect.Effect<A, E, R>,
     millis: number,
-  ): Effect.Effect<A, E | TimeoutException, R> =>
+  ): Effect.Effect<A, E | TimeoutError, R> =>
     timeoutOrElse(self, {
       duration: millis,
-      onTimeout: () => fail(new TimeoutException()),
+      onTimeout: () => fail(new TimeoutError()),
     }),
 )
 
@@ -2489,7 +2614,7 @@ class ScopeImpl implements Scope.Scope.Closeable {
         this.state = { _tag: "Closed", exit: microExit }
         return flatMap(
           forEach(finalizers, (finalizer) => exit(finalizer(microExit))),
-          exitVoidAll,
+          exitAsVoidAll,
         )
       }
       return void_
@@ -2698,7 +2823,9 @@ export const acquireUseRelease = <Resource, E, R, A, E2, R2, E3, R3>(
 // ----------------------------------------------------------------------------
 
 /** @internal */
-export const interrupt: Effect.Effect<never> = failCause(causeInterrupt)
+export const interrupt: Effect.Effect<never> = withFiber((fiber) =>
+  failCause(causeInterrupt(fiber.id)),
+)
 
 /** @internal */
 export const uninterruptible = <A, E, R>(
@@ -2715,8 +2842,8 @@ const setInterruptible: (interruptible: boolean) => Primitive = makePrimitive({
   op: "SetInterruptible",
   ensure(fiber) {
     fiber.interruptible = this[args]
-    if (fiber._interrupted && fiber.interruptible) {
-      return () => exitInterrupt
+    if (fiber._interruptedCause && fiber.interruptible) {
+      return () => failCause(fiber._interruptedCause!)
     }
   },
 })
@@ -2729,7 +2856,7 @@ export const interruptible = <A, E, R>(
     if (fiber.interruptible) return self
     fiber.interruptible = true
     fiber._stack.push(setInterruptible(false))
-    if (fiber._interrupted) return exitInterrupt
+    if (fiber._interruptedCause) return failCause(fiber._interruptedCause)
     return self
   })
 
@@ -3188,41 +3315,51 @@ export const runSync = <A, E>(effect: Effect.Effect<A, E>): A => {
 // ----------------------------------------------------------------------------
 
 /** @internal */
-export const YieldableError: new (message?: string) => Effect.YieldableError =
-  (function () {
-    class YieldableError extends globalThis.Error {}
-    Object.assign(YieldableError.prototype, EffectProto, StructuralPrototype, {
-      [identifier]: "Failure",
-      [evaluate]() {
-        return fail(this)
-      },
-      toString(this: Error) {
-        return this.message ? `${this.name}: ${this.message}` : this.name
-      },
-      toJSON() {
-        return { ...this }
-      },
-      [NodeInspectSymbol](this: Error): string {
-        const stack = this.stack
-        if (stack) {
-          return `${this.toString()}\n${stack.split("\n").slice(1).join("\n")}`
-        }
-        return this.toString()
-      },
-    })
-    return YieldableError as any
-  })()
+export const YieldableError: new (
+  message?: string,
+  options?: ErrorOptions,
+) => Cause.YieldableError = (function () {
+  class YieldableError extends globalThis.Error {}
+  Object.assign(YieldableError.prototype, EffectProto, StructuralPrototype, {
+    [identifier]: "Failure",
+    [evaluate]() {
+      return fail(this)
+    },
+    toString(this: Error) {
+      return this.message ? `${this.name}: ${this.message}` : this.name
+    },
+    toJSON() {
+      return { ...this }
+    },
+    [NodeInspectSymbol](this: Error): string {
+      const stack = this.stack
+      if (stack) {
+        return `${this.toString()}\n${stack.split("\n").slice(1).join("\n")}`
+      }
+      return this.toString()
+    },
+  })
+  return YieldableError as any
+})()
 
 /** @internal */
 export const Error: new <A extends Record<string, any> = {}>(
   args: Equals<A, {}> extends true ? void : { readonly [P in keyof A]: A[P] },
 ) => Cause.YieldableError & Readonly<A> = (function () {
-  return class extends YieldableError {
+  const plainArgsSymbol = Symbol.for("effect/Data/Error/plainArgs")
+  return class Base extends YieldableError {
     constructor(args: any) {
-      super()
+      super(args?.message, args?.cause ? { cause: args.cause } : undefined)
       if (args) {
         Object.assign(this, args)
+        Object.defineProperty(this, plainArgsSymbol, {
+          value: args,
+          enumerable: false,
+        })
       }
+    }
+    toJSON() {
+      return { ...(this as any)[plainArgsSymbol], ...this }
     }
   } as any
 })()
@@ -3243,9 +3380,29 @@ export const TaggedError = <Tag extends string>(
 }
 
 /** @internal */
-export class NoSuchElementException extends TaggedError(
-  "NoSuchElementException",
-)<{ message?: string | undefined }> {}
+export const NoSuchElementErrorTypeId: Cause.NoSuchElementErrorTypeId =
+  Symbol.for(
+    "effect/Cause/NoSuchElementError",
+  ) as Cause.NoSuchElementErrorTypeId
 
 /** @internal */
-export class TimeoutException extends TaggedError("TimeoutException") {}
+export class NoSuchElementError extends TaggedError("NoSuchElementError") {
+  readonly [NoSuchElementErrorTypeId]: Cause.NoSuchElementErrorTypeId =
+    NoSuchElementErrorTypeId
+  constructor(message?: string) {
+    super({ message } as any)
+  }
+}
+
+/** @internal */
+export const TimeoutErrorTypeId: Cause.TimeoutErrorTypeId = Symbol.for(
+  "effect/Cause/TimeoutError",
+) as Cause.TimeoutErrorTypeId
+
+/** @internal */
+export class TimeoutError extends TaggedError("TimeoutError") {
+  readonly [TimeoutErrorTypeId]: Cause.TimeoutErrorTypeId = TimeoutErrorTypeId
+  constructor(message?: string) {
+    super({ message } as any)
+  }
+}

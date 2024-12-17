@@ -28,11 +28,12 @@ export type TypeId = typeof TypeId
 export interface Fiber<out A, out E = never> extends Pipeable {
   readonly [TypeId]: Fiber.Variance<A, E>
 
+  readonly id: number
   readonly currentOpCount: number
   readonly getRef: <I, A>(ref: Context.Reference<I, A>) => A
   readonly context: Context.Context<never>
   readonly addObserver: (cb: (exit: Exit<A, E>) => void) => () => void
-  readonly unsafeInterrupt: () => void
+  readonly unsafeInterrupt: (fiberId?: number | undefined) => void
   readonly unsafePoll: () => Exit<A, E> | undefined
 }
 

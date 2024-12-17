@@ -6,6 +6,8 @@ import type * as Context from "./Context.js"
 import { Pipeable } from "./Pipeable.js"
 import { Inspectable } from "./Inspectable.js"
 import type * as Effect from "./Effect.js"
+import { Option } from "./Option.js"
+import { Equal } from "./Equal.js"
 
 /**
  * @since 2.0.0
@@ -25,7 +27,7 @@ export type TypeId = typeof TypeId
  * @since 2.0.0
  * @category models
  */
-export interface Cause<out E> extends Pipeable, Inspectable {
+export interface Cause<out E> extends Pipeable, Inspectable, Equal {
   readonly [TypeId]: TypeId
   readonly failures: ReadonlyArray<Failure<E>>
 }
@@ -93,7 +95,9 @@ export interface Fail<out E> extends Cause.FailureProto<"Fail"> {
  * @since 2.0.0
  * @category models
  */
-export interface Interrupt extends Cause.FailureProto<"Interrupt"> {}
+export interface Interrupt extends Cause.FailureProto<"Interrupt"> {
+  readonly fiberId: Option<number>
+}
 
 /**
  * @since 2.0.0
@@ -108,4 +112,55 @@ export interface YieldableError extends Pipeable, Inspectable, Readonly<Error> {
  * @since 4.0.0
  * @category errors
  */
-export interface NoSuchElementError extends YieldableError {}
+export const NoSuchElementErrorTypeId: unique symbol =
+  core.NoSuchElementErrorTypeId
+
+/**
+ * @since 4.0.0
+ * @category errors
+ */
+export type NoSuchElementErrorTypeId = typeof NoSuchElementErrorTypeId
+
+/**
+ * @since 4.0.0
+ * @category errors
+ */
+export interface NoSuchElementError extends YieldableError {
+  readonly [NoSuchElementErrorTypeId]: NoSuchElementErrorTypeId
+  readonly _tag: "NoSuchElementError"
+}
+
+/**
+ * @since 4.0.0
+ * @category errors
+ */
+export const NoSuchElementError: new (message?: string) => NoSuchElementError =
+  core.NoSuchElementError
+
+/**
+ * @since 4.0.0
+ * @category errors
+ */
+export const TimeoutErrorTypeId: unique symbol = core.TimeoutErrorTypeId
+
+/**
+ * @since 4.0.0
+ * @category errors
+ */
+export type TimeoutErrorTypeId = typeof TimeoutErrorTypeId
+
+/**
+ * @since 4.0.0
+ * @category errors
+ */
+export interface TimeoutError extends YieldableError {
+  readonly [TimeoutErrorTypeId]: TimeoutErrorTypeId
+  readonly _tag: "TimeoutError"
+}
+
+/**
+ * @since 4.0.0
+ * @category errors
+ */
+export const TimeoutError: new (message?: string) => TimeoutError =
+  core.TimeoutError
