@@ -378,6 +378,8 @@ const fiberIdStore = globalValue("effect/Fiber/fiberIdStore", () => ({
   id: 0,
 }))
 
+const currentFiberUri = "effect/Fiber/currentFiber"
+
 class FiberImpl<in out A = any, in out E = any> implements Fiber.Fiber<A, E> {
   readonly [FiberTypeId]: Fiber.Fiber.Variance<A, E>
 
@@ -463,6 +465,8 @@ class FiberImpl<in out A = any, in out E = any> implements Fiber.Fiber<A, E> {
   }
 
   runLoop(effect: Primitive): Exit.Exit<A, E> | Yield {
+    const prevFiber = (globalThis as any)[currentFiberUri]
+    ;(globalThis as any)[currentFiberUri] = this
     let yielding = false
     let current: Primitive | Yield = effect
     this.currentOpCount = 0
@@ -492,6 +496,8 @@ class FiberImpl<in out A = any, in out E = any> implements Fiber.Fiber<A, E> {
         return exitDie(`Fiber.runLoop: Not a valid effect: ${String(current)}`)
       }
       return exitDie(error)
+    } finally {
+      ;(globalThis as any)[currentFiberUri] = prevFiber
     }
   }
 
