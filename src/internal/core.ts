@@ -996,12 +996,30 @@ export const gen = <
       : never
 > =>
   suspend(() =>
-    fromIterator(
+    unsafeFromIterator(
       args.length === 1 ? args[0]() : (args[1].call(args[0]) as any),
     ),
   )
 
-const fromIterator: (
+/** @internal */
+export const fnUntraced: Effect.fn.Gen = (
+  body: Function,
+  ...pipeables: Array<any>
+) => {
+  return pipeables.length === 0
+    ? function (this: any, ...args: any[]) {
+        return suspend(() => unsafeFromIterator(body.apply(this, args)))
+      }
+    : function (this: any, ...args: any[]) {
+        let effect = suspend(() => unsafeFromIterator(body.apply(this, args)))
+        for (const pipeable of pipeables) {
+          effect = pipeable(effect)
+        }
+        return effect
+      }
+}
+
+const unsafeFromIterator: (
   iterator: Iterator<any, YieldWrap<Effect.Effect<any, any, any>>>,
 ) => Effect.Effect<any, any, any> = makePrimitive({
   op: "Iterator",

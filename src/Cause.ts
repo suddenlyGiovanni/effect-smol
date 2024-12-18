@@ -101,6 +101,25 @@ export interface Interrupt extends Cause.FailureProto<"Interrupt"> {
 
 /**
  * @since 2.0.0
+ * @category constructors
+ */
+export const fail: <E>(error: E) => Cause<E> = core.causeFail
+
+/**
+ * @since 2.0.0
+ * @category constructors
+ */
+export const die: (defect: unknown) => Cause<never> = core.causeDie
+
+/**
+ * @since 2.0.0
+ * @category constructors
+ */
+export const interrupt: (fiberId?: number | undefined) => Cause<never> =
+  core.causeInterrupt
+
+/**
+ * @since 2.0.0
  * @category errors
  */
 export interface YieldableError extends Pipeable, Inspectable, Readonly<Error> {

@@ -90,6 +90,15 @@ export const fail: <E>(e: E) => Exit<never, E> = core.exitFail
  */
 export const die: (defect: unknown) => Exit<never> = core.exitDie
 
+const void_: Exit<void> = core.exitVoid
+export {
+  /**
+   * @since 2.0.0
+   * @category constructors
+   */
+  void_ as void,
+}
+
 /**
  * @since 2.0.0
  * @category guards
@@ -106,15 +115,15 @@ export const isFailure: <A, E>(self: Exit<A, E>) => self is Failure<A, E> =
 
 /**
  * @since 2.0.0
- * @category guards
+ * @category combinators
  */
-export const exitVoid: Exit<void> = core.exitVoid
+export const asVoid: <A, E>(self: Exit<A, E>) => Exit<void, E> = core.exitAsVoid
 
 /**
  * @since 4.0.0
  * @category combinators
  */
-export const exitVoidAll: <I extends Iterable<Exit<any, any>>>(
+export const asVoidAll: <I extends Iterable<Exit<any, any>>>(
   exits: I,
 ) => Exit<void, I extends Iterable<Exit<infer _A, infer _E>> ? _E : never> =
   core.exitAsVoidAll

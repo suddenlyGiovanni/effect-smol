@@ -14,6 +14,7 @@ import type { Concurrency, Covariant } from "./Types.js"
 import type * as Unify from "./Unify.js"
 import { YieldWrap } from "./Utils.js"
 import * as core from "./internal/core.js"
+import type { Scope } from "./Scope.js"
 
 /**
  * @since 4.0.0
@@ -666,6 +667,74 @@ export const die: (defect: unknown) => Effect<never> = core.die
 // -----------------------------------------------------------------------------
 
 /**
+ * Chains effects to produce new `Effect` instances, useful for combining
+ * operations that depend on previous results.
+ *
+ * **Syntax**
+ * ```ts
+ * const flatMappedEffect = pipe(myEffect, Effect.flatMap(transformation))
+ * // or
+ * const flatMappedEffect = Effect.flatMap(myEffect, transformation)
+ * // or
+ * const flatMappedEffect = myEffect.pipe(Effect.flatMap(transformation))
+ * ```
+ *
+ * **When to Use**
+ *
+ * Use `flatMap` when you need to chain multiple effects, ensuring that each
+ * step produces a new `Effect` while flattening any nested effects that may
+ * occur.
+ *
+ * **Details**
+ *
+ * `flatMap` lets you sequence effects so that the result of one effect can be
+ * used in the next step. It is similar to `flatMap` used with arrays but works
+ * specifically with `Effect` instances, allowing you to avoid deeply nested
+ * effect structures.
+ *
+ * Since effects are immutable, `flatMap` always returns a new effect instead of
+ * changing the original one.
+ *
+ * @example
+ * ```ts
+ * import { pipe, Effect } from "effect"
+ *
+ * // Function to apply a discount safely to a transaction amount
+ * const applyDiscount = (
+ *   total: number,
+ *   discountRate: number
+ * ): Effect.Effect<number, Error> =>
+ *   discountRate === 0
+ *     ? Effect.fail(new Error("Discount rate cannot be zero"))
+ *     : Effect.succeed(total - (total * discountRate) / 100)
+ *
+ * // Simulated asynchronous task to fetch a transaction amount from database
+ * const fetchTransactionAmount = Effect.promise(() => Promise.resolve(100))
+ *
+ * // Chaining the fetch and discount application using `flatMap`
+ * const finalAmount = pipe(
+ *   fetchTransactionAmount,
+ *   Effect.flatMap((amount) => applyDiscount(amount, 5))
+ * )
+ *
+ * Effect.runPromise(finalAmount).then(console.log)
+ * // Output: 95
+ * ```
+ *
+ * @since 2.0.0
+ * @category Mapping
+ */
+export const flatMap: {
+  <A, B, E1, R1>(
+    f: (a: A) => Effect<B, E1, R1>,
+  ): <E, R>(self: Effect<A, E, R>) => Effect<B, E1 | E, R1 | R>
+  <A, E, R, B, E1, R1>(
+    self: Effect<A, E, R>,
+    f: (a: A) => Effect<B, E1, R1>,
+  ): Effect<B, E | E1, R | R1>
+} = core.flatMap
+
+/**
  * Transforms the value inside an effect by applying a function to it.
  *
  * **Syntax**
@@ -728,7 +797,7 @@ const catch_: {
     self: Effect<A, E, R>,
     f: (e: E) => Effect<A2, E2, R2>,
   ): Effect<A2 | A, E2, R2 | R>
-} = core.catch
+} = core.catch_
 
 export {
   /**
@@ -1006,6 +1075,118 @@ export const catchFailure: {
     f: (failure: NoInfer<Failure<E>>, cause: Cause<E>) => Effect<B, E2, R2>,
   ): Effect<A | B, E | E2, R | R2>
 } = core.catchFailure
+
+// -----------------------------------------------------------------------------
+// Resource management & finalization
+// -----------------------------------------------------------------------------
+
+/**
+ * This function adds a finalizer to the scope of the calling `Effect` value.
+ * The finalizer is guaranteed to be run when the scope is closed, and it may
+ * depend on the `Exit` value that the scope is closed with.
+ *
+ * @since 2.0.0
+ * @category Resource management & finalization
+ */
+export const addFinalizer: (
+  finalizer: (exit: Exit<unknown, unknown>) => Effect<void>,
+) => Effect<void, never, Scope> = core.addFinalizer
+
+/**
+ * Returns an effect that, if this effect _starts_ execution, then the
+ * specified `finalizer` is guaranteed to be executed, whether this effect
+ * succeeds, fails, or is interrupted.
+ *
+ * For use cases that need access to the effect's result, see `onExit`.
+ *
+ * Finalizers offer very powerful guarantees, but they are low-level, and
+ * should generally not be used for releasing resources. For higher-level
+ * logic built on `ensuring`, see the `acquireRelease` family of methods.
+ *
+ * @since 2.0.0
+ * @category Resource management & finalization
+ */
+export const ensuring: {
+  <X, R1>(
+    finalizer: Effect<X, never, R1>,
+  ): <A, E, R>(self: Effect<A, E, R>) => Effect<A, E, R1 | R>
+  <A, E, R, X, R1>(
+    self: Effect<A, E, R>,
+    finalizer: Effect<X, never, R1>,
+  ): Effect<A, E, R1 | R>
+} = core.ensuring
+
+/**
+ * Runs the specified effect if this effect fails, providing the error to the
+ * effect if it exists. The provided effect will not be interrupted.
+ *
+ * @since 2.0.0
+ * @category Resource management & finalization
+ */
+export const onError: {
+  <E, X, R2>(
+    cleanup: (cause: Cause<E>) => Effect<X, never, R2>,
+  ): <A, R>(self: Effect<A, E, R>) => Effect<A, E, R2 | R>
+  <A, E, R, X, R2>(
+    self: Effect<A, E, R>,
+    cleanup: (cause: Cause<E>) => Effect<X, never, R2>,
+  ): Effect<A, E, R2 | R>
+} = core.onError
+
+/**
+ * Ensures that a cleanup functions runs, whether this effect succeeds, fails,
+ * or is interrupted.
+ *
+ * @since 2.0.0
+ * @category Resource management & finalization
+ */
+export const onExit: {
+  <A, E, X, R2>(
+    cleanup: (exit: Exit<A, E>) => Effect<X, never, R2>,
+  ): <R>(self: Effect<A, E, R>) => Effect<A, E, R2 | R>
+  <A, E, R, X, R2>(
+    self: Effect<A, E, R>,
+    cleanup: (exit: Exit<A, E>) => Effect<X, never, R2>,
+  ): Effect<A, E, R | R2>
+} = core.onExit
+
+// -----------------------------------------------------------------------------
+// Interruption
+// -----------------------------------------------------------------------------
+
+/**
+ * @since 2.0.0
+ * @category Interruption
+ */
+export const interrupt: Effect<never> = core.interrupt
+
+// -----------------------------------------------------------------------------
+// Supervision & Fiber's
+// -----------------------------------------------------------------------------
+
+/**
+ * Forks the effect in the specified scope. The fiber will be interrupted
+ * when the scope is closed.
+ *
+ * @since 2.0.0
+ * @category supervision & fibers
+ */
+export const forkIn: {
+  (
+    scope: Scope,
+  ): <A, E, R>(self: Effect<A, E, R>) => Effect<Fiber<A, E>, never, R>
+  <A, E, R>(self: Effect<A, E, R>, scope: Scope): Effect<Fiber<A, E>, never, R>
+} = core.forkIn
+
+/**
+ * Forks the fiber in a `Scope`, interrupting it when the scope is closed.
+ *
+ * @since 2.0.0
+ * @category supervision & fibers
+ */
+export const forkScoped: <A, E, R>(
+  self: Effect<A, E, R>,
+) => Effect<Fiber<A, E>, never, Scope | R> = core.forkScoped
 
 // -----------------------------------------------------------------------------
 // Running Effects
@@ -1289,3 +1470,471 @@ export const runSync: <A, E>(effect: Effect<A, E>) => A = core.runSync
  */
 export const runSyncExit: <A, E>(effect: Effect<A, E>) => Exit<A, E> =
   core.runSyncExit
+
+// -----------------------------------------------------------------------------
+// Function
+// -----------------------------------------------------------------------------
+
+/**
+ * @since 3.12.0
+ * @category Function
+ */
+export namespace fn {
+  /**
+   * @since 3.12.0
+   * @category Function
+   */
+  export type Gen = {
+    <
+      Eff extends YieldWrap<Effect<any, any, any>>,
+      AEff,
+      Args extends Array<any>,
+    >(
+      body: (...args: Args) => Generator<Eff, AEff, never>,
+    ): (
+      ...args: Args
+    ) => Effect<
+      AEff,
+      [Eff] extends [never]
+        ? never
+        : [Eff] extends [YieldWrap<Effect<infer _A, infer E, infer _R>>]
+          ? E
+          : never,
+      [Eff] extends [never]
+        ? never
+        : [Eff] extends [YieldWrap<Effect<infer _A, infer _E, infer R>>]
+          ? R
+          : never
+    >
+    <
+      Eff extends YieldWrap<Effect<any, any, any>>,
+      AEff,
+      Args extends Array<any>,
+      A extends Effect<any, any, any>,
+    >(
+      body: (...args: Args) => Generator<Eff, AEff, never>,
+      a: (
+        _: Effect<
+          AEff,
+          [Eff] extends [never]
+            ? never
+            : [Eff] extends [YieldWrap<Effect<infer _A, infer E, infer _R>>]
+              ? E
+              : never,
+          [Eff] extends [never]
+            ? never
+            : [Eff] extends [YieldWrap<Effect<infer _A, infer _E, infer R>>]
+              ? R
+              : never
+        >,
+      ) => A,
+    ): (...args: Args) => A
+    <
+      Eff extends YieldWrap<Effect<any, any, any>>,
+      AEff,
+      Args extends Array<any>,
+      A,
+      B extends Effect<any, any, any>,
+    >(
+      body: (...args: Args) => Generator<Eff, AEff, never>,
+      a: (
+        _: Effect<
+          AEff,
+          [Eff] extends [never]
+            ? never
+            : [Eff] extends [YieldWrap<Effect<infer _A, infer E, infer _R>>]
+              ? E
+              : never,
+          [Eff] extends [never]
+            ? never
+            : [Eff] extends [YieldWrap<Effect<infer _A, infer _E, infer R>>]
+              ? R
+              : never
+        >,
+      ) => A,
+      b: (_: A) => B,
+    ): (...args: Args) => B
+    <
+      Eff extends YieldWrap<Effect<any, any, any>>,
+      AEff,
+      Args extends Array<any>,
+      A,
+      B,
+      C extends Effect<any, any, any>,
+    >(
+      body: (...args: Args) => Generator<Eff, AEff, never>,
+      a: (
+        _: Effect<
+          AEff,
+          [Eff] extends [never]
+            ? never
+            : [Eff] extends [YieldWrap<Effect<infer _A, infer E, infer _R>>]
+              ? E
+              : never,
+          [Eff] extends [never]
+            ? never
+            : [Eff] extends [YieldWrap<Effect<infer _A, infer _E, infer R>>]
+              ? R
+              : never
+        >,
+      ) => A,
+      b: (_: A) => B,
+      c: (_: B) => C,
+    ): (...args: Args) => C
+    <
+      Eff extends YieldWrap<Effect<any, any, any>>,
+      AEff,
+      Args extends Array<any>,
+      A,
+      B,
+      C,
+      D extends Effect<any, any, any>,
+    >(
+      body: (...args: Args) => Generator<Eff, AEff, never>,
+      a: (
+        _: Effect<
+          AEff,
+          [Eff] extends [never]
+            ? never
+            : [Eff] extends [YieldWrap<Effect<infer _A, infer E, infer _R>>]
+              ? E
+              : never,
+          [Eff] extends [never]
+            ? never
+            : [Eff] extends [YieldWrap<Effect<infer _A, infer _E, infer R>>]
+              ? R
+              : never
+        >,
+      ) => A,
+      b: (_: A) => B,
+      c: (_: B) => C,
+      d: (_: C) => D,
+    ): (...args: Args) => D
+    <
+      Eff extends YieldWrap<Effect<any, any, any>>,
+      AEff,
+      Args extends Array<any>,
+      A,
+      B,
+      C,
+      D,
+      E extends Effect<any, any, any>,
+    >(
+      body: (...args: Args) => Generator<Eff, AEff, never>,
+      a: (
+        _: Effect<
+          AEff,
+          [Eff] extends [never]
+            ? never
+            : [Eff] extends [YieldWrap<Effect<infer _A, infer E, infer _R>>]
+              ? E
+              : never,
+          [Eff] extends [never]
+            ? never
+            : [Eff] extends [YieldWrap<Effect<infer _A, infer _E, infer R>>]
+              ? R
+              : never
+        >,
+      ) => A,
+      b: (_: A) => B,
+      c: (_: B) => C,
+      d: (_: C) => D,
+      e: (_: D) => E,
+    ): (...args: Args) => E
+    <
+      Eff extends YieldWrap<Effect<any, any, any>>,
+      AEff,
+      Args extends Array<any>,
+      A,
+      B,
+      C,
+      D,
+      E,
+      F extends Effect<any, any, any>,
+    >(
+      body: (...args: Args) => Generator<Eff, AEff, never>,
+      a: (
+        _: Effect<
+          AEff,
+          [Eff] extends [never]
+            ? never
+            : [Eff] extends [YieldWrap<Effect<infer _A, infer E, infer _R>>]
+              ? E
+              : never,
+          [Eff] extends [never]
+            ? never
+            : [Eff] extends [YieldWrap<Effect<infer _A, infer _E, infer R>>]
+              ? R
+              : never
+        >,
+      ) => A,
+      b: (_: A) => B,
+      c: (_: B) => C,
+      d: (_: C) => D,
+      e: (_: D) => E,
+      f: (_: E) => F,
+    ): (...args: Args) => F
+    <
+      Eff extends YieldWrap<Effect<any, any, any>>,
+      AEff,
+      Args extends Array<any>,
+      A,
+      B,
+      C,
+      D,
+      E,
+      F,
+      G extends Effect<any, any, any>,
+    >(
+      body: (...args: Args) => Generator<Eff, AEff, never>,
+      a: (
+        _: Effect<
+          AEff,
+          [Eff] extends [never]
+            ? never
+            : [Eff] extends [YieldWrap<Effect<infer _A, infer E, infer _R>>]
+              ? E
+              : never,
+          [Eff] extends [never]
+            ? never
+            : [Eff] extends [YieldWrap<Effect<infer _A, infer _E, infer R>>]
+              ? R
+              : never
+        >,
+      ) => A,
+      b: (_: A) => B,
+      c: (_: B) => C,
+      d: (_: C) => D,
+      e: (_: D) => E,
+      f: (_: E) => F,
+      g: (_: F) => G,
+    ): (...args: Args) => G
+    <
+      Eff extends YieldWrap<Effect<any, any, any>>,
+      AEff,
+      Args extends Array<any>,
+      A,
+      B,
+      C,
+      D,
+      E,
+      F,
+      G,
+      H extends Effect<any, any, any>,
+    >(
+      body: (...args: Args) => Generator<Eff, AEff, never>,
+      a: (
+        _: Effect<
+          AEff,
+          [Eff] extends [never]
+            ? never
+            : [Eff] extends [YieldWrap<Effect<infer _A, infer E, infer _R>>]
+              ? E
+              : never,
+          [Eff] extends [never]
+            ? never
+            : [Eff] extends [YieldWrap<Effect<infer _A, infer _E, infer R>>]
+              ? R
+              : never
+        >,
+      ) => A,
+      b: (_: A) => B,
+      c: (_: B) => C,
+      d: (_: C) => D,
+      e: (_: D) => E,
+      f: (_: E) => F,
+      g: (_: F) => G,
+      h: (_: G) => H,
+    ): (...args: Args) => H
+    <
+      Eff extends YieldWrap<Effect<any, any, any>>,
+      AEff,
+      Args extends Array<any>,
+      A,
+      B,
+      C,
+      D,
+      E,
+      F,
+      G,
+      H,
+      I extends Effect<any, any, any>,
+    >(
+      body: (...args: Args) => Generator<Eff, AEff, never>,
+      a: (
+        _: Effect<
+          AEff,
+          [Eff] extends [never]
+            ? never
+            : [Eff] extends [YieldWrap<Effect<infer _A, infer E, infer _R>>]
+              ? E
+              : never,
+          [Eff] extends [never]
+            ? never
+            : [Eff] extends [YieldWrap<Effect<infer _A, infer _E, infer R>>]
+              ? R
+              : never
+        >,
+      ) => A,
+      b: (_: A) => B,
+      c: (_: B) => C,
+      d: (_: C) => D,
+      e: (_: D) => E,
+      f: (_: E) => F,
+      g: (_: F) => G,
+      h: (_: G) => H,
+      i: (_: H) => I,
+    ): (...args: Args) => I
+  }
+
+  /**
+   * @since 3.11.0
+   * @category models
+   */
+  export type NonGen = {
+    <Eff extends Effect<any, any, any>, Args extends Array<any>>(
+      body: (...args: Args) => Eff,
+    ): (...args: Args) => Eff
+    <Eff extends Effect<any, any, any>, A, Args extends Array<any>>(
+      body: (...args: Args) => A,
+      a: (_: A) => Eff,
+    ): (...args: Args) => Eff
+    <Eff extends Effect<any, any, any>, A, B, Args extends Array<any>>(
+      body: (...args: Args) => A,
+      a: (_: A) => B,
+      b: (_: B) => Eff,
+    ): (...args: Args) => Eff
+    <Eff extends Effect<any, any, any>, A, B, C, Args extends Array<any>>(
+      body: (...args: Args) => A,
+      a: (_: A) => B,
+      b: (_: B) => C,
+      c: (_: C) => Eff,
+    ): (...args: Args) => Eff
+    <Eff extends Effect<any, any, any>, A, B, C, D, Args extends Array<any>>(
+      body: (...args: Args) => A,
+      a: (_: A) => B,
+      b: (_: B) => C,
+      c: (_: C) => D,
+      d: (_: D) => Eff,
+    ): (...args: Args) => Eff
+    <Eff extends Effect<any, any, any>, A, B, C, D, E, Args extends Array<any>>(
+      body: (...args: Args) => A,
+      a: (_: A) => B,
+      b: (_: B) => C,
+      c: (_: C) => D,
+      d: (_: D) => E,
+      e: (_: E) => Eff,
+    ): (...args: Args) => Eff
+    <
+      Eff extends Effect<any, any, any>,
+      A,
+      B,
+      C,
+      D,
+      E,
+      F,
+      Args extends Array<any>,
+    >(
+      body: (...args: Args) => A,
+      a: (_: A) => B,
+      b: (_: B) => C,
+      c: (_: C) => D,
+      d: (_: D) => E,
+      e: (_: E) => F,
+      f: (_: E) => Eff,
+    ): (...args: Args) => Eff
+    <
+      Eff extends Effect<any, any, any>,
+      A,
+      B,
+      C,
+      D,
+      E,
+      F,
+      G,
+      Args extends Array<any>,
+    >(
+      body: (...args: Args) => A,
+      a: (_: A) => B,
+      b: (_: B) => C,
+      c: (_: C) => D,
+      d: (_: D) => E,
+      e: (_: E) => F,
+      f: (_: E) => G,
+      g: (_: G) => Eff,
+    ): (...args: Args) => Eff
+    <
+      Eff extends Effect<any, any, any>,
+      A,
+      B,
+      C,
+      D,
+      E,
+      F,
+      G,
+      H,
+      Args extends Array<any>,
+    >(
+      body: (...args: Args) => A,
+      a: (_: A) => B,
+      b: (_: B) => C,
+      c: (_: C) => D,
+      d: (_: D) => E,
+      e: (_: E) => F,
+      f: (_: E) => G,
+      g: (_: G) => H,
+      h: (_: H) => Eff,
+    ): (...args: Args) => Eff
+    <
+      Eff extends Effect<any, any, any>,
+      A,
+      B,
+      C,
+      D,
+      E,
+      F,
+      G,
+      H,
+      I,
+      Args extends Array<any>,
+    >(
+      body: (...args: Args) => A,
+      a: (_: A) => B,
+      b: (_: B) => C,
+      c: (_: C) => D,
+      d: (_: D) => E,
+      e: (_: E) => F,
+      f: (_: E) => G,
+      g: (_: G) => H,
+      h: (_: H) => I,
+      i: (_: H) => Eff,
+    ): (...args: Args) => Eff
+  }
+}
+
+/**
+ * Creates a function that returns an Effect.
+ *
+ * The function can be created using a generator function that can yield
+ * effects.
+ *
+ * `Effect.fnUntraced` also acts as a `pipe` function, allowing you to create a pipeline after the function definition.
+ *
+ * @example
+ * ```ts
+ * // Title: Creating a traced function with a generator function
+ * import { Effect } from "effect"
+ *
+ * const logExample = Effect.fnUntraced(function*<N extends number>(n: N) {
+ *   yield* Effect.annotateCurrentSpan("n", n)
+ *   yield* Effect.logInfo(`got: ${n}`)
+ *   yield* Effect.fail(new Error())
+ * })
+ *
+ * Effect.runFork(logExample(100))
+ * ```
+ *
+ * @since 3.12.0
+ * @category function
+ */
+export const fnUntraced: fn.Gen = core.fnUntraced
