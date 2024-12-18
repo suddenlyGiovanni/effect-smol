@@ -14,5 +14,11 @@ const abc = Channel.asyncPush<string>(
 )
 
 Effect.gen(function* () {
-  console.log(yield* Channel.runCollect(abc))
+  console.log(
+    yield* Channel.runCollect(
+      Channel.mergeAll({ concurrency: 2 })(
+        Channel.fromIterable([abc, abc, abc, abc, abc]),
+      ),
+    ),
+  )
 }).pipe(Effect.runFork)

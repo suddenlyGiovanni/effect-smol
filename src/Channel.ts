@@ -12,6 +12,7 @@ import * as internalMailbox from "./internal/mailbox.js"
 import type { Mailbox } from "./Mailbox.js"
 import * as Exit from "./Exit.js"
 import * as Scope from "./Scope.js"
+import * as Chunk from "effect/Chunk"
 
 /**
  * @since 4.0.0
@@ -204,11 +205,7 @@ const makeNoInput = <OutElem, OutErr, OutDone, EX, EnvX, Env>(
   OutDone,
   unknown,
   Env | EnvX
-> => {
-  const self = Object.create(ChannelProto)
-  self.transform = (_: any) => effect
-  return self
-}
+> => makeImpl((_, __) => effect)
 
 const withForkedScope = <OutElem, InElem, OutErr, InErr, EnvX, EX, Env>(
   f: (
@@ -283,6 +280,25 @@ const emitFromMailbox = <A, E>(mailbox: Mailbox<A, E>): Emit<A, E> => ({
   single: (value) => mailbox.unsafeOffer(value),
 })
 
+const mailboxToPull = <A, E>(mailbox: Mailbox<A, E>) => {
+  let buffer: ReadonlyArray<A> = []
+  let index = 0
+  let done = false
+  return Effect.suspend(() => {
+    if (index < buffer.length) {
+      return Effect.succeed(buffer[index++])
+    } else if (done) {
+      return Halt.voidEffect
+    }
+    return Effect.map(mailbox.takeAll, ([values, done_]) => {
+      buffer = Chunk.toReadonlyArray(values)
+      index = 0
+      done = done_
+      return buffer[index++]
+    })
+  })
+}
+
 /**
  * @since 2.0.0
  * @category constructors
@@ -297,9 +313,28 @@ export const asyncPush = <A, E = never, R = never>(
         yield* scope.addFinalizer(() => mailbox.shutdown)
         const emit = emitFromMailbox(mailbox)
         yield* Effect.forkIn(Scope.provideScope(f(emit), scope), scope)
-        return Effect.catch(mailbox.take, (_) => Halt.voidEffect)
+        return mailboxToPull(mailbox)
       }),
     ),
+  )
+
+/**
+ * @since 2.0.0
+ * @category constructors
+ */
+export const fromIterable = <A>(iterable: Iterable<A>): Channel<A> =>
+  makeNoInput(
+    Effect.sync(() => {
+      const iterator = iterable[Symbol.iterator]()
+      return Effect.suspend(() => {
+        const state = iterator.next()
+        if (state.done) {
+          return Halt.voidEffect
+        } else {
+          return Effect.succeed(state.value)
+        }
+      })
+    }),
   )
 
 /**
@@ -368,6 +403,98 @@ export const mapEffectSequential = <
   makeImpl((upstream, scope) =>
     Effect.map(toTransform(self)(upstream, scope), Effect.flatMap(f)),
   )
+
+/**
+ * @since 2.0.0
+ * @category utils
+ */
+export const mergeAll =
+  ({ concurrency }: { readonly concurrency: number | "unbounded" }) =>
+  <
+    OutElem,
+    InElem1,
+    OutErr1,
+    InErr1,
+    OutDone,
+    InDone1,
+    Env1,
+    InElem,
+    OutErr,
+    InErr,
+    InDone,
+    Env,
+  >(
+    channels: Channel<
+      Channel<OutElem, InElem1, OutErr1, InErr1, OutDone, InDone1, Env1>,
+      InElem,
+      OutErr,
+      InErr,
+      OutDone,
+      InDone,
+      Env
+    >,
+  ): Channel<
+    OutElem,
+    InElem & InElem1,
+    OutErr1 | OutErr,
+    InErr & InErr1,
+    OutDone,
+    InDone & InDone1,
+    Env1 | Env
+  > =>
+    makeImpl(
+      withForkedScope(
+        Effect.fnUntraced(function* (upstream, parentScope, scope) {
+          const concurrencyN =
+            concurrency === "unbounded"
+              ? Number.MAX_SAFE_INTEGER
+              : Math.max(1, concurrency)
+          const semaphore = Effect.unsafeMakeSemaphore(concurrencyN)
+
+          const mailbox = yield* internalMailbox.make<
+            OutElem,
+            OutErr | OutErr1
+          >()
+          yield* scope.addFinalizer(() => mailbox.shutdown)
+
+          const pull = yield* toTransform(channels)(upstream, parentScope)
+
+          yield* Effect.gen(function* () {
+            while (true) {
+              yield* semaphore.take(1)
+              const channel = yield* pull
+              const childPull = yield* toTransform(channel)(
+                upstream,
+                parentScope,
+              )
+              yield* Effect.gen(function* () {
+                while (true) {
+                  yield* mailbox.offer(yield* childPull)
+                }
+              }).pipe(
+                Effect.onError((cause): Effect.Effect<void> => {
+                  for (const failure of cause.failures) {
+                    if (isHaltFailure(failure)) {
+                      return semaphore.release(1)
+                    }
+                  }
+                  return mailbox.failCause(cause)
+                }),
+                Effect.forkIn(scope),
+              )
+            }
+          }).pipe(
+            Effect.onError((cause) =>
+              // n-1 because of the Halt defect
+              semaphore.withPermits(concurrencyN - 1)(mailbox.failCause(cause)),
+            ),
+            Effect.forkIn(scope),
+          )
+
+          return mailboxToPull(mailbox)
+        }),
+      ),
+    )
 
 /**
  * Returns a new channel that pipes the output of this channel into the
@@ -528,7 +655,7 @@ class Halt<out Leftover = unknown> {
 
   static catch<L, A2, E2, R2>(f: (halt: Halt<L>) => Effect.Effect<A2, E2, R2>) {
     return <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-      Effect.catchFailure(effect, failureIsHalt, (failure) =>
+      Effect.catchFailure(effect, isHaltFailure, (failure) =>
         f(failure.defect as any),
       )
   }
@@ -536,5 +663,8 @@ class Halt<out Leftover = unknown> {
 
 const isHalt = (u: unknown): u is Halt => Predicate.hasProperty(u, HaltTypeId)
 
-const failureIsHalt = <E>(failure: Cause.Failure<E>): failure is Cause.Die =>
-  failure._tag === "Die" && isHalt(failure.defect)
+const isHaltFailure = <E>(
+  failure: Cause.Failure<E>,
+): failure is Cause.Die & {
+  readonly defect: Halt
+} => failure._tag === "Die" && isHalt(failure.defect)

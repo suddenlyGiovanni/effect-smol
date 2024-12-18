@@ -1077,6 +1077,280 @@ export const catchFailure: {
 } = core.catchFailure
 
 // -----------------------------------------------------------------------------
+// Pattern matching
+// -----------------------------------------------------------------------------
+
+/**
+ * Handles both success and failure cases of an effect without performing side
+ * effects.
+ *
+ * **Details**
+ *
+ * `match` lets you define custom handlers for both success and failure
+ * scenarios. You provide separate functions to handle each case, allowing you
+ * to process the result if the effect succeeds, or handle the error if the
+ * effect fails.
+ *
+ * **When to Use**
+ *
+ * This is useful for structuring your code to respond differently to success or
+ * failure without triggering side effects.
+ *
+ * @see {@link matchEffect} if you need to perform side effects in the handlers.
+ *
+ * @example
+ * ```ts
+ * // Title: Handling Both Success and Failure Cases
+ * import { Effect } from "effect"
+ *
+ * const success: Effect.Effect<number, Error> = Effect.succeed(42)
+ *
+ * const program1 = Effect.match(success, {
+ *   onFailure: (error) => `failure: ${error.message}`,
+ *   onSuccess: (value) => `success: ${value}`
+ * })
+ *
+ * // Run and log the result of the successful effect
+ * Effect.runPromise(program1).then(console.log)
+ * // Output: "success: 42"
+ *
+ * const failure: Effect.Effect<number, Error> = Effect.fail(
+ *   new Error("Uh oh!")
+ * )
+ *
+ * const program2 = Effect.match(failure, {
+ *   onFailure: (error) => `failure: ${error.message}`,
+ *   onSuccess: (value) => `success: ${value}`
+ * })
+ *
+ * // Run and log the result of the failed effect
+ * Effect.runPromise(program2).then(console.log)
+ * // Output: "failure: Uh oh!"
+ * ```
+ *
+ * @since 2.0.0
+ * @category Pattern matching
+ */
+export const match: {
+  <E, A2, A, A3>(options: {
+    readonly onFailure: (error: E) => A2
+    readonly onSuccess: (value: A) => A3
+  }): <R>(self: Effect<A, E, R>) => Effect<A2 | A3, never, R>
+  <A, E, R, A2, A3>(
+    self: Effect<A, E, R>,
+    options: {
+      readonly onFailure: (error: E) => A2
+      readonly onSuccess: (value: A) => A3
+    },
+  ): Effect<A2 | A3, never, R>
+} = core.match
+
+/**
+ * Handles failures by matching the cause of failure.
+ *
+ * **Details**
+ *
+ * The `matchCause` function allows you to handle failures with access to the
+ * full cause of the failure within a fiber.
+ *
+ * **When to Use**
+ *
+ * This is useful for differentiating between different types of errors, such as
+ * regular failures, defects, or interruptions. You can provide specific
+ * handling logic for each failure type based on the cause.
+ *
+ * @see {@link matchCauseEffect} if you need to perform side effects in the
+ * handlers.
+ * @see {@link match} if you don't need to handle the cause of the failure.
+ *
+ * @example
+ * ```ts
+ * // Title: Handling Different Failure Causes
+ * import { Effect } from "effect"
+ *
+ * const task: Effect.Effect<number, Error> = Effect.die("Uh oh!")
+ *
+ * const program = Effect.matchCause(task, {
+ *   onFailure: (cause) => {
+ *     switch (cause._tag) {
+ *       case "Fail":
+ *         // Handle standard failure
+ *         return `Fail: ${cause.error.message}`
+ *       case "Die":
+ *         // Handle defects (unexpected errors)
+ *         return `Die: ${cause.defect}`
+ *       case "Interrupt":
+ *         // Handle interruption
+ *         return `${cause.fiberId} interrupted!`
+ *     }
+ *     // Fallback for other causes
+ *     return "failed due to other causes"
+ *   },
+ *   onSuccess: (value) =>
+ *     // task completes successfully
+ *     `succeeded with ${value} value`
+ * })
+ *
+ * Effect.runPromise(program).then(console.log)
+ * // Output: "Die: Uh oh!"
+ *
+ * ```
+ *
+ * @since 2.0.0
+ * @category Pattern matching
+ */
+export const matchCause: {
+  <E, A2, A, A3>(options: {
+    readonly onFailure: (cause: Cause<E>) => A2
+    readonly onSuccess: (a: A) => A3
+  }): <R>(self: Effect<A, E, R>) => Effect<A2 | A3, never, R>
+  <A, E, R, A2, A3>(
+    self: Effect<A, E, R>,
+    options: {
+      readonly onFailure: (cause: Cause<E>) => A2
+      readonly onSuccess: (a: A) => A3
+    },
+  ): Effect<A2 | A3, never, R>
+} = core.matchCause
+
+/**
+ * Handles failures with access to the cause and allows performing side effects.
+ *
+ * **Details**
+ *
+ * The `matchCauseEffect` function works similarly to {@link matchCause}, but it
+ * also allows you to perform additional side effects based on the failure
+ * cause. This function provides access to the complete cause of the failure,
+ * making it possible to differentiate between various failure types, and allows
+ * you to respond accordingly while performing side effects (like logging or
+ * other operations).
+ *
+ * @see {@link matchCause} if you don't need side effects and only want to handle the result or failure.
+ * @see {@link matchEffect} if you don't need to handle the cause of the failure.
+ *
+ * @example
+ * ```ts
+ * // Title: Handling Different Failure Causes with Side Effects
+ * import { Effect, Console } from "effect"
+ *
+ * const task: Effect.Effect<number, Error> = Effect.die("Uh oh!")
+ *
+ * const program = Effect.matchCauseEffect(task, {
+ *   onFailure: (cause) => {
+ *     switch (cause._tag) {
+ *       case "Fail":
+ *         // Handle standard failure with a logged message
+ *         return Console.log(`Fail: ${cause.error.message}`)
+ *       case "Die":
+ *         // Handle defects (unexpected errors) by logging the defect
+ *         return Console.log(`Die: ${cause.defect}`)
+ *       case "Interrupt":
+ *         // Handle interruption and log the fiberId that was interrupted
+ *         return Console.log(`${cause.fiberId} interrupted!`)
+ *     }
+ *     // Fallback for other causes
+ *     return Console.log("failed due to other causes")
+ *   },
+ *   onSuccess: (value) =>
+ *     // Log success if the task completes successfully
+ *     Console.log(`succeeded with ${value} value`)
+ * })
+ *
+ * Effect.runPromise(program)
+ * // Output: "Die: Uh oh!"
+ * ```
+ *
+ * @since 2.0.0
+ * @category Pattern matching
+ */
+export const matchCauseEffect: {
+  <E, A2, E2, R2, A, A3, E3, R3>(options: {
+    readonly onFailure: (cause: Cause<E>) => Effect<A2, E2, R2>
+    readonly onSuccess: (a: A) => Effect<A3, E3, R3>
+  }): <R>(self: Effect<A, E, R>) => Effect<A2 | A3, E2 | E3, R2 | R3 | R>
+  <A, E, R, A2, E2, R2, A3, E3, R3>(
+    self: Effect<A, E, R>,
+    options: {
+      readonly onFailure: (cause: Cause<E>) => Effect<A2, E2, R2>
+      readonly onSuccess: (a: A) => Effect<A3, E3, R3>
+    },
+  ): Effect<A2 | A3, E2 | E3, R2 | R3 | R>
+} = core.matchCauseEffect
+
+/**
+ * Handles both success and failure cases of an effect, allowing for additional
+ * side effects.
+ *
+ * **Details**
+ *
+ * The `matchEffect` function is similar to {@link match}, but it enables you to
+ * perform side effects in the handlers for both success and failure outcomes.
+ *
+ * **When to Use**
+ *
+ * This is useful when you need to execute additional actions, like logging or
+ * notifying users, based on whether an effect succeeds or fails.
+ *
+ * @see {@link match} if you don't need side effects and only want to handle the
+ * result or failure.
+ *
+ * @example
+ * ```ts
+ * // Title: Handling Both Success and Failure Cases with Side Effects
+ * import { Effect } from "effect"
+ *
+ * const success: Effect.Effect<number, Error> = Effect.succeed(42)
+ * const failure: Effect.Effect<number, Error> = Effect.fail(
+ *   new Error("Uh oh!")
+ * )
+ *
+ * const program1 = Effect.matchEffect(success, {
+ *   onFailure: (error) =>
+ *     Effect.succeed(`failure: ${error.message}`).pipe(
+ *       Effect.tap(Effect.log)
+ *     ),
+ *   onSuccess: (value) =>
+ *     Effect.succeed(`success: ${value}`).pipe(Effect.tap(Effect.log))
+ * })
+ *
+ * console.log(Effect.runSync(program1))
+ * // Output:
+ * // timestamp=... level=INFO fiber=#0 message="success: 42"
+ * // success: 42
+ *
+ * const program2 = Effect.matchEffect(failure, {
+ *   onFailure: (error) =>
+ *     Effect.succeed(`failure: ${error.message}`).pipe(
+ *       Effect.tap(Effect.log)
+ *     ),
+ *   onSuccess: (value) =>
+ *     Effect.succeed(`success: ${value}`).pipe(Effect.tap(Effect.log))
+ * })
+ *
+ * console.log(Effect.runSync(program2))
+ * // Output:
+ * // timestamp=... level=INFO fiber=#1 message="failure: Uh oh!"
+ * // failure: Uh oh!
+ * ```
+ *
+ * @since 2.0.0
+ * @category Pattern matching
+ */
+export const matchEffect: {
+  <E, A2, E2, R2, A, A3, E3, R3>(options: {
+    readonly onFailure: (e: E) => Effect<A2, E2, R2>
+    readonly onSuccess: (a: A) => Effect<A3, E3, R3>
+  }): <R>(self: Effect<A, E, R>) => Effect<A2 | A3, E2 | E3, R2 | R3 | R>
+  <A, E, R, A2, E2, R2, A3, E3, R3>(
+    self: Effect<A, E, R>,
+    options: {
+      readonly onFailure: (e: E) => Effect<A2, E2, R2>
+      readonly onSuccess: (a: A) => Effect<A3, E3, R3>
+    },
+  ): Effect<A2 | A3, E2 | E3, R2 | R3 | R>
+} = core.matchEffect
+
+// -----------------------------------------------------------------------------
 // Resource management & finalization
 // -----------------------------------------------------------------------------
 
@@ -1159,6 +1433,105 @@ export const onExit: {
  * @category Interruption
  */
 export const interrupt: Effect<never> = core.interrupt
+
+// -----------------------------------------------------------------------------
+// Semaphore
+// -----------------------------------------------------------------------------
+
+/**
+ * @category Semaphore
+ * @since 2.0.0
+ */
+export interface Semaphore {
+  /** when the given amount of permits are available, run the effect and release the permits when finished */
+  withPermits(
+    permits: number,
+  ): <A, E, R>(self: Effect<A, E, R>) => Effect<A, E, R>
+  /** only if the given permits are available, run the effect and release the permits when finished */
+  withPermitsIfAvailable(
+    permits: number,
+  ): <A, E, R>(self: Effect<A, E, R>) => Effect<Option<A>, E, R>
+  /** take the given amount of permits, suspending if they are not yet available */
+  take(permits: number): Effect<number>
+  /** release the given amount of permits, and return the resulting available permits */
+  release(permits: number): Effect<number>
+  /** release all the taken permits, and return the resulting available permits */
+  releaseAll: Effect<number>
+}
+
+/**
+ * Unsafely creates a new Semaphore
+ *
+ * @since 2.0.0
+ * @category Semaphore
+ */
+export const unsafeMakeSemaphore: (permits: number) => Semaphore =
+  core.unsafeMakeSemaphore
+
+/**
+ * Creates a new Semaphore
+ *
+ * @since 2.0.0
+ * @category Semaphore
+ */
+export const makeSemaphore: (permits: number) => Effect<Semaphore> =
+  core.makeSemaphore
+
+// -----------------------------------------------------------------------------
+// Latch
+// -----------------------------------------------------------------------------
+
+/**
+ * @category Latch
+ * @since 3.8.0
+ */
+export interface Latch {
+  /** open the latch, releasing all fibers waiting on it */
+  readonly open: Effect<void>
+  /** release all fibers waiting on the latch, without opening it */
+  readonly release: Effect<void>
+  /** wait for the latch to be opened */
+  readonly await: Effect<void>
+  /** close the latch */
+  readonly close: Effect<void>
+  /** close the latch */
+  readonly unsafeClose: () => void
+  /** only run the given effect when the latch is open */
+  readonly whenOpen: <A, E, R>(self: Effect<A, E, R>) => Effect<A, E, R>
+}
+
+/**
+ * @category Latch
+ * @since 3.8.0
+ */
+export const unsafeMakeLatch: (open?: boolean | undefined) => Latch =
+  core.unsafeMakeLatch
+
+/**
+ * @category latch
+ * @since 3.8.0
+ * @example
+ * ```ts
+ * import { Effect } from "effect"
+ *
+ * Effect.gen(function*() {
+ *   // Create a latch, starting in the closed state
+ *   const latch = yield* Effect.makeLatch(false)
+ *
+ *   // Fork a fiber that logs "open sesame" when the latch is opened
+ *   const fiber = yield* Effect.log("open sesame").pipe(
+ *     latch.whenOpen,
+ *     Effect.fork
+ *   )
+ *
+ *   // Open the latch
+ *   yield* latch.open
+ *   yield* fiber.await
+ * })
+ * ```
+ */
+export const makeLatch: (open?: boolean | undefined) => Effect<Latch> =
+  core.makeLatch
 
 // -----------------------------------------------------------------------------
 // Supervision & Fiber's

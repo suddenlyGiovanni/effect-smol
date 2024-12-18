@@ -144,6 +144,13 @@ export type NoSuchElementErrorTypeId = typeof NoSuchElementErrorTypeId
  * @since 4.0.0
  * @category errors
  */
+export const isNoSuchElementError: (u: unknown) => u is NoSuchElementError =
+  core.isNoSuchElementError
+
+/**
+ * @since 4.0.0
+ * @category errors
+ */
 export interface NoSuchElementError extends YieldableError {
   readonly [NoSuchElementErrorTypeId]: NoSuchElementErrorTypeId
   readonly _tag: "NoSuchElementError"
@@ -167,6 +174,13 @@ export const TimeoutErrorTypeId: unique symbol = core.TimeoutErrorTypeId
  * @category errors
  */
 export type TimeoutErrorTypeId = typeof TimeoutErrorTypeId
+
+/**
+ * @since 4.0.0
+ * @category errors
+ */
+export const isTimeoutError: (u: unknown) => u is TimeoutError =
+  core.isTimeoutError
 
 /**
  * @since 4.0.0

@@ -3334,6 +3334,165 @@ export const runSync = <A, E>(effect: Effect.Effect<A, E>): A => {
 }
 
 // ----------------------------------------------------------------------------
+// Semaphore
+// ----------------------------------------------------------------------------
+
+/** @internal */
+class Semaphore {
+  public waiters = new Set<() => void>()
+  public taken = 0
+
+  constructor(readonly permits: number) {}
+
+  get free() {
+    return this.permits - this.taken
+  }
+
+  readonly take = (n: number): Effect.Effect<number> =>
+    async<number>((resume) => {
+      if (this.free < n) {
+        const observer = () => {
+          if (this.free < n) {
+            return
+          }
+          this.waiters.delete(observer)
+          this.taken += n
+          resume(succeed(n))
+        }
+        this.waiters.add(observer)
+        return sync(() => {
+          this.waiters.delete(observer)
+        })
+      }
+      this.taken += n
+      return resume(succeed(n))
+    })
+
+  readonly updateTaken = (f: (n: number) => number): Effect.Effect<number> =>
+    withFiber((fiber) => {
+      this.taken = f(this.taken)
+      if (this.waiters.size > 0) {
+        fiber.getRef(CurrentScheduler).scheduleTask(() => {
+          const iter = this.waiters.values()
+          let item = iter.next()
+          while (item.done === false && this.free > 0) {
+            item.value()
+            item = iter.next()
+          }
+        }, 0)
+      }
+      return succeed(this.free)
+    })
+
+  readonly release = (n: number): Effect.Effect<number> =>
+    this.updateTaken((taken) => taken - n)
+
+  readonly releaseAll: Effect.Effect<number> = this.updateTaken((_) => 0)
+
+  readonly withPermits =
+    (n: number) =>
+    <A, E, R>(self: Effect.Effect<A, E, R>) =>
+      uninterruptibleMask((restore) =>
+        flatMap(restore(this.take(n)), (permits) =>
+          ensuring(restore(self), this.release(permits)),
+        ),
+      )
+
+  readonly withPermitsIfAvailable =
+    (n: number) =>
+    <A, E, R>(self: Effect.Effect<A, E, R>) =>
+      uninterruptibleMask((restore) =>
+        suspend(() => {
+          if (this.free < n) {
+            return succeedNone
+          }
+          this.taken += n
+          return ensuring(restore(asSome(self)), this.release(n))
+        }),
+      )
+}
+
+/** @internal */
+export const unsafeMakeSemaphore = (permits: number): Semaphore =>
+  new Semaphore(permits)
+
+/** @internal */
+export const makeSemaphore = (permits: number) =>
+  sync(() => unsafeMakeSemaphore(permits))
+
+class Latch implements Effect.Latch {
+  waiters: Array<(_: Effect.Effect<void>) => void> = []
+  scheduled = false
+  constructor(private isOpen: boolean) {}
+
+  commit() {
+    return this.await
+  }
+
+  private unsafeSchedule(fiber: Fiber.Fiber<void>) {
+    if (this.scheduled || this.waiters.length === 0) {
+      return void_
+    }
+    this.scheduled = true
+    fiber.getRef(CurrentScheduler).scheduleTask(this.flushWaiters, 0)
+    return void_
+  }
+  private flushWaiters = () => {
+    this.scheduled = false
+    const waiters = this.waiters
+    this.waiters = []
+    for (let i = 0; i < waiters.length; i++) {
+      waiters[i](exitVoid)
+    }
+  }
+
+  open = withFiber<void>((fiber) => {
+    if (this.isOpen) {
+      return void_
+    }
+    this.isOpen = true
+    return this.unsafeSchedule(fiber)
+  })
+  release = withFiber<void>((fiber) => {
+    if (this.isOpen) {
+      return void_
+    }
+    return this.unsafeSchedule(fiber)
+  })
+  await = async<void>((resume) => {
+    if (this.isOpen) {
+      return resume(void_)
+    }
+    this.waiters.push(resume)
+    return sync(() => {
+      const index = this.waiters.indexOf(resume)
+      if (index !== -1) {
+        this.waiters.splice(index, 1)
+      }
+    })
+  })
+  unsafeClose() {
+    this.isOpen = false
+  }
+  close = sync(() => {
+    this.isOpen = false
+  })
+  whenOpen = <A, E, R>(
+    self: Effect.Effect<A, E, R>,
+  ): Effect.Effect<A, E, R> => {
+    return andThen(this.await, self)
+  }
+}
+
+/** @internal */
+export const unsafeMakeLatch = (open?: boolean | undefined): Effect.Latch =>
+  new Latch(open ?? false)
+
+/** @internal */
+export const makeLatch = (open?: boolean | undefined) =>
+  sync(() => unsafeMakeLatch(open))
+
+// ----------------------------------------------------------------------------
 // Errors
 // ----------------------------------------------------------------------------
 
@@ -3409,6 +3568,11 @@ export const NoSuchElementErrorTypeId: Cause.NoSuchElementErrorTypeId =
   ) as Cause.NoSuchElementErrorTypeId
 
 /** @internal */
+export const isNoSuchElementError = (
+  u: unknown,
+): u is Cause.NoSuchElementError => hasProperty(u, NoSuchElementErrorTypeId)
+
+/** @internal */
 export class NoSuchElementError extends TaggedError("NoSuchElementError") {
   readonly [NoSuchElementErrorTypeId]: Cause.NoSuchElementErrorTypeId =
     NoSuchElementErrorTypeId
@@ -3421,6 +3585,10 @@ export class NoSuchElementError extends TaggedError("NoSuchElementError") {
 export const TimeoutErrorTypeId: Cause.TimeoutErrorTypeId = Symbol.for(
   "effect/Cause/TimeoutError",
 ) as Cause.TimeoutErrorTypeId
+
+/** @internal */
+export const isTimeoutError = (u: unknown): u is Cause.TimeoutError =>
+  hasProperty(u, TimeoutErrorTypeId)
 
 /** @internal */
 export class TimeoutError extends TaggedError("TimeoutError") {
