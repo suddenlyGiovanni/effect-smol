@@ -6,7 +6,7 @@ import { Pipeable } from "./Pipeable.js"
 import * as Unify from "./Unify.js"
 import * as Effect from "./Effect.js"
 import * as Types from "./Types.js"
-import { dual, identity } from "./Function.js"
+import { constant, constTrue, constVoid, dual, identity } from "./Function.js"
 import * as Cause from "./Cause.js"
 import * as internalMailbox from "./internal/mailbox.js"
 import type { Mailbox } from "./Mailbox.js"
@@ -408,8 +408,42 @@ export const mapEffectSequential = <
  * @since 2.0.0
  * @category utils
  */
-export const mergeAll =
-  ({ concurrency }: { readonly concurrency: number | "unbounded" }) =>
+export const mergeAll: {
+  (options: {
+    readonly concurrency: number | "unbounded"
+    readonly bufferSize?: number | undefined
+  }): <
+    OutElem,
+    InElem1,
+    OutErr1,
+    InErr1,
+    OutDone,
+    InDone1,
+    Env1,
+    InElem,
+    OutErr,
+    InErr,
+    InDone,
+    Env,
+  >(
+    channels: Channel<
+      Channel<OutElem, InElem1, OutErr1, InErr1, OutDone, InDone1, Env1>,
+      InElem,
+      OutErr,
+      InErr,
+      OutDone,
+      InDone,
+      Env
+    >,
+  ) => Channel<
+    OutElem,
+    InElem & InElem1,
+    OutErr1 | OutErr,
+    InErr & InErr1,
+    OutDone,
+    InDone & InDone1,
+    Env1 | Env
+  >
   <
     OutElem,
     InElem1,
@@ -433,6 +467,51 @@ export const mergeAll =
       InDone,
       Env
     >,
+    options: {
+      readonly concurrency: number | "unbounded"
+      readonly bufferSize?: number | undefined
+    },
+  ): Channel<
+    OutElem,
+    InElem & InElem1,
+    OutErr1 | OutErr,
+    InErr & InErr1,
+    OutDone,
+    InDone & InDone1,
+    Env1 | Env
+  >
+} = dual(
+  2,
+  <
+    OutElem,
+    InElem1,
+    OutErr1,
+    InErr1,
+    OutDone,
+    InDone1,
+    Env1,
+    InElem,
+    OutErr,
+    InErr,
+    InDone,
+    Env,
+  >(
+    channels: Channel<
+      Channel<OutElem, InElem1, OutErr1, InErr1, OutDone, InDone1, Env1>,
+      InElem,
+      OutErr,
+      InErr,
+      OutDone,
+      InDone,
+      Env
+    >,
+    {
+      concurrency,
+      bufferSize = 16,
+    }: {
+      readonly concurrency: number | "unbounded"
+      readonly bufferSize?: number | undefined
+    },
   ): Channel<
     OutElem,
     InElem & InElem1,
@@ -454,7 +533,7 @@ export const mergeAll =
           const mailbox = yield* internalMailbox.make<
             OutElem,
             OutErr | OutErr1
-          >()
+          >(bufferSize)
           yield* scope.addFinalizer(() => mailbox.shutdown)
 
           const pull = yield* toTransform(channels)(upstream, parentScope)
@@ -467,25 +546,28 @@ export const mergeAll =
                 upstream,
                 parentScope,
               )
-              yield* Effect.gen(function* () {
-                while (true) {
-                  yield* mailbox.offer(yield* childPull)
-                }
+              yield* Effect.whileLoop({
+                while: constTrue,
+                body: constant(
+                  Effect.flatMap(childPull, (value) => mailbox.offer(value)),
+                ),
+                step: constVoid,
               }).pipe(
-                Effect.onError((cause): Effect.Effect<void> => {
-                  for (const failure of cause.failures) {
-                    if (isHaltFailure(failure)) {
-                      return semaphore.release(1)
-                    }
-                  }
-                  return mailbox.failCause(cause)
-                }),
+                Effect.onExit(
+                  (exit): Effect.Effect<void> =>
+                    exit._tag === "Failure" && !isHaltCause(exit.cause)
+                      ? Effect.andThen(
+                          semaphore.release(1),
+                          mailbox.failCause(exit.cause),
+                        )
+                      : semaphore.release(1),
+                ),
                 Effect.forkIn(scope),
               )
             }
           }).pipe(
             Effect.onError((cause) =>
-              // n-1 because of the Halt defect
+              // n-1 because of the failure
               semaphore.withPermits(concurrencyN - 1)(mailbox.failCause(cause)),
             ),
             Effect.forkIn(scope),
@@ -494,7 +576,8 @@ export const mergeAll =
           return mailboxToPull(mailbox)
         }),
       ),
-    )
+    ),
+)
 
 /**
  * Returns a new channel that pipes the output of this channel into the
@@ -662,6 +745,9 @@ class Halt<out Leftover = unknown> {
 }
 
 const isHalt = (u: unknown): u is Halt => Predicate.hasProperty(u, HaltTypeId)
+
+const isHaltCause = <E>(cause: Cause.Cause<E>): boolean =>
+  cause.failures.some(isHaltFailure)
 
 const isHaltFailure = <E>(
   failure: Cause.Failure<E>,

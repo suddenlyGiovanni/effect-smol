@@ -10,7 +10,7 @@ import { Option } from "./Option.js"
 import type { Pipeable } from "./Pipeable.js"
 import { Predicate, Refinement } from "./Predicate.js"
 import { Scheduler } from "./Scheduler.js"
-import type { Concurrency, Covariant } from "./Types.js"
+import type { Concurrency, Covariant, NotFunction } from "./Types.js"
 import type * as Unify from "./Unify.js"
 import { YieldWrap } from "./Utils.js"
 import * as core from "./internal/core.js"
@@ -733,6 +733,107 @@ export const flatMap: {
     f: (a: A) => Effect<B, E1, R1>,
   ): Effect<B, E | E1, R | R1>
 } = core.flatMap
+
+/**
+ * Chains two actions, where the second action can depend on the result of the
+ * first.
+ *
+ * **Syntax**
+ * ```ts
+ * const transformedEffect = pipe(myEffect, Effect.andThen(anotherEffect))
+ * // or
+ * const transformedEffect = Effect.andThen(myEffect, anotherEffect)
+ * // or
+ * const transformedEffect = myEffect.pipe(Effect.andThen(anotherEffect))
+ * ```
+ *
+ * **When to Use**
+ *
+ * Use `andThen` when you need to run multiple actions in sequence, with the
+ * second action depending on the result of the first. This is useful for
+ * combining effects or handling computations that must happen in order.
+ *
+ * **Details**
+ *
+ * The second action can be:
+ *
+ * - A constant value (similar to {@link as})
+ * - A function returning a value (similar to {@link map})
+ * - An `Effect`
+ * - A function returning an `Effect` (similar to {@link flatMap})
+ *
+ * **Note:** `andThen` works well with both `Option` and `Either` types,
+ * treating them as effects.
+ *
+ * @example
+ * ```ts
+ * // Title: Applying a Discount Based on Fetched Amount
+ * import { pipe, Effect } from "effect"
+ *
+ * // Function to apply a discount safely to a transaction amount
+ * const applyDiscount = (
+ *   total: number,
+ *   discountRate: number
+ * ): Effect.Effect<number, Error> =>
+ *   discountRate === 0
+ *     ? Effect.fail(new Error("Discount rate cannot be zero"))
+ *     : Effect.succeed(total - (total * discountRate) / 100)
+ *
+ * // Simulated asynchronous task to fetch a transaction amount from database
+ * const fetchTransactionAmount = Effect.promise(() => Promise.resolve(100))
+ *
+ * // Using Effect.map and Effect.flatMap
+ * const result1 = pipe(
+ *   fetchTransactionAmount,
+ *   Effect.map((amount) => amount * 2),
+ *   Effect.flatMap((amount) => applyDiscount(amount, 5))
+ * )
+ *
+ * Effect.runPromise(result1).then(console.log)
+ * // Output: 190
+ *
+ * // Using Effect.andThen
+ * const result2 = pipe(
+ *   fetchTransactionAmount,
+ *   Effect.andThen((amount) => amount * 2),
+ *   Effect.andThen((amount) => applyDiscount(amount, 5))
+ * )
+ *
+ * Effect.runPromise(result2).then(console.log)
+ * // Output: 190
+ * ```
+ *
+ * @since 2.0.0
+ * @category Mapping
+ */
+export const andThen: {
+  <A, X>(
+    f: (a: A) => X,
+  ): <E, R>(
+    self: Effect<A, E, R>,
+  ) => [X] extends [Effect<infer A1, infer E1, infer R1>]
+    ? Effect<A1, E | E1, R | R1>
+    : Effect<X, E, R>
+  <X>(
+    f: NotFunction<X>,
+  ): <A, E, R>(
+    self: Effect<A, E, R>,
+  ) => [X] extends [Effect<infer A1, infer E1, infer R1>]
+    ? Effect<A1, E | E1, R | R1>
+    : Effect<X, E, R>
+  <A, E, R, X>(
+    self: Effect<A, E, R>,
+    f: (a: A) => X,
+  ): [X] extends [Effect<infer A1, infer E1, infer R1>]
+    ? Effect<A1, E | E1, R | R1>
+    : Effect<X, E, R>
+  <A, E, R, X>(
+    self: Effect<A, E, R>,
+    f: NotFunction<X>,
+  ): [X] extends [Effect<infer A1, infer E1, infer R1>]
+    ? Effect<A1, E | E1, R | R1>
+    : Effect<X, E, R>
+} = core.andThen
 
 /**
  * Transforms the value inside an effect by applying a function to it.
@@ -1532,6 +1633,20 @@ export const unsafeMakeLatch: (open?: boolean | undefined) => Latch =
  */
 export const makeLatch: (open?: boolean | undefined) => Effect<Latch> =
   core.makeLatch
+
+// -----------------------------------------------------------------------------
+// Repetition & recursion
+// -----------------------------------------------------------------------------
+
+/**
+ * @since 2.0.0
+ * @category repetition / recursion
+ */
+export const whileLoop: <A, E, R>(options: {
+  readonly while: LazyArg<boolean>
+  readonly body: LazyArg<Effect<A, E, R>>
+  readonly step: (a: A) => void
+}) => Effect<void, E, R> = core.whileLoop
 
 // -----------------------------------------------------------------------------
 // Supervision & Fiber's
