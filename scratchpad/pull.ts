@@ -13,8 +13,9 @@ const abc = Channel.asyncPush<string>(
   }),
 )
 
-const merged = Channel.mergeAll({ concurrency: 2 })(
+const merged = Channel.mergeAll(
   Channel.fromIterable([abc, abc, abc, abc, abc]),
+  { concurrency: 2 },
 )
 
 Effect.gen(function* () {

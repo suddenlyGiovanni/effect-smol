@@ -103,6 +103,14 @@ export interface Interrupt extends Cause.FailureProto<"Interrupt"> {
  * @since 2.0.0
  * @category constructors
  */
+export const fromFailures: <E>(
+  failures: ReadonlyArray<Failure<E>>,
+) => Cause<E> = core.causeFromFailures
+
+/**
+ * @since 2.0.0
+ * @category constructors
+ */
 export const fail: <E>(error: E) => Cause<E> = core.causeFail
 
 /**

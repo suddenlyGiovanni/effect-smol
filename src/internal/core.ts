@@ -178,6 +178,11 @@ class Fail<E> extends FailureBase<"Fail"> implements Cause.Fail<E> {
 }
 
 /** @internal */
+export const causeFromFailures = <E>(
+  failures: ReadonlyArray<Cause.Failure<E>>,
+): Cause.Cause<E> => new CauseImpl(failures)
+
+/** @internal */
 export const causeFail = <E>(error: E): Cause.Cause<E> =>
   new CauseImpl([new Fail(error)])
 

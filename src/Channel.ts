@@ -22,6 +22,7 @@ import * as Scope from "./Scope.js"
 import * as Chunk from "effect/Chunk"
 import * as Context from "./Context.js"
 import * as Inspectable from "./Inspectable.js"
+import * as Option from "./Option.js"
 
 /**
  * @since 4.0.0
@@ -66,18 +67,8 @@ export interface Channel<
   in InElem = unknown,
   out OutErr = never,
   in InErr = unknown,
-  out OutDone = void,
-  in InDone = unknown,
   out Env = never,
-> extends Channel.Variance<
-      OutElem,
-      InElem,
-      OutErr,
-      InErr,
-      OutDone,
-      InDone,
-      Env
-    >,
+> extends Channel.Variance<OutElem, InElem, OutErr, InErr, Env>,
     Pipeable {
   [Unify.typeSymbol]?: unknown
   [Unify.unifySymbol]?: ChannelUnify<this>
@@ -91,17 +82,9 @@ export interface Channel<
 export interface ChannelUnify<A extends { [Unify.typeSymbol]?: any }>
   extends Effect.EffectUnify<A> {
   Channel?: () => A[Unify.typeSymbol] extends
-    | Channel<
-        infer OutElem,
-        infer InElem,
-        infer OutErr,
-        infer InErr,
-        infer OutDone,
-        infer InDone,
-        infer Env
-      >
+    | Channel<infer OutElem, infer InElem, infer OutErr, infer InErr, infer Env>
     | infer _
-    ? Channel<OutElem, InElem, OutErr, InErr, OutDone, InDone, Env>
+    ? Channel<OutElem, InElem, OutErr, InErr, Env>
     : never
 }
 
@@ -126,19 +109,9 @@ export declare namespace Channel {
     in InElem,
     out OutErr,
     in InErr,
-    out OutDone,
-    in InDone,
     out Env,
   > {
-    readonly [TypeId]: VarianceStruct<
-      OutElem,
-      InElem,
-      OutErr,
-      InErr,
-      OutDone,
-      InDone,
-      Env
-    >
+    readonly [TypeId]: VarianceStruct<OutElem, InElem, OutErr, InErr, Env>
   }
   /**
    * @since 2.0.0
@@ -149,17 +122,13 @@ export declare namespace Channel {
     in InElem,
     out OutErr,
     in InErr,
-    out OutDone,
-    in InDone,
     out Env,
   > {
     _Env: Types.Covariant<Env>
     _InErr: Types.Contravariant<InErr>
     _InElem: Types.Contravariant<InElem>
-    _InDone: Types.Contravariant<InDone>
     _OutErr: Types.Covariant<OutErr>
     _OutElem: Types.Covariant<OutElem>
-    _OutDone: Types.Covariant<OutDone>
   }
 }
 
@@ -183,7 +152,7 @@ export type HaltTypeId = typeof HaltTypeId
  * @since 4.0.0
  * @category Halt
  */
-export class Halt<out Leftover> implements Inspectable.Inspectable {
+export class Halt implements Inspectable.Inspectable {
   /**
    * @since 4.0.0
    */
@@ -194,15 +163,12 @@ export class Halt<out Leftover> implements Inspectable.Inspectable {
    */
   readonly _tag = "Halt"
 
-  constructor(readonly leftover: Leftover) {}
-
   /**
    * @since 4.0.0
    */
   toJSON(): unknown {
     return {
       _id: "Channel/Halt",
-      leftover: this.leftover,
     }
   }
 
@@ -223,20 +189,16 @@ export class Halt<out Leftover> implements Inspectable.Inspectable {
   /**
    * @since 4.0.0
    */
-  static catch<E, A2, E2, R2>(
-    f: (halt: Halt.FromError<Types.NoInfer<E>>) => Effect.Effect<A2, E2, R2>,
-  ) {
+  static catch<E, A2, E2, R2>(f: (halt: Halt) => Effect.Effect<A2, E2, R2>) {
     return <A, R>(effect: Effect.Effect<A, E, R>) =>
-      Effect.catchFailure(effect, isHaltFailure, (failure) =>
-        f(failure.error as any),
-      )
+      Effect.catchFailure(effect, isHaltFailure, (failure) => f(failure.defect))
   }
 
   /**
    * @since 4.0.0
    */
-  static fromCause<E>(cause: Cause.Cause<E>): Halt.FromError<E> | undefined {
-    return cause.failures.find(isHaltFailure)?.error as any
+  static fromCause<E>(cause: Cause.Cause<E>): Halt | undefined {
+    return cause.failures.find(isHaltFailure)?.defect
   }
 }
 
@@ -244,49 +206,7 @@ export class Halt<out Leftover> implements Inspectable.Inspectable {
  * @since 4.0.0
  * @category Halt
  */
-export namespace Halt {
-  /**
-   * @since 4.0.0
-   * @category Halt
-   */
-  export type FromError<E> = E extends Halt<infer A> ? Halt<A> : never
-
-  /**
-   * @since 4.0.0
-   * @category Halt
-   */
-  export type LeftoverFromError<E> = E extends Halt<infer A> ? A : never
-
-  /**
-   * @since 4.0.0
-   * @category Halt
-   */
-  export type FailureFromError<E> = (
-    E extends Halt<infer A> ? A : never
-  ) extends infer L
-    ? [L] extends [never]
-      ? never
-      : Cause.Fail<Halt<L>>
-    : never
-
-  /**
-   * @since 4.0.0
-   * @category Halt
-   */
-  export type ExtractHalt<E> = E extends Halt<infer A> ? Halt<A> : never
-
-  /**
-   * @since 4.0.0
-   * @category Halt
-   */
-  export type ExcludeHalt<E> = E extends Halt<infer _A> ? never : E
-}
-
-/**
- * @since 4.0.0
- * @category Halt
- */
-export const isHalt = (u: unknown): u is Halt<unknown> =>
+export const isHalt = (u: unknown): u is Halt =>
   Predicate.hasProperty(u, HaltTypeId)
 
 /**
@@ -302,72 +222,38 @@ export const isHaltCause = <E>(cause: Cause.Cause<E>): boolean =>
  */
 export const isHaltFailure = <E>(
   failure: Cause.Failure<E>,
-): failure is Cause.Fail<E & Halt.ExtractHalt<E>> =>
-  failure._tag === "Fail" && isHalt(failure.error)
+): failure is Cause.Die & { readonly defect: Halt } =>
+  failure._tag === "Die" && isHalt(failure.defect)
 
 /**
  * @since 4.0.0
  * @category Halt
  */
-export const halt = <A>(leftover: A): Effect.Effect<never, Halt<A>> =>
-  Effect.fail(new Halt(leftover))
-
-/**
- * @since 4.0.0
- * @category Halt
- */
-const haltVoid: Effect.Effect<never, Halt<void>> = Effect.fail(new Halt(void 0))
+export const halt: Effect.Effect<never> = Effect.die(new Halt())
 
 const ChannelProto = {
   [TypeId]: {
     _Env: identity,
     _InErr: identity,
     _InElem: identity,
-    _InDone: identity,
     _OutErr: identity,
     _OutElem: identity,
-    _OutDone: identity,
   },
   pipe() {
     return pipeArguments(this, arguments)
   },
 }
 
-/**
- * @since 4.0.0
- * @category Pull
- */
-export interface Pull<out A, out E = never, out Done = void, out R = never>
-  extends Effect.Effect<A, E | Halt<Done>, R> {}
-
 // -----------------------------------------------------------------------------
 // Constructors
 // -----------------------------------------------------------------------------
 
-const makeImpl = <
-  OutElem,
-  InElem,
-  OutErr,
-  InErr,
-  OutDone,
-  InDone,
-  EX,
-  EnvX,
-  Env,
->(
+const makeImpl = <OutElem, InElem, OutErr, InErr, EX, EnvX, Env>(
   transform: (
-    upstream: Pull<InElem, InErr, InDone>,
+    upstream: Effect.Effect<InElem, InErr>,
     scope: Scope.Scope,
-  ) => Effect.Effect<Pull<OutElem, OutErr, OutDone, EnvX>, EX, Env>,
-): Channel<
-  OutElem,
-  InElem,
-  Halt.ExcludeHalt<OutErr | EX>,
-  InErr,
-  OutDone,
-  InDone,
-  Env | EnvX
-> => {
+  ) => Effect.Effect<Effect.Effect<OutElem, OutErr, EnvX>, EX, Env>,
+): Channel<OutElem, InElem, OutErr | EX, InErr, Env | EnvX> => {
   const self = Object.create(ChannelProto)
   self.transform = transform
   return self
@@ -377,43 +263,18 @@ const makeImpl = <
  * @since 4.0.0
  * @category constructors
  */
-export const fromPull = <OutElem, OutErr, OutDone, EX, EnvX, Env>(
-  effect: Effect.Effect<Pull<OutElem, OutErr, OutDone, EnvX>, EX, Env>,
-): Channel<
-  OutElem,
-  unknown,
-  Halt.ExcludeHalt<OutErr | EX>,
-  unknown,
-  OutDone,
-  unknown,
-  Env | EnvX
-> => makeImpl((_, __) => effect)
+export const fromPull = <OutElem, OutErr, EX, EnvX, Env>(
+  effect: Effect.Effect<Effect.Effect<OutElem, OutErr, EnvX>, EX, Env>,
+): Channel<OutElem, unknown, OutErr | EX, unknown, Env | EnvX> =>
+  makeImpl((_, __) => effect)
 
-const makeImplScoped = <
-  OutElem,
-  InElem,
-  OutErr,
-  InErr,
-  OutDone,
-  InDone,
-  EX,
-  EnvX,
-  Env,
->(
+const makeImplScoped = <OutElem, InElem, OutErr, InErr, EX, EnvX, Env>(
   f: (
-    upstream: Pull<InElem, InErr, InDone>,
+    upstream: Effect.Effect<InElem, InErr>,
     scope: Scope.Scope,
     forkedScope: Scope.Scope,
-  ) => Effect.Effect<Pull<OutElem, OutErr, OutDone, EnvX>, EX, Env>,
-): Channel<
-  OutElem,
-  InElem,
-  Halt.ExcludeHalt<OutErr | EX>,
-  InErr,
-  OutDone,
-  InDone,
-  Env | EnvX
-> =>
+  ) => Effect.Effect<Effect.Effect<OutElem, OutErr, EnvX>, EX, Env>,
+): Channel<OutElem, InElem, OutErr | EX, InErr, Env | EnvX> =>
   makeImpl(
     Effect.fnUntraced(function* (upstream, scope) {
       const closableScope = yield* scope.fork
@@ -426,12 +287,12 @@ const makeImplScoped = <
     }),
   )
 
-const toTransform = <OutElem, InElem, OutErr, InErr, OutDone, InDone, Env>(
-  channel: Channel<OutElem, InElem, OutErr, InErr, OutDone, InDone, Env>,
+const toTransform = <OutElem, InElem, OutErr, InErr, Env>(
+  channel: Channel<OutElem, InElem, OutErr, InErr, Env>,
 ): ((
-  upstream: Pull<InElem, InErr, InDone>,
+  upstream: Effect.Effect<InElem, InErr>,
   scope: Scope.Scope,
-) => Effect.Effect<Pull<OutElem, OutErr, OutDone>, never, Env>) =>
+) => Effect.Effect<Effect.Effect<OutElem, OutErr>, never, Env>) =>
   (channel as any).transform
 
 /**
@@ -501,7 +362,7 @@ const mailboxToPull = <A, E>(mailbox: ReadonlyMailbox<A, E>) => {
       return Effect.succeed(buffer[index++])
     } else if (done) {
       buffer = []
-      return haltVoid as Effect.Effect<never>
+      return halt
     }
     return refill
   })
@@ -513,7 +374,7 @@ const mailboxToPull = <A, E>(mailbox: ReadonlyMailbox<A, E>) => {
  */
 export const asyncPush = <A, E = never, R = never>(
   f: (emit: Emit<A, E>) => Effect.Effect<unknown, E, R | Scope.Scope>,
-): Channel<A, unknown, E, unknown, void, unknown, Exclude<R, Scope.Scope>> =>
+): Channel<A, unknown, E, unknown, Exclude<R, Scope.Scope>> =>
   makeImplScoped(
     Effect.fnUntraced(function* (_, __, scope) {
       const mailbox = yield* internalMailbox.make<A, E>()
@@ -528,22 +389,11 @@ export const asyncPush = <A, E = never, R = never>(
  * @since 2.0.0
  * @category constructors
  */
-export const acquireUseRelease = <
-  A,
-  E,
-  R,
-  OutElem,
-  InElem,
-  OutErr,
-  InErr,
-  OutDone,
-  InDone,
-  Env,
->(
+export const acquireUseRelease = <A, E, R, OutElem, InElem, OutErr, InErr, Env>(
   acquire: Effect.Effect<A, E, R>,
-  use: (a: A) => Channel<OutElem, InElem, OutErr, InErr, OutDone, InDone, Env>,
-  release: (a: A, exit: Exit.Exit<OutDone, OutErr>) => Effect.Effect<void>,
-): Channel<OutElem, InElem, OutErr | E, InErr, OutDone, InDone, Env | R> =>
+  use: (a: A) => Channel<OutElem, InElem, OutErr, InErr, Env>,
+  release: (a: A, exit: Exit.Exit<void, OutErr>) => Effect.Effect<void>,
+): Channel<OutElem, InElem, OutErr | E, InErr, Env | R> =>
   makeImpl(
     Effect.fnUntraced(function* (upstream, scope) {
       const value = yield* acquire
@@ -551,9 +401,7 @@ export const acquireUseRelease = <
       return Effect.onExit(pull, (exit) => {
         if (exit._tag === "Success") return Effect.void
         const halt = Halt.fromCause(exit.cause)
-        return halt
-          ? release(value, Exit.succeed(halt.leftover as OutDone))
-          : release(value, exit as any)
+        return halt ? release(value, Exit.void) : release(value, exit as any)
       })
     }),
   )
@@ -562,16 +410,14 @@ export const acquireUseRelease = <
  * @since 2.0.0
  * @category constructors
  */
-export const fromIterator = <A, Done>(
-  iterator: LazyArg<Iterator<A, Done>>,
-): Channel<A, unknown, never, unknown, Done> =>
+export const fromIterator = <A>(iterator: LazyArg<Iterator<A>>): Channel<A> =>
   fromPull(
     Effect.sync(() => {
       const iter = iterator()
       return Effect.suspend(() => {
         const state = iter.next()
         if (state.done) {
-          return halt(state.value)
+          return halt
         } else {
           return Effect.succeed(state.value)
         }
@@ -583,10 +429,10 @@ export const fromIterator = <A, Done>(
  * @since 2.0.0
  * @category constructors
  */
-export const fromIteratorChunk = <A, Done>(
-  iterator: LazyArg<Iterator<A, Done>>,
+export const fromIteratorChunk = <A>(
+  iterator: LazyArg<Iterator<A>>,
   chunkSize = DefaultChunkSize,
-): Channel<Chunk.Chunk<A>, unknown, never, unknown, Done> =>
+): Channel<Chunk.Chunk<A>> =>
   fromPull(
     Effect.sync(() => {
       const iter = iterator()
@@ -595,7 +441,7 @@ export const fromIteratorChunk = <A, Done>(
         while (buffer.length < chunkSize) {
           const state = iter.next()
           if (state.done) {
-            return halt(state.value)
+            return halt
           }
           buffer.push(state.value)
         }
@@ -608,18 +454,16 @@ export const fromIteratorChunk = <A, Done>(
  * @since 2.0.0
  * @category constructors
  */
-export const fromIterable = <A, Done>(
-  iterable: Iterable<A, Done>,
-): Channel<A, unknown, never, unknown, Done> =>
+export const fromIterable = <A>(iterable: Iterable<A>): Channel<A> =>
   fromIterator(() => iterable[Symbol.iterator]())
 
 /**
  * @since 2.0.0
  * @category constructors
  */
-export const fromIterableChunk = <A, Done>(
-  iterable: Iterable<A, Done>,
-): Channel<Chunk.Chunk<A>, unknown, never, unknown, Done> =>
+export const fromIterableChunk = <A>(
+  iterable: Iterable<A>,
+): Channel<Chunk.Chunk<A>> =>
   fromIteratorChunk(() => iterable[Symbol.iterator]())
 
 /**
@@ -634,7 +478,7 @@ export const succeed = <A>(value: A): Channel<A> =>
       let done = false
       return Effect.suspend(() => {
         if (done) {
-          return haltVoid
+          return halt
         } else {
           done = true
           return Effect.succeed(value)
@@ -644,24 +488,12 @@ export const succeed = <A>(value: A): Channel<A> =>
   )
 
 /**
- * Create a channel that completes with the specified value.
+ * Represents an Channel that emits no elements
  *
  * @since 2.0.0
  * @category constructors
  */
-export const done = <A>(value: A): Channel<never, unknown, never, unknown, A> =>
-  fromPull(Effect.succeed(halt(value)))
-
-const void_: Channel<never> = fromPull(Effect.succeed(haltVoid))
-export {
-  /**
-   * Represents an Channel that emits no elements
-   *
-   * @since 2.0.0
-   * @category constructors
-   */
-  void_ as void,
-}
+export const empty: Channel<never> = fromPull(Effect.succeed(halt))
 
 /**
  * Represents an Channel that never completes
@@ -679,12 +511,12 @@ export const never: Channel<never> = fromPull(Effect.succeed(Effect.never))
  */
 export const fromEffect = <A, E, R>(
   effect: Effect.Effect<A, E, R>,
-): Channel<A, unknown, E, unknown, void, unknown, R> =>
+): Channel<A, unknown, E, unknown, R> =>
   fromPull(
     Effect.sync(() => {
       let done = false
-      return Effect.suspend((): Pull<A, E, void, R> => {
-        if (done) return haltVoid
+      return Effect.suspend(() => {
+        if (done) return halt
         done = true
         return effect
       })
@@ -713,7 +545,7 @@ export const fromMailboxChunk = <A, E>(
   fromPull(
     Effect.succeed(
       Effect.flatMap(mailbox.takeAll, ([values]) =>
-        values.length === 0 ? haltVoid : Effect.succeed(values),
+        values.length === 0 ? halt : Effect.succeed(values),
       ),
     ),
   )
@@ -727,21 +559,107 @@ export const fromMailboxChunk = <A, E>(
 export const map: {
   <OutElem, OutElem2>(
     f: (o: OutElem) => OutElem2,
-  ): <InElem, OutErr, InErr, OutDone, InDone, Env>(
-    self: Channel<OutElem, InElem, OutErr, InErr, OutDone, InDone, Env>,
-  ) => Channel<OutElem2, InElem, OutErr, InErr, OutDone, InDone, Env>
-  <OutElem, InElem, OutErr, InErr, OutDone, InDone, Env, OutElem2>(
-    self: Channel<OutElem, InElem, OutErr, InErr, OutDone, InDone, Env>,
+  ): <InElem, OutErr, InErr, Env>(
+    self: Channel<OutElem, InElem, OutErr, InErr, Env>,
+  ) => Channel<OutElem2, InElem, OutErr, InErr, Env>
+  <OutElem, InElem, OutErr, InErr, Env, OutElem2>(
+    self: Channel<OutElem, InElem, OutErr, InErr, Env>,
     f: (o: OutElem) => OutElem2,
-  ): Channel<OutElem2, InElem, OutErr, InErr, OutDone, InDone, Env>
+  ): Channel<OutElem2, InElem, OutErr, InErr, Env>
 } = dual(
   2,
-  <OutElem, InElem, OutErr, InErr, OutDone, InDone, Env, OutElem2>(
-    self: Channel<OutElem, InElem, OutErr, InErr, OutDone, InDone, Env>,
+  <OutElem, InElem, OutErr, InErr, Env, OutElem2>(
+    self: Channel<OutElem, InElem, OutErr, InErr, Env>,
     f: (o: OutElem) => OutElem2,
-  ): Channel<OutElem2, InElem, OutErr, InErr, OutDone, InDone, Env> =>
+  ): Channel<OutElem2, InElem, OutErr, InErr, Env> =>
     makeImpl((upstream, scope) =>
       Effect.map(toTransform(self)(upstream, scope), Effect.map(f)),
+    ),
+)
+
+/**
+ * Returns a new channel, which sequentially combines this channel, together
+ * with the provided factory function, which creates a second channel based on
+ * the output values of this channel. The result is a channel that will first
+ * perform the functions of this channel, before performing the functions of
+ * the created channel (including yielding its terminal value).
+ *
+ * @since 2.0.0
+ * @category sequencing
+ */
+export const flatMap: {
+  <OutElem, OutElem1, InElem1, OutErr1, InErr1, Env1>(
+    f: (d: OutElem) => Channel<OutElem1, InElem1, OutErr1, InErr1, Env1>,
+  ): <OutElem, InElem, OutErr, InErr, Env>(
+    self: Channel<OutElem, InElem, OutErr, InErr, Env>,
+  ) => Channel<
+    OutElem1,
+    InElem & InElem1,
+    OutErr1 | OutErr,
+    InErr & InErr1,
+    Env1 | Env
+  >
+  <
+    OutElem,
+    InElem,
+    OutErr,
+    InErr,
+    Env,
+    OutElem1,
+    InElem1,
+    OutErr1,
+    InErr1,
+    Env1,
+  >(
+    self: Channel<OutElem, InElem, OutErr, InErr, Env>,
+    f: (d: OutElem) => Channel<OutElem1, InElem1, OutErr1, InErr1, Env1>,
+  ): Channel<
+    OutElem1,
+    InElem & InElem1,
+    OutErr | OutErr1,
+    InErr & InErr1,
+    Env | Env1
+  >
+} = dual(
+  2,
+  <
+    OutElem,
+    InElem,
+    OutErr,
+    InErr,
+    Env,
+    OutElem1,
+    InElem1,
+    OutErr1,
+    InErr1,
+    Env1,
+  >(
+    self: Channel<OutElem, InElem, OutErr, InErr, Env>,
+    f: (d: OutElem) => Channel<OutElem1, InElem1, OutErr1, InErr1, Env1>,
+  ): Channel<
+    OutElem1,
+    InElem & InElem1,
+    OutErr | OutErr1,
+    InErr & InErr1,
+    Env | Env1
+  > =>
+    makeImpl(
+      Effect.fnUntraced(function* (upstream, scope) {
+        const pull = yield* toTransform(self)(upstream, scope)
+        let childPull: Effect.Effect<OutElem1, OutErr1, Env1> | null = null
+        const makePull: Effect.Effect<OutElem1, OutErr | OutErr1, Env1> =
+          pull.pipe(
+            Effect.flatMap((value) => toTransform(f(value))(upstream, scope)),
+            Effect.flatMap((pull) => {
+              childPull = Effect.catchIf(pull, isHalt, (_) => {
+                childPull = null
+                return makePull
+              }) as any
+              return childPull!
+            }),
+          )
+        return Effect.suspend(() => childPull ?? makePull)
+      }),
     ),
 )
 
@@ -750,16 +668,14 @@ export const mapEffectSequential = <
   InElem,
   OutErr,
   InErr,
-  OutDone,
-  InDone,
   Env,
   OutElem2,
   EX,
   RX,
 >(
-  self: Channel<OutElem, InElem, OutErr, InErr, OutDone, InDone, Env>,
+  self: Channel<OutElem, InElem, OutErr, InErr, Env>,
   f: (o: OutElem) => Effect.Effect<OutElem2, EX, RX>,
-): Channel<OutElem2, InElem, OutErr | EX, InErr, OutDone, InDone, Env | RX> =>
+): Channel<OutElem2, InElem, OutErr | EX, InErr, Env | RX> =>
   makeImpl((upstream, scope) =>
     Effect.map(toTransform(self)(upstream, scope), Effect.flatMap(f)),
   )
@@ -772,27 +688,12 @@ export const mergeAll: {
   (options: {
     readonly concurrency: number | "unbounded"
     readonly bufferSize?: number | undefined
-  }): <
-    OutElem,
-    InElem1,
-    OutErr1,
-    InErr1,
-    OutDone,
-    InDone1,
-    Env1,
-    InElem,
-    OutErr,
-    InErr,
-    InDone,
-    Env,
-  >(
+  }): <OutElem, InElem1, OutErr1, InErr1, Env1, InElem, OutErr, InErr, Env>(
     channels: Channel<
-      Channel<OutElem, InElem1, OutErr1, InErr1, OutDone, InDone1, Env1>,
+      Channel<OutElem, InElem1, OutErr1, InErr1, Env1>,
       InElem,
       OutErr,
       InErr,
-      OutDone,
-      InDone,
       Env
     >,
   ) => Channel<
@@ -800,31 +701,14 @@ export const mergeAll: {
     InElem & InElem1,
     OutErr1 | OutErr,
     InErr & InErr1,
-    OutDone,
-    InDone & InDone1,
     Env1 | Env
   >
-  <
-    OutElem,
-    InElem1,
-    OutErr1,
-    InErr1,
-    OutDone,
-    InDone1,
-    Env1,
-    InElem,
-    OutErr,
-    InErr,
-    InDone,
-    Env,
-  >(
+  <OutElem, InElem1, OutErr1, InErr1, Env1, InElem, OutErr, InErr, Env>(
     channels: Channel<
-      Channel<OutElem, InElem1, OutErr1, InErr1, OutDone, InDone1, Env1>,
+      Channel<OutElem, InElem1, OutErr1, InErr1, Env1>,
       InElem,
       OutErr,
       InErr,
-      OutDone,
-      InDone,
       Env
     >,
     options: {
@@ -836,33 +720,16 @@ export const mergeAll: {
     InElem & InElem1,
     OutErr1 | OutErr,
     InErr & InErr1,
-    OutDone,
-    InDone & InDone1,
     Env1 | Env
   >
 } = dual(
   2,
-  <
-    OutElem,
-    InElem1,
-    OutErr1,
-    InErr1,
-    OutDone,
-    InDone1,
-    Env1,
-    InElem,
-    OutErr,
-    InErr,
-    InDone,
-    Env,
-  >(
+  <OutElem, InElem1, OutErr1, InErr1, Env1, InElem, OutErr, InErr, Env>(
     channels: Channel<
-      Channel<OutElem, InElem1, OutErr1, InErr1, OutDone, InDone1, Env1>,
+      Channel<OutElem, InElem1, OutErr1, InErr1, Env1>,
       InElem,
       OutErr,
       InErr,
-      OutDone,
-      InDone,
       Env
     >,
     {
@@ -877,8 +744,6 @@ export const mergeAll: {
     InElem & InElem1,
     OutErr1 | OutErr,
     InErr & InErr1,
-    OutDone,
-    InDone & InDone1,
     Env1 | Env
   > =>
     makeImplScoped(
@@ -889,10 +754,9 @@ export const mergeAll: {
             : Math.max(1, concurrency)
         const semaphore = Effect.unsafeMakeSemaphore(concurrencyN)
 
-        const mailbox = yield* internalMailbox.make<
-          OutElem,
-          OutErr | OutErr1 | Halt<OutDone>
-        >(bufferSize)
+        const mailbox = yield* internalMailbox.make<OutElem, OutErr | OutErr1>(
+          bufferSize,
+        )
         yield* scope.addFinalizer(() => mailbox.shutdown)
 
         const pull = yield* toTransform(channels)(upstream, parentScope)
@@ -944,45 +808,21 @@ export const mergeAll: {
  * @category utils
  */
 export const pipeTo: {
-  <OutElem2, OutElem, OutErr2, OutErr, OutDone2, OutDone, Env2>(
-    that: Channel<OutElem2, OutElem, OutErr2, OutErr, OutDone2, OutDone, Env2>,
-  ): <InElem, InErr, InDone, Env>(
-    self: Channel<OutElem, InElem, OutErr, InErr, OutDone, InDone, Env>,
-  ) => Channel<OutElem2, InElem, OutErr2, InErr, OutDone2, InDone, Env2 | Env>
-  <
-    OutElem,
-    InElem,
-    OutErr,
-    InErr,
-    OutDone,
-    InDone,
-    Env,
-    OutElem2,
-    OutErr2,
-    OutDone2,
-    Env2,
-  >(
-    self: Channel<OutElem, InElem, OutErr, InErr, OutDone, InDone, Env>,
-    that: Channel<OutElem2, OutElem, OutErr2, OutErr, OutDone2, OutDone, Env2>,
-  ): Channel<OutElem2, InElem, OutErr2, InErr, OutDone2, InDone, Env | Env2>
+  <OutElem2, OutElem, OutErr2, OutErr, Env2>(
+    that: Channel<OutElem2, OutElem, OutErr2, OutErr, Env2>,
+  ): <InElem, InErr, Env>(
+    self: Channel<OutElem, InElem, OutErr, InErr, Env>,
+  ) => Channel<OutElem2, InElem, OutErr2, InErr, Env2 | Env>
+  <OutElem, InElem, OutErr, InErr, Env, OutElem2, OutErr2, Env2>(
+    self: Channel<OutElem, InElem, OutErr, InErr, Env>,
+    that: Channel<OutElem2, OutElem, OutErr2, OutErr, Env2>,
+  ): Channel<OutElem2, InElem, OutErr2, InErr, Env | Env2>
 } = dual(
   2,
-  <
-    OutElem,
-    InElem,
-    OutErr,
-    InErr,
-    OutDone,
-    InDone,
-    Env,
-    OutElem2,
-    OutErr2,
-    OutDone2,
-    Env2,
-  >(
-    self: Channel<OutElem, InElem, OutErr, InErr, OutDone, InDone, Env>,
-    that: Channel<OutElem2, OutElem, OutErr2, OutErr, OutDone2, OutDone, Env2>,
-  ): Channel<OutElem2, InElem, OutErr2, InErr, OutDone2, InDone, Env | Env2> =>
+  <OutElem, InElem, OutErr, InErr, Env, OutElem2, OutErr2, Env2>(
+    self: Channel<OutElem, InElem, OutErr, InErr, Env>,
+    that: Channel<OutElem2, OutElem, OutErr2, OutErr, Env2>,
+  ): Channel<OutElem2, InElem, OutErr2, InErr, Env | Env2> =>
     makeImpl((upstream, scope) =>
       Effect.flatMap(toTransform(self)(upstream, scope), (upstream) =>
         toTransform(that)(upstream, scope),
@@ -997,31 +837,31 @@ export const pipeTo: {
  * @category utils
  */
 export const embedInput: {
-  <InErr, InElem, InDone, R>(
+  <InErr, InElem, R>(
     input: (
-      upstream: Pull<InElem, InErr | Halt<InDone>>,
+      upstream: Effect.Effect<InElem, InErr>,
     ) => Effect.Effect<void, never, R>,
-  ): <OutElem, OutErr, OutDone, Env>(
-    self: Channel<OutElem, unknown, OutErr, unknown, OutDone, unknown, Env>,
-  ) => Channel<OutElem, InElem, OutErr, InErr, OutDone, InDone, Env | R>
-  <OutElem, OutErr, OutDone, Env, InErr, InElem, InDone, R>(
-    self: Channel<OutElem, unknown, OutErr, unknown, OutDone, unknown, Env>,
+  ): <OutElem, OutErr, Env>(
+    self: Channel<OutElem, unknown, OutErr, unknown, Env>,
+  ) => Channel<OutElem, InElem, OutErr, InErr, Env | R>
+  <OutElem, OutErr, Env, InErr, InElem, R>(
+    self: Channel<OutElem, unknown, OutErr, unknown, Env>,
     input: (
-      upstream: Pull<InElem, InErr | Halt<InDone>>,
+      upstream: Effect.Effect<InElem, InErr>,
     ) => Effect.Effect<void, never, R>,
-  ): Channel<OutElem, InElem, OutErr, InErr, OutDone, InDone, Env | R>
+  ): Channel<OutElem, InElem, OutErr, InErr, Env | R>
 } = dual(
   2,
-  <OutElem, OutErr, OutDone, Env, InErr, InElem, InDone, R>(
-    self: Channel<OutElem, unknown, OutErr, unknown, OutDone, unknown, Env>,
+  <OutElem, OutErr, Env, InErr, InElem, R>(
+    self: Channel<OutElem, unknown, OutErr, unknown, Env>,
     input: (
-      upstream: Pull<InElem, InErr | Halt<InDone>>,
+      upstream: Effect.Effect<InElem, InErr>,
     ) => Effect.Effect<void, never, R>,
-  ): Channel<OutElem, InElem, OutErr, InErr, OutDone, InDone, Env | R> =>
+  ): Channel<OutElem, InElem, OutErr, InErr, Env | R> =>
     makeImplScoped(
       Effect.fnUntraced(function* (upstream, scope, forkedScope) {
         yield* Effect.forkIn(input(upstream), forkedScope)
-        return yield* toTransform(self)(haltVoid, scope)
+        return yield* toTransform(self)(halt, scope)
       }),
     ),
 )
@@ -1031,8 +871,6 @@ const runWith = <
   InElem,
   OutErr,
   InErr,
-  OutDone,
-  InDone,
   Env,
   EX,
   RX,
@@ -1040,17 +878,15 @@ const runWith = <
   EH = never,
   RH = never,
 >(
-  self: Channel<OutElem, InElem, OutErr, InErr, OutDone, InDone, Env>,
-  f: (pull: Pull<OutElem, OutErr, OutDone>) => Effect.Effect<void, EX, RX>,
-  onHalt?: (leftover: OutDone) => Effect.Effect<AH, EH, RH>,
-): Effect.Effect<AH, Halt.ExcludeHalt<EX> | EH, Env | RX | RH> =>
+  self: Channel<OutElem, InElem, OutErr, InErr, Env>,
+  f: (pull: Effect.Effect<OutElem, OutErr>) => Effect.Effect<void, EX, RX>,
+  onHalt?: Effect.Effect<AH, EH, RH>,
+): Effect.Effect<AH, EX | EH, Env | RX | RH> =>
   Effect.suspend(() => {
     const scope = Scope.unsafeMake()
-    const makePull = toTransform(self)(haltVoid as any, scope)
+    const makePull = toTransform(self)(halt, scope)
     return Effect.flatMap(makePull, f).pipe(
-      Halt.catch((halt) =>
-        onHalt ? onHalt(halt.leftover as any) : (Effect.void as any),
-      ),
+      Halt.catch((_) => (onHalt ? onHalt : (Effect.void as any))),
       Effect.onExit((exit) => scope.close(exit)),
     ) as any
   })
@@ -1059,9 +895,9 @@ const runWith = <
  * @since 2.0.0
  * @category execution
  */
-export const runDrain = <OutElem, InElem, OutErr, InErr, OutDone, InDone, Env>(
-  self: Channel<OutElem, InElem, OutErr, InErr, OutDone, InDone, Env>,
-): Effect.Effect<OutDone, OutErr, Env> =>
+export const runDrain = <OutElem, InElem, OutErr, InErr, Env>(
+  self: Channel<OutElem, InElem, OutErr, InErr, Env>,
+): Effect.Effect<void, OutErr, Env> =>
   runWith(self, (pull) =>
     Effect.whileLoop({
       while: constTrue,
@@ -1077,19 +913,19 @@ export const runDrain = <OutElem, InElem, OutErr, InErr, OutDone, InDone, Env>(
 export const runForEach: {
   <OutElem, EX, RX>(
     f: (o: OutElem) => Effect.Effect<void, EX, RX>,
-  ): <InElem, OutErr, InErr, OutDone, InDone, Env>(
-    self: Channel<OutElem, InElem, OutErr, InErr, OutDone, InDone, Env>,
-  ) => Effect.Effect<OutDone, OutErr | EX, Env | RX>
-  <OutElem, InElem, OutErr, InErr, OutDone, InDone, Env, EX, RX>(
-    self: Channel<OutElem, InElem, OutErr, InErr, OutDone, InDone, Env>,
+  ): <InElem, OutErr, InErr, Env>(
+    self: Channel<OutElem, InElem, OutErr, InErr, Env>,
+  ) => Effect.Effect<void, OutErr | EX, Env | RX>
+  <OutElem, InElem, OutErr, InErr, Env, EX, RX>(
+    self: Channel<OutElem, InElem, OutErr, InErr, Env>,
     f: (o: OutElem) => Effect.Effect<void, EX, RX>,
-  ): Effect.Effect<OutDone, OutErr | EX, Env | RX>
+  ): Effect.Effect<void, OutErr | EX, Env | RX>
 } = dual(
   2,
-  <OutElem, InElem, OutErr, InErr, OutDone, InDone, Env, EX, RX>(
-    self: Channel<OutElem, InElem, OutErr, InErr, OutDone, InDone, Env>,
+  <OutElem, InElem, OutErr, InErr, Env, EX, RX>(
+    self: Channel<OutElem, InElem, OutErr, InErr, Env>,
     f: (o: OutElem) => Effect.Effect<void, EX, RX>,
-  ): Effect.Effect<OutDone, OutErr | EX, Env | RX> =>
+  ): Effect.Effect<void, OutErr | EX, Env | RX> =>
     runWith(self, (pull) => {
       const pump = Effect.flatMap(pull, f)
       return Effect.whileLoop({
@@ -1104,16 +940,8 @@ export const runForEach: {
  * @since 2.0.0
  * @category execution
  */
-export const runCollect = <
-  OutElem,
-  InElem,
-  OutErr,
-  InErr,
-  OutDone,
-  InDone,
-  Env,
->(
-  self: Channel<OutElem, InElem, OutErr, InErr, OutDone, InDone, Env>,
+export const runCollect = <OutElem, InElem, OutErr, InErr, Env>(
+  self: Channel<OutElem, InElem, OutErr, InErr, Env>,
 ): Effect.Effect<Array<OutElem>, OutErr, Env> =>
   Effect.suspend(() => {
     const result: Array<OutElem> = []
@@ -1127,7 +955,7 @@ export const runCollect = <
             result.push(value)
           },
         }),
-      () => Effect.succeed(result),
+      Effect.succeed(result),
     )
   })
 
@@ -1135,17 +963,23 @@ export const runCollect = <
  * @since 2.0.0
  * @category constructors
  */
-export const toPull: <OutElem, InElem, OutErr, InErr, OutDone, InDone, Env>(
-  self: Channel<OutElem, InElem, OutErr, InErr, OutDone, InDone, Env>,
-) => Effect.Effect<Pull<OutElem, OutErr, OutDone>, never, Env | Scope.Scope> =
-  Effect.fnUntraced(
-    function* (self) {
-      const context = yield* Effect.context<Scope.Scope>()
-      const scope = Context.get(context, Scope.Scope)
-      return yield* toTransform(self)(haltVoid as any, scope).pipe(
-        Effect.provideContext(context),
-      )
-    },
-    // ensure errors are redirected to the pull effect
-    Effect.catchCause((cause) => Effect.succeed(Effect.failCause(cause))),
-  )
+export const toPull: <OutElem, InElem, OutErr, InErr, Env>(
+  self: Channel<OutElem, InElem, OutErr, InErr, Env>,
+) => Effect.Effect<
+  Effect.Effect<OutElem, Option.Option<OutErr>>,
+  never,
+  Env | Scope.Scope
+> = Effect.fnUntraced(
+  function* (self) {
+    const context = yield* Effect.context<Scope.Scope>()
+    const scope = Context.get(context, Scope.Scope)
+    const pull = yield* toTransform(self)(halt, scope)
+    return pull.pipe(
+      Effect.provideContext(context),
+      Effect.mapError(Option.some),
+      Effect.catchFailure(isHaltFailure, (_) => Effect.fail(Option.none())),
+    )
+  },
+  // ensure errors are redirected to the pull effect
+  Effect.catchCause((cause) => Effect.succeed(Effect.failCause(cause))),
+)
