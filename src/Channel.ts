@@ -1,7 +1,6 @@
 /**
  * @since 2.0.0
  */
-import * as Predicate from "./Predicate.js"
 import { Pipeable, pipeArguments } from "./Pipeable.js"
 import * as Unify from "./Unify.js"
 import * as Effect from "./Effect.js"
@@ -21,7 +20,6 @@ import * as Exit from "./Exit.js"
 import * as Scope from "./Scope.js"
 import * as Chunk from "effect/Chunk"
 import * as Context from "./Context.js"
-import * as Inspectable from "./Inspectable.js"
 import * as Option from "./Option.js"
 
 /**
@@ -140,74 +138,32 @@ export declare namespace Channel {
  * @since 4.0.0
  * @category Halt
  */
-export const HaltTypeId: unique symbol = Symbol.for("effect/Channel/Halt")
+export const Halt: unique symbol = Symbol.for("effect/Channel/Halt")
 
 /**
  * @since 4.0.0
  * @category Halt
  */
-export type HaltTypeId = typeof HaltTypeId
+export type Halt = typeof Halt
 
-/**
- * @since 4.0.0
- * @category Halt
- */
-export class Halt implements Inspectable.Inspectable {
-  /**
-   * @since 4.0.0
-   */
-  readonly [HaltTypeId]: HaltTypeId = HaltTypeId
+function catchHalt<A, R, E, A2, E2, R2>(
+  effect: Effect.Effect<A, E, R>,
+  f: (halt: Halt) => Effect.Effect<A2, E2, R2>,
+) {
+  return Effect.catchFailure(effect, isHaltFailure, (failure) =>
+    f(failure.defect),
+  )
+}
 
-  /**
-   * @since 4.0.0
-   */
-  readonly _tag = "Halt"
-
-  /**
-   * @since 4.0.0
-   */
-  toJSON(): unknown {
-    return {
-      _id: "Channel/Halt",
-    }
-  }
-
-  /**
-   * @since 4.0.0
-   */
-  toString(): string {
-    return Inspectable.format(this)
-  }
-
-  /**
-   * @since 4.0.0
-   */
-  [Inspectable.NodeInspectSymbol](): string {
-    return this.toString()
-  }
-
-  /**
-   * @since 4.0.0
-   */
-  static catch<E, A2, E2, R2>(f: (halt: Halt) => Effect.Effect<A2, E2, R2>) {
-    return <A, R>(effect: Effect.Effect<A, E, R>) =>
-      Effect.catchFailure(effect, isHaltFailure, (failure) => f(failure.defect))
-  }
-
-  /**
-   * @since 4.0.0
-   */
-  static fromCause<E>(cause: Cause.Cause<E>): Halt | undefined {
-    return cause.failures.find(isHaltFailure)?.defect
-  }
+function haltFromCause<E>(cause: Cause.Cause<E>): Halt | undefined {
+  return cause.failures.find(isHaltFailure)?.defect
 }
 
 /**
  * @since 4.0.0
  * @category Halt
  */
-export const isHalt = (u: unknown): u is Halt =>
-  Predicate.hasProperty(u, HaltTypeId)
+export const isHalt = (u: unknown): u is Halt => u === Halt
 
 /**
  * @since 4.0.0
@@ -223,13 +179,13 @@ export const isHaltCause = <E>(cause: Cause.Cause<E>): boolean =>
 export const isHaltFailure = <E>(
   failure: Cause.Failure<E>,
 ): failure is Cause.Die & { readonly defect: Halt } =>
-  failure._tag === "Die" && isHalt(failure.defect)
+  failure._tag === "Die" && failure.defect === Halt
 
 /**
  * @since 4.0.0
  * @category Halt
  */
-export const halt: Effect.Effect<never> = Effect.die(new Halt())
+export const halt: Effect.Effect<never> = Effect.die(Halt)
 
 const ChannelProto = {
   [TypeId]: {
@@ -400,7 +356,7 @@ export const acquireUseRelease = <A, E, R, OutElem, InElem, OutErr, InErr, Env>(
       const pull = yield* toTransform(use(value))(upstream, scope)
       return Effect.onExit(pull, (exit) => {
         if (exit._tag === "Success") return Effect.void
-        const halt = Halt.fromCause(exit.cause)
+        const halt = haltFromCause(exit.cause)
         return halt ? release(value, Exit.void) : release(value, exit as any)
       })
     }),
@@ -436,12 +392,18 @@ export const fromIteratorChunk = <A>(
   fromPull(
     Effect.sync(() => {
       const iter = iterator()
+      let done = false
       return Effect.suspend(() => {
+        if (done) return halt
         const buffer: A[] = []
         while (buffer.length < chunkSize) {
           const state = iter.next()
           if (state.done) {
-            return halt
+            if (buffer.length === 0) {
+              return halt
+            }
+            done = true
+            break
           }
           buffer.push(state.value)
         }
@@ -651,7 +613,7 @@ export const flatMap: {
           pull.pipe(
             Effect.flatMap((value) => toTransform(f(value))(upstream, scope)),
             Effect.flatMap((pull) => {
-              childPull = Effect.catchIf(pull, isHalt, (_) => {
+              childPull = catchHalt(pull, (_) => {
                 childPull = null
                 return makePull
               }) as any
@@ -885,10 +847,9 @@ const runWith = <
   Effect.suspend(() => {
     const scope = Scope.unsafeMake()
     const makePull = toTransform(self)(halt, scope)
-    return Effect.flatMap(makePull, f).pipe(
-      Halt.catch((_) => (onHalt ? onHalt : (Effect.void as any))),
-      Effect.onExit((exit) => scope.close(exit)),
-    ) as any
+    return catchHalt(Effect.flatMap(makePull, f), (_) =>
+      onHalt ? onHalt : (Effect.void as any),
+    ).pipe(Effect.onExit((exit) => scope.close(exit))) as any
   })
 
 /**
