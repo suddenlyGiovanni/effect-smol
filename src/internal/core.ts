@@ -3311,7 +3311,7 @@ export const runPromise = <A, E>(
 ): Promise<A> =>
   runPromiseExit(effect, options).then((exit) => {
     if (exit._tag === "Failure") {
-      throw exit.cause
+      throw causeSquash(exit.cause)
     }
     return exit.value
   })
@@ -3329,7 +3329,7 @@ export const runSyncExit = <A, E>(
 /** @internal */
 export const runSync = <A, E>(effect: Effect.Effect<A, E>): A => {
   const exit = runSyncExit(effect)
-  if (exit._tag === "Failure") throw exit.cause
+  if (exit._tag === "Failure") throw causeSquash(exit.cause)
   return exit.value
 }
 

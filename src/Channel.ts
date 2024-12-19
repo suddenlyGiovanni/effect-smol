@@ -2,7 +2,7 @@
  * @since 2.0.0
  */
 import * as Predicate from "./Predicate.js"
-import { Pipeable } from "./Pipeable.js"
+import { Pipeable, pipeArguments } from "./Pipeable.js"
 import * as Unify from "./Unify.js"
 import * as Effect from "./Effect.js"
 import * as Types from "./Types.js"
@@ -16,10 +16,12 @@ import {
 } from "./Function.js"
 import * as Cause from "./Cause.js"
 import * as internalMailbox from "./internal/mailbox.js"
-import type { Mailbox } from "./Mailbox.js"
+import type { Mailbox, ReadonlyMailbox } from "./Mailbox.js"
 import * as Exit from "./Exit.js"
 import * as Scope from "./Scope.js"
 import * as Chunk from "effect/Chunk"
+import * as Context from "./Context.js"
+import * as Inspectable from "./Inspectable.js"
 
 /**
  * @since 4.0.0
@@ -181,13 +183,42 @@ export type HaltTypeId = typeof HaltTypeId
  * @since 4.0.0
  * @category Halt
  */
-export class Halt<out Leftover> {
+export class Halt<out Leftover> implements Inspectable.Inspectable {
   /**
    * @since 4.0.0
    */
   readonly [HaltTypeId]: HaltTypeId = HaltTypeId
 
+  /**
+   * @since 4.0.0
+   */
+  readonly _tag = "Halt"
+
   constructor(readonly leftover: Leftover) {}
+
+  /**
+   * @since 4.0.0
+   */
+  toJSON(): unknown {
+    return {
+      _id: "Channel/Halt",
+      leftover: this.leftover,
+    }
+  }
+
+  /**
+   * @since 4.0.0
+   */
+  toString(): string {
+    return Inspectable.format(this)
+  }
+
+  /**
+   * @since 4.0.0
+   */
+  [Inspectable.NodeInspectSymbol](): string {
+    return this.toString()
+  }
 
   /**
    * @since 4.0.0
@@ -297,6 +328,9 @@ const ChannelProto = {
     _OutElem: identity,
     _OutDone: identity,
   },
+  pipe() {
+    return pipeArguments(this, arguments)
+  },
 }
 
 /**
@@ -339,7 +373,11 @@ const makeImpl = <
   return self
 }
 
-const makeNoInput = <OutElem, OutErr, OutDone, EX, EnvX, Env>(
+/**
+ * @since 4.0.0
+ * @category constructors
+ */
+export const fromPull = <OutElem, OutErr, OutDone, EX, EnvX, Env>(
   effect: Effect.Effect<Pull<OutElem, OutErr, OutDone, EnvX>, EX, Env>,
 ): Channel<
   OutElem,
@@ -448,10 +486,16 @@ const emitFromMailbox = <A, E>(mailbox: Mailbox<A, E>): Emit<A, E> => ({
   single: (value) => mailbox.unsafeOffer(value),
 })
 
-const mailboxToPull = <A, E>(mailbox: Mailbox<A, E>) => {
+const mailboxToPull = <A, E>(mailbox: ReadonlyMailbox<A, E>) => {
   let buffer: ReadonlyArray<A> = []
   let index = 0
   let done = false
+  const refill = Effect.map(mailbox.takeAll, ([values, done_]) => {
+    buffer = Chunk.toReadonlyArray(values)
+    index = 0
+    done = done_
+    return buffer[index++]
+  })
   return Effect.suspend((): Effect.Effect<A, E> => {
     if (index < buffer.length) {
       return Effect.succeed(buffer[index++])
@@ -459,12 +503,7 @@ const mailboxToPull = <A, E>(mailbox: Mailbox<A, E>) => {
       buffer = []
       return haltVoid as Effect.Effect<never>
     }
-    return Effect.map(mailbox.takeAll, ([values, done_]) => {
-      buffer = Chunk.toReadonlyArray(values)
-      index = 0
-      done = done_
-      return buffer[index++]
-    })
+    return refill
   })
 }
 
@@ -526,7 +565,7 @@ export const acquireUseRelease = <
 export const fromIterator = <A, Done>(
   iterator: LazyArg<Iterator<A, Done>>,
 ): Channel<A, unknown, never, unknown, Done> =>
-  makeNoInput(
+  fromPull(
     Effect.sync(() => {
       const iter = iterator()
       return Effect.suspend(() => {
@@ -548,7 +587,7 @@ export const fromIteratorChunk = <A, Done>(
   iterator: LazyArg<Iterator<A, Done>>,
   chunkSize = DefaultChunkSize,
 ): Channel<Chunk.Chunk<A>, unknown, never, unknown, Done> =>
-  makeNoInput(
+  fromPull(
     Effect.sync(() => {
       const iter = iterator()
       return Effect.suspend(() => {
@@ -556,7 +595,7 @@ export const fromIteratorChunk = <A, Done>(
         while (buffer.length < chunkSize) {
           const state = iter.next()
           if (state.done) {
-            return Effect.die(new Halt(state.value))
+            return halt(state.value)
           }
           buffer.push(state.value)
         }
@@ -589,8 +628,8 @@ export const fromIterableChunk = <A, Done>(
  * @since 2.0.0
  * @category constructors
  */
-export const write = <A>(value: A): Channel<A> =>
-  makeNoInput(
+export const succeed = <A>(value: A): Channel<A> =>
+  fromPull(
     Effect.sync(() => {
       let done = false
       return Effect.suspend(() => {
@@ -610,12 +649,10 @@ export const write = <A>(value: A): Channel<A> =>
  * @since 2.0.0
  * @category constructors
  */
-export const succeed = <A>(
-  value: A,
-): Channel<never, unknown, never, unknown, A> =>
-  makeNoInput(Effect.succeed(halt(value)))
+export const done = <A>(value: A): Channel<never, unknown, never, unknown, A> =>
+  fromPull(Effect.succeed(halt(value)))
 
-const void_: Channel<never> = makeNoInput(Effect.succeed(haltVoid))
+const void_: Channel<never> = fromPull(Effect.succeed(haltVoid))
 export {
   /**
    * Represents an Channel that emits no elements
@@ -632,7 +669,54 @@ export {
  * @since 2.0.0
  * @category constructors
  */
-export const never: Channel<never> = makeNoInput(Effect.succeed(Effect.never))
+export const never: Channel<never> = fromPull(Effect.succeed(Effect.never))
+
+/**
+ * Use an effect to write a single value to the channel.
+ *
+ * @since 2.0.0
+ * @category constructors
+ */
+export const fromEffect = <A, E, R>(
+  effect: Effect.Effect<A, E, R>,
+): Channel<A, unknown, E, unknown, void, unknown, R> =>
+  fromPull(
+    Effect.sync(() => {
+      let done = false
+      return Effect.suspend((): Pull<A, E, void, R> => {
+        if (done) return haltVoid
+        done = true
+        return effect
+      })
+    }),
+  )
+
+/**
+ * Create a channel from a ReadonlyMailbox
+ *
+ * @since 4.0.0
+ * @category constructors
+ */
+export const fromMailbox = <A, E>(
+  mailbox: ReadonlyMailbox<A, E>,
+): Channel<A, unknown, E> => fromPull(Effect.sync(() => mailboxToPull(mailbox)))
+
+/**
+ * Create a channel from a ReadonlyMailbox
+ *
+ * @since 4.0.0
+ * @category constructors
+ */
+export const fromMailboxChunk = <A, E>(
+  mailbox: ReadonlyMailbox<A, E>,
+): Channel<Chunk.Chunk<A>, unknown, E> =>
+  fromPull(
+    Effect.succeed(
+      Effect.flatMap(mailbox.takeAll, ([values]) =>
+        values.length === 0 ? haltVoid : Effect.succeed(values),
+      ),
+    ),
+  )
 
 /**
  * Maps the output of this channel using the specified function.
@@ -1046,3 +1130,22 @@ export const runCollect = <
       () => Effect.succeed(result),
     )
   })
+
+/**
+ * @since 2.0.0
+ * @category constructors
+ */
+export const toPull: <OutElem, InElem, OutErr, InErr, OutDone, InDone, Env>(
+  self: Channel<OutElem, InElem, OutErr, InErr, OutDone, InDone, Env>,
+) => Effect.Effect<Pull<OutElem, OutErr, OutDone>, never, Env | Scope.Scope> =
+  Effect.fnUntraced(
+    function* (self) {
+      const context = yield* Effect.context<Scope.Scope>()
+      const scope = Context.get(context, Scope.Scope)
+      return yield* toTransform(self)(haltVoid as any, scope).pipe(
+        Effect.provideContext(context),
+      )
+    },
+    // ensure errors are redirected to the pull effect
+    Effect.catchCause((cause) => Effect.succeed(Effect.failCause(cause))),
+  )

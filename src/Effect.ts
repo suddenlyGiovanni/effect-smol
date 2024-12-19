@@ -15,6 +15,7 @@ import type * as Unify from "./Unify.js"
 import { YieldWrap } from "./Utils.js"
 import * as core from "./internal/core.js"
 import type { Scope } from "./Scope.js"
+import { Context } from "./Context.js"
 
 /**
  * @since 4.0.0
@@ -1452,8 +1453,50 @@ export const matchEffect: {
 } = core.matchEffect
 
 // -----------------------------------------------------------------------------
+// Environment
+// -----------------------------------------------------------------------------
+
+/**
+ * @since 2.0.0
+ * @category Environment
+ */
+export const context: <R>() => Effect<Context<R>, never, R> = core.context
+
+/**
+ * @since 2.0.0
+ * @category Environment
+ */
+export const provideContext: {
+  <XR>(
+    context: Context<XR>,
+  ): <A, E, R>(self: Effect<A, E, R>) => Effect<A, E, Exclude<R, XR>>
+  <A, E, R, XR>(
+    self: Effect<A, E, R>,
+    context: Context<XR>,
+  ): Effect<A, E, Exclude<R, XR>>
+} = core.provideContext
+
+// -----------------------------------------------------------------------------
 // Resource management & finalization
 // -----------------------------------------------------------------------------
+
+/**
+ * @since 2.0.0
+ * @category Resource management & finalization
+ */
+export const scope: Effect<Scope, never, Scope> = core.scope
+
+/**
+ * Scopes all resources used in this workflow to the lifetime of the workflow,
+ * ensuring that their finalizers are run as soon as this workflow completes
+ * execution, whether by success, failure, or interruption.
+ *
+ * @since 2.0.0
+ * @category scoping, resources & finalization
+ */
+export const scoped: <A, E, R>(
+  effect: Effect<A, E, R>,
+) => Effect<A, E, Exclude<R, Scope>> = core.scoped
 
 /**
  * This function adds a finalizer to the scope of the calling `Effect` value.
