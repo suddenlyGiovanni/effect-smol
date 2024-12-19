@@ -299,6 +299,13 @@ const ChannelProto = {
   },
 }
 
+/**
+ * @since 4.0.0
+ * @category Pull
+ */
+export interface Pull<out A, out E = never, out Done = void, out R = never>
+  extends Effect.Effect<A, E | Halt<Done>, R> {}
+
 // -----------------------------------------------------------------------------
 // Constructors
 // -----------------------------------------------------------------------------
@@ -315,13 +322,9 @@ const makeImpl = <
   Env,
 >(
   transform: (
-    upstream: Effect.Effect<InElem, InErr | Halt<InDone>>,
+    upstream: Pull<InElem, InErr, InDone>,
     scope: Scope.Scope,
-  ) => Effect.Effect<
-    Effect.Effect<OutElem, OutErr | Halt<OutDone>, EnvX>,
-    EX,
-    Env
-  >,
+  ) => Effect.Effect<Pull<OutElem, OutErr, OutDone, EnvX>, EX, Env>,
 ): Channel<
   OutElem,
   InElem,
@@ -337,11 +340,7 @@ const makeImpl = <
 }
 
 const makeNoInput = <OutElem, OutErr, OutDone, EX, EnvX, Env>(
-  effect: Effect.Effect<
-    Effect.Effect<OutElem, OutErr | Halt<OutDone>, EnvX>,
-    EX,
-    Env
-  >,
+  effect: Effect.Effect<Pull<OutElem, OutErr, OutDone, EnvX>, EX, Env>,
 ): Channel<
   OutElem,
   unknown,
@@ -364,14 +363,10 @@ const makeImplScoped = <
   Env,
 >(
   f: (
-    upstream: Effect.Effect<InElem, InErr | Halt<InDone>>,
+    upstream: Pull<InElem, InErr, InDone>,
     scope: Scope.Scope,
     forkedScope: Scope.Scope,
-  ) => Effect.Effect<
-    Effect.Effect<OutElem, OutErr | Halt<OutDone>, EnvX>,
-    EX,
-    Env
-  >,
+  ) => Effect.Effect<Pull<OutElem, OutErr, OutDone, EnvX>, EX, Env>,
 ): Channel<
   OutElem,
   InElem,
@@ -396,15 +391,10 @@ const makeImplScoped = <
 const toTransform = <OutElem, InElem, OutErr, InErr, OutDone, InDone, Env>(
   channel: Channel<OutElem, InElem, OutErr, InErr, OutDone, InDone, Env>,
 ): ((
-  upstream: Effect.Effect<InElem, InErr | Halt<InDone>>,
+  upstream: Pull<InElem, InErr, InDone>,
   scope: Scope.Scope,
-) => Effect.Effect<
-  Effect.Effect<OutElem, OutErr | Halt<OutDone>>,
-  never,
-  Env
->) => {
-  return (channel as any).transform
-}
+) => Effect.Effect<Pull<OutElem, OutErr, OutDone>, never, Env>) =>
+  (channel as any).transform
 
 /**
  * @since 2.0.0
@@ -916,23 +906,41 @@ export const pipeTo: {
     ),
 )
 
-// /**
-//  * Returns a new channel which connects the given pull effect this channel's input.
-//  *
-//  * @since 2.0.0
-//  * @category utils
-//  */
-// export const embedInput: {
-//   <InErr, InElem, InDone>(
-//     input: SingleProducerAsyncInput.AsyncInputProducer<InErr, InElem, InDone>,
-//   ): <OutElem, OutErr, OutDone, Env>(
-//     self: Channel<OutElem, unknown, OutErr, unknown, OutDone, unknown, Env>,
-//   ) => Channel<OutElem, InElem, OutErr, InErr, OutDone, InDone, Env>
-//   <OutElem, OutErr, OutDone, Env, InErr, InElem, InDone>(
-//     self: Channel<OutElem, unknown, OutErr, unknown, OutDone, unknown, Env>,
-//     input: SingleProducerAsyncInput.AsyncInputProducer<InErr, InElem, InDone>,
-//   ): Channel<OutElem, InElem, OutErr, InErr, OutDone, InDone, Env>
-// } = core.embedInput
+/**
+ * Returns a new channel which embeds the given input handler into a Channel.
+ *
+ * @since 2.0.0
+ * @category utils
+ */
+export const embedInput: {
+  <InErr, InElem, InDone, R>(
+    input: (
+      upstream: Pull<InElem, InErr | Halt<InDone>>,
+    ) => Effect.Effect<void, never, R>,
+  ): <OutElem, OutErr, OutDone, Env>(
+    self: Channel<OutElem, unknown, OutErr, unknown, OutDone, unknown, Env>,
+  ) => Channel<OutElem, InElem, OutErr, InErr, OutDone, InDone, Env | R>
+  <OutElem, OutErr, OutDone, Env, InErr, InElem, InDone, R>(
+    self: Channel<OutElem, unknown, OutErr, unknown, OutDone, unknown, Env>,
+    input: (
+      upstream: Pull<InElem, InErr | Halt<InDone>>,
+    ) => Effect.Effect<void, never, R>,
+  ): Channel<OutElem, InElem, OutErr, InErr, OutDone, InDone, Env | R>
+} = dual(
+  2,
+  <OutElem, OutErr, OutDone, Env, InErr, InElem, InDone, R>(
+    self: Channel<OutElem, unknown, OutErr, unknown, OutDone, unknown, Env>,
+    input: (
+      upstream: Pull<InElem, InErr | Halt<InDone>>,
+    ) => Effect.Effect<void, never, R>,
+  ): Channel<OutElem, InElem, OutErr, InErr, OutDone, InDone, Env | R> =>
+    makeImplScoped(
+      Effect.fnUntraced(function* (upstream, scope, forkedScope) {
+        yield* Effect.forkIn(input(upstream), forkedScope)
+        return yield* toTransform(self)(haltVoid, scope)
+      }),
+    ),
+)
 
 const runWith = <
   OutElem,
@@ -949,9 +957,7 @@ const runWith = <
   RH = never,
 >(
   self: Channel<OutElem, InElem, OutErr, InErr, OutDone, InDone, Env>,
-  f: (
-    pull: Effect.Effect<OutElem, OutErr | Halt<OutDone>>,
-  ) => Effect.Effect<void, EX, RX>,
+  f: (pull: Pull<OutElem, OutErr, OutDone>) => Effect.Effect<void, EX, RX>,
   onHalt?: (leftover: OutDone) => Effect.Effect<AH, EH, RH>,
 ): Effect.Effect<AH, Halt.ExcludeHalt<EX> | EH, Env | RX | RH> =>
   Effect.suspend(() => {
@@ -969,30 +975,45 @@ const runWith = <
  * @since 2.0.0
  * @category execution
  */
+export const runDrain = <OutElem, InElem, OutErr, InErr, OutDone, InDone, Env>(
+  self: Channel<OutElem, InElem, OutErr, InErr, OutDone, InDone, Env>,
+): Effect.Effect<OutDone, OutErr, Env> =>
+  runWith(self, (pull) =>
+    Effect.whileLoop({
+      while: constTrue,
+      body: () => pull,
+      step: constVoid,
+    }),
+  )
+
+/**
+ * @since 2.0.0
+ * @category execution
+ */
 export const runForEach: {
   <OutElem, EX, RX>(
     f: (o: OutElem) => Effect.Effect<void, EX, RX>,
   ): <InElem, OutErr, InErr, OutDone, InDone, Env>(
     self: Channel<OutElem, InElem, OutErr, InErr, OutDone, InDone, Env>,
-  ) => Effect.Effect<void, OutErr | EX, Env | RX>
+  ) => Effect.Effect<OutDone, OutErr | EX, Env | RX>
   <OutElem, InElem, OutErr, InErr, OutDone, InDone, Env, EX, RX>(
     self: Channel<OutElem, InElem, OutErr, InErr, OutDone, InDone, Env>,
     f: (o: OutElem) => Effect.Effect<void, EX, RX>,
-  ): Effect.Effect<void, OutErr | EX, Env | RX>
+  ): Effect.Effect<OutDone, OutErr | EX, Env | RX>
 } = dual(
   2,
   <OutElem, InElem, OutErr, InErr, OutDone, InDone, Env, EX, RX>(
     self: Channel<OutElem, InElem, OutErr, InErr, OutDone, InDone, Env>,
     f: (o: OutElem) => Effect.Effect<void, EX, RX>,
-  ): Effect.Effect<void, OutErr | EX, Env | RX> =>
-    runWith(
-      self,
-      Effect.fnUntraced(function* (pull) {
-        while (true) {
-          yield* f(yield* pull)
-        }
-      }),
-    ),
+  ): Effect.Effect<OutDone, OutErr | EX, Env | RX> =>
+    runWith(self, (pull) => {
+      const pump = Effect.flatMap(pull, f)
+      return Effect.whileLoop({
+        while: constTrue,
+        body: () => pump,
+        step: constVoid,
+      })
+    }),
 )
 
 /**
@@ -1011,14 +1032,17 @@ export const runCollect = <
   self: Channel<OutElem, InElem, OutErr, InErr, OutDone, InDone, Env>,
 ): Effect.Effect<Array<OutElem>, OutErr, Env> =>
   Effect.suspend(() => {
-    const result: OutElem[] = []
+    const result: Array<OutElem> = []
     return runWith(
       self,
-      Effect.fnUntraced(function* (pull) {
-        while (true) {
-          result.push(yield* pull)
-        }
-      }),
+      (pull) =>
+        Effect.whileLoop({
+          while: constTrue,
+          body: () => pull,
+          step: (value) => {
+            result.push(value)
+          },
+        }),
       () => Effect.succeed(result),
     )
   })
