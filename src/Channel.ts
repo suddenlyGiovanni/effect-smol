@@ -1029,7 +1029,6 @@ export const embedInput: {
 
 const runWith = <
   OutElem,
-  InElem,
   OutErr,
   InErr,
   Env,
@@ -1039,7 +1038,7 @@ const runWith = <
   EH = never,
   RH = never,
 >(
-  self: Channel<OutElem, InElem, OutErr, InErr, Env>,
+  self: Channel<OutElem, unknown, OutErr, InErr, Env>,
   f: (pull: Effect.Effect<OutElem, OutErr>) => Effect.Effect<void, EX, RX>,
   onHalt?: Effect.Effect<AH, EH, RH>,
 ): Effect.Effect<AH, EX | EH, Env | RX | RH> =>
@@ -1055,8 +1054,8 @@ const runWith = <
  * @since 2.0.0
  * @category execution
  */
-export const runDrain = <OutElem, InElem, OutErr, InErr, Env>(
-  self: Channel<OutElem, InElem, OutErr, InErr, Env>,
+export const runDrain = <OutElem, OutErr, InErr, Env>(
+  self: Channel<OutElem, unknown, OutErr, InErr, Env>,
 ): Effect.Effect<void, OutErr, Env> =>
   runWith(self, (pull) =>
     Effect.whileLoop({
@@ -1082,8 +1081,8 @@ export const runForEach: {
   ): Effect.Effect<void, OutErr | EX, Env | RX>
 } = dual(
   2,
-  <OutElem, InElem, OutErr, InErr, Env, EX, RX>(
-    self: Channel<OutElem, InElem, OutErr, InErr, Env>,
+  <OutElem, OutErr, InErr, Env, EX, RX>(
+    self: Channel<OutElem, unknown, OutErr, InErr, Env>,
     f: (o: OutElem) => Effect.Effect<void, EX, RX>,
   ): Effect.Effect<void, OutErr | EX, Env | RX> =>
     runWith(self, (pull) => {
@@ -1100,8 +1099,8 @@ export const runForEach: {
  * @since 2.0.0
  * @category execution
  */
-export const runCollect = <OutElem, InElem, OutErr, InErr, Env>(
-  self: Channel<OutElem, InElem, OutErr, InErr, Env>,
+export const runCollect = <OutElem, OutErr, InErr, Env>(
+  self: Channel<OutElem, unknown, OutErr, InErr, Env>,
 ): Effect.Effect<Array<OutElem>, OutErr, Env> =>
   Effect.suspend(() => {
     const result: Array<OutElem> = []
