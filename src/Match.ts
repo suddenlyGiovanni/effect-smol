@@ -117,7 +117,7 @@ export const valueTags: <
         _: Extract<I, { readonly _tag: Tag }>
       ) => any
     }
-    & { readonly [Tag in Exclude<keyof P, Types.Tags<"_tag", I>>]: never }
+    & Readonly<Record<Exclude<keyof P, Types.Tags<"_tag", I>>, never>>
 >(fields: P) => (input: I) => Unify<ReturnType<P[keyof P]>> = internal.valueTags
 
 /**
@@ -131,7 +131,7 @@ export const typeTags: <I>() => <
         _: Extract<I, { readonly _tag: Tag }>
       ) => any
     }
-    & { readonly [Tag in Exclude<keyof P, Types.Tags<"_tag", I>>]: never }
+    & Readonly<Record<Exclude<keyof P, Types.Tags<"_tag", I>>, never>>
 >(fields: P) => (input: I) => Unify<ReturnType<P[keyof P]>> = internal.typeTags
 
 /**
@@ -259,7 +259,7 @@ export const discriminators: <D extends string>(
   Ret,
   P extends
     & { readonly [Tag in Types.Tags<D, R> & string]?: ((_: Extract<R, Record<D, Tag>>) => Ret) | undefined }
-    & { readonly [Tag in Exclude<keyof P, Types.Tags<D, R>>]: never }
+    & Readonly<Record<Exclude<keyof P, Types.Tags<D, R>>, never>>
 >(
   fields: P
 ) => <I, F, A, Pr>(
@@ -284,7 +284,7 @@ export const discriminatorsExhaustive: <D extends string>(
   Ret,
   P extends
     & { readonly [Tag in Types.Tags<D, R> & string]: (_: Extract<R, Record<D, Tag>>) => Ret }
-    & { readonly [Tag in Exclude<keyof P, Types.Tags<D, R>>]: never }
+    & Readonly<Record<Exclude<keyof P, Types.Tags<D, R>>, never>>
 >(
   fields: P
 ) => <I, F, A, Pr>(
@@ -336,7 +336,7 @@ export const tags: <
   Ret,
   P extends
     & { readonly [Tag in Types.Tags<"_tag", R> & string]?: ((_: Extract<R, Record<"_tag", Tag>>) => Ret) | undefined }
-    & { readonly [Tag in Exclude<keyof P, Types.Tags<"_tag", R>>]: never }
+    & Readonly<Record<Exclude<keyof P, Types.Tags<"_tag", R>>, never>>
 >(
   fields: P
 ) => <I, F, A, Pr>(
@@ -359,7 +359,7 @@ export const tagsExhaustive: <
   Ret,
   P extends
     & { readonly [Tag in Types.Tags<"_tag", R> & string]: (_: Extract<R, Record<"_tag", Tag>>) => Ret }
-    & { readonly [Tag in Exclude<keyof P, Types.Tags<"_tag", R>>]: never }
+    & Readonly<Record<Exclude<keyof P, Types.Tags<"_tag", R>>, never>>
 >(
   fields: P
 ) => <I, F, A, Pr>(
@@ -474,7 +474,7 @@ export const date: Predicate.Refinement<unknown, Date> = Predicate.isDate
  * @category predicates
  * @since 1.0.0
  */
-export const record: Predicate.Refinement<unknown, { [x: string | symbol]: unknown }> = Predicate.isRecord
+export const record: Predicate.Refinement<unknown, Record<string | symbol, unknown>> = Predicate.isRecord
 
 /**
  * @category predicates

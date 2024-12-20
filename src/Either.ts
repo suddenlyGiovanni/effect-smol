@@ -925,8 +925,8 @@ export const bind: {
  * @since 2.0.0
  */
 export const bindTo: {
-  <N extends string>(name: N): <R, L>(self: Either<R, L>) => Either<{ [K in N]: R }, L>
-  <R, L, N extends string>(self: Either<R, L>, name: N): Either<{ [K in N]: R }, L>
+  <N extends string>(name: N): <R, L>(self: Either<R, L>) => Either<Record<N, R>, L>
+  <R, L, N extends string>(self: Either<R, L>, name: N): Either<Record<N, R>, L>
 } = doNotation.bindTo<EitherTypeLambda>(map)
 
 const let_: {

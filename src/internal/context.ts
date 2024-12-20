@@ -12,12 +12,12 @@ import * as option from "./option.js"
 
 /** @internal */
 export const TagTypeId: C.TagTypeId = Symbol.for(
-  "effect/Context/Tag",
+  "effect/Context/Tag"
 ) as C.TagTypeId
 
 /** @internal */
 export const ReferenceTypeId: C.ReferenceTypeId = Symbol.for(
-  "effect/Context/Reference",
+  "effect/Context/Reference"
 ) as C.ReferenceTypeId
 
 /** @internal */
@@ -25,7 +25,7 @@ export const TagProto: any = {
   _op: "Tag",
   [TagTypeId]: {
     _Service: (_: unknown) => _,
-    _Identifier: (_: unknown) => _,
+    _Identifier: (_: unknown) => _
   },
   toString() {
     return format(this.toJSON())
@@ -34,7 +34,7 @@ export const TagProto: any = {
     return {
       _id: "Tag",
       key: this.key,
-      stack: this.stack,
+      stack: this.stack
     }
   },
   [NodeInspectSymbol]() {
@@ -45,20 +45,20 @@ export const TagProto: any = {
   },
   context<Identifier, Service>(
     this: C.Tag<Identifier, Service>,
-    self: Service,
+    self: Service
   ): C.Context<Identifier> {
     return make(this, self)
-  },
+  }
 }
 
 export const ReferenceProto: any = {
   ...TagProto,
-  [ReferenceTypeId]: ReferenceTypeId,
+  [ReferenceTypeId]: ReferenceTypeId
 }
 
 /** @internal */
 export const makeGenericTag = <Identifier, Service = Identifier>(
-  key: string,
+  key: string
 ): C.Tag<Identifier, Service> => {
   const limit = Error.stackTraceLimit
   Error.stackTraceLimit = 2
@@ -68,57 +68,54 @@ export const makeGenericTag = <Identifier, Service = Identifier>(
   Object.defineProperty(tag, "stack", {
     get() {
       return creationError.stack
-    },
+    }
   })
   tag.key = key
   return tag
 }
 
 /** @internal */
-export const Tag =
-  <const Id extends string>(id: Id) =>
-  <Self, Shape>(): C.TagClass<Self, Id, Shape> => {
-    const limit = Error.stackTraceLimit
-    Error.stackTraceLimit = 2
-    const creationError = new Error()
-    Error.stackTraceLimit = limit
+export const Tag = <const Id extends string>(id: Id) => <Self, Shape>(): C.TagClass<Self, Id, Shape> => {
+  const limit = Error.stackTraceLimit
+  Error.stackTraceLimit = 2
+  const creationError = new Error()
+  Error.stackTraceLimit = limit
 
-    function TagClass() {}
-    Object.setPrototypeOf(TagClass, TagProto)
-    TagClass.key = id
-    Object.defineProperty(TagClass, "stack", {
-      get() {
-        return creationError.stack
-      },
-    })
-    return TagClass as any
-  }
+  function TagClass() {}
+  Object.setPrototypeOf(TagClass, TagProto)
+  TagClass.key = id
+  Object.defineProperty(TagClass, "stack", {
+    get() {
+      return creationError.stack
+    }
+  })
+  return TagClass as any
+}
 
 /** @internal */
-export const Reference =
-  <Self>() =>
-  <const Id extends string, Service>(
-    id: Id,
-    options: {
-      readonly defaultValue: () => Service
-    },
-  ): C.ReferenceClass<Self, Id, Service> => {
-    const limit = Error.stackTraceLimit
-    Error.stackTraceLimit = 2
-    const creationError = new Error()
-    Error.stackTraceLimit = limit
-
-    function ReferenceClass() {}
-    Object.setPrototypeOf(ReferenceClass, ReferenceProto)
-    ReferenceClass.key = id
-    ReferenceClass.defaultValue = options.defaultValue
-    Object.defineProperty(ReferenceClass, "stack", {
-      get() {
-        return creationError.stack
-      },
-    })
-    return ReferenceClass as any
+export const Reference = <Self>() =>
+<const Id extends string, Service>(
+  id: Id,
+  options: {
+    readonly defaultValue: () => Service
   }
+): C.ReferenceClass<Self, Id, Service> => {
+  const limit = Error.stackTraceLimit
+  Error.stackTraceLimit = 2
+  const creationError = new Error()
+  Error.stackTraceLimit = limit
+
+  function ReferenceClass() {}
+  Object.setPrototypeOf(ReferenceClass, ReferenceProto)
+  ReferenceClass.key = id
+  ReferenceClass.defaultValue = options.defaultValue
+  Object.defineProperty(ReferenceClass, "stack", {
+    get() {
+      return creationError.stack
+    }
+  })
+  return ReferenceClass as any
+}
 
 /** @internal */
 export const TypeId: C.TypeId = Symbol.for("effect/Context") as C.TypeId
@@ -126,7 +123,7 @@ export const TypeId: C.TypeId = Symbol.for("effect/Context") as C.TypeId
 /** @internal */
 export const ContextProto: Omit<C.Context<unknown>, "unsafeMap"> = {
   [TypeId]: {
-    _Services: (_: unknown) => _,
+    _Services: (_: unknown) => _
   },
   [Equal.symbol]<A>(this: C.Context<A>, that: unknown): boolean {
     if (isContext(that)) {
@@ -156,17 +153,17 @@ export const ContextProto: Omit<C.Context<unknown>, "unsafeMap"> = {
   toJSON<A>(this: C.Context<A>) {
     return {
       _id: "Context",
-      services: Array.from(this.unsafeMap).map(toJSON),
+      services: Array.from(this.unsafeMap).map(toJSON)
     }
   },
   [NodeInspectSymbol]() {
     return (this as any).toJSON()
-  },
+  }
 }
 
 /** @internal */
 export const makeContext = <Services>(
-  unsafeMap: Map<string, any>,
+  unsafeMap: Map<string, any>
 ): C.Context<Services> => {
   const context = Object.create(ContextProto)
   context.unsafeMap = unsafeMap
@@ -175,7 +172,7 @@ export const makeContext = <Services>(
 
 const serviceNotFoundError = (tag: C.Tag<any, any>) => {
   const error = new Error(
-    `Service not found${tag.key ? `: ${String(tag.key)}` : ""}`,
+    `Service not found${tag.key ? `: ${String(tag.key)}` : ""}`
   )
   if (tag.stack) {
     const lines = tag.stack.split("\n")
@@ -195,16 +192,13 @@ const serviceNotFoundError = (tag: C.Tag<any, any>) => {
 }
 
 /** @internal */
-export const isContext = (u: unknown): u is C.Context<never> =>
-  hasProperty(u, TypeId)
+export const isContext = (u: unknown): u is C.Context<never> => hasProperty(u, TypeId)
 
 /** @internal */
-export const isTag = (u: unknown): u is C.Tag<any, any> =>
-  hasProperty(u, TagTypeId)
+export const isTag = (u: unknown): u is C.Tag<any, any> => hasProperty(u, TagTypeId)
 
 /** @internal */
-export const isReference = (u: unknown): u is C.Reference<any, any> =>
-  hasProperty(u, ReferenceTypeId)
+export const isReference = (u: unknown): u is C.Reference<any, any> => hasProperty(u, ReferenceTypeId)
 
 const _empty = makeContext(new Map())
 
@@ -214,21 +208,21 @@ export const empty = (): C.Context<never> => _empty
 /** @internal */
 export const make = <T extends C.Tag<any, any>>(
   tag: T,
-  service: C.Tag.Service<T>,
+  service: C.Tag.Service<T>
 ): C.Context<C.Tag.Identifier<T>> => makeContext(new Map([[tag.key, service]]))
 
 /** @internal */
 export const add = dual<
   <T extends C.Tag<any, any>>(
     tag: T,
-    service: C.Tag.Service<T>,
+    service: C.Tag.Service<T>
   ) => <Services>(
-    self: C.Context<Services>,
+    self: C.Context<Services>
   ) => C.Context<Services | C.Tag.Identifier<T>>,
   <Services, T extends C.Tag<any, any>>(
     self: C.Context<Services>,
     tag: T,
-    service: C.Tag.Service<T>,
+    service: C.Tag.Service<T>
   ) => C.Context<Services | C.Tag.Identifier<T>>
 >(3, (self, tag, service) => {
   const map = new Map(self.unsafeMap)
@@ -238,7 +232,7 @@ export const add = dual<
 
 const defaultValueCache = globalValue(
   "effect/Context/defaultValueCache",
-  () => new Map<string, any>(),
+  () => new Map<string, any>()
 )
 const getDefaultValue = (tag: C.Reference<any, any>) => {
   if (defaultValueCache.has(tag.key)) {
@@ -252,7 +246,7 @@ const getDefaultValue = (tag: C.Reference<any, any>) => {
 /** @internal */
 export const unsafeGetReference = <Services, I, S>(
   self: C.Context<Services>,
-  tag: C.Reference<I, S>,
+  tag: C.Reference<I, S>
 ): S => {
   return self.unsafeMap.has(tag.key)
     ? self.unsafeMap.get(tag.key)
@@ -275,12 +269,12 @@ export const unsafeGet = dual<
 export const get: {
   <I, S>(tag: C.Reference<I, S>): <Services>(self: C.Context<Services>) => S
   <Services, T extends C.ValidTagsById<Services>>(
-    tag: T,
+    tag: T
   ): (self: C.Context<Services>) => C.Tag.Service<T>
   <Services, I, S>(self: C.Context<Services>, tag: C.Reference<I, S>): S
   <Services, T extends C.ValidTagsById<Services>>(
     self: C.Context<Services>,
-    tag: T,
+    tag: T
   ): C.Tag.Service<T>
 } = unsafeGet as any
 
@@ -288,12 +282,12 @@ export const get: {
 export const getOrElse = dual<
   <S, I, B>(
     tag: C.Tag<I, S>,
-    orElse: LazyArg<B>,
+    orElse: LazyArg<B>
   ) => <Services>(self: C.Context<Services>) => S | B,
   <Services, S, I, B>(
     self: C.Context<Services>,
     tag: C.Tag<I, S>,
-    orElse: LazyArg<B>,
+    orElse: LazyArg<B>
   ) => S | B
 >(3, (self, tag, orElse) => {
   if (!self.unsafeMap.has(tag.key)) {
@@ -305,7 +299,7 @@ export const getOrElse = dual<
 /** @internal */
 export const getOption = dual<
   <S, I>(
-    tag: C.Tag<I, S>,
+    tag: C.Tag<I, S>
   ) => <Services>(self: C.Context<Services>) => O.Option<S>,
   <Services, S, I>(self: C.Context<Services>, tag: C.Tag<I, S>) => O.Option<S>
 >(2, (self, tag) => {
@@ -318,11 +312,11 @@ export const getOption = dual<
 /** @internal */
 export const merge = dual<
   <R1>(
-    that: C.Context<R1>,
+    that: C.Context<R1>
   ) => <Services>(self: C.Context<Services>) => C.Context<Services | R1>,
   <Services, R1>(
     self: C.Context<Services>,
-    that: C.Context<R1>,
+    that: C.Context<R1>
   ) => C.Context<Services | R1>
 >(2, (self, that) => {
   const map = new Map(self.unsafeMap)
@@ -333,34 +327,32 @@ export const merge = dual<
 })
 
 /** @internal */
-export const pick =
-  <Services, S extends Array<C.ValidTagsById<Services>>>(...tags: S) =>
-  (
-    self: C.Context<Services>,
-  ): C.Context<{ [k in keyof S]: C.Tag.Identifier<S[k]> }[number]> => {
-    const tagSet = new Set<string>(tags.map((_) => _.key))
-    const newEnv = new Map()
-    for (const [tag, s] of self.unsafeMap.entries()) {
-      if (tagSet.has(tag)) {
-        newEnv.set(tag, s)
-      }
+export const pick = <Services, S extends Array<C.ValidTagsById<Services>>>(...tags: S) =>
+(
+  self: C.Context<Services>
+): C.Context<{ [k in keyof S]: C.Tag.Identifier<S[k]> }[number]> => {
+  const tagSet = new Set<string>(tags.map((_) => _.key))
+  const newEnv = new Map()
+  for (const [tag, s] of self.unsafeMap.entries()) {
+    if (tagSet.has(tag)) {
+      newEnv.set(tag, s)
     }
-    return makeContext<{ [k in keyof S]: C.Tag.Identifier<S[k]> }[number]>(
-      newEnv,
-    )
   }
+  return makeContext<{ [k in keyof S]: C.Tag.Identifier<S[k]> }[number]>(
+    newEnv
+  )
+}
 
 /** @internal */
-export const omit =
-  <Services, S extends Array<C.ValidTagsById<Services>>>(...tags: S) =>
-  (
-    self: C.Context<Services>,
-  ): C.Context<
-    Exclude<Services, { [k in keyof S]: C.Tag.Identifier<S[k]> }[keyof S]>
-  > => {
-    const newEnv = new Map(self.unsafeMap)
-    for (const tag of tags) {
-      newEnv.delete(tag.key)
-    }
-    return makeContext(newEnv)
+export const omit = <Services, S extends Array<C.ValidTagsById<Services>>>(...tags: S) =>
+(
+  self: C.Context<Services>
+): C.Context<
+  Exclude<Services, { [k in keyof S]: C.Tag.Identifier<S[k]> }[keyof S]>
+> => {
+  const newEnv = new Map(self.unsafeMap)
+  for (const tag of tags) {
+    newEnv.delete(tag.key)
   }
+  return makeContext(newEnv)
+}

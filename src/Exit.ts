@@ -1,10 +1,10 @@
 /**
  * @since 2.0.0
  */
-import * as core from "./internal/core.js"
-import type * as Effect from "./Effect.js"
 import type * as Cause from "./Cause.js"
-import { NoInfer } from "./Types.js"
+import type * as Effect from "./Effect.js"
+import * as core from "./internal/core.js"
+import type { NoInfer } from "./Types.js"
 
 /**
  * @since 2.0.0
@@ -76,8 +76,7 @@ export const succeed: <A>(a: A) => Exit<A> = core.exitSucceed
  * @since 2.0.0
  * @category constructors
  */
-export const failCause: <E>(cause: Cause.Cause<E>) => Exit<never, E> =
-  core.exitFailCause
+export const failCause: <E>(cause: Cause.Cause<E>) => Exit<never, E> = core.exitFailCause
 
 /**
  * @since 2.0.0
@@ -97,22 +96,20 @@ export {
    * @since 2.0.0
    * @category constructors
    */
-  void_ as void,
+  void_ as void
 }
 
 /**
  * @since 2.0.0
  * @category guards
  */
-export const isSuccess: <A, E>(self: Exit<A, E>) => self is Success<A, E> =
-  core.exitIsSuccess
+export const isSuccess: <A, E>(self: Exit<A, E>) => self is Success<A, E> = core.exitIsSuccess
 
 /**
  * @since 2.0.0
  * @category guards
  */
-export const isFailure: <A, E>(self: Exit<A, E>) => self is Failure<A, E> =
-  core.exitIsFailure
+export const isFailure: <A, E>(self: Exit<A, E>) => self is Failure<A, E> = core.exitIsFailure
 
 /**
  * @since 2.0.0
@@ -128,7 +125,7 @@ export const match: {
     options: {
       readonly onSuccess: (a: A) => X1
       readonly onFailure: (cause: Cause.Cause<E>) => X2
-    },
+    }
   ): X1 | X2
 } = core.exitMatch
 
@@ -143,6 +140,5 @@ export const asVoid: <A, E>(self: Exit<A, E>) => Exit<void, E> = core.exitAsVoid
  * @category combinators
  */
 export const asVoidAll: <I extends Iterable<Exit<any, any>>>(
-  exits: I,
-) => Exit<void, I extends Iterable<Exit<infer _A, infer _E>> ? _E : never> =
-  core.exitAsVoidAll
+  exits: I
+) => Exit<void, I extends Iterable<Exit<infer _A, infer _E>> ? _E : never> = core.exitAsVoidAll

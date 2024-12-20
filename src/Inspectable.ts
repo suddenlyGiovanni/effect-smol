@@ -1,8 +1,8 @@
 /**
  * @since 2.0.0
  */
-import { hasProperty, isFunction } from "./Predicate.js"
 import type * as Context from "./Context.js"
+import { hasProperty, isFunction } from "./Predicate.js"
 
 /**
  * @since 2.0.0
@@ -63,7 +63,7 @@ export const BaseProto: Inspectable = {
   },
   toString() {
     return format(this.toJSON())
-  },
+  }
 }
 
 /**
@@ -93,7 +93,7 @@ export abstract class Class {
  */
 export const toStringUnknown = (
   u: unknown,
-  whitespace: number | string | undefined = 2,
+  whitespace: number | string | undefined = 2
 ): string => {
   if (typeof u === "string") {
     return u
@@ -110,7 +110,7 @@ export const toStringUnknown = (
  */
 export const stringifyCircular = (
   obj: unknown,
-  whitespace?: number | string | undefined,
+  whitespace?: number | string | undefined
 ): string => {
   let cache: Array<unknown> = []
   const retVal = JSON.stringify(
@@ -121,7 +121,7 @@ export const stringifyCircular = (
           ? undefined // circular reference
           : cache.push(value) && (isRedactable(value) ? redact(value) : value)
         : value,
-    whitespace,
+    whitespace
   )
   ;(cache as any) = undefined
   return retVal
@@ -140,7 +140,7 @@ export interface Redactable {
  * @category redactable
  */
 export const symbolRedactable: unique symbol = Symbol.for(
-  "effect/Inspectable/Redactable",
+  "effect/Inspectable/Redactable"
 )
 
 /**

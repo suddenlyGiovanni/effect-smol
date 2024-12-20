@@ -1,7 +1,7 @@
-import { Effect } from "./Effect.js"
-import { Exit } from "./Exit.js"
+import type * as Context from "./Context.js"
+import type { Effect } from "./Effect.js"
+import type { Exit } from "./Exit.js"
 import * as core from "./internal/core.js"
-import * as Context from "./Context.js"
 
 /**
  * @since 2.0.0
@@ -22,7 +22,7 @@ export type TypeId = typeof TypeId
 export interface Scope {
   readonly [TypeId]: TypeId
   readonly addFinalizer: (
-    finalizer: (exit: Exit<unknown, unknown>) => Effect<void>,
+    finalizer: (exit: Exit<unknown, unknown>) => Effect<void>
   ) => Effect<void>
   readonly fork: Effect<Scope.Closeable>
 }
@@ -65,10 +65,10 @@ export const unsafeMake: () => Scope.Closeable = core.scopeUnsafeMake
  */
 export const provideScope: {
   (
-    scope: Scope,
+    scope: Scope
   ): <A, E, R>(self: Effect<A, E, R>) => Effect<A, E, Exclude<R, Scope>>
   <A, E, R>(
     self: Effect<A, E, R>,
-    scope: Scope,
+    scope: Scope
   ): Effect<A, E, Exclude<R, Scope>>
 } = core.provideScope

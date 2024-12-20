@@ -45,7 +45,7 @@ export type ReadonlyTypeId = typeof ReadonlyTypeId
  * @category guards
  */
 export const isMailbox = <A = unknown, E = unknown>(
-  u: unknown,
+  u: unknown
 ): u is Mailbox<A, E> => hasProperty(u, TypeId)
 
 /**
@@ -54,7 +54,7 @@ export const isMailbox = <A = unknown, E = unknown>(
  * @category guards
  */
 export const isReadonlyMailbox = <A = unknown, E = unknown>(
-  u: unknown,
+  u: unknown
 ): u is ReadonlyMailbox<A, E> => hasProperty(u, ReadonlyTypeId)
 
 /**
@@ -64,8 +64,7 @@ export const isReadonlyMailbox = <A = unknown, E = unknown>(
  * @experimental
  * @category models
  */
-export interface Mailbox<in out A, in out E = never>
-  extends ReadonlyMailbox<A, E> {
+export interface Mailbox<in out A, in out E = never> extends ReadonlyMailbox<A, E> {
   readonly [TypeId]: TypeId
   /**
    * Add a message to the mailbox. Returns `false` if the mailbox is done.
@@ -146,7 +145,7 @@ export interface ReadonlyMailbox<out A, out E = never> extends Inspectable {
    * fails, the Effect will fail with the error.
    */
   readonly takeN: (
-    n: number,
+    n: number
   ) => Effect<readonly [messages: Chunk<A>, done: boolean], E>
   /**
    * Take a single message from the mailbox, or wait for a message to be
@@ -210,10 +209,10 @@ export const make: <A, E = never>(
   capacity?:
     | number
     | {
-        readonly capacity?: number
-        readonly strategy?: "suspend" | "dropping" | "sliding"
-      }
-    | undefined,
+      readonly capacity?: number
+      readonly strategy?: "suspend" | "dropping" | "sliding"
+    }
+    | undefined
 ) => Effect<Mailbox<A, E>> = internal.make
 
 /**
@@ -226,12 +225,12 @@ export const make: <A, E = never>(
  */
 export const into: {
   <A, E>(
-    self: Mailbox<A, E>,
+    self: Mailbox<A, E>
   ): <AX, EX extends E, RX>(
-    effect: Effect<AX, EX, RX>,
+    effect: Effect<AX, EX, RX>
   ) => Effect<boolean, never, RX>
   <AX, E, EX extends E, RX, A>(
     effect: Effect<AX, EX, RX>,
-    self: Mailbox<A, E>,
+    self: Mailbox<A, E>
   ): Effect<boolean, never, RX>
 } = internal.into
