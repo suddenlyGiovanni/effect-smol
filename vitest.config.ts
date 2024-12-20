@@ -1,3 +1,4 @@
+import * as path from "node:path"
 import { defineConfig } from "vitest/config"
 
 export default defineConfig({
@@ -6,6 +7,12 @@ export default defineConfig({
   },
   optimizeDeps: {
     // exclude: ["bun:sqlite"]
+  },
+  resolve: {
+    alias: {
+      "effect": path.join(__dirname, "src"),
+      "effect/test": path.join(__dirname, "test")
+    }
   },
   test: {
     // setupFiles: [path.join(__dirname, "setupTests.ts")],
