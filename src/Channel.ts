@@ -400,6 +400,26 @@ export const fromIterator = <A>(iterator: LazyArg<Iterator<A>>): Channel<A> =>
  * @since 2.0.0
  * @category constructors
  */
+export const fromArray = <A>(array: ReadonlyArray<A>): Channel<A> =>
+  fromPullUnsafe(
+    Effect.sync(() => {
+      let index = 0
+      return Effect.suspend(() => {
+        return index >= array.length ? halt : Effect.succeed(array[index++])
+      })
+    })
+  )
+
+/**
+ * @since 2.0.0
+ * @category constructors
+ */
+export const fromChunk = <A>(chunk: Chunk.Chunk<A>): Channel<A> => fromArray(Chunk.toReadonlyArray(chunk))
+
+/**
+ * @since 2.0.0
+ * @category constructors
+ */
 export const fromIteratorChunk = <A>(
   iterator: LazyArg<Iterator<A>>,
   chunkSize = DefaultChunkSize
@@ -447,17 +467,22 @@ export const fromIterableChunk = <A>(
  * @since 2.0.0
  * @category constructors
  */
-export const succeed = <A>(value: A): Channel<A> =>
+export const succeed = <A>(value: A): Channel<A> => sync(() => value)
+
+/**
+ * Writes a single value to the channel.
+ *
+ * @since 2.0.0
+ * @category constructors
+ */
+export const sync = <A>(evaluate: LazyArg<A>): Channel<A> =>
   fromPullUnsafe(
     Effect.sync(() => {
       let done = false
       return Effect.suspend(() => {
-        if (done) {
-          return halt
-        } else {
-          done = true
-          return Effect.succeed(value)
-        }
+        if (done) return halt
+        done = true
+        return Effect.succeed(evaluate())
       })
     })
   )
@@ -568,8 +593,8 @@ export const mapEffect: {
   <OutElem, OutElem1, OutErr1, Env1>(
     f: (d: OutElem) => Effect.Effect<OutElem1, OutErr1, Env1>,
     options?: {
-      readonly concurrency?: number | "unbounded"
-      readonly bufferSize?: number
+      readonly concurrency?: number | "unbounded" | undefined
+      readonly bufferSize?: number | undefined
     }
   ): <OutErr, InElem, InErr, Env>(
     self: Channel<OutElem, OutErr, InElem, InErr, Env>
@@ -578,8 +603,8 @@ export const mapEffect: {
     self: Channel<OutElem, OutErr, InElem, InErr, Env>,
     f: (d: OutElem) => Effect.Effect<OutElem1, OutErr1, Env1>,
     options?: {
-      readonly concurrency?: number | "unbounded"
-      readonly bufferSize?: number
+      readonly concurrency?: number | "unbounded" | undefined
+      readonly bufferSize?: number | undefined
     }
   ): Channel<OutElem1, OutErr | OutErr1, InElem, InErr, Env | Env1>
 } = dual(
@@ -588,8 +613,8 @@ export const mapEffect: {
     self: Channel<OutElem, OutErr, InElem, InErr, Env>,
     f: (d: OutElem) => Effect.Effect<OutElem1, OutErr1, Env1>,
     options?: {
-      readonly concurrency?: number | "unbounded"
-      readonly bufferSize?: number
+      readonly concurrency?: number | "unbounded" | undefined
+      readonly bufferSize?: number | undefined
     }
   ): Channel<OutElem1, OutErr | OutErr1, InElem, InErr, Env | Env1> =>
     concurrencyIsSequential(options?.concurrency)
@@ -674,10 +699,10 @@ export const flatMap: {
   <OutElem, OutElem1, OutErr1, InElem1, InErr1, Env1>(
     f: (d: OutElem) => Channel<OutElem1, OutErr1, InElem1, InErr1, Env1>,
     options?: {
-      readonly concurrency?: number | "unbounded"
-      readonly bufferSize?: number
+      readonly concurrency?: number | "unbounded" | undefined
+      readonly bufferSize?: number | undefined
     }
-  ): <OutElem, InElem, OutErr, InErr, Env>(
+  ): <OutErr, InElem, InErr, Env>(
     self: Channel<OutElem, OutErr, InElem, InErr, Env>
   ) => Channel<
     OutElem1,
@@ -701,8 +726,8 @@ export const flatMap: {
     self: Channel<OutElem, OutErr, InElem, InErr, Env>,
     f: (d: OutElem) => Channel<OutElem1, OutErr1, InElem1, InErr1, Env1>,
     options?: {
-      readonly concurrency?: number | "unbounded"
-      readonly bufferSize?: number
+      readonly concurrency?: number | "unbounded" | undefined
+      readonly bufferSize?: number | undefined
     }
   ): Channel<
     OutElem1,
@@ -1076,6 +1101,43 @@ export const runCollect = <OutElem, OutErr, InErr, Env>(
       Effect.succeed(result)
     )
   })
+
+/**
+ * @since 2.0.0
+ * @category execution
+ */
+export const runFold: {
+  <Z, OutElem>(
+    initial: Z,
+    f: (acc: Z, o: OutElem) => Z
+  ): <OutErr, InErr, Env>(
+    self: Channel<OutElem, OutErr, unknown, InErr, Env>
+  ) => Effect.Effect<Z, OutErr, Env>
+  <OutElem, OutErr, InErr, Env, Z>(
+    self: Channel<OutElem, OutErr, unknown, InErr, Env>,
+    initial: Z,
+    f: (acc: Z, o: OutElem) => Z
+  ): Effect.Effect<Z, OutErr, Env>
+} = dual(3, <OutElem, OutErr, InErr, Env, Z>(
+  self: Channel<OutElem, OutErr, unknown, InErr, Env>,
+  initial: Z,
+  f: (acc: Z, o: OutElem) => Z
+): Effect.Effect<Z, OutErr, Env> =>
+  Effect.suspend(() => {
+    let state = initial
+    return runWith(
+      self,
+      (pull) =>
+        Effect.whileLoop({
+          while: constTrue,
+          body: () => pull,
+          step: (value) => {
+            state = f(state, value)
+          }
+        }),
+      Effect.sync(() => state)
+    )
+  }))
 
 /**
  * @since 2.0.0
