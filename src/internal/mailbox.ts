@@ -1,5 +1,5 @@
 import * as Arr from "../Array.js"
-import { Cause } from "../Cause.js"
+import type { Cause } from "../Cause.js"
 import * as Chunk from "../Chunk.js"
 import type { Effect } from "../Effect.js"
 import type { Exit } from "../Exit.js"
@@ -10,58 +10,57 @@ import type * as Api from "../Mailbox.js"
 import * as Option from "../Option.js"
 import { pipeArguments } from "../Pipeable.js"
 import { hasProperty } from "../Predicate.js"
+import { CurrentScheduler } from "../References.js"
 import type { Scheduler } from "../Scheduler.js"
 import * as core from "./core.js"
-import { CurrentScheduler } from "../References.js"
 
 /** @internal */
 export const TypeId: Api.TypeId = Symbol.for("effect/Mailbox") as Api.TypeId
 
 /** @internal */
 export const ReadonlyTypeId: Api.ReadonlyTypeId = Symbol.for(
-  "effect/Mailbox/ReadonlyMailbox",
+  "effect/Mailbox/ReadonlyMailbox"
 ) as Api.ReadonlyTypeId
 
 /** @internal */
-export const isMailbox = (u: unknown): u is Api.Mailbox<unknown, unknown> =>
-  hasProperty(u, TypeId)
+export const isMailbox = (u: unknown): u is Api.Mailbox<unknown, unknown> => hasProperty(u, TypeId)
 
 /** @internal */
 export const isReadonlyMailbox = (
-  u: unknown,
+  u: unknown
 ): u is Api.ReadonlyMailbox<unknown, unknown> => hasProperty(u, ReadonlyTypeId)
 
 type MailboxState<A, E> =
   | {
-      readonly _tag: "Open"
-      readonly takers: Set<(_: Effect<void, E>) => void>
-      readonly offers: Set<OfferEntry<A>>
-      readonly awaiters: Set<(_: Effect<void, E>) => void>
-    }
+    readonly _tag: "Open"
+    readonly takers: Set<(_: Effect<void, E>) => void>
+    readonly offers: Set<OfferEntry<A>>
+    readonly awaiters: Set<(_: Effect<void, E>) => void>
+  }
   | {
-      readonly _tag: "Closing"
-      readonly takers: Set<(_: Effect<void, E>) => void>
-      readonly offers: Set<OfferEntry<A>>
-      readonly awaiters: Set<(_: Effect<void, E>) => void>
-      readonly exit: Exit<void, E>
-    }
+    readonly _tag: "Closing"
+    readonly takers: Set<(_: Effect<void, E>) => void>
+    readonly offers: Set<OfferEntry<A>>
+    readonly awaiters: Set<(_: Effect<void, E>) => void>
+    readonly exit: Exit<void, E>
+  }
   | {
-      readonly _tag: "Done"
-      readonly exit: Exit<void, E>
-    }
+    readonly _tag: "Done"
+    readonly exit: Exit<void, E>
+  }
 
 type OfferEntry<A> =
   | {
-      readonly _tag: "Array"
-      readonly remaining: Array<A>
-      offset: number
-      readonly resume: (_: Effect<Chunk.Chunk<A>>) => void
-    }
+    readonly _tag: "Array"
+    readonly remaining: Array<A>
+    offset: number
+    readonly resume: (_: Effect<Chunk.Chunk<A>>) => void
+  }
   | {
-      readonly _tag: "Single"
-      readonly message: A
-      readonly resume: (_: Effect<boolean>) => void
-    }
+    readonly _tag: "Single"
+    readonly message: A
+    readonly resume: (_: Effect<boolean>) => void
+  }
 
 const empty = Chunk.empty()
 const exitEmpty = core.exitSucceed(empty)
@@ -70,7 +69,7 @@ const exitTrue = core.exitSucceed(true)
 const constDone = [empty, true] as const
 const exitFailNone = core.exitFail(Option.none())
 const exitToOption: <E>(
-  exit: Exit<void, E>,
+  exit: Exit<void, E>
 ) => Exit<never, Option.Option<E>> = (exit) => {
   if (exit._tag === "Success") return exitFailNone
   const fail = exit.cause.failures.find((_) => _._tag === "Fail")
@@ -84,14 +83,14 @@ class MailboxImpl<A, E> implements Api.Mailbox<A, E> {
     _tag: "Open",
     takers: new Set(),
     offers: new Set(),
-    awaiters: new Set(),
+    awaiters: new Set()
   }
   private messages: Array<A> = []
   private messagesChunk = Chunk.empty<A>()
   constructor(
     readonly scheduler: Scheduler,
     private capacity: number,
-    readonly strategy: "suspend" | "dropping" | "sliding",
+    readonly strategy: "suspend" | "dropping" | "sliding"
   ) {}
 
   offer(message: A): Effect<boolean> {
@@ -100,7 +99,7 @@ class MailboxImpl<A, E> implements Api.Mailbox<A, E> {
         return exitFalse
       } else if (
         this.messages.length + this.messagesChunk.length >=
-        this.capacity
+          this.capacity
       ) {
         switch (this.strategy) {
           case "dropping":
@@ -128,7 +127,7 @@ class MailboxImpl<A, E> implements Api.Mailbox<A, E> {
       return false
     } else if (
       this.messages.length + this.messagesChunk.length >=
-      this.capacity
+        this.capacity
     ) {
       if (this.strategy === "sliding") {
         this.unsafeTake()
@@ -172,13 +171,13 @@ class MailboxImpl<A, E> implements Api.Mailbox<A, E> {
       if (this.messages.length > 0) {
         this.messagesChunk = Chunk.appendAll(
           this.messagesChunk,
-          Chunk.unsafeFromArray(this.messages),
+          Chunk.unsafeFromArray(this.messages)
         )
       }
       if (this.strategy === "sliding") {
         this.messagesChunk = this.messagesChunk.pipe(
           Chunk.appendAll(Chunk.fromIterable(messages)),
-          Chunk.takeRight(this.capacity),
+          Chunk.takeRight(this.capacity)
         )
       } else if (Chunk.isChunk(messages)) {
         this.messagesChunk = Chunk.appendAll(this.messagesChunk, messages)
@@ -188,10 +187,9 @@ class MailboxImpl<A, E> implements Api.Mailbox<A, E> {
       this.scheduleReleaseTaker()
       return []
     }
-    const free =
-      this.capacity <= 0
-        ? this.state.takers.size
-        : this.capacity - this.messages.length - this.messagesChunk.length
+    const free = this.capacity <= 0
+      ? this.state.takers.size
+      : this.capacity - this.messages.length - this.messagesChunk.length
     if (free === 0) {
       return Arr.fromIterable(messages)
     }
@@ -243,8 +241,8 @@ class MailboxImpl<A, E> implements Api.Mailbox<A, E> {
         } else {
           entry.resume(
             core.exitSucceed(
-              Chunk.unsafeFromArray(entry.remaining.slice(entry.offset)),
-            ),
+              Chunk.unsafeFromArray(entry.remaining.slice(entry.offset))
+            )
           )
         }
       }
@@ -264,19 +262,18 @@ class MailboxImpl<A, E> implements Api.Mailbox<A, E> {
     this.releaseCapacity()
     return core.succeed(messages)
   })
-  takeAll: Effect<readonly [messages: Chunk.Chunk<A>, done: boolean], E> =
-    core.suspend(() => {
-      if (this.state._tag === "Done") {
-        return core.exitAs(this.state.exit, constDone)
-      }
-      const messages = this.unsafeTakeAll()
-      if (messages.length === 0) {
-        return core.andThen(this.awaitTake, this.takeAll)
-      }
-      return core.succeed([messages, this.releaseCapacity()])
-    })
+  takeAll: Effect<readonly [messages: Chunk.Chunk<A>, done: boolean], E> = core.suspend(() => {
+    if (this.state._tag === "Done") {
+      return core.exitAs(this.state.exit, constDone)
+    }
+    const messages = this.unsafeTakeAll()
+    if (messages.length === 0) {
+      return core.andThen(this.awaitTake, this.takeAll)
+    }
+    return core.succeed([messages, this.releaseCapacity()])
+  })
   takeN(
-    n: number,
+    n: number
   ): Effect<readonly [messages: Chunk.Chunk<A>, done: boolean], E> {
     return core.suspend(() => {
       if (this.state._tag === "Done") {
@@ -292,7 +289,7 @@ class MailboxImpl<A, E> implements Api.Mailbox<A, E> {
       } else if (n <= this.messages.length + this.messagesChunk.length) {
         this.messagesChunk = Chunk.appendAll(
           this.messagesChunk,
-          Chunk.unsafeFromArray(this.messages),
+          Chunk.unsafeFromArray(this.messages)
         )
         this.messages = []
         messages = Chunk.take(this.messagesChunk, n)
@@ -329,7 +326,7 @@ class MailboxImpl<A, E> implements Api.Mailbox<A, E> {
     return core.exitSucceed(message)
   }
   take: Effect<A, Option.Option<E>> = core.suspend(
-    () => this.unsafeTake() ?? core.andThen(this.awaitTakeOption, this.take),
+    () => this.unsafeTake() ?? core.andThen(this.awaitTakeOption, this.take)
   )
   await: Effect<void, E> = core.async<void, E>((resume) => {
     if (this.state._tag === "Done") {
@@ -358,7 +355,7 @@ class MailboxImpl<A, E> implements Api.Mailbox<A, E> {
     return {
       _id: "effect/Mailbox",
       state: this.state._tag,
-      size: this.unsafeSize().toJSON(),
+      size: this.unsafeSize().toJSON()
     }
   }
   toString(): string {
@@ -391,7 +388,7 @@ class MailboxImpl<A, E> implements Api.Mailbox<A, E> {
         _tag: "Array",
         remaining,
         offset: 0,
-        resume,
+        resume
       }
       this.state.offers.add(entry)
       return core.sync(() => {
@@ -470,13 +467,12 @@ class MailboxImpl<A, E> implements Api.Mailbox<A, E> {
 
   private unsafeTakeAll() {
     if (this.messagesChunk.length > 0) {
-      const messages =
-        this.messages.length > 0
-          ? Chunk.appendAll(
-              this.messagesChunk,
-              Chunk.unsafeFromArray(this.messages),
-            )
-          : this.messagesChunk
+      const messages = this.messages.length > 0
+        ? Chunk.appendAll(
+          this.messagesChunk,
+          Chunk.unsafeFromArray(this.messages)
+        )
+        : this.messagesChunk
       this.messagesChunk = empty
       this.messages = []
       return messages
@@ -515,10 +511,10 @@ export const make = <A, E = never>(
   capacity?:
     | number
     | {
-        readonly capacity?: number | undefined
-        readonly strategy?: "suspend" | "dropping" | "sliding" | undefined
-      }
-    | undefined,
+      readonly capacity?: number | undefined
+      readonly strategy?: "suspend" | "dropping" | "sliding" | undefined
+    }
+    | undefined
 ): Effect<Api.Mailbox<A, E>> =>
   core.withFiber((fiber) =>
     core.succeed(
@@ -529,32 +525,32 @@ export const make = <A, E = never>(
           : (capacity?.capacity ?? Number.POSITIVE_INFINITY),
         typeof capacity === "number"
           ? "suspend"
-          : (capacity?.strategy ?? "suspend"),
-      ),
-    ),
+          : (capacity?.strategy ?? "suspend")
+      )
+    )
   )
 
 /** @internal */
 export const into: {
   <A, E>(
-    self: Api.Mailbox<A, E>,
+    self: Api.Mailbox<A, E>
   ): <AX, EX extends E, RX>(
-    effect: Effect<AX, EX, RX>,
+    effect: Effect<AX, EX, RX>
   ) => Effect<boolean, never, RX>
   <AX, E, EX extends E, RX, A>(
     effect: Effect<AX, EX, RX>,
-    self: Api.Mailbox<A, E>,
+    self: Api.Mailbox<A, E>
   ): Effect<boolean, never, RX>
 } = dual(
   2,
   <AX, E, EX extends E, RX, A>(
     effect: Effect<AX, EX, RX>,
-    self: Api.Mailbox<A, E>,
+    self: Api.Mailbox<A, E>
   ): Effect<boolean, never, RX> =>
     core.uninterruptibleMask((restore) =>
       core.matchCauseEffect(restore(effect), {
         onFailure: (cause) => self.failCause(cause),
-        onSuccess: (_) => self.end,
-      }),
-    ),
+        onSuccess: (_) => self.end
+      })
+    )
 )

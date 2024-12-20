@@ -54,9 +54,7 @@ export type RefinedConstructorsTypeId = typeof RefinedConstructorsTypeId
  * @category models
  */
 export interface Brand<in out K extends string | symbol> {
-  readonly [BrandTypeId]: {
-    readonly [k in K]: K
-  }
+  readonly [BrandTypeId]: Readonly<Record<K, K>>
 }
 
 /**

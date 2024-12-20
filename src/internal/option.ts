@@ -11,14 +11,14 @@ const TypeId: Option.TypeId = Symbol.for("effect/Option") as Option.TypeId
 
 const CommonProto = {
   [TypeId]: {
-    _A: (_: never) => _,
+    _A: (_: never) => _
   },
   [NodeInspectSymbol]<A>(this: Option.Option<A>) {
     return this.toJSON()
   },
   toString<A>(this: Option.Option<A>) {
     return format(this.toJSON())
-  },
+  }
 }
 
 const SomeProto = Object.assign(Object.create(CommonProto), {
@@ -32,16 +32,16 @@ const SomeProto = Object.assign(Object.create(CommonProto), {
   [Hash.symbol]<A>(this: Option.Some<A>) {
     return Hash.cached(
       this,
-      Hash.combine(Hash.hash(this._tag))(Hash.hash(this.value)),
+      Hash.combine(Hash.hash(this._tag))(Hash.hash(this.value))
     )
   },
   toJSON<A>(this: Option.Some<A>) {
     return {
       _id: "Option",
       _tag: this._tag,
-      value: toJSON(this.value),
+      value: toJSON(this.value)
     }
-  },
+  }
 })
 
 const NoneHash = Hash.hash("None")
@@ -57,22 +57,19 @@ const NoneProto = Object.assign(Object.create(CommonProto), {
   toJSON<A>(this: Option.None<A>) {
     return {
       _id: "Option",
-      _tag: this._tag,
+      _tag: this._tag
     }
-  },
+  }
 })
 
 /** @internal */
-export const isOption = (input: unknown): input is Option.Option<unknown> =>
-  hasProperty(input, TypeId)
+export const isOption = (input: unknown): input is Option.Option<unknown> => hasProperty(input, TypeId)
 
 /** @internal */
-export const isNone = <A>(fa: Option.Option<A>): fa is Option.None<A> =>
-  fa._tag === "None"
+export const isNone = <A>(fa: Option.Option<A>): fa is Option.None<A> => fa._tag === "None"
 
 /** @internal */
-export const isSome = <A>(fa: Option.Option<A>): fa is Option.Some<A> =>
-  fa._tag === "Some"
+export const isSome = <A>(fa: Option.Option<A>): fa is Option.Some<A> => fa._tag === "Some"
 
 /** @internal */
 export const none: Option.Option<never> = Object.create(NoneProto)

@@ -2,14 +2,15 @@
  * @since 4.0.0
  */
 import * as Context from "./Context.js"
-import { MixedScheduler, Scheduler, MaxOpsBeforeYield } from "./Scheduler.js"
+import type { Scheduler } from "./Scheduler.js"
+import { MaxOpsBeforeYield, MixedScheduler } from "./Scheduler.js"
 
 export {
   /**
    * @since 4.0.0
    * @category references
    */
-  MaxOpsBeforeYield,
+  MaxOpsBeforeYield
 }
 
 /**
@@ -29,5 +30,5 @@ export class CurrentScheduler extends Context.Reference<CurrentScheduler>()<
   "effect/Effect/currentScheduler",
   Scheduler
 >("effect/Effect/currentScheduler", {
-  defaultValue: () => new MixedScheduler(),
+  defaultValue: () => new MixedScheduler()
 }) {}

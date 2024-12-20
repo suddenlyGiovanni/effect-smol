@@ -650,9 +650,10 @@ export const map: {
  * @category mapping
  * @since 2.0.0
  */
-export const as: {
-  <B>(b: B): <X>(self: Option<X>) => Option<B>
-} = dual(2, <X, B>(self: Option<X>, b: B): Option<B> => map(self, () => b))
+export const as: <B>(b: B) => <X>(self: Option<X>) => Option<B> = dual(
+  2,
+  <X, B>(self: Option<X>, b: B): Option<B> => map(self, () => b)
+)
 
 /**
  * Maps the `Some` value of this `Option` to the `void` constant value.
@@ -1292,8 +1293,8 @@ export const exists: {
  * @since 2.0.0
  */
 export const bindTo: {
-  <N extends string>(name: N): <A>(self: Option<A>) => Option<{ [K in N]: A }>
-  <A, N extends string>(self: Option<A>, name: N): Option<{ [K in N]: A }>
+  <N extends string>(name: N): <A>(self: Option<A>) => Option<Record<N, A>>
+  <A, N extends string>(self: Option<A>, name: N): Option<Record<N, A>>
 } = doNotation.bindTo<OptionTypeLambda>(map)
 
 const let_: {

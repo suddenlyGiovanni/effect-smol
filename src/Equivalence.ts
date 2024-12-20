@@ -12,9 +12,7 @@ import type { TypeLambda } from "./HKT.js"
  * @category type class
  * @since 2.0.0
  */
-export interface Equivalence<in A> {
-  (self: A, that: A): boolean
-}
+export type Equivalence<in A> = (self: A, that: A) => boolean
 
 /**
  * @category type lambdas

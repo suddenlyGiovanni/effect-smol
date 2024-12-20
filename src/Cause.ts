@@ -1,13 +1,13 @@
 /**
  * @since 2.0.0
  */
-import * as core from "./internal/core.js"
 import type * as Context from "./Context.js"
-import { Pipeable } from "./Pipeable.js"
-import { Inspectable } from "./Inspectable.js"
 import type * as Effect from "./Effect.js"
-import { Option } from "./Option.js"
-import { Equal } from "./Equal.js"
+import type { Equal } from "./Equal.js"
+import type { Inspectable } from "./Inspectable.js"
+import * as core from "./internal/core.js"
+import type { Option } from "./Option.js"
+import type { Pipeable } from "./Pipeable.js"
 
 /**
  * @since 2.0.0
@@ -104,7 +104,7 @@ export interface Interrupt extends Cause.FailureProto<"Interrupt"> {
  * @category constructors
  */
 export const fromFailures: <E>(
-  failures: ReadonlyArray<Failure<E>>,
+  failures: ReadonlyArray<Failure<E>>
 ) => Cause<E> = core.causeFromFailures
 
 /**
@@ -123,8 +123,7 @@ export const die: (defect: unknown) => Cause<never> = core.causeDie
  * @since 2.0.0
  * @category constructors
  */
-export const interrupt: (fiberId?: number | undefined) => Cause<never> =
-  core.causeInterrupt
+export const interrupt: (fiberId?: number | undefined) => Cause<never> = core.causeInterrupt
 
 /**
  * @since 2.0.0
@@ -139,8 +138,7 @@ export interface YieldableError extends Pipeable, Inspectable, Readonly<Error> {
  * @since 4.0.0
  * @category errors
  */
-export const NoSuchElementErrorTypeId: unique symbol =
-  core.NoSuchElementErrorTypeId
+export const NoSuchElementErrorTypeId: unique symbol = core.NoSuchElementErrorTypeId
 
 /**
  * @since 4.0.0
@@ -152,8 +150,7 @@ export type NoSuchElementErrorTypeId = typeof NoSuchElementErrorTypeId
  * @since 4.0.0
  * @category errors
  */
-export const isNoSuchElementError: (u: unknown) => u is NoSuchElementError =
-  core.isNoSuchElementError
+export const isNoSuchElementError: (u: unknown) => u is NoSuchElementError = core.isNoSuchElementError
 
 /**
  * @since 4.0.0
@@ -168,8 +165,7 @@ export interface NoSuchElementError extends YieldableError {
  * @since 4.0.0
  * @category errors
  */
-export const NoSuchElementError: new (message?: string) => NoSuchElementError =
-  core.NoSuchElementError
+export const NoSuchElementError: new(message?: string) => NoSuchElementError = core.NoSuchElementError
 
 /**
  * @since 4.0.0
@@ -187,8 +183,7 @@ export type TimeoutErrorTypeId = typeof TimeoutErrorTypeId
  * @since 4.0.0
  * @category errors
  */
-export const isTimeoutError: (u: unknown) => u is TimeoutError =
-  core.isTimeoutError
+export const isTimeoutError: (u: unknown) => u is TimeoutError = core.isTimeoutError
 
 /**
  * @since 4.0.0
@@ -203,5 +198,4 @@ export interface TimeoutError extends YieldableError {
  * @since 4.0.0
  * @category errors
  */
-export const TimeoutError: new (message?: string) => TimeoutError =
-  core.TimeoutError
+export const TimeoutError: new(message?: string) => TimeoutError = core.TimeoutError

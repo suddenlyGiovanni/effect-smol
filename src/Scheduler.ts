@@ -1,8 +1,8 @@
 /**
  * @since 2.0.0
  */
-import type * as Fiber from "./Fiber.js"
 import * as Context from "./Context.js"
+import type * as Fiber from "./Fiber.js"
 
 /**
  * @since 2.0.0
@@ -14,10 +14,9 @@ export interface Scheduler {
   readonly flush: () => void
 }
 
-const setImmediate =
-  "setImmediate" in globalThis
-    ? globalThis.setImmediate
-    : (f: () => void) => setTimeout(f, 0)
+const setImmediate = "setImmediate" in globalThis
+  ? globalThis.setImmediate
+  : (f: () => void) => setTimeout(f, 0)
 
 /**
  * @since 2.0.0

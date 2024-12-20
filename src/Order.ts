@@ -23,9 +23,7 @@ import type { TypeLambda } from "./HKT.js"
  * @category type class
  * @since 2.0.0
  */
-export interface Order<in A> {
-  (self: A, that: A): -1 | 0 | 1
-}
+export type Order<in A> = (self: A, that: A) => -1 | 0 | 1
 
 /**
  * @category type lambdas
@@ -239,7 +237,7 @@ export const array = <A>(O: Order<A>): Order<ReadonlyArray<A>> =>
  * @category combinators
  * @since 2.0.0
  */
-export const struct = <R extends { readonly [x: string]: Order<any> }>(
+export const struct = <R extends Readonly<Record<string, Order<any>>>>(
   fields: R
 ): Order<{ [K in keyof R]: [R[K]] extends [Order<infer A>] ? A : never }> => {
   const keys = Object.keys(fields)

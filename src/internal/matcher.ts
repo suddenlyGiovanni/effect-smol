@@ -382,7 +382,7 @@ export const discriminators = <D extends string>(field: D) =>
         | ((_: Extract<R, Record<D, Tag>>) => Ret)
         | undefined
     }
-    & { readonly [Tag in Exclude<keyof P, Types.Tags<D, R>>]: never }
+    & Readonly<Record<Exclude<keyof P, Types.Tags<D, R>>, never>>
 >(
   fields: P
 ) => {
@@ -415,7 +415,7 @@ export const discriminatorsExhaustive: <D extends string>(
         _: Extract<R, Record<D, Tag>>
       ) => Ret
     }
-    & { readonly [Tag in Exclude<keyof P, Types.Tags<D, R>>]: never }
+    & Readonly<Record<Exclude<keyof P, Types.Tags<D, R>>, never>>
 >(
   fields: P
 ) => <I, F, A, Pr>(

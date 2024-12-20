@@ -1,13 +1,13 @@
 /**
  * @since 2.0.0
  */
-import * as Context from "./Context.js"
-import type { Covariant } from "./Types.js"
+import type * as Context from "./Context.js"
+import type { Effect } from "./Effect.js"
+import type { Exit } from "./Exit.js"
+import type * as core from "./internal/core.js"
 import * as internal from "./internal/fiber.js"
-import { Exit } from "./Exit.js"
-import { Effect } from "./Effect.js"
-import * as core from "./internal/core.js"
-import { Pipeable } from "./Pipeable.js"
+import type { Pipeable } from "./Pipeable.js"
+import type { Covariant } from "./Types.js"
 
 /**
  * @since 2.0.0
@@ -58,7 +58,7 @@ export {
    * @since 2.0.0
    * @category combinators
    */
-  await_ as await,
+  await_ as await
 }
 
 /**
@@ -71,13 +71,12 @@ export const join: <A, E>(self: Fiber<A, E>) => Effect<A, E> = core.fiberJoin
  * @since 2.0.0
  * @category interruption
  */
-export const interrupt: <A, E>(self: Fiber<A, E>) => Effect<void> =
-  core.fiberInterrupt
+export const interrupt: <A, E>(self: Fiber<A, E>) => Effect<void> = core.fiberInterrupt
 
 /**
  * @since 2.0.0
  * @category interruption
  */
 export const interruptAll: <A extends Iterable<Fiber<any, any>>>(
-  fibers: A,
+  fibers: A
 ) => Effect<void> = core.fiberInterruptAll

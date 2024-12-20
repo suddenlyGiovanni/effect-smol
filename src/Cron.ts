@@ -393,8 +393,8 @@ export const next = (cron: Cron, now?: DateTime.DateTime.Input): Date => {
       }
 
       if (cron.weekdays.size !== 0 || cron.days.size !== 0) {
-        let a: number = Infinity
-        let b: number = Infinity
+        let a = Infinity
+        let b = Infinity
 
         if (cron.weekdays.size !== 0) {
           const currentWeekday = current.getUTCDay()

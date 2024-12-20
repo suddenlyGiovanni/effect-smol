@@ -15,19 +15,19 @@ import * as option from "./option.js"
  * @internal
  */
 export const TypeId: Either.TypeId = Symbol.for(
-  "effect/Either",
+  "effect/Either"
 ) as Either.TypeId
 
 const CommonProto = {
   [TypeId]: {
-    _R: (_: never) => _,
+    _R: (_: never) => _
   },
   [NodeInspectSymbol]<L, R>(this: Either.Either<R, L>) {
     return this.toJSON()
   },
   toString<L, R>(this: Either.Left<L, R>) {
     return format(this.toJSON())
-  },
+  }
 }
 
 const RightProto = Object.assign(Object.create(CommonProto), {
@@ -45,9 +45,9 @@ const RightProto = Object.assign(Object.create(CommonProto), {
     return {
       _id: "Either",
       _tag: this._tag,
-      right: toJSON(this.right),
+      right: toJSON(this.right)
     }
-  },
+  }
 })
 
 const LeftProto = Object.assign(Object.create(CommonProto), {
@@ -63,24 +63,24 @@ const LeftProto = Object.assign(Object.create(CommonProto), {
     return {
       _id: "Either",
       _tag: this._tag,
-      left: toJSON(this.left),
+      left: toJSON(this.left)
     }
-  },
+  }
 })
 
 /** @internal */
 export const isEither = (
-  input: unknown,
+  input: unknown
 ): input is Either.Either<unknown, unknown> => hasProperty(input, TypeId)
 
 /** @internal */
 export const isLeft = <R, L>(
-  ma: Either.Either<R, L>,
+  ma: Either.Either<R, L>
 ): ma is Either.Left<L, R> => ma._tag === "Left"
 
 /** @internal */
 export const isRight = <R, L>(
-  ma: Either.Either<R, L>,
+  ma: Either.Either<R, L>
 ): ma is Either.Right<L, R> => ma._tag === "Right"
 
 /** @internal */
@@ -112,5 +112,5 @@ export const fromOption: {
 } = dual(
   2,
   <R, L>(self: Option<R>, onNone: () => L): Either.Either<R, L> =>
-    option.isNone(self) ? left(onNone()) : right(self.value),
+    option.isNone(self) ? left(onNone()) : right(self.value)
 )

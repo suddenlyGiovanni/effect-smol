@@ -1,21 +1,21 @@
+import type * as Effect from "../Effect.js"
+import * as Equal from "../Equal.js"
 import { identity } from "../Function.js"
+import * as Hash from "../Hash.js"
 import { format, NodeInspectSymbol } from "../Inspectable.js"
 import { pipeArguments } from "../Pipeable.js"
 import { SingleShotGen, YieldWrap } from "../Utils.js"
-import type * as Effect from "../Effect.js"
 import type { Primitive } from "./core.js"
-import * as Equal from "../Equal.js"
-import * as Hash from "../Hash.js"
 
 /** @internal */
 export const TypeId: Effect.TypeId = Symbol.for(
-  "effect/Effect",
+  "effect/Effect"
 ) as Effect.TypeId
 
 const effectVariance = {
   _A: identity,
   _E: identity,
-  _R: identity,
+  _R: identity
 }
 
 /** @internal */
@@ -66,7 +66,7 @@ export const EffectProto = {
     return {
       _id: "Effect",
       op: this[identifier],
-      ...(args in this ? { args: this[args] } : undefined),
+      ...(args in this ? { args: this[args] } : undefined)
     }
   },
   toString() {
@@ -74,7 +74,7 @@ export const EffectProto = {
   },
   [NodeInspectSymbol]() {
     return format(this)
-  },
+  }
 }
 
 /** @internal */
@@ -99,5 +99,5 @@ export const StructuralPrototype: Equal.Equal = {
       }
     }
     return true
-  },
+  }
 }

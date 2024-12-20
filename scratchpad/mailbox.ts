@@ -1,7 +1,7 @@
-import * as Mailbox from "effect/Mailbox"
 import * as Effect from "effect/Effect"
+import * as Mailbox from "effect/Mailbox"
 
-Effect.gen(function* () {
+Effect.gen(function*() {
   const mailbox = yield* Mailbox.make<string>()
   yield* mailbox.offer("Hello")
   console.log(yield* mailbox.take)
