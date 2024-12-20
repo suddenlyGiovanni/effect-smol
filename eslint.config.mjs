@@ -34,12 +34,6 @@ export default tseslint.config(
       sourceType: "module"
     },
 
-    // settings: {
-    //   "import/parsers": {
-    //     "@typescript-eslint/parser": [".ts", ".tsx"]
-    //   }
-    // },
-
     rules: {
       "no-fallthrough": "off",
       "no-irregular-whitespace": "off",
@@ -75,14 +69,21 @@ export default tseslint.config(
           readonly: "generic"
         }
       ],
-
-      "@typescript-eslint/member-delimiter-style": 0,
-      "@typescript-eslint/no-non-null-assertion": "off",
+      "@typescript-eslint/ban-ts-comment": "off",
       "@typescript-eslint/ban-types": "off",
+      "@typescript-eslint/camelcase": "off",
+      "@typescript-eslint/explicit-module-boundary-types": "off",
+      "@typescript-eslint/consistent-type-imports": "warn",
+      "@typescript-eslint/explicit-function-return-type": "off",
+      "@typescript-eslint/interface-name-prefix": "off",
+      "@typescript-eslint/member-delimiter-style": 0,
+      "@typescript-eslint/no-array-constructor": "off",
       "@typescript-eslint/no-explicit-any": "off",
       "@typescript-eslint/no-empty-interface": "off",
-      "@typescript-eslint/consistent-type-imports": "warn",
-
+      "@typescript-eslint/no-empty-object-type": "off",
+      "@typescript-eslint/no-invalid-void-type": "off",
+      "@typescript-eslint/no-namespace": "off",
+      "@typescript-eslint/no-non-null-assertion": "off",
       "@typescript-eslint/no-unused-vars": [
         "error",
         {
@@ -90,15 +91,9 @@ export default tseslint.config(
           varsIgnorePattern: "^_"
         }
       ],
-
-      "@typescript-eslint/ban-ts-comment": "off",
-      "@typescript-eslint/camelcase": "off",
-      "@typescript-eslint/explicit-function-return-type": "off",
-      "@typescript-eslint/explicit-module-boundary-types": "off",
-      "@typescript-eslint/interface-name-prefix": "off",
-      "@typescript-eslint/no-array-constructor": "off",
       "@typescript-eslint/no-use-before-define": "off",
-      "@typescript-eslint/no-namespace": "off",
+      "@typescript-eslint/prefer-for-of": "off",
+      "@typescript-eslint/unified-signatures": "off",
 
       "@effect/dprint": [
         "error",

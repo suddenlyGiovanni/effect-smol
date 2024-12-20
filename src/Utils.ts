@@ -176,30 +176,32 @@ export interface Variance<in out F extends TypeLambda, in R, out O, out E> {
  * @category models
  * @since 2.0.0
  */
-export interface Gen<F extends TypeLambda, Z> {
-  <Self, K extends Variance<F, any, any, any> | YieldWrap<Kind<F, any, any, any, any>>, A>(
-    ...args:
-      | [
-        self: Self,
-        body: (this: Self, resume: Z) => Generator<K, A, never>
-      ]
-      | [
-        body: (resume: Z) => Generator<K, A, never>
-      ]
-  ): Kind<
-    F,
-    [K] extends [Variance<F, infer R, any, any>] ? R
-      : [K] extends [YieldWrap<Kind<F, infer R, any, any, any>>] ? R
-      : never,
-    [K] extends [Variance<F, any, infer O, any>] ? O
-      : [K] extends [YieldWrap<Kind<F, any, infer O, any, any>>] ? O
-      : never,
-    [K] extends [Variance<F, any, any, infer E>] ? E
-      : [K] extends [YieldWrap<Kind<F, any, any, infer E, any>>] ? E
-      : never,
-    A
-  >
-}
+export type Gen<F extends TypeLambda, Z> = <
+  Self,
+  K extends Variance<F, any, any, any> | YieldWrap<Kind<F, any, any, any, any>>,
+  A
+>(
+  ...args:
+    | [
+      self: Self,
+      body: (this: Self, resume: Z) => Generator<K, A, never>
+    ]
+    | [
+      body: (resume: Z) => Generator<K, A, never>
+    ]
+) => Kind<
+  F,
+  [K] extends [Variance<F, infer R, any, any>] ? R
+    : [K] extends [YieldWrap<Kind<F, infer R, any, any, any>>] ? R
+    : never,
+  [K] extends [Variance<F, any, infer O, any>] ? O
+    : [K] extends [YieldWrap<Kind<F, any, infer O, any, any>>] ? O
+    : never,
+  [K] extends [Variance<F, any, any, infer E>] ? E
+    : [K] extends [YieldWrap<Kind<F, any, any, infer E, any>>] ? E
+    : never,
+  A
+>
 
 /**
  * @category models
@@ -567,18 +569,18 @@ export class PCGRandom {
       incLo = this._state ? this._state[3] : defaultIncLo
       incHi = this._state ? this._state[2] : defaultIncHi
     } else if (isNullable(incLo)) {
-      incLo = <number> incHi
+      incLo = incHi as number
       incHi = 0
     }
 
-    this._state = new Int32Array([0, 0, (<number> incHi) >>> 0, ((incLo || 0) | 1) >>> 0])
+    this._state = new Int32Array([0, 0, (incHi as number) >>> 0, ((incLo || 0) | 1) >>> 0])
     this._next()
     add64(
       this._state,
       this._state[0]!,
       this._state[1]!,
-      (<number> seedHi) >>> 0,
-      (<number> seedLo) >>> 0
+      (seedHi as number) >>> 0,
+      (seedLo as number) >>> 0
     )
     this._next()
     return this

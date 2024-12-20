@@ -17,9 +17,7 @@ import type { NoInfer } from "./Types.js"
  * @category models
  * @since 2.0.0
  */
-export type ReadonlyRecord<in out K extends string | symbol, out A> = {
-  readonly [P in K]: A
-}
+export type ReadonlyRecord<in out K extends string | symbol, out A> = Readonly<Record<K, A>>
 
 /**
  * @since 2.0.0
@@ -624,7 +622,7 @@ export const mapEntries: {
     self: ReadonlyRecord<K, A>,
     f: (a: A, key: K) => [K2, B]
   ): Record<K2, B> => {
-    const out = <Record<K2, B>> {}
+    const out = {} as Record<K2, B>
     for (const key of keys(self)) {
       const [k, b] = f(self[key], key)
       out[k] = b
@@ -1265,7 +1263,7 @@ export const difference: {
   if (isEmptyRecord(that)) {
     return { ...self } as any
   }
-  const out = <Record<K0 | K1, A | B>> {}
+  const out = {} as Record<K0 | K1, A | B>
   for (const key of keys(self)) {
     if (!has(that, key as any)) {
       out[key] = self[key]

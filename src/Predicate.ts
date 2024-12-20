@@ -9,9 +9,7 @@ import type { TupleOf, TupleOfAtLeast } from "./Types.js"
  * @category models
  * @since 2.0.0
  */
-export interface Predicate<in A> {
-  (a: A): boolean
-}
+export type Predicate<in A> = (a: A) => boolean
 
 /**
  * @category type lambdas
@@ -25,9 +23,7 @@ export interface PredicateTypeLambda extends TypeLambda {
  * @category models
  * @since 2.0.0
  */
-export interface Refinement<in A, out B extends A> {
-  (a: A): a is B
-}
+export type Refinement<in A, out B extends A> = (a: A) => a is B
 
 /**
  * @since 3.6.0
@@ -452,7 +448,7 @@ export const isNever: (input: unknown) => input is never = (_: unknown): _ is ne
 export const isUnknown: (input: unknown) => input is unknown = (_): _ is unknown => true
 
 /** @internal */
-export const isRecordOrArray = (input: unknown): input is { [x: PropertyKey]: unknown } =>
+export const isRecordOrArray = (input: unknown): input is Record<PropertyKey, unknown> =>
   typeof input === "object" && input !== null
 
 /**
@@ -486,11 +482,11 @@ export const isObject = (input: unknown): input is object => isRecordOrArray(inp
  * @since 2.0.0
  */
 export const hasProperty: {
-  <P extends PropertyKey>(property: P): (self: unknown) => self is { [K in P]: unknown }
-  <P extends PropertyKey>(self: unknown, property: P): self is { [K in P]: unknown }
+  <P extends PropertyKey>(property: P): (self: unknown) => self is Record<P, unknown>
+  <P extends PropertyKey>(self: unknown, property: P): self is Record<P, unknown>
 } = dual(
   2,
-  <P extends PropertyKey>(self: unknown, property: P): self is { [K in P]: unknown } =>
+  <P extends PropertyKey>(self: unknown, property: P): self is Record<P, unknown> =>
     isObject(self) && (property in self)
 )
 
@@ -668,7 +664,7 @@ export const isIterable = (input: unknown): input is Iterable<unknown> => hasPro
  * @category guards
  * @since 2.0.0
  */
-export const isRecord = (input: unknown): input is { [x: string | symbol]: unknown } =>
+export const isRecord = (input: unknown): input is Record<string | symbol, unknown> =>
   isRecordOrArray(input) && !Array.isArray(input)
 
 /**
@@ -694,7 +690,7 @@ export const isRecord = (input: unknown): input is { [x: string | symbol]: unkno
  */
 export const isReadonlyRecord: (
   input: unknown
-) => input is { readonly [x: string | symbol]: unknown } = isRecord
+) => input is Readonly<Record<string | symbol, unknown>> = isRecord
 
 /**
  * A guard that succeeds when the input is a Promise.
@@ -810,15 +806,13 @@ export const productMany = <A>(
  *
  * @since 2.0.0
  */
-export const tuple: {
-  <T extends ReadonlyArray<Predicate.Any>>(
-    ...elements: T
-  ): [Extract<T[number], Refinement.Any>] extends [never] ? Predicate<{ readonly [I in keyof T]: Predicate.In<T[I]> }>
-    : Refinement<
-      { readonly [I in keyof T]: T[I] extends Refinement.Any ? Refinement.In<T[I]> : Predicate.In<T[I]> },
-      { readonly [I in keyof T]: T[I] extends Refinement.Any ? Refinement.Out<T[I]> : Predicate.In<T[I]> }
-    >
-} = (...elements: ReadonlyArray<Predicate.Any>) => all(elements) as any
+export const tuple: <T extends ReadonlyArray<Predicate.Any>>(
+  ...elements: T
+) => [Extract<T[number], Refinement.Any>] extends [never] ? Predicate<{ readonly [I in keyof T]: Predicate.In<T[I]> }>
+  : Refinement<
+    { readonly [I in keyof T]: T[I] extends Refinement.Any ? Refinement.In<T[I]> : Predicate.In<T[I]> },
+    { readonly [I in keyof T]: T[I] extends Refinement.Any ? Refinement.Out<T[I]> : Predicate.In<T[I]> }
+  > = (...elements: ReadonlyArray<Predicate.Any>) => all(elements) as any
 
 /**
  * ```
@@ -829,26 +823,24 @@ export const tuple: {
  *
  * @since 2.0.0
  */
-export const struct: {
-  <R extends Record<string, Predicate.Any>>(
-    fields: R
-  ): [Extract<R[keyof R], Refinement.Any>] extends [never] ?
-    Predicate<{ readonly [K in keyof R]: Predicate.In<R[K]> }> :
-    Refinement<
-      { readonly [K in keyof R]: R[K] extends Refinement.Any ? Refinement.In<R[K]> : Predicate.In<R[K]> },
-      { readonly [K in keyof R]: R[K] extends Refinement.Any ? Refinement.Out<R[K]> : Predicate.In<R[K]> }
-    >
-} = (<R extends Record<string, Predicate.Any>>(fields: R) => {
-  const keys = Object.keys(fields)
-  return (a: Record<string, unknown>) => {
-    for (const key of keys) {
-      if (!fields[key](a[key])) {
-        return false
+export const struct: <R extends Record<string, Predicate.Any>>(
+  fields: R
+) => [Extract<R[keyof R], Refinement.Any>] extends [never] ?
+  Predicate<{ readonly [K in keyof R]: Predicate.In<R[K]> }> :
+  Refinement<
+    { readonly [K in keyof R]: R[K] extends Refinement.Any ? Refinement.In<R[K]> : Predicate.In<R[K]> },
+    { readonly [K in keyof R]: R[K] extends Refinement.Any ? Refinement.Out<R[K]> : Predicate.In<R[K]> }
+  > = (<R extends Record<string, Predicate.Any>>(fields: R) => {
+    const keys = Object.keys(fields)
+    return (a: Record<string, unknown>) => {
+      for (const key of keys) {
+        if (!fields[key](a[key])) {
+          return false
+        }
       }
+      return true
     }
-    return true
-  }
-}) as any
+  }) as any
 
 /**
  * Negates the result of a given predicate.

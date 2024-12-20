@@ -695,7 +695,7 @@ class LinesIterator implements IterableIterator<string> {
   private index: number
   private readonly length: number
 
-  constructor(readonly s: string, readonly stripped: boolean = false) {
+  constructor(readonly s: string, readonly stripped = false) {
     this.index = 0
     this.length = s.length
   }

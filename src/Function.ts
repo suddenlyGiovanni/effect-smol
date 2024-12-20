@@ -180,9 +180,7 @@ export const apply = <A>(a: A) => <B>(self: (a: A) => B): B => self(a)
  *
  * @since 2.0.0
  */
-export interface LazyArg<A> {
-  (): A
-}
+export type LazyArg<A> = () => A
 
 /**
  * @example
@@ -194,9 +192,7 @@ export interface LazyArg<A> {
  *
  * @since 2.0.0
  */
-export interface FunctionN<A extends ReadonlyArray<unknown>, B> {
-  (...args: A): B
-}
+export type FunctionN<A extends ReadonlyArray<unknown>, B> = (...args: A) => B
 
 /**
  * The identity function, i.e. A function that returns its input argument.

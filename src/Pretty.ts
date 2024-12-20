@@ -13,9 +13,7 @@ import * as AST from "./SchemaAST.js"
  * @category model
  * @since 3.10.0
  */
-export interface Pretty<To> {
-  (a: To): string
-}
+export type Pretty<To> = (a: To) => string
 
 /**
  * @category annotations
@@ -130,7 +128,7 @@ export const match: AST.Match<Pretty<any>> = {
     for (let i = 0; i < propertySignaturesTypes.length; i++) {
       expectedKeys[ast.propertySignatures[i].name] = null
     }
-    return (input: { readonly [x: PropertyKey]: unknown }) => {
+    return (input: Readonly<Record<PropertyKey, unknown>>) => {
       const output: Array<string> = []
       // ---------------------------------------------
       // handle property signatures

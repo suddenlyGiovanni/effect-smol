@@ -3318,8 +3318,8 @@ export const bind: {
  * @since 3.2.0
  */
 export const bindTo: {
-  <N extends string>(tag: N): <A>(self: ReadonlyArray<A>) => Array<{ [K in N]: A }>
-  <A, N extends string>(self: ReadonlyArray<A>, tag: N): Array<{ [K in N]: A }>
+  <N extends string>(tag: N): <A>(self: ReadonlyArray<A>) => Array<Record<N, A>>
+  <A, N extends string>(self: ReadonlyArray<A>, tag: N): Array<Record<N, A>>
 } = doNotation.bindTo<ReadonlyArrayTypeLambda>(map) as any
 
 const let_: {
