@@ -408,11 +408,7 @@ export const fromIterator = <A>(iterator: LazyArg<Iterator<A>>): Channel<A> =>
       const iter = iterator()
       return Effect.suspend(() => {
         const state = iter.next()
-        if (state.done) {
-          return halt
-        } else {
-          return Effect.succeed(state.value)
-        }
+        return state.done ? halt : Effect.succeed(state.value)
       })
     }),
   )
