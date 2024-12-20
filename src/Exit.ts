@@ -4,6 +4,7 @@
 import * as core from "./internal/core.js"
 import type * as Effect from "./Effect.js"
 import type * as Cause from "./Cause.js"
+import { NoInfer } from "./Types.js"
 
 /**
  * @since 2.0.0
@@ -112,6 +113,24 @@ export const isSuccess: <A, E>(self: Exit<A, E>) => self is Success<A, E> =
  */
 export const isFailure: <A, E>(self: Exit<A, E>) => self is Failure<A, E> =
   core.exitIsFailure
+
+/**
+ * @since 2.0.0
+ * @category pattern matching
+ */
+export const match: {
+  <A, E, X1, X2>(options: {
+    readonly onSuccess: (a: NoInfer<A>) => X1
+    readonly onFailure: (cause: Cause.Cause<NoInfer<E>>) => X2
+  }): (self: Exit<A, E>) => X1 | X2
+  <A, E, X1, X2>(
+    self: Exit<A, E>,
+    options: {
+      readonly onSuccess: (a: A) => X1
+      readonly onFailure: (cause: Cause.Cause<E>) => X2
+    },
+  ): X1 | X2
+} = core.exitMatch
 
 /**
  * @since 2.0.0

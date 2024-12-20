@@ -18,9 +18,10 @@ import * as internalMailbox from "./internal/mailbox.js"
 import type { Mailbox, ReadonlyMailbox } from "./Mailbox.js"
 import * as Exit from "./Exit.js"
 import * as Scope from "./Scope.js"
-import * as Chunk from "effect/Chunk"
+import * as Chunk from "./Chunk.js"
 import * as Context from "./Context.js"
 import * as Option from "./Option.js"
+import { hasProperty } from "./Predicate.js"
 
 /**
  * @since 4.0.0
@@ -33,6 +34,15 @@ export const TypeId: unique symbol = Symbol.for("effect/Channel")
  * @category symbols
  */
 export type TypeId = typeof TypeId
+
+/**
+ * @since 3.5.4
+ * @category refinements
+ */
+export const isChannel = (
+  u: unknown,
+): u is Channel<unknown, unknown, unknown, unknown, unknown> =>
+  hasProperty(u, TypeId)
 
 /**
  * A `Channel` is a nexus of I/O operations, which supports both reading and
@@ -155,10 +165,6 @@ function catchHalt<A, R, E, A2, E2, R2>(
   )
 }
 
-function haltFromCause<E>(cause: Cause.Cause<E>): Halt | undefined {
-  return cause.failures.find(isHaltFailure)?.defect
-}
-
 /**
  * @since 4.0.0
  * @category Halt
@@ -219,7 +225,7 @@ const makeImpl = <OutElem, InElem, OutErr, InErr, EX, EnvX, Env>(
  * @since 4.0.0
  * @category constructors
  */
-export const fromPull = <OutElem, OutErr, EX, EnvX, Env>(
+export const fromPullUnsafe = <OutElem, OutErr, EX, EnvX, Env>(
   effect: Effect.Effect<Effect.Effect<OutElem, OutErr, EnvX>, EX, Env>,
 ): Channel<OutElem, unknown, OutErr | EX, unknown, Env | EnvX> =>
   makeImpl((_, __) => effect)
@@ -234,12 +240,15 @@ const makeImplScoped = <OutElem, InElem, OutErr, InErr, EX, EnvX, Env>(
   makeImpl(
     Effect.fnUntraced(function* (upstream, scope) {
       const closableScope = yield* scope.fork
-      const pull = yield* f(upstream, scope, closableScope)
-      return Effect.onError(pull, (cause) =>
+      const onCause = (cause: Cause.Cause<EX | OutErr>) =>
         closableScope.close(
           isHaltCause(cause) ? Exit.void : Exit.failCause(cause),
-        ),
+        )
+      const pull = yield* Effect.onError(
+        f(upstream, scope, closableScope),
+        onCause,
       )
+      return Effect.onError(pull, onCause)
     }),
   )
 
@@ -303,26 +312,14 @@ const emitFromMailbox = <A, E>(mailbox: Mailbox<A, E>): Emit<A, E> => ({
   single: (value) => mailbox.unsafeOffer(value),
 })
 
-const mailboxToPull = <A, E>(mailbox: ReadonlyMailbox<A, E>) => {
-  let buffer: ReadonlyArray<A> = []
-  let index = 0
-  let done = false
-  const refill = Effect.map(mailbox.takeAll, ([values, done_]) => {
-    buffer = Chunk.toReadonlyArray(values)
-    index = 0
-    done = done_
-    return buffer[index++]
-  })
-  return Effect.suspend((): Effect.Effect<A, E> => {
-    if (index < buffer.length) {
-      return Effect.succeed(buffer[index++])
-    } else if (done) {
-      buffer = []
-      return halt
-    }
-    return refill
-  })
-}
+const mailboxToPull = <A, E>(mailbox: ReadonlyMailbox<A, E>) =>
+  Effect.catch(
+    mailbox.take,
+    Option.match({
+      onNone: () => halt,
+      onSome: Effect.fail,
+    }),
+  )
 
 /**
  * @since 2.0.0
@@ -330,10 +327,17 @@ const mailboxToPull = <A, E>(mailbox: ReadonlyMailbox<A, E>) => {
  */
 export const asyncPush = <A, E = never, R = never>(
   f: (emit: Emit<A, E>) => Effect.Effect<unknown, E, R | Scope.Scope>,
+  options?: {
+    readonly bufferSize?: number | undefined
+    readonly strategy?: "sliding" | "dropping" | undefined
+  },
 ): Channel<A, unknown, E, unknown, Exclude<R, Scope.Scope>> =>
   makeImplScoped(
     Effect.fnUntraced(function* (_, __, scope) {
-      const mailbox = yield* internalMailbox.make<A, E>()
+      const mailbox = yield* internalMailbox.make<A, E>({
+        capacity: options?.bufferSize,
+        strategy: options?.strategy,
+      })
       yield* scope.addFinalizer(() => mailbox.shutdown)
       const emit = emitFromMailbox(mailbox)
       yield* Effect.forkIn(Scope.provideScope(f(emit), scope), scope)
@@ -345,20 +349,52 @@ export const asyncPush = <A, E = never, R = never>(
  * @since 2.0.0
  * @category constructors
  */
+export const suspend = <OutElem, InElem, OutErr, InErr, Env>(
+  evaluate: LazyArg<Channel<OutElem, InElem, OutErr, InErr, Env>>,
+): Channel<OutElem, InElem, OutErr, InErr, Env> =>
+  makeImpl((upstream, scope) =>
+    Effect.suspend(() => toTransform(evaluate())(upstream, scope)),
+  )
+
+/**
+ * @since 4.0.0
+ * @category constructors
+ */
+export const fromPull = <A, E, R>(
+  effect: Effect.Effect<A, Option.Option<E>, R>,
+): Channel<A, unknown, E, unknown, R> =>
+  fromPullUnsafe(
+    Effect.succeed(
+      Effect.catch(
+        effect,
+        Option.match({
+          onNone: () => halt,
+          onSome: Effect.fail,
+        }),
+      ),
+    ),
+  )
+
+/**
+ * @since 2.0.0
+ * @category constructors
+ */
 export const acquireUseRelease = <A, E, R, OutElem, InElem, OutErr, InErr, Env>(
   acquire: Effect.Effect<A, E, R>,
   use: (a: A) => Channel<OutElem, InElem, OutErr, InErr, Env>,
   release: (a: A, exit: Exit.Exit<void, OutErr>) => Effect.Effect<void>,
 ): Channel<OutElem, InElem, OutErr | E, InErr, Env | R> =>
-  makeImpl(
-    Effect.fnUntraced(function* (upstream, scope) {
+  makeImplScoped(
+    Effect.fnUntraced(function* (upstream, scope, forkedScope) {
+      let option = Option.none<A>()
+      yield* forkedScope.addFinalizer((exit) =>
+        Option.isSome(option)
+          ? release(option.value, exit as any)
+          : Effect.void,
+      )
       const value = yield* acquire
-      const pull = yield* toTransform(use(value))(upstream, scope)
-      return Effect.onExit(pull, (exit) => {
-        if (exit._tag === "Success") return Effect.void
-        const halt = haltFromCause(exit.cause)
-        return halt ? release(value, Exit.void) : release(value, exit as any)
-      })
+      option = Option.some(value)
+      return yield* toTransform(use(value))(upstream, scope)
     }),
   )
 
@@ -367,7 +403,7 @@ export const acquireUseRelease = <A, E, R, OutElem, InElem, OutErr, InErr, Env>(
  * @category constructors
  */
 export const fromIterator = <A>(iterator: LazyArg<Iterator<A>>): Channel<A> =>
-  fromPull(
+  fromPullUnsafe(
     Effect.sync(() => {
       const iter = iterator()
       return Effect.suspend(() => {
@@ -389,7 +425,7 @@ export const fromIteratorChunk = <A>(
   iterator: LazyArg<Iterator<A>>,
   chunkSize = DefaultChunkSize,
 ): Channel<Chunk.Chunk<A>> =>
-  fromPull(
+  fromPullUnsafe(
     Effect.sync(() => {
       const iter = iterator()
       let done = false
@@ -435,7 +471,7 @@ export const fromIterableChunk = <A>(
  * @category constructors
  */
 export const succeed = <A>(value: A): Channel<A> =>
-  fromPull(
+  fromPullUnsafe(
     Effect.sync(() => {
       let done = false
       return Effect.suspend(() => {
@@ -455,7 +491,7 @@ export const succeed = <A>(value: A): Channel<A> =>
  * @since 2.0.0
  * @category constructors
  */
-export const empty: Channel<never> = fromPull(Effect.succeed(halt))
+export const empty: Channel<never> = fromPullUnsafe(Effect.succeed(halt))
 
 /**
  * Represents an Channel that never completes
@@ -463,7 +499,9 @@ export const empty: Channel<never> = fromPull(Effect.succeed(halt))
  * @since 2.0.0
  * @category constructors
  */
-export const never: Channel<never> = fromPull(Effect.succeed(Effect.never))
+export const never: Channel<never> = fromPullUnsafe(
+  Effect.succeed(Effect.never),
+)
 
 /**
  * Use an effect to write a single value to the channel.
@@ -474,7 +512,7 @@ export const never: Channel<never> = fromPull(Effect.succeed(Effect.never))
 export const fromEffect = <A, E, R>(
   effect: Effect.Effect<A, E, R>,
 ): Channel<A, unknown, E, unknown, R> =>
-  fromPull(
+  fromPullUnsafe(
     Effect.sync(() => {
       let done = false
       return Effect.suspend(() => {
@@ -493,7 +531,8 @@ export const fromEffect = <A, E, R>(
  */
 export const fromMailbox = <A, E>(
   mailbox: ReadonlyMailbox<A, E>,
-): Channel<A, unknown, E> => fromPull(Effect.sync(() => mailboxToPull(mailbox)))
+): Channel<A, unknown, E> =>
+  fromPullUnsafe(Effect.sync(() => mailboxToPull(mailbox)))
 
 /**
  * Create a channel from a ReadonlyMailbox
@@ -504,7 +543,7 @@ export const fromMailbox = <A, E>(
 export const fromMailboxChunk = <A, E>(
   mailbox: ReadonlyMailbox<A, E>,
 ): Channel<Chunk.Chunk<A>, unknown, E> =>
-  fromPull(
+  fromPullUnsafe(
     Effect.succeed(
       Effect.flatMap(mailbox.takeAll, ([values]) =>
         values.length === 0 ? halt : Effect.succeed(values),
@@ -539,6 +578,122 @@ export const map: {
     ),
 )
 
+const concurrencyIsSequential = (
+  concurrency: number | "unbounded" | undefined,
+) =>
+  concurrency === undefined || (concurrency !== "unbounded" && concurrency <= 1)
+
+/**
+ * Returns a new channel, which sequentially combines this channel, together
+ * with the provided factory function, which creates a second channel based on
+ * the output values of this channel. The result is a channel that will first
+ * perform the functions of this channel, before performing the functions of
+ * the created channel (including yielding its terminal value).
+ *
+ * @since 2.0.0
+ * @category sequencing
+ */
+export const mapEffect: {
+  <OutElem, OutElem1, OutErr1, Env1>(
+    f: (d: OutElem) => Effect.Effect<OutElem1, OutErr1, Env1>,
+    options?: {
+      readonly concurrency?: number | "unbounded"
+      readonly bufferSize?: number
+    },
+  ): <InElem, OutErr, InErr, Env>(
+    self: Channel<OutElem, InElem, OutErr, InErr, Env>,
+  ) => Channel<OutElem1, InElem, OutErr1 | OutErr, InErr, Env1 | Env>
+  <OutElem, InElem, OutErr, InErr, Env, OutElem1, OutErr1, Env1>(
+    self: Channel<OutElem, InElem, OutErr, InErr, Env>,
+    f: (d: OutElem) => Effect.Effect<OutElem1, OutErr1, Env1>,
+    options?: {
+      readonly concurrency?: number | "unbounded"
+      readonly bufferSize?: number
+    },
+  ): Channel<OutElem1, InElem, OutErr | OutErr1, InErr, Env | Env1>
+} = dual(
+  (args) => isChannel(args[0]),
+  <OutElem, InElem, OutErr, InErr, Env, OutElem1, OutErr1, Env1>(
+    self: Channel<OutElem, InElem, OutErr, InErr, Env>,
+    f: (d: OutElem) => Effect.Effect<OutElem1, OutErr1, Env1>,
+    options?: {
+      readonly concurrency?: number | "unbounded"
+      readonly bufferSize?: number
+    },
+  ): Channel<OutElem1, InElem, OutErr | OutErr1, InErr, Env | Env1> =>
+    concurrencyIsSequential(options?.concurrency)
+      ? mapEffectSequential(self, f)
+      : mapEffectConcurrent(self, f, options as any),
+)
+
+const mapEffectSequential = <
+  OutElem,
+  InElem,
+  OutErr,
+  InErr,
+  Env,
+  OutElem2,
+  EX,
+  RX,
+>(
+  self: Channel<OutElem, InElem, OutErr, InErr, Env>,
+  f: (o: OutElem) => Effect.Effect<OutElem2, EX, RX>,
+): Channel<OutElem2, InElem, OutErr | EX, InErr, Env | RX> =>
+  makeImpl((upstream, scope) =>
+    Effect.map(toTransform(self)(upstream, scope), Effect.flatMap(f)),
+  )
+
+const mapEffectConcurrent = <
+  OutElem,
+  InElem,
+  OutErr,
+  InErr,
+  Env,
+  OutElem2,
+  EX,
+  RX,
+>(
+  self: Channel<OutElem, InElem, OutErr, InErr, Env>,
+  f: (o: OutElem) => Effect.Effect<OutElem2, EX, RX>,
+  options: {
+    readonly concurrency: number | "unbounded"
+    readonly bufferSize?: number | undefined
+  },
+): Channel<OutElem2, InElem, OutErr | EX, InErr, Env | RX> =>
+  makeImplScoped(
+    Effect.fnUntraced(function* (upstream, scope, forkedScope) {
+      const pull = yield* toTransform(self)(upstream, scope)
+      const concurrencyN =
+        options.concurrency === "unbounded"
+          ? Number.MAX_SAFE_INTEGER
+          : options.concurrency
+      const semaphore = Effect.unsafeMakeSemaphore(concurrencyN)
+      const mailbox = yield* internalMailbox.make<OutElem2, OutErr | EX>(
+        options.bufferSize ?? 16,
+      )
+      yield* forkedScope.addFinalizer(() => mailbox.shutdown)
+
+      yield* Effect.gen(function* () {
+        while (true) {
+          yield* semaphore.take(1)
+          const value = yield* pull
+          yield* f(value).pipe(
+            Effect.flatMap((value) => mailbox.offer(value)),
+            Effect.ensuring(semaphore.release(1)),
+            Effect.fork,
+          )
+        }
+      }).pipe(
+        Effect.onError((cause) =>
+          semaphore.withPermits(concurrencyN - 1)(mailbox.failCause(cause)),
+        ),
+        Effect.forkIn(forkedScope),
+      )
+
+      return mailboxToPull(mailbox)
+    }),
+  )
+
 /**
  * Returns a new channel, which sequentially combines this channel, together
  * with the provided factory function, which creates a second channel based on
@@ -552,6 +707,10 @@ export const map: {
 export const flatMap: {
   <OutElem, OutElem1, InElem1, OutErr1, InErr1, Env1>(
     f: (d: OutElem) => Channel<OutElem1, InElem1, OutErr1, InErr1, Env1>,
+    options?: {
+      readonly concurrency?: number | "unbounded"
+      readonly bufferSize?: number
+    },
   ): <OutElem, InElem, OutErr, InErr, Env>(
     self: Channel<OutElem, InElem, OutErr, InErr, Env>,
   ) => Channel<
@@ -575,6 +734,10 @@ export const flatMap: {
   >(
     self: Channel<OutElem, InElem, OutErr, InErr, Env>,
     f: (d: OutElem) => Channel<OutElem1, InElem1, OutErr1, InErr1, Env1>,
+    options?: {
+      readonly concurrency?: number | "unbounded"
+      readonly bufferSize?: number
+    },
   ): Channel<
     OutElem1,
     InElem & InElem1,
@@ -583,7 +746,7 @@ export const flatMap: {
     Env | Env1
   >
 } = dual(
-  2,
+  (args) => isChannel(args[0]),
   <
     OutElem,
     InElem,
@@ -598,6 +761,10 @@ export const flatMap: {
   >(
     self: Channel<OutElem, InElem, OutErr, InErr, Env>,
     f: (d: OutElem) => Channel<OutElem1, InElem1, OutErr1, InErr1, Env1>,
+    options?: {
+      readonly concurrency?: number | "unbounded"
+      readonly bufferSize?: number
+    },
   ): Channel<
     OutElem1,
     InElem & InElem1,
@@ -605,42 +772,75 @@ export const flatMap: {
     InErr & InErr1,
     Env | Env1
   > =>
-    makeImpl(
-      Effect.fnUntraced(function* (upstream, scope) {
-        const pull = yield* toTransform(self)(upstream, scope)
-        let childPull: Effect.Effect<OutElem1, OutErr1, Env1> | null = null
-        const makePull: Effect.Effect<OutElem1, OutErr | OutErr1, Env1> =
-          pull.pipe(
-            Effect.flatMap((value) => toTransform(f(value))(upstream, scope)),
-            Effect.flatMap((pull) => {
-              childPull = catchHalt(pull, (_) => {
-                childPull = null
-                return makePull
-              }) as any
-              return childPull!
-            }),
-          )
-        return Effect.suspend(() => childPull ?? makePull)
-      }),
-    ),
+    concurrencyIsSequential(options?.concurrency)
+      ? flatMapSequential(self, f)
+      : flatMapConcurrent(self, f, options as any),
 )
 
-export const mapEffectSequential = <
+const flatMapSequential = <
   OutElem,
   InElem,
   OutErr,
   InErr,
   Env,
-  OutElem2,
-  EX,
-  RX,
+  OutElem1,
+  InElem1,
+  OutErr1,
+  InErr1,
+  Env1,
 >(
   self: Channel<OutElem, InElem, OutErr, InErr, Env>,
-  f: (o: OutElem) => Effect.Effect<OutElem2, EX, RX>,
-): Channel<OutElem2, InElem, OutErr | EX, InErr, Env | RX> =>
+  f: (d: OutElem) => Channel<OutElem1, InElem1, OutErr1, InErr1, Env1>,
+): Channel<
+  OutElem1,
+  InElem & InElem1,
+  OutErr | OutErr1,
+  InErr & InErr1,
+  Env | Env1
+> =>
   makeImpl((upstream, scope) =>
-    Effect.map(toTransform(self)(upstream, scope), Effect.flatMap(f)),
+    Effect.map(toTransform(self)(upstream, scope), (pull) => {
+      let childPull: Effect.Effect<OutElem1, OutErr1, Env1> | null = null
+      const makePull: Effect.Effect<OutElem1, OutErr | OutErr1, Env1> =
+        pull.pipe(
+          Effect.flatMap((value) => toTransform(f(value))(upstream, scope)),
+          Effect.flatMap((pull) => {
+            childPull = catchHalt(pull, (_) => {
+              childPull = null
+              return makePull
+            }) as any
+            return childPull!
+          }),
+        )
+      return Effect.suspend(() => childPull ?? makePull)
+    }),
   )
+
+const flatMapConcurrent = <
+  OutElem,
+  InElem,
+  OutErr,
+  InErr,
+  Env,
+  OutElem1,
+  InElem1,
+  OutErr1,
+  InErr1,
+  Env1,
+>(
+  self: Channel<OutElem, InElem, OutErr, InErr, Env>,
+  f: (d: OutElem) => Channel<OutElem1, InElem1, OutErr1, InErr1, Env1>,
+  options: {
+    readonly concurrency: number | "unbounded"
+    readonly bufferSize?: number | undefined
+  },
+): Channel<
+  OutElem1,
+  InElem & InElem1,
+  OutErr | OutErr1,
+  InErr & InErr1,
+  Env | Env1
+> => self.pipe(map(f), mergeAll(options))
 
 /**
  * @since 2.0.0
@@ -709,7 +909,7 @@ export const mergeAll: {
     Env1 | Env
   > =>
     makeImplScoped(
-      Effect.fnUntraced(function* (upstream, parentScope, scope) {
+      Effect.fnUntraced(function* (upstream, scope, forkedScope) {
         const concurrencyN =
           concurrency === "unbounded"
             ? Number.MAX_SAFE_INTEGER
@@ -719,15 +919,15 @@ export const mergeAll: {
         const mailbox = yield* internalMailbox.make<OutElem, OutErr | OutErr1>(
           bufferSize,
         )
-        yield* scope.addFinalizer(() => mailbox.shutdown)
+        yield* forkedScope.addFinalizer(() => mailbox.shutdown)
 
-        const pull = yield* toTransform(channels)(upstream, parentScope)
+        const pull = yield* toTransform(channels)(upstream, scope)
 
         yield* Effect.gen(function* () {
           while (true) {
             yield* semaphore.take(1)
             const channel = yield* pull
-            const childPull = yield* toTransform(channel)(upstream, parentScope)
+            const childPull = yield* toTransform(channel)(upstream, scope)
             yield* Effect.whileLoop({
               while: constTrue,
               body: constant(
@@ -744,15 +944,14 @@ export const mergeAll: {
                       )
                     : semaphore.release(1),
               ),
-              Effect.forkIn(scope),
+              Effect.fork,
             )
           }
         }).pipe(
           Effect.onError((cause) =>
-            // n-1 because of the failure
             semaphore.withPermits(concurrencyN - 1)(mailbox.failCause(cause)),
           ),
-          Effect.forkIn(scope),
+          Effect.forkIn(forkedScope),
         )
 
         return mailboxToPull(mailbox)
@@ -932,6 +1131,7 @@ export const toPull: <OutElem, InElem, OutErr, InErr, Env>(
   Env | Scope.Scope
 > = Effect.fnUntraced(
   function* (self) {
+    const semaphore = Effect.unsafeMakeSemaphore(1)
     const context = yield* Effect.context<Scope.Scope>()
     const scope = Context.get(context, Scope.Scope)
     const pull = yield* toTransform(self)(halt, scope)
@@ -939,8 +1139,49 @@ export const toPull: <OutElem, InElem, OutErr, InErr, Env>(
       Effect.provideContext(context),
       Effect.mapError(Option.some),
       Effect.catchFailure(isHaltFailure, (_) => Effect.fail(Option.none())),
+      semaphore.withPermits(1),
     )
   },
   // ensure errors are redirected to the pull effect
   Effect.catchCause((cause) => Effect.succeed(Effect.failCause(cause))),
+)
+
+/**
+ * @since 4.0.0
+ * @category conversions
+ */
+export const toMailbox: {
+  (options?: {
+    readonly bufferSize?: number | undefined
+  }): <OutElem, InElem, OutErr, InErr, Env>(
+    self: Channel<OutElem, InElem, OutErr, InErr, Env>,
+  ) => Effect.Effect<ReadonlyMailbox<OutElem, OutErr>, never, Env | Scope.Scope>
+  <OutElem, InElem, OutErr, InErr, Env>(
+    self: Channel<OutElem, InElem, OutErr, InErr, Env>,
+    options?: {
+      readonly bufferSize?: number | undefined
+    },
+  ): Effect.Effect<ReadonlyMailbox<OutElem, OutErr>, never, Env | Scope.Scope>
+} = dual(
+  (args) => isChannel(args[0]),
+  Effect.fnUntraced(function* <OutElem, InElem, OutErr, InErr, Env>(
+    self: Channel<OutElem, InElem, OutErr, InErr, Env>,
+    options?: {
+      readonly bufferSize?: number | undefined
+    },
+  ) {
+    const scope = yield* Effect.scope
+    const mailbox = yield* internalMailbox.make<OutElem, OutErr>(
+      options?.bufferSize,
+    )
+    yield* scope.addFinalizer(() => mailbox.shutdown)
+    yield* Effect.forkIn(
+      Effect.onExit(
+        runForEach(self, (value) => mailbox.offer(value)),
+        (exit) => mailbox.done(exit),
+      ),
+      scope,
+    )
+    return mailbox
+  }),
 )

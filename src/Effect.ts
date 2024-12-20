@@ -837,6 +837,104 @@ export const andThen: {
 } = core.andThen
 
 /**
+ * Runs a side effect with the result of an effect without changing the original
+ * value.
+ *
+ * **When to Use**
+ *
+ * Use `tap` when you want to perform a side effect, like logging or tracking,
+ * without modifying the main value. This is useful when you need to observe or
+ * record an action but want the original value to be passed to the next step.
+ *
+ * **Details**
+ *
+ * `tap` works similarly to `flatMap`, but it ignores the result of the function
+ * passed to it. The value from the previous effect remains available for the
+ * next part of the chain. Note that if the side effect fails, the entire chain
+ * will fail too.
+ *
+ * @example
+ * ```ts
+ * // Title: Logging a step in a pipeline
+ * import { Console, Effect, pipe } from "effect"
+ *
+ * // Function to apply a discount safely to a transaction amount
+ * const applyDiscount = (
+ *   total: number,
+ *   discountRate: number
+ * ): Effect.Effect<number, Error> =>
+ *   discountRate === 0
+ *     ? Effect.fail(new Error("Discount rate cannot be zero"))
+ *     : Effect.succeed(total - (total * discountRate) / 100)
+ *
+ * // Simulated asynchronous task to fetch a transaction amount from database
+ * const fetchTransactionAmount = Effect.promise(() => Promise.resolve(100))
+ *
+ * const finalAmount = pipe(
+ *   fetchTransactionAmount,
+ *   // Log the fetched transaction amount
+ *   Effect.tap((amount) => Console.log(`Apply a discount to: ${amount}`)),
+ *   // `amount` is still available!
+ *   Effect.flatMap((amount) => applyDiscount(amount, 5))
+ * )
+ *
+ * Effect.runPromise(finalAmount).then(console.log)
+ * // Output:
+ * // Apply a discount to: 100
+ * // 95
+ * ```
+ *
+ * @since 2.0.0
+ * @category sequencing
+ */
+export const tap: {
+  <A, X>(
+    f: (a: NoInfer<A>) => X,
+  ): <E, R>(
+    self: Effect<A, E, R>,
+  ) => [X] extends [Effect<infer _A1, infer E1, infer R1>]
+    ? Effect<A, E | E1, R | R1>
+    : Effect<A, E, R>
+  <A, X, E1, R1>(
+    f: (a: NoInfer<A>) => Effect<X, E1, R1>,
+    options: { onlyEffect: true },
+  ): <E, R>(self: Effect<A, E, R>) => Effect<A, E | E1, R | R1>
+  <X>(
+    f: NotFunction<X>,
+  ): <A, E, R>(
+    self: Effect<A, E, R>,
+  ) => [X] extends [Effect<infer _A1, infer E1, infer R1>]
+    ? Effect<A, E | E1, R | R1>
+    : Effect<A, E, R>
+  <X, E1, R1>(
+    f: Effect<X, E1, R1>,
+    options: { onlyEffect: true },
+  ): <A, E, R>(self: Effect<A, E, R>) => Effect<A, E | E1, R | R1>
+  <A, E, R, X>(
+    self: Effect<A, E, R>,
+    f: (a: NoInfer<A>) => X,
+  ): [X] extends [Effect<infer _A1, infer E1, infer R1>]
+    ? Effect<A, E | E1, R | R1>
+    : Effect<A, E, R>
+  <A, E, R, X, E1, R1>(
+    self: Effect<A, E, R>,
+    f: (a: NoInfer<A>) => Effect<X, E1, R1>,
+    options: { onlyEffect: true },
+  ): Effect<A, E | E1, R | R1>
+  <A, E, R, X>(
+    self: Effect<A, E, R>,
+    f: NotFunction<X>,
+  ): [X] extends [Effect<infer _A1, infer E1, infer R1>]
+    ? Effect<A, E | E1, R | R1>
+    : Effect<A, E, R>
+  <A, E, R, X, E1, R1>(
+    self: Effect<A, E, R>,
+    f: Effect<X, E1, R1>,
+    options: { onlyEffect: true },
+  ): Effect<A, E | E1, R | R1>
+} = core.tap
+
+/**
  * Transforms the value inside an effect by applying a function to it.
  *
  * **Syntax**
@@ -1731,6 +1829,34 @@ export const whileLoop: <A, E, R>(options: {
 // -----------------------------------------------------------------------------
 // Supervision & Fiber's
 // -----------------------------------------------------------------------------
+
+/**
+ * Returns an effect that forks this effect into its own separate fiber,
+ * returning the fiber immediately, without waiting for it to begin executing
+ * the effect.
+ *
+ * You can use the `fork` method whenever you want to execute an effect in a
+ * new fiber, concurrently and without "blocking" the fiber executing other
+ * effects. Using fibers can be tricky, so instead of using this method
+ * directly, consider other higher-level methods, such as `raceWith`,
+ * `zipPar`, and so forth.
+ *
+ * The fiber returned by this method has methods to interrupt the fiber and to
+ * wait for it to finish executing the effect. See `Fiber` for more
+ * information.
+ *
+ * Whenever you use this method to launch a new fiber, the new fiber is
+ * attached to the parent fiber's scope. This means when the parent fiber
+ * terminates, the child fiber will be terminated as well, ensuring that no
+ * fibers leak. This behavior is called "auto supervision", and if this
+ * behavior is not desired, you may use the `forkDaemon` or `forkIn` methods.
+ *
+ * @since 2.0.0
+ * @category supervision & fibers
+ */
+export const fork: <A, E, R>(
+  self: Effect<A, E, R>,
+) => Effect<Fiber<A, E>, never, R> = core.fork
 
 /**
  * Forks the effect in the specified scope. The fiber will be interrupted

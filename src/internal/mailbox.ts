@@ -1,5 +1,5 @@
 import * as Arr from "../Array.js"
-import { Cause, NoSuchElementError } from "../Cause.js"
+import { Cause } from "../Cause.js"
 import * as Chunk from "../Chunk.js"
 import type { Effect } from "../Effect.js"
 import type { Exit } from "../Exit.js"
@@ -68,6 +68,14 @@ const exitEmpty = core.exitSucceed(empty)
 const exitFalse = core.exitSucceed(false)
 const exitTrue = core.exitSucceed(true)
 const constDone = [empty, true] as const
+const exitFailNone = core.exitFail(Option.none())
+const exitToOption: <E>(
+  exit: Exit<void, E>,
+) => Exit<never, Option.Option<E>> = (exit) => {
+  if (exit._tag === "Success") return exitFailNone
+  const fail = exit.cause.failures.find((_) => _._tag === "Fail")
+  return fail ? core.exitFail(Option.some(fail.error)) : (exit as any)
+}
 
 class MailboxImpl<A, E> implements Api.Mailbox<A, E> {
   readonly [TypeId]: Api.TypeId = TypeId
@@ -295,12 +303,9 @@ class MailboxImpl<A, E> implements Api.Mailbox<A, E> {
       return core.succeed([messages, this.releaseCapacity()])
     })
   }
-  unsafeTake(): Exit<A, E | NoSuchElementError> | undefined {
+  unsafeTake(): Exit<A, Option.Option<E>> | undefined {
     if (this.state._tag === "Done") {
-      return core.exitZipRight(
-        this.state.exit,
-        core.exitFail(new NoSuchElementError()),
-      )
+      return exitToOption(this.state.exit)
     }
     let message: A
     if (this.messagesChunk.length > 0) {
@@ -323,8 +328,8 @@ class MailboxImpl<A, E> implements Api.Mailbox<A, E> {
     this.releaseCapacity()
     return core.exitSucceed(message)
   }
-  take: Effect<A, E | NoSuchElementError> = core.suspend(
-    () => this.unsafeTake() ?? core.andThen(this.awaitTake, this.take),
+  take: Effect<A, Option.Option<E>> = core.suspend(
+    () => this.unsafeTake() ?? core.andThen(this.awaitTakeOption, this.take),
   )
   await: Effect<void, E> = core.async<void, E>((resume) => {
     if (this.state._tag === "Done") {
@@ -441,6 +446,7 @@ class MailboxImpl<A, E> implements Api.Mailbox<A, E> {
       }
     })
   })
+  private awaitTakeOption = core.mapError(this.awaitTake, Option.some)
 
   private scheduleRunning = false
   private scheduleReleaseTaker() {
@@ -552,77 +558,3 @@ export const into: {
       }),
     ),
 )
-
-// /** @internal */
-// export const toChannel = <A, E>(
-//   self: Api.ReadonlyMailbox<A, E>,
-// ): Channel<Chunk.Chunk<A>, unknown, E> => {
-//   const loop: Channel<Chunk.Chunk<A>, unknown, E> = coreChannel.flatMap(
-//     self.takeAll,
-//     ([messages, done]) =>
-//       done
-//         ? messages.length === 0
-//           ? coreChannel.void
-//           : coreChannel.write(messages)
-//         : channel.zipRight(coreChannel.write(messages), loop),
-//   )
-//   return loop
-// }
-//
-// /** @internal */
-// export const toStream = <A, E>(self: Api.ReadonlyMailbox<A, E>): Stream<A, E> =>
-//   stream.fromChannel(toChannel(self))
-//
-// /** @internal */
-// export const fromStream: {
-//   (options?: {
-//     readonly capacity?: number | undefined
-//     readonly strategy?: "suspend" | "dropping" | "sliding" | undefined
-//   }): <A, E, R>(
-//     self: Stream<A, E, R>,
-//   ) => Effect<Api.ReadonlyMailbox<A, E>, never, R | Scope>
-//   <A, E, R>(
-//     self: Stream<A, E, R>,
-//     options?: {
-//       readonly capacity?: number | undefined
-//       readonly strategy?: "suspend" | "dropping" | "sliding" | undefined
-//     },
-//   ): Effect<Api.ReadonlyMailbox<A, E>, never, R | Scope>
-// } = dual(
-//   (args) => stream.isStream(args[0]),
-//   <A, E, R>(
-//     self: Stream<A, E, R>,
-//     options?: {
-//       readonly capacity?: number | undefined
-//       readonly strategy?: "suspend" | "dropping" | "sliding" | undefined
-//     },
-//   ): Effect<Api.ReadonlyMailbox<A, E>, never, R | Scope> =>
-//     core.tap(
-//       fiberRuntime.acquireRelease(
-//         make<A, E>(options),
-//         (mailbox) => mailbox.shutdown,
-//       ),
-//       (mailbox) => {
-//         const writer: Channel<
-//           never,
-//           Chunk.Chunk<A>,
-//           never,
-//           E
-//         > = coreChannel.readWithCause({
-//           onInput: (input: Chunk.Chunk<A>) =>
-//             coreChannel.flatMap(mailbox.offerAll(input), () => writer),
-//           onFailure: (cause: Cause<E>) => mailbox.failCause(cause),
-//           onDone: () => mailbox.end,
-//         })
-//         return channel.unwrapScopedWith((scope) =>
-//           stream
-//             .toChannel(self)
-//             .pipe(
-//               coreChannel.pipeTo(writer),
-//               channelExecutor.runIn(scope),
-//               circular.forkIn(scope),
-//             ),
-//         )
-//       },
-//     ),
-// )

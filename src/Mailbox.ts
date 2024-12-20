@@ -2,7 +2,7 @@
  * @since 3.8.0
  * @experimental
  */
-import type { Cause, NoSuchElementError } from "./Cause.js"
+import type { Cause } from "./Cause.js"
 import type { Chunk } from "./Chunk.js"
 import type { Effect } from "./Effect.js"
 import type { Exit } from "./Exit.js"
@@ -152,10 +152,10 @@ export interface ReadonlyMailbox<out A, out E = never> extends Inspectable {
    * Take a single message from the mailbox, or wait for a message to be
    * available.
    *
-   * If the mailbox is done, it will fail with `NoSuchElementException`. If the
-   * mailbox fails, the Effect will fail with the error.
+   * If the mailbox is done, it will fail with `Option.None`. If the
+   * mailbox fails, the Effect will fail with `Option.some(error)`.
    */
-  readonly take: Effect<A, E | NoSuchElementError>
+  readonly take: Effect<A, Option<E>>
   /** Wait for the mailbox to be done. */
   readonly await: Effect<void, E>
   /**
@@ -235,44 +235,3 @@ export const into: {
     self: Mailbox<A, E>,
   ): Effect<boolean, never, RX>
 } = internal.into
-
-// /**
-//  * Create a `Channel` from a `Mailbox`.
-//  *
-//  * @since 3.8.0
-//  * @experimental
-//  * @category conversions
-//  */
-// export const toChannel: <A, E>(self: ReadonlyMailbox<A, E>) => Channel<Chunk<A>, unknown, E> = internal.toChannel
-
-// /**
-//  * Create a `Stream` from a `Mailbox`.
-//  *
-//  * @since 3.8.0
-//  * @experimental
-//  * @category conversions
-//  */
-// export const toStream: <A, E>(self: ReadonlyMailbox<A, E>) => Stream<A, E> = internal.toStream
-//
-// /**
-//  * Create a `ReadonlyMailbox` from a `Stream`.
-//  *
-//  * @since 3.11.0
-//  * @experimental
-//  * @category conversions
-//  */
-// export const fromStream: {
-//   (
-//     options?: {
-//       readonly capacity?: number | undefined
-//       readonly strategy?: "suspend" | "dropping" | "sliding" | undefined
-//     }
-//   ): <A, E, R>(self: Stream<A, E, R>) => Effect<ReadonlyMailbox<A, E>, never, R | Scope>
-//   <A, E, R>(
-//     self: Stream<A, E, R>,
-//     options?: {
-//       readonly capacity?: number | undefined
-//       readonly strategy?: "suspend" | "dropping" | "sliding" | undefined
-//     }
-//   ): Effect<ReadonlyMailbox<A, E>, never, R | Scope>
-// } = internal.fromStream

@@ -13,7 +13,13 @@ import * as Option from "../Option.js"
 import { pipeArguments } from "../Pipeable.js"
 import type { Predicate, Refinement } from "../Predicate.js"
 import { hasProperty, isIterable, isObject, isTagged } from "../Predicate.js"
-import type { Concurrency, Equals, NotFunction, Simplify } from "../Types.js"
+import type {
+  Concurrency,
+  Equals,
+  NoInfer,
+  NotFunction,
+  Simplify,
+} from "../Types.js"
 import { YieldWrap, yieldWrapGet } from "../Utils.js"
 import type * as Effect from "../Effect.js"
 import type * as Exit from "../Exit.js"
@@ -1422,6 +1428,33 @@ export const exitZipRight: {
     self: Exit.Exit<A, E>,
     that: Exit.Exit<A2, E2>,
   ): Exit.Exit<A2, E | E2> => (exitIsSuccess(self) ? that : (self as any)),
+)
+
+/** @internal */
+export const exitMatch: {
+  <A, E, X1, X2>(options: {
+    readonly onSuccess: (a: NoInfer<A>) => X1
+    readonly onFailure: (cause: Cause.Cause<NoInfer<E>>) => X2
+  }): (self: Exit.Exit<A, E>) => X1 | X2
+  <A, E, X1, X2>(
+    self: Exit.Exit<A, E>,
+    options: {
+      readonly onSuccess: (a: A) => X1
+      readonly onFailure: (cause: Cause.Cause<E>) => X2
+    },
+  ): X1 | X2
+} = dual(
+  2,
+  <A, E, X1, X2>(
+    self: Exit.Exit<A, E>,
+    options: {
+      readonly onSuccess: (a: A) => X1
+      readonly onFailure: (cause: Cause.Cause<E>) => X2
+    },
+  ): X1 | X2 =>
+    exitIsSuccess(self)
+      ? options.onSuccess(self.value)
+      : options.onFailure(self.cause),
 )
 
 /** @internal */
@@ -3204,7 +3237,7 @@ const unsafeFork = <FA, FE, A, E, R>(
   const child = new FiberImpl<A, E>(parent.context, parent.interruptible)
   if (!daemon) {
     parent.children().add(child)
-    child.addObserver(() => parent.children().delete(child))
+    child.addObserver(() => parent._children!.delete(child))
   }
   if (immediate) {
     child.evaluate(effect as any)
