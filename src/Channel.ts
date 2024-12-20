@@ -451,6 +451,37 @@ export const fromIteratorChunk = <A>(
  * @since 2.0.0
  * @category constructors
  */
+export const fromIteratorArray = <A>(
+  iterator: LazyArg<Iterator<A>>,
+  chunkSize = DefaultChunkSize
+): Channel<ReadonlyArray<A>> =>
+  fromPullUnsafe(
+    Effect.sync(() => {
+      const iter = iterator()
+      let done = false
+      return Effect.suspend(() => {
+        if (done) return halt
+        const buffer: Array<A> = []
+        while (buffer.length < chunkSize) {
+          const state = iter.next()
+          if (state.done) {
+            if (buffer.length === 0) {
+              return halt
+            }
+            done = true
+            break
+          }
+          buffer.push(state.value)
+        }
+        return Effect.succeed(buffer)
+      })
+    })
+  )
+
+/**
+ * @since 2.0.0
+ * @category constructors
+ */
 export const fromIterable = <A>(iterable: Iterable<A>): Channel<A> => fromIterator(() => iterable[Symbol.iterator]())
 
 /**
