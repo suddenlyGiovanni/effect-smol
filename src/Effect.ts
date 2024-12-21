@@ -628,6 +628,18 @@ export const failCauseSync: <E>(
  */
 export const die: (defect: unknown) => Effect<never> = core.die
 
+/**
+ * @since 2.0.0
+ * @category Creating Effects
+ */
+export const yieldNow: Effect<void> = core.yieldNow
+
+/**
+ * @since 2.0.0
+ * @category Creating Effects
+ */
+export const yieldFlush: Effect<void> = core.yieldFlush
+
 // -----------------------------------------------------------------------------
 // Mapping
 // -----------------------------------------------------------------------------
