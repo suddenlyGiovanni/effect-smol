@@ -5,7 +5,7 @@ import * as Arr from "./Array.js"
 import * as Channel from "./Channel.js"
 import type * as Effect from "./Effect.js"
 import type { LazyArg } from "./Function.js"
-import { constant, dual, identity } from "./Function.js"
+import { dual, identity } from "./Function.js"
 import type { TypeLambda } from "./HKT.js"
 import { type Pipeable, pipeArguments } from "./Pipeable.js"
 import { hasProperty } from "./Predicate.js"
@@ -366,8 +366,8 @@ export const runCollect = <A, E, R>(self: Stream<A, E, R>): Effect.Effect<Array<
     toChannel(self),
     () => [] as Array<A>,
     (acc, chunk) => {
-      for (const a of chunk) {
-        acc.push(a)
+      for (let i = 0; i < chunk.length; i++) {
+        acc.push(chunk[i])
       }
       return acc
     }
@@ -380,7 +380,7 @@ export const runCollect = <A, E, R>(self: Stream<A, E, R>): Effect.Effect<Array<
  * @category destructors
  */
 export const runCount = <A, E, R>(self: Stream<A, E, R>): Effect.Effect<number, E, R> =>
-  Channel.runFold(toChannel(self), constant(0), (acc, chunk) => acc + chunk.length)
+  Channel.runFold(toChannel(self), () => 0, (acc, chunk) => acc + chunk.length)
 
 /**
  * Runs the stream only for its effects. The emitted elements are discarded.
