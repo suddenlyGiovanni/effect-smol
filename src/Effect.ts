@@ -634,12 +634,6 @@ export const die: (defect: unknown) => Effect<never> = core.die
  */
 export const yieldNow: Effect<void> = core.yieldNow
 
-/**
- * @since 2.0.0
- * @category Creating Effects
- */
-export const yieldFlush: Effect<void> = core.yieldFlush
-
 // -----------------------------------------------------------------------------
 // Mapping
 // -----------------------------------------------------------------------------

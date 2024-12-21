@@ -296,10 +296,10 @@ const makeImplBracket = <OutElem, OutErr, OutDone, InElem, InErr, InDone, EX, En
   fromTransform(
     Effect.fnUntraced(function*(upstream, scope) {
       const closableScope = yield* scope.fork
-      const onCause = (cause: Cause.Cause<EX | OutErr | Halt<OutDone>>) =>
-        closableScope.close(
-          isHaltCause(cause) ? Exit.void : Exit.failCause(cause)
-        )
+      const onCause = (cause: Cause.Cause<EX | OutErr | Halt<OutDone>>) => {
+        const halt = haltFromCause(cause)
+        return closableScope.close(halt ? Exit.succeed(halt.leftover) : Exit.failCause(cause))
+      }
       const pull = yield* Effect.onError(
         f(upstream, scope, closableScope),
         onCause
@@ -413,7 +413,7 @@ export const suspend = <OutElem, OutErr, OutDone, InElem, InErr, InDone, Env>(
 export const acquireUseRelease = <A, E, R, OutElem, OutErr, OutDone, InElem, InErr, InDone, Env>(
   acquire: Effect.Effect<A, E, R>,
   use: (a: A) => Channel<OutElem, OutErr, OutDone, InElem, InErr, InDone, Env>,
-  release: (a: A, exit: Exit.Exit<void, OutErr>) => Effect.Effect<void>
+  release: (a: A, exit: Exit.Exit<OutDone, OutErr>) => Effect.Effect<unknown>
 ): Channel<OutElem, OutErr | E, OutDone, InElem, InErr, InDone, Env | R> =>
   makeImplBracket(
     Effect.fnUntraced(function*(upstream, scope, forkedScope) {
@@ -1325,6 +1325,57 @@ export const embedInput: {
       })
     )
 )
+
+/**
+ * Returns a new channel with an attached finalizer. The finalizer is
+ * guaranteed to be executed so long as the channel begins execution (and
+ * regardless of whether or not it completes).
+ *
+ * @since 2.0.0
+ * @category utils
+ */
+export const ensuringWith: {
+  <OutDone, OutErr, Env2>(
+    finalizer: (e: Exit.Exit<OutDone, OutErr>) => Effect.Effect<unknown, never, Env2>
+  ): <OutElem, InElem, InErr, InDone, Env>(
+    self: Channel<OutElem, OutErr, OutDone, InElem, InErr, InDone, Env>
+  ) => Channel<OutElem, OutErr, OutDone, InElem, InErr, InDone, Env2 | Env>
+  <OutElem, OutErr, OutDone, InElem, InErr, InDone, Env, Env2>(
+    self: Channel<OutElem, OutErr, OutDone, InElem, InErr, InDone, Env>,
+    finalizer: (e: Exit.Exit<OutDone, OutErr>) => Effect.Effect<unknown, never, Env2>
+  ): Channel<OutElem, OutErr, OutDone, InElem, InErr, InDone, Env2 | Env>
+} = dual(2, <OutElem, OutErr, OutDone, InElem, InErr, InDone, Env, Env2>(
+  self: Channel<OutElem, OutErr, OutDone, InElem, InErr, InDone, Env>,
+  finalizer: (e: Exit.Exit<OutDone, OutErr>) => Effect.Effect<unknown, never, Env2>
+): Channel<OutElem, OutErr, OutDone, InElem, InErr, InDone, Env2 | Env> =>
+  makeImplBracket((upstream, scope, forkedScope) =>
+    forkedScope.addFinalizer(finalizer as any).pipe(
+      Effect.andThen(toTransform(self)(upstream, scope))
+    )
+  ))
+
+/**
+ * Returns a new channel with an attached finalizer. The finalizer is
+ * guaranteed to be executed so long as the channel begins execution (and
+ * regardless of whether or not it completes).
+ *
+ * @since 2.0.0
+ * @category utils
+ */
+export const ensuring: {
+  <Env2>(
+    finalizer: Effect.Effect<unknown, never, Env2>
+  ): <OutElem, OutDone, OutErr, InElem, InErr, InDone, Env>(
+    self: Channel<OutElem, OutErr, OutDone, InElem, InErr, InDone, Env>
+  ) => Channel<OutElem, OutErr, OutDone, InElem, InErr, InDone, Env2 | Env>
+  <OutElem, OutErr, OutDone, InElem, InErr, InDone, Env, Env2>(
+    self: Channel<OutElem, OutErr, OutDone, InElem, InErr, InDone, Env>,
+    finalizer: Effect.Effect<unknown, never, Env2>
+  ): Channel<OutElem, OutErr, OutDone, InElem, InErr, InDone, Env2 | Env>
+} = dual(2, <OutElem, OutErr, OutDone, InElem, InErr, InDone, Env, Env2>(
+  self: Channel<OutElem, OutErr, OutDone, InElem, InErr, InDone, Env>,
+  finalizer: Effect.Effect<unknown, never, Env2>
+): Channel<OutElem, OutErr, OutDone, InElem, InErr, InDone, Env2 | Env> => ensuringWith(self, (_) => finalizer))
 
 const runWith = <
   OutElem,

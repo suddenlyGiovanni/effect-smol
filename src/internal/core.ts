@@ -878,12 +878,6 @@ export const withFiber: <A, E = never, R = never>(
   }
 })
 
-/** @internal */
-export const yieldFlush: Effect.Effect<void> = withFiber((fiber) => {
-  fiber.getRef(CurrentScheduler).flush()
-  return exitVoid
-})
-
 const asyncOptions: <A, E = never, R = never>(
   register: (
     resume: (effect: Effect.Effect<A, E, R>) => void,

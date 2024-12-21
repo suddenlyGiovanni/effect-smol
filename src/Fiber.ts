@@ -4,8 +4,7 @@
 import type * as Context from "./Context.js"
 import type { Effect } from "./Effect.js"
 import type { Exit } from "./Exit.js"
-import type * as core from "./internal/core.js"
-import * as internal from "./internal/fiber.js"
+import * as core from "./internal/core.js"
 import type { Pipeable } from "./Pipeable.js"
 import type { Covariant } from "./Types.js"
 
@@ -13,7 +12,7 @@ import type { Covariant } from "./Types.js"
  * @since 2.0.0
  * @category type ids
  */
-export const TypeId: unique symbol = internal.TypeId
+export const TypeId: unique symbol = core.FiberTypeId
 
 /**
  * @since 2.0.0

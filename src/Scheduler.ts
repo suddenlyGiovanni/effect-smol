@@ -11,7 +11,6 @@ import type * as Fiber from "./Fiber.js"
 export interface Scheduler {
   readonly scheduleTask: (task: () => void, priority: number) => void
   readonly shouldYield: (fiber: Fiber.Fiber<unknown, unknown>) => boolean
-  readonly flush: () => void
 }
 
 const setImmediate = "setImmediate" in globalThis
