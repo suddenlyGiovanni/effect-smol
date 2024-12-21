@@ -7,7 +7,7 @@ import * as Equal from "../Equal.js"
 import type * as Exit from "../Exit.js"
 import type * as Fiber from "../Fiber.js"
 import type { LazyArg } from "../Function.js"
-import { constVoid, dual, identity } from "../Function.js"
+import { constTrue, constVoid, dual, identity } from "../Function.js"
 import { globalValue } from "../GlobalValue.js"
 import * as Hash from "../Hash.js"
 import { format, NodeInspectSymbol } from "../Inspectable.js"
@@ -1890,7 +1890,12 @@ export const replicateEffect: {
 /** @internal */
 export const forever = <A, E, R>(
   self: Effect.Effect<A, E, R>
-): Effect.Effect<never, E, R> => repeat(self) as any
+): Effect.Effect<never, E, R> =>
+  whileLoop({
+    while: constTrue,
+    body: () => flatMap(self, () => yieldNow),
+    step: constVoid
+  }) as any
 
 // ----------------------------------------------------------------------------
 // error handling

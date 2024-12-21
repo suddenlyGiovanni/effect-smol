@@ -1851,6 +1851,14 @@ export const makeLatch: (open?: boolean | undefined) => Effect<Latch> = core.mak
 // -----------------------------------------------------------------------------
 
 /**
+ * Repeats this effect forever (until the first error).
+ *
+ * @since 2.0.0
+ * @category repetition / recursion
+ */
+export const forever: <A, E, R>(self: Effect<A, E, R>) => Effect<never, E, R> = core.forever
+
+/**
  * @since 2.0.0
  * @category repetition / recursion
  */
