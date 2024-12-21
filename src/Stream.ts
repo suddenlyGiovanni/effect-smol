@@ -138,7 +138,7 @@ const StreamProto = {
  * @category constructors
  */
 export const fromChannel = <A, E, R>(
-  channel: Channel.Channel<Chunk.Chunk<A>, E, unknown, unknown, R>
+  channel: Channel.Channel<Chunk.Chunk<A>, E, void, unknown, unknown, unknown, R>
 ): Stream<A, E, R> => {
   const self = Object.create(StreamProto)
   self.channel = channel
@@ -153,7 +153,7 @@ export const fromChannel = <A, E, R>(
  */
 export const toChannel = <A, E, R>(
   stream: Stream<A, E, R>
-): Channel.Channel<Chunk.Chunk<A>, E, unknown, unknown, R> => (stream as any).channel
+): Channel.Channel<Chunk.Chunk<A>, E, void, unknown, unknown, unknown, R> => (stream as any).channel
 
 /**
  * Creates a single-valued pure stream.
