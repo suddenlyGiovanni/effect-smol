@@ -155,18 +155,44 @@ export const HaltTypeId: unique symbol = Symbol.for("effect/Channel/Halt")
  */
 export type HaltTypeId = typeof HaltTypeId
 
-class Halt<out L> {
+/**
+ * @since 4.0.0
+ * @category Halt
+ */
+export class Halt<out L> {
   readonly [HaltTypeId]: HaltTypeId = HaltTypeId
   constructor(readonly leftover: L) {}
 }
 
-declare namespace Halt {
-  type ExcludeHalt<E> = Exclude<E, Halt<any>>
-  type Extract<E> = E extends Halt<infer L> ? L : never
-  type Only<E> = E extends Halt<infer L> ? Halt<L> : never
+/**
+ * @since 4.0.0
+ * @category Halt
+ */
+export declare namespace Halt {
+  /**
+   * @since 4.0.0
+   * @category Halt
+   */
+  export type ExcludeHalt<E> = Exclude<E, Halt<any>>
+
+  /**
+   * @since 4.0.0
+   * @category Halt
+   */
+  export type Extract<E> = E extends Halt<infer L> ? L : never
+
+  /**
+   * @since 4.0.0
+   * @category Halt
+   */
+  export type Only<E> = E extends Halt<infer L> ? Halt<L> : never
 }
 
-function catchHalt<A, R, E, A2, E2, R2>(
+/**
+ * @since 4.0.0
+ * @category Halt
+ */
+export function catchHalt<A, R, E, A2, E2, R2>(
   effect: Effect.Effect<A, E, R>,
   f: (leftover: Halt.Extract<E>) => Effect.Effect<A2, E2, R2>
 ): Effect.Effect<A | A2, Halt.ExcludeHalt<E> | E2, R | R2> {
@@ -1374,13 +1400,15 @@ export const toPull: <OutElem, OutErr, OutDone, Env>(
   never,
   Env | Scope.Scope
 > = Effect.fnUntraced(
-  function*(self) {
+  function*<OutElem, OutErr, OutDone, Env>(
+    self: Channel<OutElem, OutErr, OutDone, unknown, unknown, unknown, Env>
+  ) {
     const semaphore = Effect.unsafeMakeSemaphore(1)
-    const context = yield* Effect.context<Scope.Scope>()
+    const context = yield* Effect.context<Env | Scope.Scope>()
     const scope = Context.get(context, Scope.Scope)
     const pull = yield* toTransform(self)(haltVoid, scope)
     return pull.pipe(
-      Effect.provideContext(context),
+      Effect.provideContext(context.pipe(Context.omit(Scope.Scope))),
       semaphore.withPermits(1)
     )
   },
