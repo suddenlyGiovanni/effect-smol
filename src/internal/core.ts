@@ -7,7 +7,7 @@ import * as Equal from "../Equal.js"
 import type * as Exit from "../Exit.js"
 import type * as Fiber from "../Fiber.js"
 import type { LazyArg } from "../Function.js"
-import { constTrue, constVoid, dual, identity } from "../Function.js"
+import { constant, constTrue, constVoid, dual, identity } from "../Function.js"
 import { globalValue } from "../GlobalValue.js"
 import * as Hash from "../Hash.js"
 import { format, NodeInspectSymbol } from "../Inspectable.js"
@@ -1882,14 +1882,28 @@ export const replicateEffect: {
 )
 
 /** @internal */
-export const forever = <A, E, R>(
-  self: Effect.Effect<A, E, R>
+export const forever: {
+  <
+    Args extends [self: Effect.Effect<any, any, any>, options?: {
+      readonly autoYield?: boolean | undefined
+    }] | [options?: {
+      readonly autoYield?: boolean | undefined
+    }]
+  >(
+    ...args: Args
+  ): [Args[0]] extends [Effect.Effect<infer _A, infer _E, infer _R>] ? Effect.Effect<never, _E, _R>
+    : <A, E, R>(self: Effect.Effect<A, E, R>) => Effect.Effect<never, E, R>
+} = dual(2, <A, E, R>(
+  self: Effect.Effect<A, E, R>,
+  options?: {
+    readonly autoYield?: boolean | undefined
+  }
 ): Effect.Effect<never, E, R> =>
   whileLoop({
     while: constTrue,
-    body: () => flatMap(self, () => yieldNow),
+    body: constant(options?.autoYield ? flatMap(self, () => yieldNow) : self),
     step: constVoid
-  }) as any
+  }) as any)
 
 // ----------------------------------------------------------------------------
 // error handling

@@ -7,7 +7,7 @@ import * as Context from "./Context.js"
 import * as Effect from "./Effect.js"
 import * as Exit from "./Exit.js"
 import type { LazyArg } from "./Function.js"
-import { constTrue, constVoid, dual, identity } from "./Function.js"
+import { constTrue, dual, identity } from "./Function.js"
 import * as internalMailbox from "./internal/mailbox.js"
 import type { Mailbox, ReadonlyMailbox } from "./Mailbox.js"
 import * as Option from "./Option.js"
@@ -1414,13 +1414,7 @@ export const runCount = <OutElem, OutErr, OutDone, Env>(
  */
 export const runDrain = <OutElem, OutErr, OutDone, Env>(
   self: Channel<OutElem, OutErr, OutDone, unknown, unknown, unknown, Env>
-): Effect.Effect<OutDone, OutErr, Env> =>
-  runWith(self, (pull) =>
-    Effect.whileLoop({
-      while: constTrue,
-      body: () => pull,
-      step: constVoid
-    }))
+): Effect.Effect<OutDone, OutErr, Env> => runWith(self, (pull) => Effect.forever(pull, { autoYield: false }))
 
 /**
  * @since 2.0.0
@@ -1442,14 +1436,7 @@ export const runForEach: {
     self: Channel<OutElem, OutErr, OutDone, unknown, unknown, unknown, Env>,
     f: (o: OutElem) => Effect.Effect<void, EX, RX>
   ): Effect.Effect<OutDone, OutErr | EX, Env | RX> =>
-    runWith(self, (pull) => {
-      const pump = Effect.flatMap(pull, f)
-      return Effect.whileLoop({
-        while: constTrue,
-        body: () => pump,
-        step: constVoid
-      })
-    })
+    runWith(self, (pull) => Effect.forever(Effect.flatMap(pull, f), { autoYield: false }))
 )
 
 /**

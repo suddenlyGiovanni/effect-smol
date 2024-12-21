@@ -1978,7 +1978,12 @@ export const whileLoop: <A, E, R>(options: {
  * @since 2.0.0
  * @category repetition / recursion
  */
-export const forever: <A, E, R>(self: Effect<A, E, R>) => Effect<never, E, R> = core.forever
+export const forever: <
+  Args extends [self: Effect<any, any, any>, options?: { readonly autoYield?: boolean | undefined }] | [
+    options?: { readonly autoYield?: boolean | undefined }
+  ]
+>(...args: Args) => [Args[0]] extends [Effect<infer _A, infer _E, infer _R>] ? Effect<never, _E, _R>
+  : <A, E, R>(self: Effect<A, E, R>) => Effect<never, E, R> = core.forever
 
 // -----------------------------------------------------------------------------
 // Supervision & Fiber's
