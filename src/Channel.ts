@@ -489,10 +489,10 @@ export const fromChunk = <A>(chunk: Chunk.Chunk<A>): Channel<A> => fromArray(Chu
  * @since 2.0.0
  * @category constructors
  */
-export const fromIteratorChunk = <A, L>(
+export const fromIteratorArray = <A, L>(
   iterator: LazyArg<Iterator<A, L>>,
   chunkSize = DefaultChunkSize
-): Channel<Chunk.Chunk<A>, never, L> =>
+): Channel<ReadonlyArray<A>, never, L> =>
   fromPull(
     Effect.sync(() => {
       const iter = iterator()
@@ -511,7 +511,7 @@ export const fromIteratorChunk = <A, L>(
           }
           buffer.push(state.value)
         }
-        return Effect.succeed(Chunk.unsafeFromArray(buffer))
+        return Effect.succeed(buffer)
       })
     })
   )
@@ -527,9 +527,9 @@ export const fromIterable = <A, L>(iterable: Iterable<A, L>): Channel<A, never, 
  * @since 2.0.0
  * @category constructors
  */
-export const fromIterableChunk = <A, L>(
+export const fromIterableArray = <A, L>(
   iterable: Iterable<A, L>
-): Channel<Chunk.Chunk<A>, never, L> => fromIteratorChunk(() => iterable[Symbol.iterator]())
+): Channel<ReadonlyArray<A>, never, L> => fromIteratorArray(() => iterable[Symbol.iterator]())
 
 /**
  * Writes a single value to the channel.

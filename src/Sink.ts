@@ -2,9 +2,8 @@
  * @since 2.0.0
  */
 import * as Channel from "./Channel.js"
-import type * as Chunk from "./Chunk.js"
 import * as Effect from "./Effect.js"
-import { constant, constTrue, constVoid, identity } from "./Function.js"
+import { identity } from "./Function.js"
 import { type Pipeable, pipeArguments } from "./Pipeable.js"
 import type * as Types from "./Types.js"
 import type * as Unify from "./Unify.js"
@@ -106,7 +105,7 @@ const SinkProto = {
  * @category constructors
  */
 export const fromChannel = <L, In, E, A, R>(
-  channel: Channel.Channel<Chunk.Chunk<L>, E, A, Chunk.Chunk<In>, never, void, R>
+  channel: Channel.Channel<ReadonlyArray<L>, E, A, ReadonlyArray<In>, never, void, R>
 ): Sink<A, In, L, E, R> => {
   const self = Object.create(SinkProto)
   self.channel = channel
@@ -121,10 +120,10 @@ export const fromChannel = <L, In, E, A, R>(
  */
 export const toChannel = <A, In, L, E, R>(
   self: Sink<A, In, L, E, R>
-): Channel.Channel<Chunk.Chunk<L>, E, A, Chunk.Chunk<In>, never, void, R> => (self as any).channel
+): Channel.Channel<ReadonlyArray<L>, E, A, ReadonlyArray<In>, never, void, R> => (self as any).channel
 
 /**
- * A sink that executes the provided effectful function for every Chunk fed
+ * A sink that executes the provided effectful function for every item fed
  * to it.
  *
  * @since 2.0.0
@@ -142,12 +141,10 @@ export const forEach = <In, X, E, R>(
  * @category constructors
  */
 export const forEachChunk = <In, X, E, R>(
-  f: (input: Chunk.Chunk<In>) => Effect.Effect<X, E, R>
+  f: (input: ReadonlyArray<In>) => Effect.Effect<X, E, R>
 ): Sink<void, In, never, E, R> =>
-  fromChannel(Channel.fromTransform((upstream) =>
-    Effect.succeed(Effect.whileLoop({
-      while: constTrue,
-      body: constant(Effect.flatMap(upstream, f)),
-      step: constVoid
-    }) as Effect.Effect<never, E | Channel.Halt<void>, R>)
-  ))
+  fromChannel(
+    Channel.fromTransform((upstream) =>
+      Effect.succeed(Effect.forever(Effect.flatMap(upstream, f), { autoYield: false }))
+    )
+  )

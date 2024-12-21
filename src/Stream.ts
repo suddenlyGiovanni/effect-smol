@@ -1,8 +1,8 @@
 /**
  * @since 2.0.0
  */
+import * as Arr from "./Array.js"
 import * as Channel from "./Channel.js"
-import * as Chunk from "./Chunk.js"
 import type * as Effect from "./Effect.js"
 import type { LazyArg } from "./Function.js"
 import { constant, dual, identity } from "./Function.js"
@@ -139,7 +139,7 @@ const StreamProto = {
  * @category constructors
  */
 export const fromChannel = <A, E, R>(
-  channel: Channel.Channel<Chunk.Chunk<A>, E, void, unknown, unknown, unknown, R>
+  channel: Channel.Channel<ReadonlyArray<A>, E, void, unknown, unknown, unknown, R>
 ): Stream<A, E, R> => {
   const self = Object.create(StreamProto)
   self.channel = channel
@@ -154,7 +154,7 @@ export const fromChannel = <A, E, R>(
  */
 export const toChannel = <A, E, R>(
   stream: Stream<A, E, R>
-): Channel.Channel<Chunk.Chunk<A>, E, void, unknown, unknown, unknown, R> => (stream as any).channel
+): Channel.Channel<ReadonlyArray<A>, E, void, unknown, unknown, unknown, R> => (stream as any).channel
 
 /**
  * Creates a single-valued pure stream.
@@ -167,13 +167,13 @@ export const toChannel = <A, E, R>(
  * const stream = Stream.succeed(3)
  *
  * // Effect.runPromise(Stream.runCollect(stream)).then(console.log)
- * // { _id: 'Chunk', values: [ 3 ] }
+ * // [ 3 ]
  * ```
  *
  * @since 2.0.0
  * @category constructors
  */
-export const succeed = <A>(value: A): Stream<A> => fromChannel(Channel.succeed(Chunk.of(value)))
+export const succeed = <A>(value: A): Stream<A> => fromChannel(Channel.succeed(Arr.of(value)))
 
 /**
  * Creates a single-valued pure stream.
@@ -181,7 +181,7 @@ export const succeed = <A>(value: A): Stream<A> => fromChannel(Channel.succeed(C
  * @since 2.0.0
  * @category constructors
  */
-export const sync = <A>(evaluate: LazyArg<A>): Stream<A> => fromChannel(Channel.sync(() => Chunk.of(evaluate())))
+export const sync = <A>(evaluate: LazyArg<A>): Stream<A> => fromChannel(Channel.sync(() => Arr.of(evaluate())))
 
 /**
  * Returns a lazily constructed stream.
@@ -199,7 +199,7 @@ export const suspend = <A, E, R>(stream: LazyArg<Stream<A, E, R>>): Stream<A, E,
  * @category constructors
  */
 export const fromIteratorSucceed = <A>(iterator: IterableIterator<A>, maxChunkSize?: number): Stream<A> =>
-  fromChannel(Channel.fromIteratorChunk(() => iterator, maxChunkSize))
+  fromChannel(Channel.fromIteratorArray(() => iterator, maxChunkSize))
 
 /**
  * Creates a new `Stream` from an iterable collection of values.
@@ -213,13 +213,13 @@ export const fromIteratorSucceed = <A>(iterator: IterableIterator<A>, maxChunkSi
  * const stream = Stream.fromIterable(numbers)
  *
  * // Effect.runPromise(Stream.runCollect(stream)).then(console.log)
- * // { _id: 'Chunk', values: [ 1, 2, 3 ] }
+ * // [ 1, 2, 3 ]
  * ```
  *
  * @since 2.0.0
  * @category constructors
  */
-export const fromIterable = <A>(iterable: Iterable<A>): Stream<A> => fromChannel(Channel.fromIterableChunk(iterable))
+export const fromIterable = <A>(iterable: Iterable<A>): Stream<A> => fromChannel(Channel.fromIterableArray(iterable))
 
 /**
  * Transforms the elements of this stream using the supplied function.
@@ -231,7 +231,7 @@ export const fromIterable = <A>(iterable: Iterable<A>): Stream<A> => fromChannel
  * const stream = Stream.make(1, 2, 3).pipe(Stream.map((n) => n + 1))
  *
  * // Effect.runPromise(Stream.runCollect(stream)).then(console.log)
- * // { _id: 'Chunk', values: [ 2, 3, 4 ] }
+ * // [ 2, 3, 4 ]
  * ```
  *
  * @since 2.0.0
@@ -243,7 +243,7 @@ export const map: {
 } = dual(2, <A, E, R, B>(self: Stream<A, E, R>, f: (a: A) => B): Stream<B, E, R> =>
   fromChannel(Channel.map(
     toChannel(self),
-    Chunk.map(f)
+    Arr.map(f)
   )))
 
 /**
@@ -289,9 +289,9 @@ export const mapEffect: {
   } | undefined
 ): Stream<A2, E | E2, R | R2> =>
   toChannel(self).pipe(
-    Channel.flatMap(Channel.fromChunk),
+    Channel.flatMap(Channel.fromArray),
     Channel.mapEffect(f, options),
-    Channel.map(Chunk.of),
+    Channel.map(Arr.of),
     fromChannel
   ))
 
@@ -327,7 +327,7 @@ export const flatMap: {
   } | undefined
 ): Stream<A2, E | E2, R | R2> =>
   toChannel(self).pipe(
-    Channel.flatMap(Channel.fromChunk),
+    Channel.flatMap(Channel.fromArray),
     Channel.flatMap((a) => toChannel(f(a)), options),
     fromChannel
   ))
