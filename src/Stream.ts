@@ -9,6 +9,7 @@ import { constant, dual, identity } from "./Function.js"
 import type { TypeLambda } from "./HKT.js"
 import { type Pipeable, pipeArguments } from "./Pipeable.js"
 import { hasProperty } from "./Predicate.js"
+import * as Sink from "./Sink.js"
 import type { Covariant } from "./Types.js"
 import type * as Unify from "./Unify.js"
 
@@ -329,6 +330,29 @@ export const flatMap: {
     Channel.flatMap(Channel.fromChunk),
     Channel.flatMap((a) => toChannel(f(a)), options),
     fromChannel
+  ))
+
+/**
+ * Runs the sink on the stream to produce either the sink's result or an error.
+ *
+ * @since 2.0.0
+ * @category destructors
+ */
+export const run: {
+  <A2, A, L, E2, R2>(
+    sink: Sink.Sink<A2, A, L, E2, R2>
+  ): <E, R>(self: Stream<A, E, R>) => Effect.Effect<A2, E2 | E, R | R2>
+  <A, E, R, L, A2, E2, R2>(
+    self: Stream<A, E, R>,
+    sink: Sink.Sink<A2, A, L, E2, R2>
+  ): Effect.Effect<A2, E | E2, R | R2>
+} = dual(2, <A, E, R, L, A2, E2, R2>(
+  self: Stream<A, E, R>,
+  sink: Sink.Sink<A2, A, L, E2, R2>
+): Effect.Effect<A2, E | E2, R | R2> =>
+  toChannel(self).pipe(
+    Channel.pipeToOrFail(Sink.toChannel(sink)),
+    Channel.runDrain
   ))
 
 /**
