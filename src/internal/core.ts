@@ -1893,7 +1893,7 @@ export const forever: {
     ...args: Args
   ): [Args[0]] extends [Effect.Effect<infer _A, infer _E, infer _R>] ? Effect.Effect<never, _E, _R>
     : <A, E, R>(self: Effect.Effect<A, E, R>) => Effect.Effect<never, E, R>
-} = dual(2, <A, E, R>(
+} = dual((args) => isEffect(args[0]), <A, E, R>(
   self: Effect.Effect<A, E, R>,
   options?: {
     readonly autoYield?: boolean | undefined

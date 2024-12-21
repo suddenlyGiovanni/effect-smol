@@ -16,9 +16,7 @@ describe("Channel", () => {
       const leftMailbox = yield* Mailbox.make<number>()
       const rightMailbox = yield* Mailbox.make<number>()
       const latch = yield* Effect.makeLatch(false)
-      const fiber = yield* Channel.merge(Channel.fromMailbox(leftMailbox), Channel.fromMailbox(rightMailbox), {
-        haltStrategy: "left"
-      }).pipe(
+      const fiber = yield* Channel.fromMailbox(leftMailbox).pipe(
         Channel.ensuring(latch.open),
         Channel.merge(Channel.fromMailbox(rightMailbox), { haltStrategy: "left" }),
         Channel.runCollect,
