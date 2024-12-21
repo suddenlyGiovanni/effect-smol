@@ -1590,6 +1590,59 @@ export const scoped: <A, E, R>(
 ) => Effect<A, E, Exclude<R, Scope>> = core.scoped
 
 /**
+ * This function constructs a scoped resource from an `acquire` and `release`
+ * `Effect` value.
+ *
+ * If the `acquire` `Effect` value successfully completes execution, then the
+ * `release` `Effect` value will be added to the finalizers associated with the
+ * scope of this `Effect` value, and it is guaranteed to be run when the scope
+ * is closed.
+ *
+ * The `acquire` and `release` `Effect` values will be run uninterruptibly.
+ * Additionally, the `release` `Effect` value may depend on the `Exit` value
+ * specified when the scope is closed.
+ *
+ * @since 2.0.0
+ * @category Resource management & finalization
+ */
+export const acquireRelease: <A, E, R>(
+  acquire: Effect<A, E, R>,
+  release: (a: A, exit: Exit<unknown, unknown>) => Effect<unknown>
+) => Effect<A, E, R | Scope> = core.acquireRelease
+
+/**
+ * This function is used to ensure that an `Effect` value that represents the
+ * acquisition of a resource (for example, opening a file, launching a thread,
+ * etc.) will not be interrupted, and that the resource will always be released
+ * when the `Effect` value completes execution.
+ *
+ * `acquireUseRelease` does the following:
+ *
+ *   1. Ensures that the `Effect` value that acquires the resource will not be
+ *      interrupted. Note that acquisition may still fail due to internal
+ *      reasons (such as an uncaught exception).
+ *   2. Ensures that the `release` `Effect` value will not be interrupted,
+ *      and will be executed as long as the acquisition `Effect` value
+ *      successfully acquires the resource.
+ *
+ * During the time period between the acquisition and release of the resource,
+ * the `use` `Effect` value will be executed.
+ *
+ * If the `release` `Effect` value fails, then the entire `Effect` value will
+ * fail, even if the `use` `Effect` value succeeds. If this fail-fast behavior
+ * is not desired, errors produced by the `release` `Effect` value can be caught
+ * and ignored.
+ *
+ * @since 2.0.0
+ * @category Resource management & finalization
+ */
+export const acquireUseRelease: <Resource, E, R, A, E2, R2, E3, R3>(
+  acquire: Effect<Resource, E, R>,
+  use: (a: Resource) => Effect<A, E2, R2>,
+  release: (a: Resource, exit: Exit<A, E2>) => Effect<void, E3, R3>
+) => Effect<A, E | E2 | E3, R | R2 | R3> = core.acquireUseRelease
+
+/**
  * This function adds a finalizer to the scope of the calling `Effect` value.
  * The finalizer is guaranteed to be run when the scope is closed, and it may
  * depend on the `Exit` value that the scope is closed with.
@@ -1668,6 +1721,35 @@ export const onExit: {
  * @category Interruption
  */
 export const interrupt: Effect<never> = core.interrupt
+
+/**
+ * @since 2.0.0
+ * @category Interruption
+ */
+export const interruptible: <A, E, R>(self: Effect<A, E, R>) => Effect<A, E, R> = core.interruptible
+
+/**
+ * @since 2.0.0
+ * @category Interruption
+ */
+export const onInterrupt: {
+  <XE, XR>(finalizer: Effect<void, XE, XR>): <A, E, R>(self: Effect<A, E, R>) => Effect<A, E | XE, R | XR>
+  <A, E, R, XE, XR>(self: Effect<A, E, R>, finalizer: Effect<void, XE, XR>): Effect<A, E | XE, R | XR>
+} = core.onInterrupt
+
+/**
+ * @since 2.0.0
+ * @category Interruption
+ */
+export const uninterruptible: <A, E, R>(self: Effect<A, E, R>) => Effect<A, E, R> = core.uninterruptible
+
+/**
+ * @since 2.0.0
+ * @category Interruption
+ */
+export const uninterruptibleMask: <A, E, R>(
+  f: (restore: <AX, EX, RX>(effect: Effect<AX, EX, RX>) => Effect<AX, EX, RX>) => Effect<A, E, R>
+) => Effect<A, E, R> = core.uninterruptibleMask
 
 // -----------------------------------------------------------------------------
 // Semaphore

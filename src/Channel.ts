@@ -216,7 +216,7 @@ export const fromPullUnsafe = <OutElem, OutErr, EX, EnvX, Env>(
   effect: Effect.Effect<Effect.Effect<OutElem, OutErr, EnvX>, EX, Env>
 ): Channel<OutElem, OutErr | EX, unknown, unknown, Env | EnvX> => makeImpl((_, __) => effect)
 
-const makeImplScoped = <OutElem, OutErr, InElem, InErr, EX, EnvX, Env>(
+const makeImplBracket = <OutElem, OutErr, InElem, InErr, EX, EnvX, Env>(
   f: (
     upstream: Effect.Effect<InElem, InErr>,
     scope: Scope.Scope,
@@ -317,8 +317,8 @@ export const asyncPush = <A, E = never, R = never>(
     readonly strategy?: "sliding" | "dropping" | undefined
   }
 ): Channel<A, E, unknown, unknown, Exclude<R, Scope.Scope>> =>
-  makeImplScoped(
-    Effect.fnUntraced(function*(_, __, scope) {
+  makeImpl(
+    Effect.fnUntraced(function*(_, scope) {
       const mailbox = yield* internalMailbox.make<A, E>({
         capacity: options?.bufferSize,
         strategy: options?.strategy
@@ -367,7 +367,7 @@ export const acquireUseRelease = <A, E, R, OutElem, InElem, OutErr, InErr, Env>(
   use: (a: A) => Channel<OutElem, OutErr, InElem, InErr, Env>,
   release: (a: A, exit: Exit.Exit<void, OutErr>) => Effect.Effect<void>
 ): Channel<OutElem, OutErr | E, InElem, InErr, Env | R> =>
-  makeImplScoped(
+  makeImplBracket(
     Effect.fnUntraced(function*(upstream, scope, forkedScope) {
       let option = Option.none<A>()
       yield* forkedScope.addFinalizer((exit) =>
@@ -375,11 +375,32 @@ export const acquireUseRelease = <A, E, R, OutElem, InElem, OutErr, InErr, Env>(
           ? release(option.value, exit as any)
           : Effect.void
       )
-      const value = yield* acquire
+      const value = yield* Effect.uninterruptible(acquire)
       option = Option.some(value)
       return yield* toTransform(use(value))(upstream, scope)
     })
   )
+
+/**
+ * @since 2.0.0
+ * @category constructors
+ */
+export const acquireRelease: {
+  <Z, R2>(
+    release: (z: Z, e: Exit.Exit<unknown, unknown>) => Effect.Effect<unknown>
+  ): <E, R>(self: Effect.Effect<Z, E, R>) => Channel<Z, E, unknown, unknown, R2 | R>
+  <Z, E, R, R2>(
+    self: Effect.Effect<Z, E, R>,
+    release: (z: Z, e: Exit.Exit<unknown, unknown>) => Effect.Effect<unknown>
+  ): Channel<Z, E, unknown, unknown, R | R2>
+} = dual(2, <Z, E, R, R2>(
+  self: Effect.Effect<Z, E, R>,
+  release: (z: Z, e: Exit.Exit<unknown, unknown>) => Effect.Effect<unknown>
+): Channel<Z, E, unknown, unknown, R | R2> =>
+  unwrapScoped(Effect.map(
+    Effect.acquireRelease(self, release),
+    succeed
+  )))
 
 /**
  * @since 2.0.0
@@ -443,37 +464,6 @@ export const fromIteratorChunk = <A>(
           buffer.push(state.value)
         }
         return Effect.succeed(Chunk.unsafeFromArray(buffer))
-      })
-    })
-  )
-
-/**
- * @since 2.0.0
- * @category constructors
- */
-export const fromIteratorArray = <A>(
-  iterator: LazyArg<Iterator<A>>,
-  chunkSize = DefaultChunkSize
-): Channel<ReadonlyArray<A>> =>
-  fromPullUnsafe(
-    Effect.sync(() => {
-      const iter = iterator()
-      let done = false
-      return Effect.suspend(() => {
-        if (done) return halt
-        const buffer: Array<A> = []
-        while (buffer.length < chunkSize) {
-          const state = iter.next()
-          if (state.done) {
-            if (buffer.length === 0) {
-              return halt
-            }
-            done = true
-            break
-          }
-          buffer.push(state.value)
-        }
-        return Effect.succeed(buffer)
       })
     })
   )
@@ -685,7 +675,7 @@ const mapEffectConcurrent = <
     readonly bufferSize?: number | undefined
   }
 ): Channel<OutElem2, OutErr | EX, InElem, InErr, Env | RX> =>
-  makeImplScoped(
+  makeImplBracket(
     Effect.fnUntraced(function*(upstream, scope, forkedScope) {
       const pull = yield* toTransform(self)(upstream, scope)
       const concurrencyN = options.concurrency === "unbounded"
@@ -929,7 +919,7 @@ export const mergeAll: {
     InErr & InErr1,
     Env1 | Env
   > =>
-    makeImplScoped(
+    makeImplBracket(
       Effect.fnUntraced(function*(upstream, scope, forkedScope) {
         const concurrencyN = concurrency === "unbounded"
           ? Number.MAX_SAFE_INTEGER
@@ -1008,6 +998,40 @@ export const pipeTo: {
 )
 
 /**
+ * Constructs a `Channel` from an effect that will result in a `Channel` if
+ * successful.
+ *
+ * @since 2.0.0
+ * @category constructors
+ */
+export const unwrap = <OutElem, OutErr, InElem, InErr, R2, E, R>(
+  channel: Effect.Effect<Channel<OutElem, OutErr, InElem, InErr, R2>, E, R>
+): Channel<OutElem, E | OutErr, InElem, InErr, R | R2> =>
+  makeImpl((upstream, scope) =>
+    Effect.flatMap(
+      channel,
+      (channel) => toTransform(channel)(upstream, scope)
+    )
+  )
+
+/**
+ * Constructs a `Channel` from a scoped effect that will result in a
+ * `Channel` if successful.
+ *
+ * @since 2.0.0
+ * @category constructors
+ */
+export const unwrapScoped = <OutElem, OutErr, InElem, InErr, R2, E, R>(
+  channel: Effect.Effect<Channel<OutElem, OutErr, InElem, InErr, R2>, E, R>
+): Channel<OutElem, E | OutErr, InElem, InErr, Exclude<R, Scope.Scope> | R2> =>
+  makeImpl((upstream, scope) =>
+    Effect.flatMap(
+      Scope.provideScope(channel, scope),
+      (channel) => toTransform(channel)(upstream, scope)
+    )
+  )
+
+/**
  * Returns a new channel which embeds the given input handler into a Channel.
  *
  * @since 2.0.0
@@ -1035,7 +1059,7 @@ export const embedInput: {
       upstream: Effect.Effect<InElem, InErr>
     ) => Effect.Effect<void, never, R>
   ): Channel<OutElem, OutErr, InElem, InErr, Env | R> =>
-    makeImplScoped(
+    makeImplBracket(
       Effect.fnUntraced(function*(upstream, scope, forkedScope) {
         yield* Effect.forkIn(input(upstream), forkedScope)
         return yield* toTransform(self)(halt, scope)
@@ -1139,23 +1163,23 @@ export const runCollect = <OutElem, OutErr, InErr, Env>(
  */
 export const runFold: {
   <Z, OutElem>(
-    initial: Z,
+    initial: LazyArg<Z>,
     f: (acc: Z, o: OutElem) => Z
   ): <OutErr, InErr, Env>(
     self: Channel<OutElem, OutErr, unknown, InErr, Env>
   ) => Effect.Effect<Z, OutErr, Env>
   <OutElem, OutErr, InErr, Env, Z>(
     self: Channel<OutElem, OutErr, unknown, InErr, Env>,
-    initial: Z,
+    initial: LazyArg<Z>,
     f: (acc: Z, o: OutElem) => Z
   ): Effect.Effect<Z, OutErr, Env>
 } = dual(3, <OutElem, OutErr, InErr, Env, Z>(
   self: Channel<OutElem, OutErr, unknown, InErr, Env>,
-  initial: Z,
+  initial: LazyArg<Z>,
   f: (acc: Z, o: OutElem) => Z
 ): Effect.Effect<Z, OutErr, Env> =>
   Effect.suspend(() => {
-    let state = initial
+    let state = initial()
     return runWith(
       self,
       (pull) =>

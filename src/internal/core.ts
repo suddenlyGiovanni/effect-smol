@@ -2668,7 +2668,7 @@ export const scoped = <A, E, R>(
 /** @internal */
 export const acquireRelease = <A, E, R>(
   acquire: Effect.Effect<A, E, R>,
-  release: (a: A, exit: Exit.Exit<unknown, unknown>) => Effect.Effect<void>
+  release: (a: A, exit: Exit.Exit<unknown, unknown>) => Effect.Effect<unknown>
 ): Effect.Effect<A, E, R | Scope.Scope> =>
   uninterruptible(
     flatMap(scope, (scope) => tap(acquire, (a) => scope.addFinalizer((exit) => release(a, exit))))
