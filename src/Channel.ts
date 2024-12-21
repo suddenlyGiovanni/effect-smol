@@ -160,7 +160,14 @@ export type HaltTypeId = typeof HaltTypeId
  * @category Halt
  */
 export class Halt<out L> {
+  /**
+   * @since 4.0.0
+   */
   readonly [HaltTypeId]: HaltTypeId = HaltTypeId
+  /**
+   * @since 4.0.0
+   */
+  readonly _tag = "Halt"
   constructor(readonly leftover: L) {}
 }
 
