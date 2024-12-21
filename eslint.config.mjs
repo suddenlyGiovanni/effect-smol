@@ -1,6 +1,7 @@
 import { FlatCompat } from "@eslint/eslintrc"
 import eslint from "@eslint/js"
-import importPlugin from "eslint-plugin-import"
+import * as tsResolver from "eslint-import-resolver-typescript"
+import importPlugin from "eslint-plugin-import-x"
 import simpleImportSort from "eslint-plugin-simple-import-sort"
 import sortDestructureKeys from "eslint-plugin-sort-destructure-keys"
 import * as Path from "node:path"
@@ -21,6 +22,7 @@ export default tseslint.config(
   eslint.configs.recommended,
   tseslint.configs.strict,
   importPlugin.flatConfigs.recommended,
+  importPlugin.flatConfigs.typescript,
   ...compat.extends("plugin:@effect/recommended"),
   {
     plugins: {
@@ -32,6 +34,16 @@ export default tseslint.config(
       parser: tseslint.parser,
       ecmaVersion: 2018,
       sourceType: "module"
+    },
+
+    settings: {
+      "import-x/resolver": {
+        name: "tsResolver",
+        resolver: tsResolver,
+        options: {
+          alwaysTryTypes: true
+        }
+      }
     },
 
     rules: {
@@ -53,11 +65,12 @@ export default tseslint.config(
       "require-yield": "off",
       "prefer-rest-params": "off",
       "prefer-spread": "off",
-      "import/first": "error",
-      "import/newline-after-import": "error",
-      "import/no-duplicates": "error",
-      "import/no-unresolved": "off",
-      "import/order": "off",
+      "import-x/first": "error",
+      "import-x/newline-after-import": "error",
+      "import-x/no-duplicates": "error",
+      "import-x/no-named-as-default-member": "off",
+      "import-x/no-unresolved": "off",
+      "import-x/order": "off",
       "simple-import-sort/imports": "off",
       "sort-destructure-keys/sort-destructure-keys": "error",
       "deprecation/deprecation": "off",
@@ -109,12 +122,6 @@ export default tseslint.config(
           }
         }
       ]
-    }
-  },
-  {
-    files: ["packages/*/src/**/*", "packages/*/test/**/*"],
-    rules: {
-      "no-console": "error"
     }
   }
 )
