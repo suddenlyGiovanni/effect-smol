@@ -124,7 +124,18 @@ export const toChannel = <A, In, L, E, R>(
 ): Channel.Channel<Chunk.Chunk<L>, E, A, Chunk.Chunk<In>, never, void, R> => (self as any).channel
 
 /**
- * A sink that executes the provided effectful function for every element fed
+ * A sink that executes the provided effectful function for every Chunk fed
+ * to it.
+ *
+ * @since 2.0.0
+ * @category constructors
+ */
+export const forEach = <In, X, E, R>(
+  f: (input: In) => Effect.Effect<X, E, R>
+): Sink<void, In, never, E, R> => forEachChunk(Effect.forEach((_) => f(_), { discard: true }))
+
+/**
+ * A sink that executes the provided effectful function for every Chunk fed
  * to it.
  *
  * @since 2.0.0

@@ -2919,23 +2919,39 @@ export const whileLoop: <A, E, R>(options: {
 
 /** @internal */
 export const forEach: {
-  <A, B, E, R>(
-    iterable: Iterable<A>,
-    f: (a: A, index: number) => Effect.Effect<B, E, R>,
+  <B, E, R, S extends Iterable<any>>(
+    f: (a: Arr.ReadonlyArray.Infer<S>, i: number) => Effect.Effect<B, E, R>,
     options?: {
       readonly concurrency?: Concurrency | undefined
       readonly discard?: false | undefined
-    }
-  ): Effect.Effect<Array<B>, E, R>
+    } | undefined
+  ): (
+    self: S
+  ) => Effect.Effect<Arr.ReadonlyArray.With<S, B>, E, R>
   <A, B, E, R>(
-    iterable: Iterable<A>,
-    f: (a: A, index: number) => Effect.Effect<B, E, R>,
+    f: (a: A, i: number) => Effect.Effect<B, E, R>,
+    options: {
+      readonly concurrency?: Concurrency | undefined
+      readonly discard: true
+    }
+  ): (self: Iterable<A>) => Effect.Effect<void, E, R>
+  <B, E, R, S extends Iterable<any>>(
+    self: S,
+    f: (a: Arr.ReadonlyArray.Infer<S>, i: number) => Effect.Effect<B, E, R>,
+    options?: {
+      readonly concurrency?: Concurrency | undefined
+      readonly discard?: false | undefined
+    } | undefined
+  ): Effect.Effect<Arr.ReadonlyArray.With<S, B>, E, R>
+  <A, B, E, R>(
+    self: Iterable<A>,
+    f: (a: A, i: number) => Effect.Effect<B, E, R>,
     options: {
       readonly concurrency?: Concurrency | undefined
       readonly discard: true
     }
   ): Effect.Effect<void, E, R>
-} = <A, B, E, R>(
+} = dual((args) => typeof args[1] === "function", <A, B, E, R>(
   iterable: Iterable<A>,
   f: (a: A, index: number) => Effect.Effect<B, E, R>,
   options?: {
@@ -3026,7 +3042,7 @@ export const forEach: {
         return fiberInterruptAll(fibers)
       })
     })
-  })
+  }))
 
 /** @internal */
 export const filter = <A, E, R>(
