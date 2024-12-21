@@ -1,10 +1,10 @@
 /**
  * @since 2.0.0
  */
+import type { Exit } from "effect/Exit"
 import type * as Arr from "./Array.js"
 import type { Cause, Failure } from "./Cause.js"
 import type { Context } from "./Context.js"
-import type { Exit } from "./Exit.js"
 import type { Fiber } from "./Fiber.js"
 import type { LazyArg } from "./Function.js"
 import type { TypeLambda } from "./HKT.js"
@@ -896,6 +896,62 @@ export const tap: {
     options: { onlyEffect: true }
   ): Effect<A, E | E1, R | R1>
 } = core.tap
+
+/**
+ * Transforms an effect to encapsulate both failure and success using the `Exit`
+ * data type.
+ *
+ * **Details**
+ *
+ * `exit` wraps an effect's success or failure inside an `Exit` type, allowing
+ * you to handle both cases explicitly.
+ *
+ * The resulting effect cannot fail because the failure is encapsulated within
+ * the `Exit.Failure` type. The error type is set to `never`, indicating that
+ * the effect is structured to never fail directly.
+ *
+ * @see {@link option} for a version that uses `Option` instead.
+ * @see {@link either} for a version that uses `Either` instead.
+ *
+ * @example
+ * ```ts
+ * import { Effect, Cause, Console, Exit } from "effect"
+ *
+ * // Simulating a runtime error
+ * const task = Effect.dieMessage("Boom!")
+ *
+ * const program = Effect.gen(function* () {
+ *   const exit = yield* Effect.exit(task)
+ *   if (Exit.isFailure(exit)) {
+ *     const cause = exit.cause
+ *     if (
+ *       Cause.isDieType(cause) &&
+ *       Cause.isRuntimeException(cause.defect)
+ *     ) {
+ *       yield* Console.log(
+ *         `RuntimeException defect caught: ${cause.defect.message}`
+ *       )
+ *     } else {
+ *       yield* Console.log("Unknown failure caught.")
+ *     }
+ *   }
+ * })
+ *
+ * // We get an Exit.Success because we caught all failures
+ * Effect.runPromiseExit(program).then(console.log)
+ * // Output:
+ * // RuntimeException defect caught: Boom!
+ * // {
+ * //   _id: "Exit",
+ * //   _tag: "Success",
+ * //   value: undefined
+ * // }
+ * ```
+ *
+ * @since 2.0.0
+ * @category Outcome Encapsulation
+ */
+export const exit: <A, E, R>(self: Effect<A, E, R>) => Effect<Exit<A, E>, never, R> = core.exit
 
 /**
  * Transforms the value inside an effect by applying a function to it.
