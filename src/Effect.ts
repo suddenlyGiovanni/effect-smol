@@ -957,6 +957,14 @@ export const die: (defect: unknown) => Effect<never> = core.die
  */
 export const yieldNow: Effect<void> = core.yieldNow
 
+/**
+ * @since 2.0.0
+ * @category Creating Effects
+ */
+export const withFiber: <A, E = never, R = never>(
+  evaluate: (fiber: Fiber<A, E>) => Effect<A, E, R>
+) => Effect<A, E, R> = core.withFiber
+
 // -----------------------------------------------------------------------------
 // Mapping
 // -----------------------------------------------------------------------------
@@ -1327,6 +1335,32 @@ export const map: {
   <A, E, R, B>(self: Effect<A, E, R>, f: (a: A) => B): Effect<B, E, R>
 } = core.map
 
+/**
+ * Replaces the value inside an effect with a constant value.
+ *
+ * `as` allows you to ignore the original value inside an effect and
+ * replace it with a new constant value.
+ *
+ * @example
+ * ```ts
+ * // Title: Replacing a Value
+ * import { pipe, Effect } from "effect"
+ *
+ * // Replaces the value 5 with the constant "new value"
+ * const program = pipe(Effect.succeed(5), Effect.as("new value"))
+ *
+ * Effect.runPromise(program).then(console.log)
+ * // Output: "new value"
+ * ```
+ *
+ * @since 2.0.0
+ * @category Mapping
+ */
+export const as: {
+  <B>(value: B): <A, E, R>(self: Effect<A, E, R>) => Effect<B, E, R>
+  <A, E, R, B>(self: Effect<A, E, R>, value: B): Effect<B, E, R>
+} = core.as
+
 // -----------------------------------------------------------------------------
 // Error handling
 // -----------------------------------------------------------------------------
@@ -1648,7 +1682,7 @@ export const catchFailure: {
  * ```
  *
  * @since 2.0.0
- * @category Mapping
+ * @category Error handling
  */
 export const mapError: {
   <E, E2>(f: (e: E) => E2): <A, R>(self: Effect<A, E, R>) => Effect<A, E2, R>
@@ -2277,6 +2311,8 @@ export const makeSemaphore: (permits: number) => Effect<Semaphore> = core.makeSe
 export interface Latch {
   /** open the latch, releasing all fibers waiting on it */
   readonly open: Effect<void>
+  /** open the latch, releasing all fibers waiting on it */
+  readonly unsafeOpen: () => void
   /** release all fibers waiting on the latch, without opening it */
   readonly release: Effect<void>
   /** wait for the latch to be opened */

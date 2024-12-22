@@ -3387,10 +3387,6 @@ class Latch implements Effect.Latch {
   scheduled = false
   constructor(private isOpen: boolean) {}
 
-  commit() {
-    return this.await
-  }
-
   private unsafeSchedule(fiber: Fiber.Fiber<void>) {
     if (this.scheduled || this.waiters.length === 0) {
       return void_
@@ -3421,6 +3417,10 @@ class Latch implements Effect.Latch {
     }
     return this.unsafeSchedule(fiber)
   })
+  unsafeOpen() {
+    this.isOpen = true
+    this.flushWaiters()
+  }
   await = async<void>((resume) => {
     if (this.isOpen) {
       return resume(void_)
