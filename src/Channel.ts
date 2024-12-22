@@ -743,7 +743,8 @@ const mapEffectConcurrent = <
           )
         }
       }).pipe(
-        Effect.onError((cause) => semaphore.withPermits(concurrencyN - 1)(mailbox.failCause(cause))),
+        Effect.tapCause(() => semaphore.take(concurrencyN - 1)),
+        Effect.onExit((exit) => mailbox.done(exit)),
         Effect.forkIn(forkedScope)
       )
 
@@ -1151,7 +1152,8 @@ export const mergeAll: {
             fibers.add(fiber)
           }
         }).pipe(
-          Effect.onError((cause) => doneLatch.whenOpen(mailbox.failCause(cause))),
+          Effect.tapCause(() => doneLatch.await),
+          Effect.onExit((exit) => mailbox.done(exit)),
           Effect.forkIn(forkedScope),
           Effect.interruptible
         )
