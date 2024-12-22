@@ -1,10 +1,10 @@
 /**
  * @since 2.0.0
  */
-import type { Exit } from "effect/Exit"
 import type * as Arr from "./Array.js"
 import type { Cause, Failure } from "./Cause.js"
 import type { Context } from "./Context.js"
+import type { Exit } from "./Exit.js"
 import type { Fiber } from "./Fiber.js"
 import type { LazyArg } from "./Function.js"
 import type { TypeLambda } from "./HKT.js"
@@ -127,7 +127,7 @@ export interface EffectIterator<T extends Effect<any, any, any>> {
 }
 
 // ========================================================================
-// collecting & elements
+// Collecting
 // ========================================================================
 
 /**
@@ -218,6 +218,329 @@ export declare namespace All {
     : [Arg] extends [Record<string, EffectAny>] ? ReturnObject<Arg, IsDiscard<O>>
     : never
 }
+
+/**
+ * Combines multiple effects into one, returning results based on the input
+ * structure.
+ *
+ * **Details**
+ *
+ * Use this function when you need to run multiple effects and combine their
+ * results into a single output. It supports tuples, iterables, structs, and
+ * records, making it flexible for different input types.
+ *
+ * For instance, if the input is a tuple:
+ *
+ * ```ts
+ * //         ┌─── a tuple of effects
+ * //         ▼
+ * Effect.all([effect1, effect2, ...])
+ * ```
+ *
+ * the effects are executed sequentially, and the result is a new effect
+ * containing the results as a tuple. The results in the tuple match the order
+ * of the effects passed to `Effect.all`.
+ *
+ * **Concurrency**
+ *
+ * You can control the execution order (e.g., sequential vs. concurrent) using
+ * the `concurrency` option.
+ *
+ * **Short-Circuiting Behavior**
+ *
+ * This function stops execution on the first error it encounters, this is
+ * called "short-circuiting". If any effect in the collection fails, the
+ * remaining effects will not run, and the error will be propagated. To change
+ * this behavior, you can use the `mode` option, which allows all effects to run
+ * and collect results as `Either` or `Option`.
+ *
+ * **The `mode` option**
+ *
+ * The `{ mode: "either" }` option changes the behavior of `Effect.all` to
+ * ensure all effects run, even if some fail. Instead of stopping on the first
+ * failure, this mode collects both successes and failures, returning an array
+ * of `Either` instances where each result is either a `Right` (success) or a
+ * `Left` (failure).
+ *
+ * Similarly, the `{ mode: "validate" }` option uses `Option` to indicate
+ * success or failure. Each effect returns `None` for success and `Some` with
+ * the error for failure.
+ *
+ * @see {@link forEach} for iterating over elements and applying an effect.
+ * @see {@link allWith} for a data-last version of this function.
+ *
+ * @example
+ * ```ts
+ * // Title: Combining Effects in Tuples
+ * import { Effect, Console } from "effect"
+ *
+ * const tupleOfEffects = [
+ *   Effect.succeed(42).pipe(Effect.tap(Console.log)),
+ *   Effect.succeed("Hello").pipe(Effect.tap(Console.log))
+ * ] as const
+ *
+ * //      ┌─── Effect<[number, string], never, never>
+ * //      ▼
+ * const resultsAsTuple = Effect.all(tupleOfEffects)
+ *
+ * Effect.runPromise(resultsAsTuple).then(console.log)
+ * // Output:
+ * // 42
+ * // Hello
+ * // [ 42, 'Hello' ]
+ * ```
+ *
+ * @example
+ * // Title: Combining Effects in Iterables
+ * import { Effect, Console } from "effect"
+ *
+ * const iterableOfEffects: Iterable<Effect.Effect<number>> = [1, 2, 3].map(
+ *   (n) => Effect.succeed(n).pipe(Effect.tap(Console.log))
+ * )
+ *
+ * //      ┌─── Effect<number[], never, never>
+ * //      ▼
+ * const resultsAsArray = Effect.all(iterableOfEffects)
+ *
+ * Effect.runPromise(resultsAsArray).then(console.log)
+ * // Output:
+ * // 1
+ * // 2
+ * // 3
+ * // [ 1, 2, 3 ]
+ *
+ * @example
+ * // Title: Combining Effects in Structs
+ * import { Effect, Console } from "effect"
+ *
+ * const structOfEffects = {
+ *   a: Effect.succeed(42).pipe(Effect.tap(Console.log)),
+ *   b: Effect.succeed("Hello").pipe(Effect.tap(Console.log))
+ * }
+ *
+ * //      ┌─── Effect<{ a: number; b: string; }, never, never>
+ * //      ▼
+ * const resultsAsStruct = Effect.all(structOfEffects)
+ *
+ * Effect.runPromise(resultsAsStruct).then(console.log)
+ * // Output:
+ * // 42
+ * // Hello
+ * // { a: 42, b: 'Hello' }
+ *
+ * @example
+ * // Title: Combining Effects in Records
+ * import { Effect, Console } from "effect"
+ *
+ * const recordOfEffects: Record<string, Effect.Effect<number>> = {
+ *   key1: Effect.succeed(1).pipe(Effect.tap(Console.log)),
+ *   key2: Effect.succeed(2).pipe(Effect.tap(Console.log))
+ * }
+ *
+ * //      ┌─── Effect<{ [x: string]: number; }, never, never>
+ * //      ▼
+ * const resultsAsRecord = Effect.all(recordOfEffects)
+ *
+ * Effect.runPromise(resultsAsRecord).then(console.log)
+ * // Output:
+ * // 1
+ * // 2
+ * // { key1: 1, key2: 2 }
+ *
+ * @example
+ * // Title: Short-Circuiting Behavior
+ * import { Effect, Console } from "effect"
+ *
+ * const program = Effect.all([
+ *   Effect.succeed("Task1").pipe(Effect.tap(Console.log)),
+ *   Effect.fail("Task2: Oh no!").pipe(Effect.tap(Console.log)),
+ *   // Won't execute due to earlier failure
+ *   Effect.succeed("Task3").pipe(Effect.tap(Console.log))
+ * ])
+ *
+ * Effect.runPromiseExit(program).then(console.log)
+ * // Output:
+ * // Task1
+ * // {
+ * //   _id: 'Exit',
+ * //   _tag: 'Failure',
+ * //   cause: { _id: 'Cause', _tag: 'Fail', failure: 'Task2: Oh no!' }
+ * // }
+ *
+ * @example
+ * // Title: Collecting Results with `mode: "either"`
+ * import { Effect, Console } from "effect"
+ *
+ * const effects = [
+ *   Effect.succeed("Task1").pipe(Effect.tap(Console.log)),
+ *   Effect.fail("Task2: Oh no!").pipe(Effect.tap(Console.log)),
+ *   Effect.succeed("Task3").pipe(Effect.tap(Console.log))
+ * ]
+ *
+ * const program = Effect.all(effects, { mode: "either" })
+ *
+ * Effect.runPromiseExit(program).then(console.log)
+ * // Output:
+ * // Task1
+ * // Task3
+ * // {
+ * //   _id: 'Exit',
+ * //   _tag: 'Success',
+ * //   value: [
+ * //     { _id: 'Either', _tag: 'Right', right: 'Task1' },
+ * //     { _id: 'Either', _tag: 'Left', left: 'Task2: Oh no!' },
+ * //     { _id: 'Either', _tag: 'Right', right: 'Task3' }
+ * //   ]
+ * // }
+ *
+ * @example
+ * //Example: Collecting Results with `mode: "validate"`
+ * import { Effect, Console } from "effect"
+ *
+ * const effects = [
+ *   Effect.succeed("Task1").pipe(Effect.tap(Console.log)),
+ *   Effect.fail("Task2: Oh no!").pipe(Effect.tap(Console.log)),
+ *   Effect.succeed("Task3").pipe(Effect.tap(Console.log))
+ * ]
+ *
+ * const program = Effect.all(effects, { mode: "validate" })
+ *
+ * Effect.runPromiseExit(program).then((result) => console.log("%o", result))
+ * // Output:
+ * // Task1
+ * // Task3
+ * // {
+ * //   _id: 'Exit',
+ * //   _tag: 'Failure',
+ * //   cause: {
+ * //     _id: 'Cause',
+ * //     _tag: 'Fail',
+ * //     failure: [
+ * //       { _id: 'Option', _tag: 'None' },
+ * //       { _id: 'Option', _tag: 'Some', value: 'Task2: Oh no!' },
+ * //       { _id: 'Option', _tag: 'None' }
+ * //     ]
+ * //   }
+ * // }
+ *
+ * @since 2.0.0
+ * @category Collecting
+ */
+export const all: <
+  const Arg extends Iterable<Effect<any, any, any>> | Record<string, Effect<any, any, any>>,
+  O extends { readonly concurrency?: Concurrency | undefined; readonly discard?: boolean | undefined }
+>(arg: Arg, options?: O) => All.Return<Arg, O> = core.all
+
+/**
+ * Executes an effectful operation for each element in an `Iterable`.
+ *
+ * **Details**
+ *
+ * The `forEach` function applies a provided operation to each element in the
+ * iterable, producing a new effect that returns an array of results.
+ *
+ * If any effect fails, the iteration stops immediately (short-circuiting), and
+ * the error is propagated.
+ *
+ * **Concurrency**
+ *
+ * The `concurrency` option controls how many operations are performed
+ * concurrently. By default, the operations are performed sequentially.
+ *
+ * **Discarding Results**
+ *
+ * If the `discard` option is set to `true`, the intermediate results are not
+ * collected, and the final result of the operation is `void`.
+ *
+ * @see {@link all} for combining multiple effects into one.
+ *
+ * @example
+ * ```ts
+ * // Title: Applying Effects to Iterable Elements
+ * import { Effect, Console } from "effect"
+ *
+ * const result = Effect.forEach([1, 2, 3, 4, 5], (n, index) =>
+ *   Console.log(`Currently at index ${index}`).pipe(Effect.as(n * 2))
+ * )
+ *
+ * Effect.runPromise(result).then(console.log)
+ * // Output:
+ * // Currently at index 0
+ * // Currently at index 1
+ * // Currently at index 2
+ * // Currently at index 3
+ * // Currently at index 4
+ * // [ 2, 4, 6, 8, 10 ]
+ * ```
+ *
+ * @example
+ * // Title: Using discard to Ignore Results
+ * import { Effect, Console } from "effect"
+ *
+ * // Apply effects but discard the results
+ * const result = Effect.forEach(
+ *   [1, 2, 3, 4, 5],
+ *   (n, index) =>
+ *     Console.log(`Currently at index ${index}`).pipe(Effect.as(n * 2)),
+ *   { discard: true }
+ * )
+ *
+ * Effect.runPromise(result).then(console.log)
+ * // Output:
+ * // Currently at index 0
+ * // Currently at index 1
+ * // Currently at index 2
+ * // Currently at index 3
+ * // Currently at index 4
+ * // undefined
+ *
+ * @since 2.0.0
+ * @category Collecting
+ */
+export const forEach: {
+  <B, E, R, S extends Iterable<any>>(
+    f: (a: Arr.ReadonlyArray.Infer<S>, i: number) => Effect<B, E, R>,
+    options?: {
+      readonly concurrency?: Concurrency | undefined
+      readonly discard?: false | undefined
+    } | undefined
+  ): (
+    self: S
+  ) => Effect<Arr.ReadonlyArray.With<S, B>, E, R>
+  <A, B, E, R>(
+    f: (a: A, i: number) => Effect<B, E, R>,
+    options: {
+      readonly concurrency?: Concurrency | undefined
+      readonly discard: true
+    }
+  ): (self: Iterable<A>) => Effect<void, E, R>
+  <B, E, R, S extends Iterable<any>>(
+    self: S,
+    f: (a: Arr.ReadonlyArray.Infer<S>, i: number) => Effect<B, E, R>,
+    options?: {
+      readonly concurrency?: Concurrency | undefined
+      readonly discard?: false | undefined
+    } | undefined
+  ): Effect<Arr.ReadonlyArray.With<S, B>, E, R>
+  <A, B, E, R>(
+    self: Iterable<A>,
+    f: (a: A, i: number) => Effect<B, E, R>,
+    options: {
+      readonly concurrency?: Concurrency | undefined
+      readonly discard: true
+    }
+  ): Effect<void, E, R>
+} = core.forEach as any
+
+/**
+ * @since 2.0.0
+ * @category Collecting
+ */
+export const whileLoop: <A, E, R>(options: {
+  readonly while: LazyArg<boolean>
+  readonly body: LazyArg<Effect<A, E, R>>
+  readonly step: (a: A) => void
+}) => Effect<void, E, R> = core.whileLoop
 
 // -----------------------------------------------------------------------------
 // Creating Effects
@@ -1908,121 +2231,6 @@ export const unsafeMakeLatch: (open?: boolean | undefined) => Latch = core.unsaf
  * ```
  */
 export const makeLatch: (open?: boolean | undefined) => Effect<Latch> = core.makeLatch
-
-// -----------------------------------------------------------------------------
-// Looping
-// -----------------------------------------------------------------------------
-
-/**
- * Executes an effectful operation for each element in an `Iterable`.
- *
- * **Details**
- *
- * The `forEach` function applies a provided operation to each element in the
- * iterable, producing a new effect that returns an array of results.
- *
- * If any effect fails, the iteration stops immediately (short-circuiting), and
- * the error is propagated.
- *
- * **Concurrency**
- *
- * The `concurrency` option controls how many operations are performed
- * concurrently. By default, the operations are performed sequentially.
- *
- * **Discarding Results**
- *
- * If the `discard` option is set to `true`, the intermediate results are not
- * collected, and the final result of the operation is `void`.
- *
- * @see {@link all} for combining multiple effects into one.
- *
- * @example
- * ```ts
- * // Title: Applying Effects to Iterable Elements
- * import { Effect, Console } from "effect"
- *
- * const result = Effect.forEach([1, 2, 3, 4, 5], (n, index) =>
- *   Console.log(`Currently at index ${index}`).pipe(Effect.as(n * 2))
- * )
- *
- * Effect.runPromise(result).then(console.log)
- * // Output:
- * // Currently at index 0
- * // Currently at index 1
- * // Currently at index 2
- * // Currently at index 3
- * // Currently at index 4
- * // [ 2, 4, 6, 8, 10 ]
- * ```
- *
- * @example
- * // Title: Using discard to Ignore Results
- * import { Effect, Console } from "effect"
- *
- * // Apply effects but discard the results
- * const result = Effect.forEach(
- *   [1, 2, 3, 4, 5],
- *   (n, index) =>
- *     Console.log(`Currently at index ${index}`).pipe(Effect.as(n * 2)),
- *   { discard: true }
- * )
- *
- * Effect.runPromise(result).then(console.log)
- * // Output:
- * // Currently at index 0
- * // Currently at index 1
- * // Currently at index 2
- * // Currently at index 3
- * // Currently at index 4
- * // undefined
- *
- * @since 2.0.0
- * @category Looping
- */
-export const forEach: {
-  <B, E, R, S extends Iterable<any>>(
-    f: (a: Arr.ReadonlyArray.Infer<S>, i: number) => Effect<B, E, R>,
-    options?: {
-      readonly concurrency?: Concurrency | undefined
-      readonly discard?: false | undefined
-    } | undefined
-  ): (
-    self: S
-  ) => Effect<Arr.ReadonlyArray.With<S, B>, E, R>
-  <A, B, E, R>(
-    f: (a: A, i: number) => Effect<B, E, R>,
-    options: {
-      readonly concurrency?: Concurrency | undefined
-      readonly discard: true
-    }
-  ): (self: Iterable<A>) => Effect<void, E, R>
-  <B, E, R, S extends Iterable<any>>(
-    self: S,
-    f: (a: Arr.ReadonlyArray.Infer<S>, i: number) => Effect<B, E, R>,
-    options?: {
-      readonly concurrency?: Concurrency | undefined
-      readonly discard?: false | undefined
-    } | undefined
-  ): Effect<Arr.ReadonlyArray.With<S, B>, E, R>
-  <A, B, E, R>(
-    self: Iterable<A>,
-    f: (a: A, i: number) => Effect<B, E, R>,
-    options: {
-      readonly concurrency?: Concurrency | undefined
-      readonly discard: true
-    }
-  ): Effect<void, E, R>
-} = core.forEach as any
-
-/**
- * @since 2.0.0
- * @category Looping
- */
-export const whileLoop: <A, E, R>(options: {
-  readonly while: LazyArg<boolean>
-  readonly body: LazyArg<Effect<A, E, R>>
-  readonly step: (a: A) => void
-}) => Effect<void, E, R> = core.whileLoop
 
 // -----------------------------------------------------------------------------
 // Repetition & recursion
