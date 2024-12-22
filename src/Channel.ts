@@ -1110,7 +1110,7 @@ export const mergeAll: {
           ? Number.MAX_SAFE_INTEGER
           : Math.max(1, concurrency)
         const semaphore = switch_ ? undefined : Effect.unsafeMakeSemaphore(concurrencyN)
-        const doneLatch = yield* Effect.makeLatch(false)
+        const doneLatch = yield* Effect.makeLatch(true)
         const fibers = new Set<Fiber.Fiber<any, any>>()
 
         const mailbox = yield* internalMailbox.make<OutElem, OutErr | OutErr1 | Halt<OutDone>>(
@@ -1127,13 +1127,17 @@ export const mergeAll: {
             const childPull = yield* toTransform(channel)(upstream, scope)
 
             while (fibers.size >= concurrencyN) {
-              yield* Fiber.interrupt(Iterable.unsafeHead(fibers))
+              const fiber = Iterable.unsafeHead(fibers)
+              fibers.delete(fiber)
+              if (fibers.size === 0) yield* doneLatch.open
+              yield* Fiber.interrupt(fiber)
             }
 
             const fiber = yield* childPull.pipe(
               Effect.flatMap((value) => mailbox.offer(value)),
               Effect.forever,
               Effect.onError(Effect.fnUntraced(function*(cause) {
+                if (!fibers.has(fiber)) return
                 fibers.delete(fiber)
                 if (semaphore) yield* semaphore.release(1)
                 if (fibers.size === 0) yield* doneLatch.open
