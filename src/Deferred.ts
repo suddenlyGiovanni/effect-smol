@@ -108,7 +108,12 @@ export const unsafeMake = <A, E = never>(): Deferred<A, E> => {
  */
 export const make = <A, E = never>(): Effect.Effect<Deferred<A, E>> => Effect.sync(() => unsafeMake())
 
-const _await = <A, E>(self: Deferred<A, E>): Effect.Effect<A, E> => Effect.flatMap(self.latch.await, () => self.effect!)
+const _await = <A, E>(self: Deferred<A, E>): Effect.Effect<A, E> =>
+  Effect.suspend(() =>
+    self.effect
+      ? self.effect
+      : Effect.flatMap(self.latch.await, () => self.effect!)
+  )
 
 export {
   /**
