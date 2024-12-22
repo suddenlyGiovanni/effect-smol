@@ -1016,44 +1016,14 @@ export const switchMap: {
     InDone & InDone1,
     Env | Env1
   > =>
-    makeImplBracket(Effect.fnUntraced(function*(upstream, scope, forkedScope) {
-      const fibers = new Set<Fiber.Fiber<any, any>>()
-      const concurrencyN = options?.concurrency === "unbounded"
-        ? Number.POSITIVE_INFINITY
-        : Math.max(1, options?.concurrency ?? 1)
-      const mailbox = yield* internalMailbox.make<OutElem1, OutErr | OutErr1 | Halt<OutDone>>(options?.bufferSize ?? 16)
-      const doneLatch = yield* Effect.makeLatch(false)
-      const pull = yield* toTransform(self)(upstream, scope)
-      yield* Effect.gen(function*() {
-        while (true) {
-          const child = f(yield* pull)
-          const childPull = yield* toTransform(child)(upstream, scope)
-          while (fibers.size >= concurrencyN) {
-            yield* Fiber.interrupt(Iterable.unsafeHead(fibers))
-          }
-          const fiber = yield* childPull.pipe(
-            Effect.flatMap((value) => mailbox.offer(value)),
-            Effect.forever,
-            Effect.onError((cause) => {
-              fibers.delete(fiber)
-              if (isHaltCause(cause) || Cause.isOnlyInterrupt(cause)) {
-                return fibers.size === 0 ? doneLatch.open : Effect.void
-              }
-              return mailbox.failCause(cause as any)
-            }),
-            Effect.fork
-          )
-          doneLatch.unsafeClose()
-          fibers.add(fiber)
-        }
-      }).pipe(
-        Effect.onError((cause) => doneLatch.whenOpen(mailbox.failCause(cause))),
-        Effect.forkIn(forkedScope),
-        Effect.interruptible
-      )
-
-      return mailboxToPull(mailbox)
-    }))
+    self.pipe(
+      map(f),
+      mergeAll({
+        ...options,
+        concurrency: options?.concurrency ?? 1,
+        switch: true
+      })
+    )
 )
 
 /**
@@ -1064,6 +1034,7 @@ export const mergeAll: {
   (options: {
     readonly concurrency: number | "unbounded"
     readonly bufferSize?: number | undefined
+    readonly switch?: boolean | undefined
   }): <OutElem, OutErr1, OutDone1, InElem1, InErr1, InDone1, Env1, OutErr, OutDone, InElem, InErr, InDone, Env>(
     channels: Channel<
       Channel<OutElem, OutErr1, OutDone1, InElem1, InErr1, InDone1, Env1>,
@@ -1096,6 +1067,7 @@ export const mergeAll: {
     options: {
       readonly concurrency: number | "unbounded"
       readonly bufferSize?: number | undefined
+      readonly switch?: boolean | undefined
     }
   ): Channel<
     OutElem,
@@ -1118,9 +1090,10 @@ export const mergeAll: {
       InDone,
       Env
     >,
-    { bufferSize = 16, concurrency }: {
+    { bufferSize = 16, concurrency, switch: switch_ = false }: {
       readonly concurrency: number | "unbounded"
       readonly bufferSize?: number | undefined
+      readonly switch?: boolean | undefined
     }
   ): Channel<
     OutElem,
@@ -1136,7 +1109,9 @@ export const mergeAll: {
         const concurrencyN = concurrency === "unbounded"
           ? Number.MAX_SAFE_INTEGER
           : Math.max(1, concurrency)
-        const semaphore = Effect.unsafeMakeSemaphore(concurrencyN)
+        const semaphore = switch_ ? undefined : Effect.unsafeMakeSemaphore(concurrencyN)
+        const doneLatch = yield* Effect.makeLatch(false)
+        const fibers = new Set<Fiber.Fiber<any, any>>()
 
         const mailbox = yield* internalMailbox.make<OutElem, OutErr | OutErr1 | Halt<OutDone>>(
           bufferSize
@@ -1147,23 +1122,32 @@ export const mergeAll: {
 
         yield* Effect.gen(function*() {
           while (true) {
-            yield* semaphore.take(1)
+            if (semaphore) yield* semaphore.take(1)
             const channel = yield* pull
             const childPull = yield* toTransform(channel)(upstream, scope)
-            yield* childPull.pipe(
+
+            while (fibers.size >= concurrencyN) {
+              yield* Fiber.interrupt(Iterable.unsafeHead(fibers))
+            }
+
+            const fiber = yield* childPull.pipe(
               Effect.flatMap((value) => mailbox.offer(value)),
               Effect.forever,
-              Effect.onError(
-                (cause): Effect.Effect<void> =>
-                  !isHaltCause(cause)
-                    ? Effect.andThen(semaphore.release(1), mailbox.failCause(cause as any))
-                    : semaphore.release(1)
-              ),
+              Effect.onError(Effect.fnUntraced(function*(cause) {
+                fibers.delete(fiber)
+                if (semaphore) yield* semaphore.release(1)
+                if (fibers.size === 0) yield* doneLatch.open
+                if (isHaltCause(cause) || Cause.isOnlyInterrupt(cause)) return
+                return yield* mailbox.failCause(cause as any)
+              })),
               Effect.fork
             )
+
+            doneLatch.unsafeClose()
+            fibers.add(fiber)
           }
         }).pipe(
-          Effect.onError((cause) => semaphore.withPermits(concurrencyN - 1)(mailbox.failCause(cause))),
+          Effect.onError((cause) => doneLatch.whenOpen(mailbox.failCause(cause))),
           Effect.forkIn(forkedScope),
           Effect.interruptible
         )
