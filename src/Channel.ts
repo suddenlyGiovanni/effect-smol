@@ -1,14 +1,16 @@
 /**
  * @since 2.0.0
  */
-import type * as Cause from "./Cause.js"
+import * as Cause from "./Cause.js"
 import * as Chunk from "./Chunk.js"
 import * as Context from "./Context.js"
 import * as Effect from "./Effect.js"
 import * as Exit from "./Exit.js"
+import * as Fiber from "./Fiber.js"
 import type { LazyArg } from "./Function.js"
 import { constTrue, dual, identity } from "./Function.js"
 import * as internalMailbox from "./internal/mailbox.js"
+import * as Iterable from "./Iterable.js"
 import type { Mailbox, ReadonlyMailbox } from "./Mailbox.js"
 import * as Option from "./Option.js"
 import type { Pipeable } from "./Pipeable.js"
@@ -921,6 +923,138 @@ const flatMapConcurrent = <
   InDone & InDone1,
   Env | Env1
 > => self.pipe(map(f), mergeAll(options))
+
+/**
+ * Returns a new channel, which sequentially combines this channel, together
+ * with the provided factory function, which creates a second channel based on
+ * the output values of this channel. The result is a channel that will first
+ * perform the functions of this channel, before performing the functions of
+ * the created channel (including yielding its terminal value).
+ *
+ * @since 2.0.0
+ * @category sequencing
+ */
+export const switchMap: {
+  <OutElem, OutElem1, OutErr1, OutDone1, InElem1, InErr1, InDone1, Env1>(
+    f: (d: OutElem) => Channel<OutElem1, OutErr1, OutDone1, InElem1, InErr1, InDone1, Env1>,
+    options?: {
+      readonly concurrency?: number | "unbounded" | undefined
+      readonly bufferSize?: number | undefined
+    }
+  ): <OutErr, OutDone, InElem, InErr, InDone, Env>(
+    self: Channel<OutElem, OutErr, OutDone, InElem, InErr, InDone, Env>
+  ) => Channel<
+    OutElem1,
+    OutErr1 | OutErr,
+    OutDone,
+    InElem & InElem1,
+    InErr & InErr1,
+    InDone & InDone1,
+    Env1 | Env
+  >
+  <
+    OutElem,
+    OutErr,
+    OutDone,
+    InElem,
+    InErr,
+    InDone,
+    Env,
+    OutElem1,
+    OutErr1,
+    OutDone1,
+    InElem1,
+    InErr1,
+    InDone1,
+    Env1
+  >(
+    self: Channel<OutElem, OutErr, OutDone, InElem, InErr, InDone, Env>,
+    f: (d: OutElem) => Channel<OutElem1, OutErr1, OutDone1, InElem1, InErr1, InDone1, Env1>,
+    options?: {
+      readonly concurrency?: number | "unbounded" | undefined
+      readonly bufferSize?: number | undefined
+    }
+  ): Channel<
+    OutElem1,
+    OutErr | OutErr1,
+    OutDone,
+    InElem & InElem1,
+    InErr & InErr1,
+    InDone & InDone1,
+    Env | Env1
+  >
+} = dual(
+  (args) => isChannel(args[0]),
+  <
+    OutElem,
+    OutErr,
+    OutDone,
+    InElem,
+    InErr,
+    InDone,
+    Env,
+    OutElem1,
+    OutErr1,
+    OutDone1,
+    InElem1,
+    InErr1,
+    InDone1,
+    Env1
+  >(
+    self: Channel<OutElem, OutErr, OutDone, InElem, InErr, InDone, Env>,
+    f: (d: OutElem) => Channel<OutElem1, OutErr1, OutDone1, InElem1, InErr1, InDone1, Env1>,
+    options?: {
+      readonly concurrency?: number | "unbounded" | undefined
+      readonly bufferSize?: number | undefined
+    }
+  ): Channel<
+    OutElem1,
+    OutErr | OutErr1,
+    OutDone,
+    InElem & InElem1,
+    InErr & InErr1,
+    InDone & InDone1,
+    Env | Env1
+  > =>
+    makeImplBracket(Effect.fnUntraced(function*(upstream, scope, forkedScope) {
+      const fibers = new Set<Fiber.Fiber<any, any>>()
+      const concurrencyN = options?.concurrency === "unbounded"
+        ? Number.POSITIVE_INFINITY
+        : Math.max(1, options?.concurrency ?? 1)
+      const mailbox = yield* internalMailbox.make<OutElem1, OutErr | OutErr1 | Halt<OutDone>>(options?.bufferSize ?? 16)
+      const doneLatch = yield* Effect.makeLatch(false)
+      const pull = yield* toTransform(self)(upstream, scope)
+      yield* Effect.gen(function*() {
+        while (true) {
+          const child = f(yield* pull)
+          const childPull = yield* toTransform(child)(upstream, scope)
+          while (fibers.size >= concurrencyN) {
+            yield* Fiber.interrupt(Iterable.unsafeHead(fibers))
+          }
+          const fiber = yield* childPull.pipe(
+            Effect.flatMap((value) => mailbox.offer(value)),
+            Effect.forever,
+            Effect.onError((cause) => {
+              fibers.delete(fiber)
+              if (isHaltCause(cause) || Cause.isOnlyInterrupt(cause)) {
+                return fibers.size === 0 ? doneLatch.open : Effect.void
+              }
+              return mailbox.failCause(cause as any)
+            }),
+            Effect.fork
+          )
+          doneLatch.unsafeClose()
+          fibers.add(fiber)
+        }
+      }).pipe(
+        Effect.onError((cause) => doneLatch.whenOpen(mailbox.failCause(cause))),
+        Effect.forkIn(forkedScope),
+        Effect.interruptible
+      )
+
+      return mailboxToPull(mailbox)
+    }))
+)
 
 /**
  * @since 2.0.0

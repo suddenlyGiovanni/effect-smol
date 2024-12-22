@@ -127,6 +127,12 @@ export const interrupt: (fiberId?: number | undefined) => Cause<never> = core.ca
 
 /**
  * @since 2.0.0
+ * @category constructors
+ */
+export const isOnlyInterrupt: <E>(self: Cause<E>) => boolean = core.causeIsOnlyInterrupt
+
+/**
+ * @since 2.0.0
  * @category errors
  */
 export interface YieldableError extends Pipeable, Inspectable, Readonly<Error> {
