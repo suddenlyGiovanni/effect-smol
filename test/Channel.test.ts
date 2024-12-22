@@ -45,7 +45,6 @@ describe("Channel", () => {
               return latch1.open.pipe(
                 Effect.andThen(Effect.never),
                 Effect.onInterrupt(Effect.sync(() => {
-                  console.log("interrupted")
                   interrupts++
                 }))
               )

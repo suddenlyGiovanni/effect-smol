@@ -732,17 +732,17 @@ const mapEffectConcurrent = <
       )
       yield* forkedScope.addFinalizer(() => mailbox.shutdown)
 
-      yield* Effect.gen(function*() {
-        while (true) {
-          yield* semaphore.take(1)
-          const value = yield* pull
-          yield* f(value).pipe(
-            Effect.flatMap((value) => mailbox.offer(value)),
-            Effect.ensuring(semaphore.release(1)),
-            Effect.fork
-          )
-        }
-      }).pipe(
+      const handleExit = Effect.onExit((exit: Exit.Exit<OutElem2, EX>): Effect.Effect<void> =>
+        Effect.andThen(
+          semaphore.release(1),
+          exit._tag === "Success" ? mailbox.offer(exit.value) : mailbox.done(exit)
+        )
+      )
+
+      yield* semaphore.take(1).pipe(
+        Effect.flatMap(() => pull),
+        Effect.flatMap((value) => Effect.fork(handleExit(f(value)))),
+        Effect.forever,
         Effect.tapCause(() => semaphore.take(concurrencyN - 1)),
         Effect.onExit((exit) => mailbox.done(exit)),
         Effect.forkIn(forkedScope)
