@@ -86,4 +86,14 @@ describe("Channel", () => {
         assert.deepStrictEqual(result, Exit.fail("boom"))
       }).pipe(Effect.runPromise))
   })
+
+  describe("switchMap", () => {
+    it("interrupts the previous channel", () =>
+      Effect.gen(function*() {
+        yield* Channel.fromIterable([1, 2, 3]).pipe(
+          Channel.switchMap((n) => n === 3 ? Channel.empty : Channel.never),
+          Channel.runDrain
+        )
+      }).pipe(Effect.runPromise))
+  })
 })
