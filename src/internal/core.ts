@@ -737,7 +737,7 @@ export const failCause: <E>(cause: Cause.Cause<E>) => Effect.Effect<never, E> = 
   prop: "cause",
   eval(fiber) {
     let cont = fiber.getCont(failureCont)
-    while (causeHasInterrupt(this[args]) && cont && fiber.interruptible) {
+    while (fiber.interruptible && fiber._interruptedCause && cont) {
       cont = fiber.getCont(failureCont)
     }
     return cont ? cont[failureCont](this[args], fiber) : fiber.yieldWith(this)
