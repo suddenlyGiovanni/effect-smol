@@ -3439,11 +3439,7 @@ class Latch implements Effect.Latch {
   close = sync(() => {
     this.isOpen = false
   })
-  whenOpen = <A, E, R>(
-    self: Effect.Effect<A, E, R>
-  ): Effect.Effect<A, E, R> => {
-    return andThen(this.await, self)
-  }
+  whenOpen = <A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> => andThen(this.await, self)
 }
 
 /** @internal */
