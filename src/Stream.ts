@@ -7,6 +7,7 @@ import type * as Effect from "./Effect.js"
 import type { LazyArg } from "./Function.js"
 import { dual, identity } from "./Function.js"
 import type { TypeLambda } from "./HKT.js"
+import type * as Mailbox from "./Mailbox.js"
 import { type Pipeable, pipeArguments } from "./Pipeable.js"
 import { hasProperty } from "./Predicate.js"
 import * as Sink from "./Sink.js"
@@ -220,6 +221,13 @@ export const fromIteratorSucceed = <A>(iterator: IterableIterator<A>, maxChunkSi
  * @category constructors
  */
 export const fromIterable = <A>(iterable: Iterable<A>): Stream<A> => fromChannel(Channel.fromIterableArray(iterable))
+
+/**
+ * @since 4.0.0
+ * @category constructors
+ */
+export const fromMailbox = <A, E>(mailbox: Mailbox.ReadonlyMailbox<A, E>): Stream<A, E> =>
+  fromChannel(Channel.fromMailboxArray(mailbox))
 
 /**
  * Transforms the elements of this stream using the supplied function.

@@ -3,14 +3,13 @@ import * as Channel from "effect/Channel"
 import * as Effect from "effect/Effect"
 
 const a = Channel.fromIterable(Arr.makeBy(10_000, (_) => "a"))
-const b = Channel.fromIterable(Arr.makeBy(10_500, (_) => "b"))
+const b = Channel.fromIterable(Arr.makeBy(10_000, (_) => "b"))
 
-const ab = Channel.mergeAll(Channel.fromIterable([a, b]), { concurrency: "unbounded" })
+const ab = Channel.merge(a, b)
 
 console.time("smol merge")
 ab.pipe(
-  Channel.runCount,
-  Effect.runSync,
-  console.log
+  Channel.runDrain,
+  Effect.runSync
 )
 console.timeEnd("smol merge")

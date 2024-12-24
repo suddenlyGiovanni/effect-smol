@@ -603,12 +603,13 @@ export const fromMailbox = <A, E>(
  * @since 4.0.0
  * @category constructors
  */
-export const fromMailboxChunk = <A, E>(
+export const fromMailboxArray = <A, E>(
   mailbox: ReadonlyMailbox<A, E>
-): Channel<Chunk.Chunk<A>, E> =>
+): Channel<ReadonlyArray<A>, E> =>
   fromPull(
     Effect.succeed(
-      Effect.flatMap(mailbox.takeAll, ([values]) => values.length === 0 ? haltVoid : Effect.succeed(values))
+      Effect.flatMap(mailbox.takeAll, ([values]) =>
+        values.length === 0 ? haltVoid : Effect.succeed(Chunk.toReadonlyArray(values)))
     )
   )
 
