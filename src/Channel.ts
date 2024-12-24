@@ -260,6 +260,15 @@ const ChannelProto = {
   }
 }
 
+/**
+ * @since 4.0.0
+ * @category Halt
+ */
+export const haltExitFromCause = <E>(cause: Cause.Cause<E>): Exit.Exit<Halt.Extract<E>, Halt.ExcludeHalt<E>> => {
+  const halt = haltFromCause(cause)
+  return halt ? Exit.succeed(halt.leftover) : Exit.failCause(cause) as any
+}
+
 // -----------------------------------------------------------------------------
 // Constructors
 // -----------------------------------------------------------------------------
@@ -298,10 +307,7 @@ const makeImplBracket = <OutElem, OutErr, OutDone, InElem, InErr, InDone, EX, En
   fromTransform(
     Effect.fnUntraced(function*(upstream, scope) {
       const closableScope = yield* scope.fork
-      const onCause = (cause: Cause.Cause<EX | OutErr | Halt<OutDone>>) => {
-        const halt = haltFromCause(cause)
-        return closableScope.close(halt ? Exit.succeed(halt.leftover) : Exit.failCause(cause))
-      }
+      const onCause = (cause: Cause.Cause<EX | OutErr | Halt<OutDone>>) => closableScope.close(haltExitFromCause(cause))
       const pull = yield* Effect.onError(
         f(upstream, scope, closableScope),
         onCause
@@ -1126,7 +1132,8 @@ export const mergeAll: {
           while (true) {
             if (semaphore) yield* semaphore.take(1)
             const channel = yield* pull
-            const childPull = yield* toTransform(channel)(upstream, scope)
+            const childScope = yield* forkedScope.fork
+            const childPull = yield* toTransform(channel)(upstream, childScope)
 
             while (fibers.size >= concurrencyN) {
               const fiber = Iterable.unsafeHead(fibers)
@@ -1139,11 +1146,13 @@ export const mergeAll: {
               Effect.flatMap((value) => mailbox.offer(value)),
               Effect.forever,
               Effect.onError(Effect.fnUntraced(function*(cause) {
+                const halt = haltFromCause(cause)
+                yield* childScope.close(halt ? Exit.succeed(halt.leftover) : Exit.failCause(cause))
                 if (!fibers.has(fiber)) return
                 fibers.delete(fiber)
                 if (semaphore) yield* semaphore.release(1)
                 if (fibers.size === 0) yield* doneLatch.open
-                if (isHaltCause(cause) || Cause.isInterruptedOnly(cause)) return
+                if (halt || Cause.isInterruptedOnly(cause)) return
                 return yield* mailbox.failCause(cause as any)
               })),
               Effect.fork
@@ -1254,7 +1263,7 @@ export const merge: {
   InDone & InDone1,
   Env | Env1
 > =>
-  makeImplBracket(Effect.fnUntraced(function*(upstream, scope, forkedScope) {
+  makeImplBracket(Effect.fnUntraced(function*(upstream, _scope, forkedScope) {
     const strategy = options?.haltStrategy ?? "both"
     const mailbox = yield* internalMailbox.make<OutElem | OutElem1, OutErr | OutErr1 | Halt<OutDone | OutDone1>>(0)
     yield* forkedScope.addFinalizer(() => mailbox.shutdown)
@@ -1290,7 +1299,8 @@ export const merge: {
         InErr & InErr1,
         InDone & InDone1,
         Env | Env1
-      >
+      >,
+      scope: Scope.Scope.Closeable
     ) =>
       toTransform(channel)(upstream, scope).pipe(
         Effect.flatMap((pull) =>
@@ -1299,12 +1309,17 @@ export const merge: {
             Effect.forever
           )
         ),
-        Effect.onError((cause) => onExit(side, cause)),
+        Effect.onError((cause) =>
+          Effect.andThen(
+            scope.close(haltExitFromCause(cause)),
+            onExit(side, cause)
+          )
+        ),
         Effect.forkIn(forkedScope),
         Effect.interruptible
       )
-    yield* runSide("left", left)
-    yield* runSide("right", right)
+    yield* runSide("left", left, yield* forkedScope.fork)
+    yield* runSide("right", right, yield* forkedScope.fork)
     return mailboxToPull(mailbox)
   })))
 
