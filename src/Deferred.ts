@@ -137,11 +137,11 @@ export {
  * @category utils
  */
 export const complete: {
-  <A, E>(effect: Effect.Effect<A, E>): (self: Deferred<A, E>) => Effect.Effect<boolean>
-  <A, E>(self: Deferred<A, E>, effect: Effect.Effect<A, E>): Effect.Effect<boolean>
+  <A, E, R>(effect: Effect.Effect<A, E, R>): (self: Deferred<A, E>) => Effect.Effect<boolean, never, R>
+  <A, E, R>(self: Deferred<A, E>, effect: Effect.Effect<A, E, R>): Effect.Effect<boolean, never, R>
 } = dual(
   2,
-  <A, E>(self: Deferred<A, E>, effect: Effect.Effect<A, E>): Effect.Effect<boolean> =>
+  <A, E, R>(self: Deferred<A, E>, effect: Effect.Effect<A, E, R>): Effect.Effect<boolean, never, R> =>
     Effect.suspend(() => self.effect ? Effect.succeed(false) : into(effect, self))
 )
 
