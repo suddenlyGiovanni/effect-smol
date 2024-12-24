@@ -3,28 +3,28 @@ import * as Effect from "effect/Effect"
 import * as Exit from "effect/Exit"
 import * as Fiber from "effect/Fiber"
 import * as Mailbox from "effect/Mailbox"
-import { assert, describe, it } from "vitest"
+import { assert, describe, it } from "./utils/extend.js"
 
 describe("Channel", () => {
   describe("constructors", () => {
-    it("succeed", () =>
+    it.effect("succeed", () =>
       Effect.gen(function*() {
         const result = yield* Channel.succeed(1).pipe(Channel.runCollect)
         assert.deepStrictEqual(result, [1])
-      }).pipe(Effect.runPromise))
+      }))
   })
 
   describe("mapping", () => {
-    it("map", () =>
+    it.effect("map", () =>
       Effect.gen(function*() {
         const result = yield* Channel.fromArray([1, 2, 3]).pipe(
           Channel.map((n) => n + 1),
           Channel.runCollect
         )
         assert.deepStrictEqual(result, [2, 3, 4])
-      }).pipe(Effect.runPromise))
+      }))
 
-    it("mapEffect - propagates interruption", () =>
+    it.effect("mapEffect - propagates interruption", () =>
       Effect.gen(function*() {
         let interrupted = false
         const latch = yield* Effect.makeLatch(false)
@@ -41,9 +41,9 @@ describe("Channel", () => {
         )
         yield* Fiber.interrupt(fiber).pipe(latch.whenOpen)
         assert.isTrue(interrupted)
-      }).pipe(Effect.runPromise))
+      }))
 
-    it("mapEffect - interrupts pending tasks on failure", () =>
+    it.effect("mapEffect - interrupts pending tasks on failure", () =>
       Effect.gen(function*() {
         let interrupts = 0
         const latch1 = yield* Effect.makeLatch(false)
@@ -76,11 +76,11 @@ describe("Channel", () => {
         )
         assert.strictEqual(interrupts, 2)
         assert.deepStrictEqual(result, Exit.fail("boom"))
-      }).pipe(Effect.runPromise))
+      }))
   })
 
   describe("merging", () => {
-    it("merge - interrupts left side if halt strategy is set to 'right'", () =>
+    it.effect("merge - interrupts left side if halt strategy is set to 'right'", () =>
       Effect.gen(function*() {
         const latch = yield* Effect.makeLatch(false)
         const leftMailbox = yield* Mailbox.make<number>()
@@ -98,9 +98,9 @@ describe("Channel", () => {
         yield* rightMailbox.offerAll([3, 4])
         const result = yield* Fiber.join(fiber)
         assert.deepStrictEqual(result, [1, 2])
-      }).pipe(Effect.runPromise))
+      }))
 
-    it("merge - interrupts right side if halt strategy is set to 'left'", () =>
+    it.effect("merge - interrupts right side if halt strategy is set to 'left'", () =>
       Effect.gen(function*() {
         const latch = yield* Effect.makeLatch(false)
         const leftMailbox = yield* Mailbox.make<number>()
@@ -118,9 +118,9 @@ describe("Channel", () => {
         yield* rightMailbox.offerAll([3, 4])
         const result = yield* Fiber.join(fiber)
         assert.deepStrictEqual(result, [1, 2])
-      }).pipe(Effect.runPromise))
+      }))
 
-    it("merge - interrupts losing side if halt strategy is set to 'either'", () =>
+    it.effect("merge - interrupts losing side if halt strategy is set to 'either'", () =>
       Effect.gen(function*() {
         const left = Channel.fromEffect(Effect.never)
         const right = Channel.succeed(1)
@@ -128,9 +128,9 @@ describe("Channel", () => {
           haltStrategy: "either"
         }).pipe(Channel.runCollect)
         assert.deepStrictEqual(result, [1])
-      }).pipe(Effect.runPromise))
+      }))
 
-    it("merge - waits for both sides if halt strategy is set to 'both'", () =>
+    it.effect("merge - waits for both sides if halt strategy is set to 'both'", () =>
       Effect.gen(function*() {
         const left = Channel.succeed(1)
         const right = Channel.succeed(2)
@@ -138,9 +138,9 @@ describe("Channel", () => {
           haltStrategy: "both"
         }).pipe(Channel.runCollect)
         assert.deepStrictEqual(result, [1, 2])
-      }).pipe(Effect.runPromise))
+      }))
 
-    it("merge - prioritizes failure", () =>
+    it.effect("merge - prioritizes failure", () =>
       Effect.gen(function*() {
         const left = Channel.fromEffect(Effect.fail("boom"))
         const right = Channel.fromEffect(Effect.never)
@@ -149,16 +149,16 @@ describe("Channel", () => {
           Effect.exit
         )
         assert.deepStrictEqual(result, Exit.fail("boom"))
-      }).pipe(Effect.runPromise))
+      }))
   })
 
   describe("switchMap", () => {
-    it("interrupts the previous channel", () =>
+    it.effect("interrupts the previous channel", () =>
       Effect.gen(function*() {
         yield* Channel.fromIterable([1, 2, 3]).pipe(
           Channel.switchMap((n) => n === 3 ? Channel.empty : Channel.never),
           Channel.runDrain
         )
-      }).pipe(Effect.runPromise))
+      }))
   })
 })
