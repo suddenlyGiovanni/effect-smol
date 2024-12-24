@@ -394,7 +394,7 @@ export const asyncPush = <A, E = never, R = never>(
       })
       yield* scope.addFinalizer(() => mailbox.shutdown)
       const emit = emitFromMailbox(mailbox)
-      yield* Effect.forkIn(Scope.provideScope(f(emit), scope), scope)
+      yield* Effect.forkIn(Scope.provide(f(emit), scope), scope)
       return mailboxToPull(mailbox)
     })
   )
@@ -1143,7 +1143,7 @@ export const mergeAll: {
                 fibers.delete(fiber)
                 if (semaphore) yield* semaphore.release(1)
                 if (fibers.size === 0) yield* doneLatch.open
-                if (isHaltCause(cause) || Cause.isOnlyInterrupt(cause)) return
+                if (isHaltCause(cause) || Cause.isInterruptedOnly(cause)) return
                 return yield* mailbox.failCause(cause as any)
               })),
               Effect.fork
@@ -1410,7 +1410,7 @@ export const unwrapScoped = <OutElem, OutErr, OutDone, InElem, InErr, InDone, R2
 ): Channel<OutElem, E | OutErr, OutDone, InElem, InErr, InDone, Exclude<R, Scope.Scope> | R2> =>
   fromTransform((upstream, scope) =>
     Effect.flatMap(
-      Scope.provideScope(channel, scope),
+      Scope.provide(channel, scope),
       (channel) => toTransform(channel)(upstream, scope)
     )
   )

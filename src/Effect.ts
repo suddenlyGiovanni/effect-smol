@@ -3,7 +3,8 @@
  */
 import type * as Arr from "./Array.js"
 import type { Cause, Failure, TimeoutError } from "./Cause.js"
-import type { Context } from "./Context.js"
+import type { Context, Reference, Tag } from "./Context.js"
+import type { Either } from "./Either.js"
 import type { Exit } from "./Exit.js"
 import type { Fiber } from "./Fiber.js"
 import type { LazyArg } from "./Function.js"
@@ -14,7 +15,7 @@ import type { Pipeable } from "./Pipeable.js"
 import type { Predicate, Refinement } from "./Predicate.js"
 import type { Scheduler } from "./Scheduler.js"
 import type { Scope } from "./Scope.js"
-import type { Concurrency, Covariant, NotFunction } from "./Types.js"
+import type { Concurrency, Covariant, NoInfer, NotFunction } from "./Types.js"
 import type * as Unify from "./Unify.js"
 import type { YieldWrap } from "./Utils.js"
 
@@ -776,6 +777,132 @@ export {
 }
 
 /**
+ * Creates an `Effect` from a callback-based asynchronous function.
+ *
+ * **Details**
+ *
+ * The `resume` function:
+ * - Must be called exactly once. Any additional calls will be ignored.
+ * - Can return an optional `Effect` that will be run if the `Fiber` executing
+ *   this `Effect` is interrupted. This can be useful in scenarios where you
+ *   need to handle resource cleanup if the operation is interrupted.
+ * - Can receive an `AbortSignal` to handle interruption if needed.
+ *
+ * The `FiberId` of the fiber that may complete the async callback may also be
+ * specified using the `blockingOn` argument. This is called the "blocking
+ * fiber" because it suspends the fiber executing the `async` effect (i.e.
+ * semantically blocks the fiber from making progress). Specifying this fiber id
+ * in cases where it is known will improve diagnostics, but not affect the
+ * behavior of the returned effect.
+ *
+ * **When to Use**
+ *
+ * Use `Effect.async` when dealing with APIs that use callback-style instead of
+ * `async/await` or `Promise`.
+ *
+ * @example
+ * ```ts
+ * // Title: Wrapping a Callback API
+ * import { Effect } from "effect"
+ * import * as NodeFS from "node:fs"
+ *
+ * const readFile = (filename: string) =>
+ *   Effect.async<Buffer, Error>((resume) => {
+ *     NodeFS.readFile(filename, (error, data) => {
+ *       if (error) {
+ *         // Resume with a failed Effect if an error occurs
+ *         resume(Effect.fail(error))
+ *       } else {
+ *         // Resume with a succeeded Effect if successful
+ *         resume(Effect.succeed(data))
+ *       }
+ *     })
+ *   })
+ *
+ * //      ┌─── Effect<Buffer, Error, never>
+ * //      ▼
+ * const program = readFile("example.txt")
+ * ```
+ *
+ * @example
+ * // Title: Handling Interruption with Cleanup
+ * import { Effect, Fiber } from "effect"
+ * import * as NodeFS from "node:fs"
+ *
+ * // Simulates a long-running operation to write to a file
+ * const writeFileWithCleanup = (filename: string, data: string) =>
+ *   Effect.async<void, Error>((resume) => {
+ *     const writeStream = NodeFS.createWriteStream(filename)
+ *
+ *     // Start writing data to the file
+ *     writeStream.write(data)
+ *
+ *     // When the stream is finished, resume with success
+ *     writeStream.on("finish", () => resume(Effect.void))
+ *
+ *     // In case of an error during writing, resume with failure
+ *     writeStream.on("error", (err) => resume(Effect.fail(err)))
+ *
+ *     // Handle interruption by returning a cleanup effect
+ *     return Effect.sync(() => {
+ *       console.log(`Cleaning up ${filename}`)
+ *       NodeFS.unlinkSync(filename)
+ *     })
+ *   })
+ *
+ * const program = Effect.gen(function* () {
+ *   const fiber = yield* Effect.fork(
+ *     writeFileWithCleanup("example.txt", "Some long data...")
+ *   )
+ *   // Simulate interrupting the fiber after 1 second
+ *   yield* Effect.sleep("1 second")
+ *   yield* Fiber.interrupt(fiber) // This will trigger the cleanup
+ * })
+ *
+ * // Run the program
+ * Effect.runPromise(program)
+ * // Output:
+ * // Cleaning up example.txt
+ *
+ * @example
+ * // Title: Handling Interruption with AbortSignal
+ * import { Effect, Fiber } from "effect"
+ *
+ * // A task that supports interruption using AbortSignal
+ * const interruptibleTask = Effect.async<void, Error>((resume, signal) => {
+ *   // Handle interruption
+ *   signal.addEventListener("abort", () => {
+ *     console.log("Abort signal received")
+ *     clearTimeout(timeoutId)
+ *   })
+ *
+ *   // Simulate a long-running task
+ *   const timeoutId = setTimeout(() => {
+ *     console.log("Operation completed")
+ *     resume(Effect.void)
+ *   }, 2000)
+ * })
+ *
+ * const program = Effect.gen(function* () {
+ *   const fiber = yield* Effect.fork(interruptibleTask)
+ *   // Simulate interrupting the fiber after 1 second
+ *   yield* Effect.sleep("1 second")
+ *   yield* Fiber.interrupt(fiber)
+ * })
+ *
+ * // Run the program
+ * Effect.runPromise(program)
+ * // Output:
+ * // Abort signal received
+ *
+ * @since 2.0.0
+ * @category Creating Effects
+ */
+export const async: <A, E = never, R = never>(
+  register: (resume: (effect: Effect<A, E, R>) => void, signal: AbortSignal) => void | Effect<void, never, R>
+) => Effect<A, E, R> = core.async
+
+/**
  * Returns an effect that will never produce anything. The moral equivalent of
  * `while(true) {}`, only without the wasted CPU cycles.
  *
@@ -950,6 +1077,18 @@ export const failCauseSync: <E>(
  * @category Creating Effects
  */
 export const die: (defect: unknown) => Effect<never> = core.die
+
+/**
+ * @since 4.0.0
+ * @category Creating Effects
+ */
+export const fromOption: <A>(option: Option<A>) => Effect<A, core.NoSuchElementError> = core.fromOption
+
+/**
+ * @since 4.0.0
+ * @category Creating Effects
+ */
+export const fromEither: <R, L>(either: Either<R, L>) => Effect<R, L> = core.fromEither
 
 /**
  * @since 2.0.0
@@ -1372,6 +1511,175 @@ export const as: {
  */
 export const asVoid: <A, E, R>(self: Effect<A, E, R>) => Effect<void, E, R> = core.asVoid
 
+/**
+ * The `flip` function swaps the success and error channels of an effect,
+ * so that the success becomes the error, and the error becomes the success.
+ *
+ * This function is useful when you need to reverse the flow of an effect,
+ * treating the previously successful values as errors and vice versa. This can
+ * be helpful in scenarios where you want to handle a success as a failure or
+ * treat an error as a valid result.
+ *
+ * @example
+ * ```ts
+ * import { Effect } from "effect"
+ *
+ * //      ┌─── Effect<number, string, never>
+ * //      ▼
+ * const program = Effect.fail("Oh uh!").pipe(Effect.as(2))
+ *
+ * //      ┌─── Effect<string, number, never>
+ * //      ▼
+ * const flipped = Effect.flip(program)
+ * ```
+ *
+ * @since 2.0.0
+ * @category Mapping
+ */
+export const flip: <A, E, R>(self: Effect<A, E, R>) => Effect<E, A, R> = core.flip
+
+// -----------------------------------------------------------------------------
+// Zipping
+// -----------------------------------------------------------------------------
+
+/**
+ * Combines two effects into a single effect, producing a tuple with the results of both effects.
+ *
+ * The `zip` function executes the first effect (left) and then the second effect (right).
+ * Once both effects succeed, their results are combined into a tuple.
+ *
+ * **Concurrency**
+ *
+ * By default, `zip` processes the effects sequentially. To execute the effects concurrently,
+ * use the `{ concurrent: true }` option.
+ *
+ * @see {@link zipWith} for a version that combines the results with a custom function.
+ * @see {@link validate} for a version that accumulates errors.
+ *
+ * @example
+ * ```ts
+ * // Title: Combining Two Effects Sequentially
+ * import { Effect } from "effect"
+ *
+ * const task1 = Effect.succeed(1).pipe(
+ *   Effect.delay("200 millis"),
+ *   Effect.tap(Effect.log("task1 done"))
+ * )
+ * const task2 = Effect.succeed("hello").pipe(
+ *   Effect.delay("100 millis"),
+ *   Effect.tap(Effect.log("task2 done"))
+ * )
+ *
+ * // Combine the two effects together
+ * //
+ * //      ┌─── Effect<[number, string], never, never>
+ * //      ▼
+ * const program = Effect.zip(task1, task2)
+ *
+ * Effect.runPromise(program).then(console.log)
+ * // Output:
+ * // timestamp=... level=INFO fiber=#0 message="task1 done"
+ * // timestamp=... level=INFO fiber=#0 message="task2 done"
+ * // [ 1, 'hello' ]
+ * ```
+ *
+ * @example
+ * // Title: Combining Two Effects Concurrently
+ * import { Effect } from "effect"
+ *
+ * const task1 = Effect.succeed(1).pipe(
+ *   Effect.delay("200 millis"),
+ *   Effect.tap(Effect.log("task1 done"))
+ * )
+ * const task2 = Effect.succeed("hello").pipe(
+ *   Effect.delay("100 millis"),
+ *   Effect.tap(Effect.log("task2 done"))
+ * )
+ *
+ * // Run both effects concurrently using the concurrent option
+ * const program = Effect.zip(task1, task2, { concurrent: true })
+ *
+ * Effect.runPromise(program).then(console.log)
+ * // Output:
+ * // timestamp=... level=INFO fiber=#0 message="task2 done"
+ * // timestamp=... level=INFO fiber=#0 message="task1 done"
+ * // [ 1, 'hello' ]
+ *
+ * @since 2.0.0
+ * @category Zipping
+ */
+export const zip: {
+  <A2, E2, R2>(
+    that: Effect<A2, E2, R2>,
+    options?: { readonly concurrent?: boolean | undefined } | undefined
+  ): <A, E, R>(self: Effect<A, E, R>) => Effect<[A, A2], E2 | E, R2 | R>
+  <A, E, R, A2, E2, R2>(
+    self: Effect<A, E, R>,
+    that: Effect<A2, E2, R2>,
+    options?: { readonly concurrent?: boolean | undefined }
+  ): Effect<[A, A2], E | E2, R | R2>
+} = core.zip
+
+/**
+ * Combines two effects sequentially and applies a function to their results to
+ * produce a single value.
+ *
+ * **When to Use**
+ *
+ * The `zipWith` function is similar to {@link zip}, but instead of returning a
+ * tuple of results, it applies a provided function to the results of the two
+ * effects, combining them into a single value.
+ *
+ * **Concurrency**
+ *
+ * By default, the effects are run sequentially. To execute them concurrently,
+ * use the `{ concurrent: true }` option.
+ *
+ * @example
+ * ```ts
+ * // Title: Combining Effects with a Custom Function
+ * import { Effect } from "effect"
+ *
+ * const task1 = Effect.succeed(1).pipe(
+ *   Effect.delay("200 millis"),
+ *   Effect.tap(Effect.log("task1 done"))
+ * )
+ * const task2 = Effect.succeed("hello").pipe(
+ *   Effect.delay("100 millis"),
+ *   Effect.tap(Effect.log("task2 done"))
+ * )
+ *
+ * const task3 = Effect.zipWith(
+ *   task1,
+ *   task2,
+ *   // Combines results into a single value
+ *   (number, string) => number + string.length
+ * )
+ *
+ * Effect.runPromise(task3).then(console.log)
+ * // Output:
+ * // timestamp=... level=INFO fiber=#3 message="task1 done"
+ * // timestamp=... level=INFO fiber=#2 message="task2 done"
+ * // 6
+ * ```
+ *
+ * @since 2.0.0
+ * @category Zipping
+ */
+export const zipWith: {
+  <A2, E2, R2, A, B>(
+    that: Effect<A2, E2, R2>,
+    f: (a: A, b: A2) => B,
+    options?: { readonly concurrent?: boolean | undefined }
+  ): <E, R>(self: Effect<A, E, R>) => Effect<B, E2 | E, R2 | R>
+  <A, E, R, A2, E2, R2, B>(
+    self: Effect<A, E, R>,
+    that: Effect<A2, E2, R2>,
+    f: (a: A, b: A2) => B,
+    options?: { readonly concurrent?: boolean | undefined }
+  ): Effect<B, E2 | E, R2 | R>
+} = core.zipWith
+
 // -----------------------------------------------------------------------------
 // Error handling
 // -----------------------------------------------------------------------------
@@ -1443,6 +1751,75 @@ export {
    */
   catch_ as catch
 }
+
+/**
+ * Catches and handles specific errors by their `_tag` field, which is used as a
+ * discriminator.
+ *
+ * **When to Use**
+ *
+ * `catchTag` is useful when your errors are tagged with a readonly `_tag` field
+ * that identifies the error type. You can use this function to handle specific
+ * error types by matching the `_tag` value. This allows for precise error
+ * handling, ensuring that only specific errors are caught and handled.
+ *
+ * The error type must have a readonly `_tag` field to use `catchTag`. This
+ * field is used to identify and match errors.
+ *
+ * @see {@link catchTags} for a version that allows you to handle multiple error
+ * types at once.
+ *
+ * @example
+ * ```ts
+ * // Title: Handling Errors by Tag
+ * import { Effect, Random } from "effect"
+ *
+ * class HttpError {
+ *   readonly _tag = "HttpError"
+ * }
+ *
+ * class ValidationError {
+ *   readonly _tag = "ValidationError"
+ * }
+ *
+ * //      ┌─── Effect<string, HttpError | ValidationError, never>
+ * //      ▼
+ * const program = Effect.gen(function* () {
+ *   const n1 = yield* Random.next
+ *   const n2 = yield* Random.next
+ *   if (n1 < 0.5) {
+ *     yield* Effect.fail(new HttpError())
+ *   }
+ *   if (n2 < 0.5) {
+ *     yield* Effect.fail(new ValidationError())
+ *   }
+ *   return "some result"
+ * })
+ *
+ * //      ┌─── Effect<string, ValidationError, never>
+ * //      ▼
+ * const recovered = program.pipe(
+ *   // Only handle HttpError errors
+ *   Effect.catchTag("HttpError", (_HttpError) =>
+ *     Effect.succeed("Recovering from HttpError")
+ *   )
+ * )
+ * ```
+ *
+ * @since 2.0.0
+ * @category Error handling
+ */
+export const catchTag: {
+  <K extends E extends { _tag: string } ? E["_tag"] : never, E, A1, E1, R1>(
+    k: K,
+    f: (e: NoInfer<Extract<E, { _tag: K }>>) => Effect<A1, E1, R1>
+  ): <A, R>(self: Effect<A, E, R>) => Effect<A1 | A, E1 | Exclude<E, { _tag: K }>, R1 | R>
+  <A, E, R, K extends E extends { _tag: string } ? E["_tag"] : never, R1, E1, A1>(
+    self: Effect<A, E, R>,
+    k: K,
+    f: (e: Extract<E, { _tag: K }>) => Effect<A1, E1, R1>
+  ): Effect<A | A1, E1 | Exclude<E, { _tag: K }>, R | R1>
+} = core.catchTag
 
 /**
  * Handles both recoverable and unrecoverable errors by providing a recovery
@@ -1962,6 +2339,142 @@ export const retry: {
   ): Effect<A, E, R>
 } = core.retry
 
+/**
+ * The `sandbox` function transforms an effect by exposing the full cause
+ * of any error, defect, or fiber interruption that might occur during its
+ * execution. It changes the error channel of the effect to include detailed
+ * information about the cause, which is wrapped in a `Cause<E>` type.
+ *
+ * This function is useful when you need access to the complete underlying cause
+ * of failures, defects, or interruptions, enabling more detailed error
+ * handling. Once you apply `sandbox`, you can use operators like
+ * {@link catchAll} and {@link catchTags} to handle specific error conditions.
+ * If necessary, you can revert the sandboxing operation with {@link unsandbox}
+ * to return to the original error handling behavior.
+ *
+ * @see {@link unsandbox} to restore the original error handling.
+ *
+ * @example
+ * ```ts
+ * import { Effect, Console } from "effect"
+ *
+ * //      ┌─── Effect<string, Error, never>
+ * //      ▼
+ * const task = Effect.fail(new Error("Oh uh!")).pipe(
+ *   Effect.as("primary result")
+ * )
+ *
+ * //      ┌─── Effect<string, Cause<Error>, never>
+ * //      ▼
+ * const sandboxed = Effect.sandbox(task)
+ *
+ * const program = Effect.catchTags(sandboxed, {
+ *   Die: (cause) =>
+ *     Console.log(`Caught a defect: ${cause.defect}`).pipe(
+ *       Effect.as("fallback result on defect")
+ *     ),
+ *   Interrupt: (cause) =>
+ *     Console.log(`Caught a defect: ${cause.fiberId}`).pipe(
+ *       Effect.as("fallback result on fiber interruption")
+ *     ),
+ *   Fail: (cause) =>
+ *     Console.log(`Caught a defect: ${cause.error}`).pipe(
+ *       Effect.as("fallback result on failure")
+ *     )
+ * })
+ *
+ * // Restore the original error handling with unsandbox
+ * const main = Effect.unsandbox(program)
+ *
+ * Effect.runPromise(main).then(console.log)
+ * // Output:
+ * // Caught a defect: Oh uh!
+ * // fallback result on failure
+ * ```
+ *
+ * @since 2.0.0
+ * @category Error handling
+ */
+export const sandbox: <A, E, R>(self: Effect<A, E, R>) => Effect<A, Cause<E>, R> = core.sandbox
+
+/**
+ * Discards both the success and failure values of an effect.
+ *
+ * **When to Use**
+ *
+ * `ignore` allows you to run an effect without caring about its result, whether
+ * it succeeds or fails. This is useful when you only care about the side
+ * effects of the effect and do not need to handle or process its outcome.
+ *
+ * @example
+ * ```ts
+ * // Title: Using Effect.ignore to Discard Values
+ * import { Effect } from "effect"
+ *
+ * //      ┌─── Effect<number, string, never>
+ * //      ▼
+ * const task = Effect.fail("Uh oh!").pipe(Effect.as(5))
+ *
+ * //      ┌─── Effect<void, never, never>
+ * //      ▼
+ * const program = Effect.ignore(task)
+ * ```
+ *
+ * @since 2.0.0
+ * @category Error handling
+ */
+export const ignore: <A, E, R>(self: Effect<A, E, R>) => Effect<void, never, R> = core.ignore
+
+// -----------------------------------------------------------------------------
+// Fallback
+// -----------------------------------------------------------------------------
+
+/**
+ * Replaces the original failure with a success value, ensuring the effect
+ * cannot fail.
+ *
+ * `orElseSucceed` allows you to replace the failure of an effect with a
+ * success value. If the effect fails, it will instead succeed with the provided
+ * value, ensuring the effect always completes successfully. This is useful when
+ * you want to guarantee a successful result regardless of whether the original
+ * effect failed.
+ *
+ * The function ensures that any failure is effectively "swallowed" and replaced
+ * by a successful value, which can be helpful for providing default values in
+ * case of failure.
+ *
+ * **Important**: This function only applies to failed effects. If the effect
+ * already succeeds, it will remain unchanged.
+ *
+ * @example
+ * ```ts
+ * import { Effect } from "effect"
+ *
+ * const validate = (age: number): Effect.Effect<number, string> => {
+ *   if (age < 0) {
+ *     return Effect.fail("NegativeAgeError")
+ *   } else if (age < 18) {
+ *     return Effect.fail("IllegalAgeError")
+ *   } else {
+ *     return Effect.succeed(age)
+ *   }
+ * }
+ *
+ * const program = Effect.orElseSucceed(validate(-1), () => 18)
+ *
+ * console.log(Effect.runSyncExit(program))
+ * // Output:
+ * // { _id: 'Exit', _tag: 'Success', value: 18 }
+ * ```
+ *
+ * @since 2.0.0
+ * @category Fallback
+ */
+export const orElseSucceed: {
+  <A2>(evaluate: LazyArg<A2>): <A, E, R>(self: Effect<A, E, R>) => Effect<A2 | A, never, R>
+  <A, E, R, A2>(self: Effect<A, E, R>, evaluate: LazyArg<A2>): Effect<A | A2, never, R>
+} = core.orElseSucceed
+
 // -----------------------------------------------------------------------------
 // Delays & timeouts
 // -----------------------------------------------------------------------------
@@ -2016,6 +2529,282 @@ export const timeout: {
   (millis: number): <A, E, R>(self: Effect<A, E, R>) => Effect<A, E | TimeoutError, R>
   <A, E, R>(self: Effect<A, E, R>, millis: number): Effect<A, E | TimeoutError, R>
 } = core.timeout
+
+/**
+ * Handles timeouts by returning an `Option` that represents either the result
+ * or a timeout.
+ *
+ * The `timeoutOption` function provides a way to gracefully handle
+ * timeouts by wrapping the outcome of an effect in an `Option` type. If the
+ * effect completes within the specified time, it returns a `Some` containing
+ * the result. If the effect times out, it returns a `None`, allowing you to
+ * treat the timeout as a regular result instead of throwing an error.
+ *
+ * This is useful when you want to handle timeouts without causing the program
+ * to fail, making it easier to manage situations where you expect tasks might
+ * take too long but want to continue executing other tasks.
+ *
+ * @see {@link timeout} for a version that raises a `TimeoutException`.
+ * @see {@link timeoutFail} for a version that raises a custom error.
+ * @see {@link timeoutFailCause} for a version that raises a custom defect.
+ * @see {@link timeoutTo} for a version that allows specifying both success and timeout handlers.
+ *
+ * @example
+ * ```ts
+ * import { Effect } from "effect"
+ *
+ * const task = Effect.gen(function* () {
+ *   console.log("Start processing...")
+ *   yield* Effect.sleep("2 seconds") // Simulates a delay in processing
+ *   console.log("Processing complete.")
+ *   return "Result"
+ * })
+ *
+ * const timedOutEffect = Effect.all([
+ *   task.pipe(Effect.timeoutOption("3 seconds")),
+ *   task.pipe(Effect.timeoutOption("1 second"))
+ * ])
+ *
+ * Effect.runPromise(timedOutEffect).then(console.log)
+ * // Output:
+ * // Start processing...
+ * // Processing complete.
+ * // Start processing...
+ * // [
+ * //   { _id: 'Option', _tag: 'Some', value: 'Result' },
+ * //   { _id: 'Option', _tag: 'None' }
+ * // ]
+ * ```
+ *
+ * @since 3.1.0
+ * @category delays & timeouts
+ */
+export const timeoutOption: {
+  (millis: number): <A, E, R>(self: Effect<A, E, R>) => Effect<Option<A>, E, R>
+  <A, E, R>(self: Effect<A, E, R>, millis: number): Effect<Option<A>, E, R>
+} = core.timeoutOption
+
+/**
+ * @since 3.1.0
+ * @category delays & timeouts
+ */
+export const timeoutOrElse: {
+  <A2, E2, R2>(
+    options: { readonly duration: number; readonly onTimeout: LazyArg<Effect<A2, E2, R2>> }
+  ): <A, E, R>(self: Effect<A, E, R>) => Effect<A | A2, E | E2, R | R2>
+  <A, E, R, A2, E2, R2>(
+    self: Effect<A, E, R>,
+    options: { readonly duration: number; readonly onTimeout: LazyArg<Effect<A2, E2, R2>> }
+  ): Effect<A | A2, E | E2, R | R2>
+} = core.timeoutOrElse
+
+/**
+ * Returns an effect that is delayed from this effect by the specified
+ * `Duration`.
+ *
+ * @since 2.0.0
+ * @category delays & timeouts
+ */
+export const delay: {
+  (millis: number): <A, E, R>(self: Effect<A, E, R>) => Effect<A, E, R>
+  <A, E, R>(self: Effect<A, E, R>, millis: number): Effect<A, E, R>
+} = core.delay
+
+/**
+ * Returns an effect that suspends for the specified duration. This method is
+ * asynchronous, and does not actually block the fiber executing the effect.
+ *
+ * @since 2.0.0
+ * @category delays & timeouts
+ */
+export const sleep: (millis: number) => Effect<void> = core.sleep
+
+// -----------------------------------------------------------------------------
+// Racing
+// -----------------------------------------------------------------------------
+
+/**
+ * Races multiple effects and returns the first successful result.
+ *
+ * **Details**
+ *
+ * This function runs multiple effects concurrently and returns the result of
+ * the first one to succeed. If one effect succeeds, the others will be
+ * interrupted.
+ *
+ * If none of the effects succeed, the function will fail with the last error
+ * encountered.
+ *
+ * **When to Use**
+ *
+ * This is useful when you want to race multiple effects, but only care about
+ * the first one to succeed. It is commonly used in cases like timeouts,
+ * retries, or when you want to optimize for the faster response without
+ * worrying about the other effects.
+ *
+ * @see {@link race} for a version that handles only two effects.
+ *
+ * @example
+ * ```ts
+ * // Title: All Tasks Succeed
+ * import { Effect, Console } from "effect"
+ *
+ * const task1 = Effect.succeed("task1").pipe(
+ *   Effect.delay("100 millis"),
+ *   Effect.tap(Console.log("task1 done")),
+ *   Effect.onInterrupt(() => Console.log("task1 interrupted"))
+ * )
+ * const task2 = Effect.succeed("task2").pipe(
+ *   Effect.delay("200 millis"),
+ *   Effect.tap(Console.log("task2 done")),
+ *   Effect.onInterrupt(() => Console.log("task2 interrupted"))
+ * )
+ *
+ * const task3 = Effect.succeed("task3").pipe(
+ *   Effect.delay("150 millis"),
+ *   Effect.tap(Console.log("task3 done")),
+ *   Effect.onInterrupt(() => Console.log("task3 interrupted"))
+ * )
+ *
+ * const program = Effect.raceAll([task1, task2, task3])
+ *
+ * Effect.runFork(program)
+ * // Output:
+ * // task1 done
+ * // task2 interrupted
+ * // task3 interrupted
+ * ```
+ *
+ * @example
+ * ```ts
+ * // Title: One Task Fails, Two Tasks Succeed
+ * import { Effect, Console } from "effect"
+ *
+ * const task1 = Effect.fail("task1").pipe(
+ *   Effect.delay("100 millis"),
+ *   Effect.tap(Console.log("task1 done")),
+ *   Effect.onInterrupt(() => Console.log("task1 interrupted"))
+ * )
+ * const task2 = Effect.succeed("task2").pipe(
+ *   Effect.delay("200 millis"),
+ *   Effect.tap(Console.log("task2 done")),
+ *   Effect.onInterrupt(() => Console.log("task2 interrupted"))
+ * )
+ *
+ * const task3 = Effect.succeed("task3").pipe(
+ *   Effect.delay("150 millis"),
+ *   Effect.tap(Console.log("task3 done")),
+ *   Effect.onInterrupt(() => Console.log("task3 interrupted"))
+ * )
+ *
+ * const program = Effect.raceAll([task1, task2, task3])
+ *
+ * Effect.runFork(program)
+ * // Output:
+ * // task3 done
+ * // task2 interrupted
+ * ```
+ *
+ * @example
+ * ```ts
+ * // Title: All Tasks Fail
+ * import { Effect, Console } from "effect"
+ *
+ * const task1 = Effect.fail("task1").pipe(
+ *   Effect.delay("100 millis"),
+ *   Effect.tap(Console.log("task1 done")),
+ *   Effect.onInterrupt(() => Console.log("task1 interrupted"))
+ * )
+ * const task2 = Effect.fail("task2").pipe(
+ *   Effect.delay("200 millis"),
+ *   Effect.tap(Console.log("task2 done")),
+ *   Effect.onInterrupt(() => Console.log("task2 interrupted"))
+ * )
+ *
+ * const task3 = Effect.fail("task3").pipe(
+ *   Effect.delay("150 millis"),
+ *   Effect.tap(Console.log("task3 done")),
+ *   Effect.onInterrupt(() => Console.log("task3 interrupted"))
+ * )
+ *
+ * const program = Effect.raceAll([task1, task2, task3])
+ *
+ * Effect.runPromiseExit(program).then(console.log)
+ * // Output:
+ * // {
+ * //   _id: 'Exit',
+ * //   _tag: 'Failure',
+ * //   cause: { _id: 'Cause', _tag: 'Fail', failure: 'task2' }
+ * // }
+ * ```
+ *
+ * @since 2.0.0
+ * @category Racing
+ */
+export const raceAll: <Eff extends Effect<any, any, any>>(
+  all: Iterable<Eff>
+) => Effect<Effect.Success<Eff>, Effect.Error<Eff>, Effect.Context<Eff>> = core.raceAll
+
+/**
+ * @since 4.0.0
+ * @category Racing
+ */
+export const raceAllFirst: <Eff extends Effect<any, any, any>>(
+  all: Iterable<Eff>
+) => Effect<Effect.Success<Eff>, Effect.Error<Eff>, Effect.Context<Eff>> = core.raceAllFirst
+
+// -----------------------------------------------------------------------------
+// Filtering
+// -----------------------------------------------------------------------------
+
+/**
+ * Filters an iterable using the specified effectful predicate.
+ *
+ * **Details**
+ *
+ * This function filters a collection (an iterable) by applying an effectful
+ * predicate.
+ *
+ * The predicate is a function that takes an element and its index, and it
+ * returns an effect that evaluates to a boolean.
+ *
+ * The function processes each element in the collection and keeps only those
+ * that satisfy the condition defined by the predicate.
+ *
+ * **Options**
+ *
+ * You can also adjust the behavior with options such as concurrency, batching,
+ * or whether to negate the condition.
+ *
+ * **When to Use**
+ *
+ * This function allows you to selectively keep or remove elements based on a
+ * condition that may involve asynchronous or side-effect-causing operations.
+ *
+ * @example
+ * ```ts
+ * import { Effect } from "effect"
+ *
+ * const numbers = [1, 2, 3, 4, 5]
+ * const predicate = (n: number, i: number) => Effect.succeed(n % 2 === 0)
+ *
+ * const program = Effect.gen(function*() {
+ *   const result = yield* Effect.filter(numbers, predicate)
+ *   console.log(result)
+ * })
+ *
+ * Effect.runFork(program)
+ * // Output: [2, 4]
+ * ```
+ *
+ * @since 2.0.0
+ * @category Filtering
+ */
+export const filter: <A, E, R>(
+  iterable: Iterable<A>,
+  f: (a: NoInfer<A>) => Effect<boolean, E, R>,
+  options?: { readonly concurrency?: Concurrency | undefined; readonly negate?: boolean | undefined }
+) => Effect<Array<A>, E, R> = core.filter
 
 // -----------------------------------------------------------------------------
 // Pattern matching
@@ -2315,6 +3104,117 @@ export const provideContext: {
   ): Effect<A, E, Exclude<R, XR>>
 } = core.provideContext
 
+/**
+ * @since 4.0.0
+ * @category Environment
+ */
+export const service: {
+  <I, S>(tag: Reference<I, S>): Effect<S>
+  <I, S>(tag: Tag<I, S>): Effect<S, never, I>
+} = core.service
+
+/**
+ * @since 2.0.0
+ * @category Context
+ */
+export const serviceOption: <I, S>(tag: Tag<I, S>) => Effect<Option<S>> = core.serviceOption
+
+/**
+ * Updates the service with the required service entry.
+ *
+ * @since 2.0.0
+ * @category Context
+ */
+export const updateService: {
+  <I, A>(tag: Reference<I, A>, f: (value: A) => A): <XA, E, R>(self: Effect<XA, E, R>) => Effect<XA, E, R>
+  <I, A>(tag: Tag<I, A>, f: (value: A) => A): <XA, E, R>(self: Effect<XA, E, R>) => Effect<XA, E, R | I>
+  <XA, E, R, I, A>(self: Effect<XA, E, R>, tag: Reference<I, A>, f: (value: A) => A): Effect<XA, E, R>
+  <XA, E, R, I, A>(self: Effect<XA, E, R>, tag: Tag<I, A>, f: (value: A) => A): Effect<XA, E, R | I>
+} = core.updateService
+
+/**
+ * The `provideService` function is used to provide an actual
+ * implementation for a service in the context of an effect.
+ *
+ * This function allows you to associate a service with its implementation so
+ * that it can be used in your program. You define the service (e.g., a random
+ * number generator), and then you use `provideService` to link that
+ * service to its implementation. Once the implementation is provided, the
+ * effect can be run successfully without further requirements.
+ *
+ * @see {@link provide} for providing multiple layers to an effect.
+ *
+ * @example
+ * ```ts
+ * import { Effect, Context } from "effect"
+ *
+ * // Declaring a tag for a service that generates random numbers
+ * class Random extends Context.Tag("MyRandomService")<
+ *   Random,
+ *   { readonly next: Effect.Effect<number> }
+ * >() {}
+ *
+ * // Using the service
+ * const program = Effect.gen(function* () {
+ *   const random = yield* Random
+ *   const randomNumber = yield* random.next
+ *   console.log(`random number: ${randomNumber}`)
+ * })
+ *
+ * // Providing the implementation
+ * //
+ * //      ┌─── Effect<void, never, never>
+ * //      ▼
+ * const runnable = Effect.provideService(program, Random, {
+ *   next: Effect.sync(() => Math.random())
+ * })
+ *
+ * // Run successfully
+ * Effect.runPromise(runnable)
+ * // Example Output:
+ * // random number: 0.8241872233134417
+ * ```
+ *
+ * @since 2.0.0
+ * @category Context
+ */
+export const provideService: {
+  <I, S>(tag: Tag<I, S>, service: S): <A, E, R>(self: Effect<A, E, R>) => Effect<A, E, Exclude<R, I>>
+  <A, E, R, I, S>(self: Effect<A, E, R>, tag: Tag<I, S>, service: S): Effect<A, E, Exclude<R, I>>
+} = core.provideService
+
+/**
+ * Provides the effect with the single service it requires. If the effect
+ * requires more than one service use `provide` instead.
+ *
+ * @since 2.0.0
+ * @category Context
+ */
+export const provideServiceEffect: {
+  <I, S, E2, R2>(
+    tag: Tag<I, S>,
+    acquire: Effect<S, E2, R2>
+  ): <A, E, R>(self: Effect<A, E, R>) => Effect<A, E | E2, Exclude<R, I> | R2>
+  <A, E, R, I, S, E2, R2>(
+    self: Effect<A, E, R>,
+    tag: Tag<I, S>,
+    acquire: Effect<S, E2, R2>
+  ): Effect<A, E | E2, Exclude<R, I> | R2>
+} = core.provideServiceEffect
+
+// -----------------------------------------------------------------------------
+// References
+// -----------------------------------------------------------------------------
+
+/**
+ * @since 2.0.0
+ * @category References
+ */
+export const withConcurrency: {
+  (concurrency: number | "unbounded"): <A, E, R>(self: Effect<A, E, R>) => Effect<A, E, R>
+  <A, E, R>(self: Effect<A, E, R>, concurrency: number | "unbounded"): Effect<A, E, R>
+} = core.withConcurrency
+
 // -----------------------------------------------------------------------------
 // Resource management & finalization
 // -----------------------------------------------------------------------------
@@ -2613,6 +3513,20 @@ export const forever: <
 >(...args: Args) => [Args[0]] extends [Effect<infer _A, infer _E, infer _R>] ? Effect<never, _E, _R>
   : <A, E, R>(self: Effect<A, E, R>) => Effect<never, E, R> = core.forever
 
+/**
+ * @since 2.0.0
+ * @category repetition / recursion
+ */
+export const repeat: {
+  <A, E>(
+    options?: { while?: Predicate<A> | undefined; times?: number | undefined } | undefined
+  ): <R>(self: Effect<A, E, R>) => Effect<A, E, R>
+  <A, E, R>(
+    self: Effect<A, E, R>,
+    options?: { while?: Predicate<A> | undefined; times?: number | undefined } | undefined
+  ): Effect<A, E, R>
+} = core.repeat
+
 // -----------------------------------------------------------------------------
 // Supervision & Fiber's
 // -----------------------------------------------------------------------------
@@ -2668,6 +3582,16 @@ export const forkIn: {
 export const forkScoped: <A, E, R>(
   self: Effect<A, E, R>
 ) => Effect<Fiber<A, E>, never, Scope | R> = core.forkScoped
+
+/**
+ * Forks the effect into a new fiber attached to the global scope. Because the
+ * new fiber is attached to the global scope, when the fiber executing the
+ * returned effect terminates, the forked fiber will continue running.
+ *
+ * @since 2.0.0
+ * @category supervision & fibers
+ */
+export const forkDaemon: <A, E, R>(self: Effect<A, E, R>) => Effect<Fiber<A, E>, never, R> = core.forkDaemon
 
 // -----------------------------------------------------------------------------
 // Running Effects

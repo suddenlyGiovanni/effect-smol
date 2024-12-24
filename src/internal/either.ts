@@ -8,6 +8,7 @@ import { dual } from "../Function.js"
 import * as Hash from "../Hash.js"
 import { format, NodeInspectSymbol, toJSON } from "../Inspectable.js"
 import type { Option } from "../Option.js"
+import { pipeArguments } from "../Pipeable.js"
 import { hasProperty } from "../Predicate.js"
 import * as option from "./option.js"
 
@@ -27,6 +28,9 @@ const CommonProto = {
   },
   toString<L, R>(this: Either.Left<L, R>) {
     return format(this.toJSON())
+  },
+  pipe() {
+    return pipeArguments(this, arguments)
   }
 }
 

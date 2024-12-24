@@ -221,7 +221,6 @@ class Die extends FailureBase<"Die"> implements Cause.Die {
 /** @internal */
 export const causeDie = (defect: unknown): Cause.Cause<never> => new CauseImpl([new Die(defect)])
 
-// TODO: add fiber ids?
 class Interrupt extends FailureBase<"Interrupt"> implements Cause.Interrupt {
   constructor(
     readonly fiberId: Option.Option<number>,
@@ -231,7 +230,8 @@ class Interrupt extends FailureBase<"Interrupt"> implements Cause.Interrupt {
   }
   toJSON(): unknown {
     return {
-      _tag: "Interrupt"
+      _tag: "Interrupt",
+      fiberId: this.fiberId
     }
   }
   annotate<I, S>(tag: Context.Tag<I, S>, value: S): this {
@@ -280,7 +280,7 @@ export const failureIsDie = <E>(self: Cause.Failure<E>): self is Cause.Die => is
 export const causeHasInterrupt = <E>(self: Cause.Cause<E>): boolean => self.failures.some(failureIsInterrupt)
 
 /** @internal */
-export const causeIsOnlyInterrupt = <E>(self: Cause.Cause<E>): boolean => self.failures.every(failureIsInterrupt)
+export const causeIsInterruptedOnly = <E>(self: Cause.Cause<E>): boolean => self.failures.every(failureIsInterrupt)
 
 /** @internal */
 export const failureIsInterrupt = <E>(
@@ -1340,6 +1340,16 @@ export const exitIsFailure = <A, E>(
 export const exitHasInterrupt = <A, E>(
   self: Exit.Exit<A, E>
 ): self is Exit.Failure<A, E> => self._tag === "Failure" && causeHasInterrupt(self.cause)
+
+/** @internal */
+export const exitHasDie = <A, E>(
+  self: Exit.Exit<A, E>
+): self is Exit.Failure<A, E> => self._tag === "Failure" && causeHasDie(self.cause)
+
+/** @internal */
+export const exitHasFail = <A, E>(
+  self: Exit.Exit<A, E>
+): self is Exit.Failure<A, E> => self._tag === "Failure" && causeHasFail(self.cause)
 
 /** @internal */
 export const exitVoid: Exit.Exit<void> = exitSucceed(void 0)

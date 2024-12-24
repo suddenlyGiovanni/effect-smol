@@ -112,6 +112,24 @@ export const isSuccess: <A, E>(self: Exit<A, E>) => self is Success<A, E> = core
 export const isFailure: <A, E>(self: Exit<A, E>) => self is Failure<A, E> = core.exitIsFailure
 
 /**
+ * @since 4.0.0
+ * @category guards
+ */
+export const hasFail: <A, E>(self: Exit<A, E>) => self is Failure<A, E> = core.exitHasFail
+
+/**
+ * @since 4.0.0
+ * @category guards
+ */
+export const hasDie: <A, E>(self: Exit<A, E>) => self is Failure<A, E> = core.exitHasDie
+
+/**
+ * @since 4.0.0
+ * @category guards
+ */
+export const hasInterrupt: <A, E>(self: Exit<A, E>) => self is Failure<A, E> = core.exitHasInterrupt
+
+/**
  * @since 2.0.0
  * @category pattern matching
  */

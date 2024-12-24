@@ -5,6 +5,7 @@ import * as Equal from "../Equal.js"
 import * as Hash from "../Hash.js"
 import { format, NodeInspectSymbol, toJSON } from "../Inspectable.js"
 import type * as Option from "../Option.js"
+import { pipeArguments } from "../Pipeable.js"
 import { hasProperty } from "../Predicate.js"
 
 const TypeId: Option.TypeId = Symbol.for("effect/Option") as Option.TypeId
@@ -18,6 +19,9 @@ const CommonProto = {
   },
   toString<A>(this: Option.Option<A>) {
     return format(this.toJSON())
+  },
+  pipe() {
+    return pipeArguments(this, arguments)
   }
 }
 

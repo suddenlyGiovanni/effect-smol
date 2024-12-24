@@ -1,3 +1,7 @@
+/**
+ * @since 2.0.0
+ */
+/* eslint-disable import-x/export */
 import type * as Context from "./Context.js"
 import type { Effect } from "./Effect.js"
 import type { Exit } from "./Exit.js"
@@ -63,7 +67,7 @@ export const unsafeMake: () => Scope.Closeable = core.scopeUnsafeMake
  * @since 4.0.0
  * @category combinators
  */
-export const provideScope: {
+export const provide: {
   (
     scope: Scope
   ): <A, E, R>(self: Effect<A, E, R>) => Effect<A, E, Exclude<R, Scope>>
