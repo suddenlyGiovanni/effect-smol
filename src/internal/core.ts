@@ -1134,7 +1134,14 @@ export const sandbox = <A, E, R>(
 
 /** @internal */
 export const raceAll = <Eff extends Effect.Effect<any, any, any>>(
-  all: Iterable<Eff>
+  all: Iterable<Eff>,
+  options?: {
+    readonly onWinner?: (options: {
+      readonly fiber: Fiber.Fiber<any, any>
+      readonly index: number
+      readonly parentFiber: Fiber.Fiber<any, any>
+    }) => void
+  }
 ): Effect.Effect<
   Effect.Effect.Success<Eff>,
   Effect.Effect.Error<Eff>,
@@ -1147,22 +1154,27 @@ export const raceAll = <Eff extends Effect.Effect<any, any, any>>(
       let doneCount = 0
       let done = false
       const fibers = new Set<Fiber.Fiber<any, any>>()
-      const causes: Array<Cause.Cause<any>> = []
-      const onExit = (exit: Exit.Exit<any, any>) => {
+      const failures: Array<Cause.Failure<any>> = []
+      const onExit = (exit: Exit.Exit<any, any>, fiber: Fiber.Fiber<any, any>, i: number) => {
         doneCount++
         if (exit._tag === "Failure") {
-          causes.push(exit.cause)
+          // eslint-disable-next-line no-restricted-syntax
+          failures.push(...exit.cause.failures)
           if (doneCount >= len) {
-            resume(failCause(causes[0]))
+            resume(failCause(causeFromFailures(failures)))
           }
           return
         }
+        const isWinner = !done
         done = true
         resume(
           fibers.size === 0
             ? exit
             : flatMap(uninterruptible(fiberInterruptAll(fibers)), () => exit)
         )
+        if (isWinner && options?.onWinner) {
+          options.onWinner({ fiber, index: i, parentFiber: parent })
+        }
       }
 
       for (let i = 0; i < len; i++) {
@@ -1171,7 +1183,7 @@ export const raceAll = <Eff extends Effect.Effect<any, any, any>>(
         fibers.add(fiber)
         fiber.addObserver((exit) => {
           fibers.delete(fiber)
-          onExit(exit)
+          onExit(exit, fiber, i)
         })
       }
 
@@ -1181,7 +1193,14 @@ export const raceAll = <Eff extends Effect.Effect<any, any, any>>(
 
 /** @internal */
 export const raceAllFirst = <Eff extends Effect.Effect<any, any, any>>(
-  all: Iterable<Eff>
+  all: Iterable<Eff>,
+  options?: {
+    readonly onWinner?: (options: {
+      readonly fiber: Fiber.Fiber<any, any>
+      readonly index: number
+      readonly parentFiber: Fiber.Fiber<any, any>
+    }) => void
+  }
 ): Effect.Effect<
   Effect.Effect.Success<Eff>,
   Effect.Effect.Error<Eff>,
@@ -1200,13 +1219,19 @@ export const raceAllFirst = <Eff extends Effect.Effect<any, any, any>>(
         )
       }
 
+      let i = 0
       for (const effect of all) {
         if (done) break
+        const index = i++
         const fiber = unsafeFork(parent, interruptible(effect), true, true)
         fibers.add(fiber)
         fiber.addObserver((exit) => {
           fibers.delete(fiber)
+          const isWinner = !done
           onExit(exit)
+          if (isWinner && options?.onWinner) {
+            options.onWinner({ fiber, index, parentFiber: parent })
+          }
         })
       }
 
@@ -1217,39 +1242,81 @@ export const raceAllFirst = <Eff extends Effect.Effect<any, any, any>>(
 /** @internal */
 export const race: {
   <A2, E2, R2>(
-    that: Effect.Effect<A2, E2, R2>
+    that: Effect.Effect<A2, E2, R2>,
+    options?: {
+      readonly onWinner?: (options: {
+        readonly fiber: Fiber.Fiber<any, any>
+        readonly index: number
+        readonly parentFiber: Fiber.Fiber<any, any>
+      }) => void
+    }
   ): <A, E, R>(
     self: Effect.Effect<A, E, R>
   ) => Effect.Effect<A | A2, E | E2, R | R2>
   <A, E, R, A2, E2, R2>(
     self: Effect.Effect<A, E, R>,
-    that: Effect.Effect<A2, E2, R2>
+    that: Effect.Effect<A2, E2, R2>,
+    options?: {
+      readonly onWinner?: (options: {
+        readonly fiber: Fiber.Fiber<any, any>
+        readonly index: number
+        readonly parentFiber: Fiber.Fiber<any, any>
+      }) => void
+    }
   ): Effect.Effect<A | A2, E | E2, R | R2>
 } = dual(
-  2,
+  (args) => isEffect(args[1]),
   <A, E, R, A2, E2, R2>(
     self: Effect.Effect<A, E, R>,
-    that: Effect.Effect<A2, E2, R2>
-  ): Effect.Effect<A | A2, E | E2, R | R2> => raceAll([self, that])
+    that: Effect.Effect<A2, E2, R2>,
+    options?: {
+      readonly onWinner?: (options: {
+        readonly fiber: Fiber.Fiber<any, any>
+        readonly index: number
+        readonly parentFiber: Fiber.Fiber<any, any>
+      }) => void
+    }
+  ): Effect.Effect<A | A2, E | E2, R | R2> => raceAll([self, that], options)
 )
 
 /** @internal */
 export const raceFirst: {
   <A2, E2, R2>(
-    that: Effect.Effect<A2, E2, R2>
+    that: Effect.Effect<A2, E2, R2>,
+    options?: {
+      readonly onWinner?: (options: {
+        readonly fiber: Fiber.Fiber<any, any>
+        readonly index: number
+        readonly parentFiber: Fiber.Fiber<any, any>
+      }) => void
+    }
   ): <A, E, R>(
     self: Effect.Effect<A, E, R>
   ) => Effect.Effect<A | A2, E | E2, R | R2>
   <A, E, R, A2, E2, R2>(
     self: Effect.Effect<A, E, R>,
-    that: Effect.Effect<A2, E2, R2>
+    that: Effect.Effect<A2, E2, R2>,
+    options?: {
+      readonly onWinner?: (options: {
+        readonly fiber: Fiber.Fiber<any, any>
+        readonly index: number
+        readonly parentFiber: Fiber.Fiber<any, any>
+      }) => void
+    }
   ): Effect.Effect<A | A2, E | E2, R | R2>
 } = dual(
-  2,
+  (args) => isEffect(args[1]),
   <A, E, R, A2, E2, R2>(
     self: Effect.Effect<A, E, R>,
-    that: Effect.Effect<A2, E2, R2>
-  ): Effect.Effect<A | A2, E | E2, R | R2> => raceAllFirst([self, that])
+    that: Effect.Effect<A2, E2, R2>,
+    options?: {
+      readonly onWinner?: (options: {
+        readonly fiber: Fiber.Fiber<any, any>
+        readonly index: number
+        readonly parentFiber: Fiber.Fiber<any, any>
+      }) => void
+    }
+  ): Effect.Effect<A | A2, E | E2, R | R2> => raceAllFirst([self, that], options)
 )
 
 /** @internal */
@@ -2519,7 +2586,13 @@ export const timeoutOrElse: {
   ): Effect.Effect<A | A2, E | E2, R | R2> =>
     raceFirst(
       self,
-      andThen(interruptible(sleep(options.duration)), options.onTimeout)
+      andThen(interruptible(sleep(options.duration)), options.onTimeout),
+      {
+        onWinner: ({ fiber, index, parentFiber }) => {
+          if (index !== 0) return
+          ;(parentFiber as FiberImpl).context = fiber.context
+        }
+      }
     )
 )
 

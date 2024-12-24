@@ -2742,7 +2742,12 @@ export const sleep: (millis: number) => Effect<void> = core.sleep
  * @category Racing
  */
 export const raceAll: <Eff extends Effect<any, any, any>>(
-  all: Iterable<Eff>
+  all: Iterable<Eff>,
+  options?: {
+    readonly onWinner?: (
+      options: { readonly fiber: Fiber<any, any>; readonly index: number; readonly parentFiber: Fiber<any, any> }
+    ) => void
+  }
 ) => Effect<Effect.Success<Eff>, Effect.Error<Eff>, Effect.Context<Eff>> = core.raceAll
 
 /**
@@ -2750,7 +2755,12 @@ export const raceAll: <Eff extends Effect<any, any, any>>(
  * @category Racing
  */
 export const raceAllFirst: <Eff extends Effect<any, any, any>>(
-  all: Iterable<Eff>
+  all: Iterable<Eff>,
+  options?: {
+    readonly onWinner?: (
+      options: { readonly fiber: Fiber<any, any>; readonly index: number; readonly parentFiber: Fiber<any, any> }
+    ) => void
+  }
 ) => Effect<Effect.Success<Eff>, Effect.Error<Eff>, Effect.Context<Eff>> = core.raceAllFirst
 
 // -----------------------------------------------------------------------------
