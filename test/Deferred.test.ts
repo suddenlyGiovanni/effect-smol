@@ -2,19 +2,19 @@ import * as Cause from "effect/Cause"
 import * as Deferred from "effect/Deferred"
 import * as Effect from "effect/Effect"
 import * as Exit from "effect/Exit"
-import { assert, describe, it } from "vitest"
+import { assert, describe, it } from "./utils/extend.js"
 
 describe("Deferred", () => {
   describe("success", () => {
-    it("succeed - should propagate the value", () =>
+    it.effect("succeed - should propagate the value", () =>
       Effect.gen(function*() {
         const deferred = yield* Deferred.make<number>()
         assert.isTrue(yield* Deferred.succeed(deferred, 1))
         assert.isFalse(yield* Deferred.succeed(deferred, 1))
         assert.strictEqual(yield* Deferred.await(deferred), 1)
-      }).pipe(Effect.runPromise))
+      }))
 
-    it("complete - should memoize the result of the provided effect", () =>
+    it.effect("complete - should memoize the result of the provided effect", () =>
       Effect.gen(function*() {
         let value = 0
         const complete = Effect.sync(() => {
@@ -28,9 +28,9 @@ describe("Deferred", () => {
         assert.strictEqual(yield* Deferred.await(deferred), 1)
         assert.strictEqual(yield* Deferred.await(deferred), 1)
         assert.strictEqual(value, 1)
-      }).pipe(Effect.runPromise))
+      }))
 
-    it("completeWith - should memoize the provided effect", () =>
+    it.effect("completeWith - should not memoize the provided effect", () =>
       Effect.gen(function*() {
         let value = 0
         const complete = Effect.sync(() => {
@@ -48,20 +48,20 @@ describe("Deferred", () => {
         assert.strictEqual(yield* Deferred.await(deferred), 1)
         assert.strictEqual(yield* Deferred.await(deferred), 2)
         assert.strictEqual(value, 2)
-      }).pipe(Effect.runPromise))
+      }))
   })
 
   describe("failure", () => {
-    it("fail - should propagate the failure", () =>
+    it.effect("fail - should propagate the failure", () =>
       Effect.gen(function*() {
         const deferred = yield* Deferred.make<number, string>()
         assert.isTrue(yield* Deferred.fail(deferred, "boom"))
         assert.isFalse(yield* Deferred.succeed(deferred, 1))
         const result = yield* Effect.exit(Deferred.await(deferred))
         assert.deepStrictEqual(result, Exit.fail("boom"))
-      }).pipe(Effect.runPromise))
+      }))
 
-    it("complete - should memoize the failure of the provided effect", () =>
+    it.effect("complete - should memoize the failure of the provided effect", () =>
       Effect.gen(function*() {
         const deferred = yield* Deferred.make<number, string>()
         assert.isTrue(yield* Deferred.complete(deferred, Effect.fail("boom")))
@@ -70,9 +70,9 @@ describe("Deferred", () => {
         const result2 = yield* Effect.exit(Deferred.await(deferred))
         assert.deepStrictEqual(result1, Exit.fail("boom"))
         assert.deepStrictEqual(result2, Exit.fail("boom"))
-      }).pipe(Effect.runPromise))
+      }))
 
-    it("completeWith - should memoize the provided effect", () =>
+    it.effect("completeWith - should memoize the provided effect", () =>
       Effect.gen(function*() {
         let i = 0
         const failures = ["boom", "boom2"]
@@ -85,33 +85,33 @@ describe("Deferred", () => {
         const result2 = yield* Effect.exit(Deferred.await(deferred))
         assert.deepStrictEqual(result, Exit.fail("boom"))
         assert.deepStrictEqual(result2, Exit.fail("boom2"))
-      }).pipe(Effect.runPromise))
+      }))
   })
 
   describe("interruption", () => {
-    it("interrupt - should propagate the interruption", () =>
+    it.effect("interrupt - should propagate the interruption", () =>
       Effect.gen(function*() {
         const deferred = yield* Deferred.make<number>()
         assert.isTrue(yield* Deferred.interruptWith(deferred, -1))
         assert.isFalse(yield* Deferred.interrupt(deferred))
         const result = yield* Effect.exit(Deferred.await(deferred))
         assert.deepStrictEqual(result, Exit.failCause(Cause.interrupt(-1)))
-      }).pipe(Effect.runPromise))
+      }))
   })
 
   describe("done", () => {
-    it("isDone - should return true when suceeded", () =>
+    it.effect("isDone - should return true when suceeded", () =>
       Effect.gen(function*() {
         const deferred = yield* Deferred.make<number>()
         yield* Deferred.succeed(deferred, 1)
         assert.isTrue(yield* Deferred.isDone(deferred))
-      }).pipe(Effect.runPromise))
+      }))
 
-    it("isDone - should return true when failed", () =>
+    it.effect("isDone - should return true when failed", () =>
       Effect.gen(function*() {
         const deferred = yield* Deferred.make<number, string>()
         yield* Deferred.fail(deferred, "boom")
         assert.isTrue(yield* Deferred.isDone(deferred))
-      }).pipe(Effect.runPromise))
+      }))
   })
 })

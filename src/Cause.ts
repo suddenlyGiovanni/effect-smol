@@ -132,6 +132,15 @@ export const interrupt: (fiberId?: number | undefined) => Cause<never> = core.ca
 export const isOnlyInterrupt: <E>(self: Cause<E>) => boolean = core.causeIsOnlyInterrupt
 
 /**
+ * Squashes a `Cause` down to a single defect, chosen to be the "most important"
+ * defect.
+ *
+ * @since 2.0.0
+ * @category destructors
+ */
+export const squash: <E>(self: Cause<E>) => unknown = core.causeSquash
+
+/**
  * @since 2.0.0
  * @category errors
  */

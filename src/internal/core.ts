@@ -2274,8 +2274,8 @@ export const retry: {
   <A, E>(
     options?:
       | {
-        while?: Predicate<E> | undefined
-        times?: number | undefined
+        readonly while?: Predicate<E> | undefined
+        readonly times?: number | undefined
         // schedule?: EffectSchedule | undefined
       }
       | undefined
@@ -2284,8 +2284,8 @@ export const retry: {
     self: Effect.Effect<A, E, R>,
     options?:
       | {
-        while?: Predicate<E> | undefined
-        times?: number | undefined
+        readonly while?: Predicate<E> | undefined
+        readonly times?: number | undefined
         // schedule?: EffectSchedule | undefined
       }
       | undefined
@@ -2296,8 +2296,8 @@ export const retry: {
     self: Effect.Effect<A, E, R>,
     options?:
       | {
-        while?: Predicate<E> | undefined
-        times?: number | undefined
+        readonly while?: Predicate<E> | undefined
+        readonly times?: number | undefined
         // schedule?: EffectSchedule | undefined
       }
       | undefined
@@ -2519,11 +2519,11 @@ export const timeout: {
     millis: number
   ): <A, E, R>(
     self: Effect.Effect<A, E, R>
-  ) => Effect.Effect<A, E | TimeoutError, R>
+  ) => Effect.Effect<A, E | Cause.TimeoutError, R>
   <A, E, R>(
     self: Effect.Effect<A, E, R>,
     millis: number
-  ): Effect.Effect<A, E | TimeoutError, R>
+  ): Effect.Effect<A, E | Cause.TimeoutError, R>
 } = dual(
   2,
   <A, E, R>(

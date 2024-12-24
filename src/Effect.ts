@@ -2,7 +2,7 @@
  * @since 2.0.0
  */
 import type * as Arr from "./Array.js"
-import type { Cause, Failure } from "./Cause.js"
+import type { Cause, Failure, TimeoutError } from "./Cause.js"
 import type { Context } from "./Context.js"
 import type { Exit } from "./Exit.js"
 import type { Fiber } from "./Fiber.js"
@@ -1361,6 +1361,17 @@ export const as: {
   <A, E, R, B>(self: Effect<A, E, R>, value: B): Effect<B, E, R>
 } = core.as
 
+/**
+ * This function maps the success value of an `Effect` value to `void`. If the
+ * original `Effect` value succeeds, the returned `Effect` value will also
+ * succeed. If the original `Effect` value fails, the returned `Effect` value
+ * will fail with the same error.
+ *
+ * @since 2.0.0
+ * @category Mapping
+ */
+export const asVoid: <A, E, R>(self: Effect<A, E, R>) => Effect<void, E, R> = core.asVoid
+
 // -----------------------------------------------------------------------------
 // Error handling
 // -----------------------------------------------------------------------------
@@ -1690,6 +1701,46 @@ export const mapError: {
 } = core.mapError
 
 /**
+ * Converts an effect's failure into a fiber termination, removing the error from the effect's type.
+ *
+ * **When to Use*
+ *
+ * Use `orDie` when failures should be treated as unrecoverable defects and no error handling is required.
+ *
+ * **Details**
+ *
+ * The `orDie` function is used when you encounter errors that you do not want to handle or recover from.
+ * It removes the error type from the effect and ensures that any failure will terminate the fiber.
+ * This is useful for propagating failures as defects, signaling that they should not be handled within the effect.
+ *
+ * @see {@link orDieWith} if you need to customize the error.
+ *
+ * @example
+ * ```ts
+ * // Title: Propagating an Error as a Defect
+ * import { Effect } from "effect"
+ *
+ * const divide = (a: number, b: number) =>
+ *   b === 0
+ *     ? Effect.fail(new Error("Cannot divide by zero"))
+ *     : Effect.succeed(a / b)
+ *
+ * //      ┌─── Effect<number, never, never>
+ * //      ▼
+ * const program = Effect.orDie(divide(1, 0))
+ *
+ * Effect.runPromise(program).catch(console.error)
+ * // Output:
+ * // (FiberFailure) Error: Cannot divide by zero
+ * //   ...stack trace...
+ * ```
+ *
+ * @since 2.0.0
+ * @category Converting Failures to Defects
+ */
+export const orDie: <A, E, R>(self: Effect<A, E, R>) => Effect<A, never, R> = core.orDie
+
+/**
  * The `tapError` function executes an effectful operation to inspect the
  * failure of an effect without modifying it.
  *
@@ -1776,6 +1827,195 @@ export const tapCause: {
     f: (cause: Cause<E>) => Effect<X, E2, R2>
   ): Effect<A, E | E2, R | R2>
 } = core.tapCause
+
+/**
+ * Retries a failing effect based on a defined retry policy.
+ *
+ * **Details**
+ *
+ * The `Effect.retry` function takes an effect and a {@link Schedule} policy,
+ * and will automatically retry the effect if it fails, following the rules of
+ * the policy.
+ *
+ * If the effect ultimately succeeds, the result will be returned.
+ *
+ * If the maximum retries are exhausted and the effect still fails, the failure
+ * is propagated.
+ *
+ * **When to Use**
+ *
+ * This can be useful when dealing with intermittent failures, such as network
+ * issues or temporary resource unavailability. By defining a retry policy, you
+ * can control the number of retries, the delay between them, and when to stop
+ * retrying.
+ *
+ * @see {@link retryOrElse} for a version that allows you to run a fallback.
+ * @see {@link repeat} if your retry condition is based on successful outcomes rather than errors.
+ *
+ * @example
+ * ```ts
+ * // Title: Retrying with a Fixed Delay
+ * import { Effect, Schedule } from "effect"
+ *
+ * let count = 0
+ *
+ * // Simulates an effect with possible failures
+ * const task = Effect.async<string, Error>((resume) => {
+ *   if (count <= 2) {
+ *     count++
+ *     console.log("failure")
+ *     resume(Effect.fail(new Error()))
+ *   } else {
+ *     console.log("success")
+ *     resume(Effect.succeed("yay!"))
+ *   }
+ * })
+ *
+ * // Define a repetition policy using a fixed delay between retries
+ * const policy = Schedule.fixed("100 millis")
+ *
+ * const repeated = Effect.retry(task, policy)
+ *
+ * Effect.runPromise(repeated).then(console.log)
+ * // Output:
+ * // failure
+ * // failure
+ * // failure
+ * // success
+ * // yay!
+ * ```
+ *
+ * @example
+ * ```ts
+ * // Title: Retrying a Task up to 5 times
+ * import { Effect } from "effect"
+ *
+ * let count = 0
+ *
+ * // Simulates an effect with possible failures
+ * const task = Effect.async<string, Error>((resume) => {
+ *   if (count <= 2) {
+ *     count++
+ *     console.log("failure")
+ *     resume(Effect.fail(new Error()))
+ *   } else {
+ *     console.log("success")
+ *     resume(Effect.succeed("yay!"))
+ *   }
+ * })
+ *
+ * // Retry the task up to 5 times
+ * Effect.runPromise(Effect.retry(task, { times: 5 }))
+ * // Output:
+ * // failure
+ * // failure
+ * // failure
+ * // success
+ * ```
+ *
+ * @example
+ * ```ts
+ * // Title: Retrying Until a Specific Condition is Met
+ * import { Effect } from "effect"
+ *
+ * let count = 0
+ *
+ * // Define an effect that simulates varying error on each invocation
+ * const action = Effect.failSync(() => {
+ *   console.log(`Action called ${++count} time(s)`)
+ *   return `Error ${count}`
+ * })
+ *
+ * // Retry the action until a specific condition is met
+ * const program = Effect.retry(action, {
+ *   until: (err) => err === "Error 3"
+ * })
+ *
+ * Effect.runPromiseExit(program).then(console.log)
+ * // Output:
+ * // Action called 1 time(s)
+ * // Action called 2 time(s)
+ * // Action called 3 time(s)
+ * // {
+ * //   _id: 'Exit',
+ * //   _tag: 'Failure',
+ * //   cause: { _id: 'Cause', _tag: 'Fail', failure: 'Error 3' }
+ * // }
+ * ```
+ *
+ * @since 2.0.0
+ * @category Error handling
+ */
+export const retry: {
+  <A, E>(
+    options?: {
+      readonly while?: Predicate<E> | undefined
+      readonly times?: number | undefined
+    } | undefined
+  ): <R>(self: Effect<A, E, R>) => Effect<A, E, R>
+  <A, E, R>(
+    self: Effect<A, E, R>,
+    options?: {
+      readonly while?: Predicate<E> | undefined
+      readonly times?: number | undefined
+    } | undefined
+  ): Effect<A, E, R>
+} = core.retry
+
+// -----------------------------------------------------------------------------
+// Delays & timeouts
+// -----------------------------------------------------------------------------
+
+/**
+ * Adds a time limit to an effect, triggering a timeout if the effect exceeds
+ * the duration.
+ *
+ * The `timeout` function allows you to specify a time limit for an
+ * effect's execution. If the effect does not complete within the given time, a
+ * `TimeoutException` is raised. This can be useful for controlling how long
+ * your program waits for a task to finish, ensuring that it doesn't hang
+ * indefinitely if the task takes too long.
+ *
+ * @see {@link timeoutFail} for a version that raises a custom error.
+ * @see {@link timeoutFailCause} for a version that raises a custom defect.
+ * @see {@link timeoutTo} for a version that allows specifying both success and timeout handlers.
+ *
+ * @example
+ * ```ts
+ * import { Effect } from "effect"
+ *
+ * const task = Effect.gen(function* () {
+ *   console.log("Start processing...")
+ *   yield* Effect.sleep("2 seconds") // Simulates a delay in processing
+ *   console.log("Processing complete.")
+ *   return "Result"
+ * })
+ *
+ * // Output will show a TimeoutException as the task takes longer
+ * // than the specified timeout duration
+ * const timedEffect = task.pipe(Effect.timeout("1 second"))
+ *
+ * Effect.runPromiseExit(timedEffect).then(console.log)
+ * // Output:
+ * // Start processing...
+ * // {
+ * //   _id: 'Exit',
+ * //   _tag: 'Failure',
+ * //   cause: {
+ * //     _id: 'Cause',
+ * //     _tag: 'Fail',
+ * //     failure: { _tag: 'TimeoutException' }
+ * //   }
+ * // }
+ * ```
+ *
+ * @since 2.0.0
+ * @category delays & timeouts
+ */
+export const timeout: {
+  (millis: number): <A, E, R>(self: Effect<A, E, R>) => Effect<A, E | TimeoutError, R>
+  <A, E, R>(self: Effect<A, E, R>, millis: number): Effect<A, E | TimeoutError, R>
+} = core.timeout
 
 // -----------------------------------------------------------------------------
 // Pattern matching

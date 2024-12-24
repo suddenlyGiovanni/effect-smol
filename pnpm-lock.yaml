@@ -23,6 +23,9 @@ importers:
       '@types/node':
         specifier: ^22.10.1
         version: 22.10.2
+      '@vitest/expect':
+        specifier: ^2.1.8
+        version: 2.1.8
       eslint:
         specifier: ^9.17.0
         version: 9.17.0
