@@ -3,13 +3,14 @@
  */
 import * as Arr from "./Array.js"
 import * as Channel from "./Channel.js"
-import type * as Effect from "./Effect.js"
+import * as Effect from "./Effect.js"
 import type { LazyArg } from "./Function.js"
 import { dual, identity } from "./Function.js"
 import type { TypeLambda } from "./HKT.js"
 import type * as Mailbox from "./Mailbox.js"
 import { type Pipeable, pipeArguments } from "./Pipeable.js"
 import { hasProperty } from "./Predicate.js"
+import type * as Scope from "./Scope.js"
 import * as Sink from "./Sink.js"
 import type { Covariant } from "./Types.js"
 import type * as Unify from "./Unify.js"
@@ -146,6 +147,26 @@ export const fromChannel = <A, E, R>(
   self.channel = channel
   return self
 }
+
+/**
+ * Creates a stream from a `Channel`.
+ *
+ * @since 2.0.0
+ * @category constructors
+ */
+export const transformPull = <A, E, R, B, E2, EX, RX>(
+  self: Stream<A, E, R>,
+  f: (pull: Effect.Effect<ReadonlyArray<A>, E | Channel.Halt<void>>, scope: Scope.Scope) => Effect.Effect<
+    Effect.Effect<ReadonlyArray<B>, E2 | Channel.Halt<void>>,
+    EX,
+    RX
+  >
+): Stream<B, EX | Channel.Halt.ExcludeHalt<E2>, R | RX> =>
+  fromChannel(
+    Channel.fromTransform((_, scope) =>
+      Effect.flatMap(Channel.toPullScoped(toChannel(self), scope), (pull) => f(pull, scope))
+    )
+  )
 
 /**
  * Creates a channel from a `Stream`.
@@ -300,7 +321,7 @@ export const mapEffect: {
   } | undefined
 ): Stream<A2, E | E2, R | R2> =>
   toChannel(self).pipe(
-    Channel.flatMap(Channel.fromArray),
+    Channel.flattenIterable,
     Channel.mapEffect(f, options),
     Channel.map(Arr.of),
     fromChannel
@@ -338,10 +359,71 @@ export const flatMap: {
   } | undefined
 ): Stream<A2, E | E2, R | R2> =>
   toChannel(self).pipe(
-    Channel.flatMap(Channel.fromArray),
+    Channel.flattenIterable,
     Channel.flatMap((a) => toChannel(f(a)), options),
     fromChannel
   ))
+
+/**
+ * Takes the specified number of elements from this stream.
+ *
+ * @example
+ * ```ts
+ * import { Effect, Stream } from "effect"
+ *
+ * const stream = Stream.take(Stream.iterate(0, (n) => n + 1), 5)
+ *
+ * // Effect.runPromise(Stream.runCollect(stream)).then(console.log)
+ * // { _id: 'Chunk', values: [ 0, 1, 2, 3, 4 ] }
+ * ```
+ *
+ * @since 2.0.0
+ * @category utils
+ */
+export const take: {
+  (n: number): <A, E, R>(self: Stream<A, E, R>) => Stream<A, E, R>
+  <A, E, R>(self: Stream<A, E, R>, n: number): Stream<A, E, R>
+} = dual(
+  2,
+  <A, E, R>(self: Stream<A, E, R>, n: number): Stream<A, E, R> =>
+    transformPull(self, (pull, _scope) =>
+      Effect.sync(() => {
+        let taken = 0
+        return Effect.suspend(() => taken >= n ? Channel.haltVoid : pull).pipe(
+          Effect.map((chunk) => {
+            taken += chunk.length
+            return taken > n ? chunk.slice(0, n - taken) : chunk
+          })
+        )
+      }))
+)
+
+/**
+ * Drops the specified number of elements from this stream.
+ *
+ * @since 2.0.0
+ * @category utils
+ */
+export const drop: {
+  (n: number): <A, E, R>(self: Stream<A, E, R>) => Stream<A, E, R>
+  <A, E, R>(self: Stream<A, E, R>, n: number): Stream<A, E, R>
+} = dual(
+  2,
+  <A, E, R>(self: Stream<A, E, R>, n: number): Stream<A, E, R> =>
+    transformPull(self, (pull, _scope) =>
+      Effect.sync(() => {
+        let dropped = 0
+        const pump: Effect.Effect<ReadonlyArray<A>, Channel.Halt<void> | E> = pull.pipe(
+          Effect.flatMap((chunk) => {
+            if (dropped >= n) return Effect.succeed(chunk)
+            dropped += chunk.length
+            if (dropped <= n) return pump
+            return Effect.succeed(chunk.slice(n - dropped))
+          })
+        )
+        return pump
+      }))
+)
 
 /**
  * Runs the sink on the stream to produce either the sink's result or an error.

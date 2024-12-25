@@ -2695,10 +2695,15 @@ class ScopeImpl implements Scope.Scope.Closeable {
   close(microExit: Exit.Exit<any, any>): Effect.Effect<void> {
     return suspend(() => {
       if (this.state._tag === "Open") {
-        const finalizers = Array.from(this.state.finalizers).reverse()
+        const finalizers = this.state.finalizers
         this.state = { _tag: "Closed", exit: microExit }
+        if (finalizers.size === 0) {
+          return void_
+        } else if (finalizers.size === 1) {
+          return asVoid(finalizers.values().next().value!(microExit))
+        }
         return flatMap(
-          forEach(finalizers, (finalizer) => exit(finalizer(microExit))),
+          forEach(Array.from(finalizers).reverse(), (finalizer) => exit(finalizer(microExit))),
           exitAsVoidAll
         )
       }

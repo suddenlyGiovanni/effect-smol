@@ -282,7 +282,7 @@ export const fromTransform = <OutElem, OutErr, OutDone, InElem, InErr, InDone, E
     upstream: Effect.Effect<InElem, InErr | Halt<InDone>>,
     scope: Scope.Scope
   ) => Effect.Effect<Effect.Effect<OutElem, OutErr | Halt<OutDone>, EnvX>, EX, Env>
-): Channel<OutElem, OutErr | EX, OutDone, InElem, InErr, InDone, Env | EnvX> => {
+): Channel<OutElem, Halt.ExcludeHalt<OutErr> | EX, OutDone, InElem, InErr, InDone, Env | EnvX> => {
   const self = Object.create(ChannelProto)
   self.transform = transform
   return self
@@ -316,7 +316,11 @@ const makeImplBracket = <OutElem, OutErr, OutDone, InElem, InErr, InDone, EX, En
     })
   )
 
-const toTransform = <OutElem, OutErr, OutDone, InElem, InErr, InDone, Env>(
+/**
+ * @since 4.0.0
+ * @category destructors
+ */
+export const toTransform = <OutElem, OutErr, OutDone, InElem, InErr, InDone, Env>(
   channel: Channel<OutElem, OutErr, OutDone, InElem, InErr, InDone, Env>
 ): (
   upstream: Effect.Effect<InElem, InErr | Halt<InDone>>,
@@ -917,16 +921,18 @@ const flatMapSequential = <
 > =>
   fromTransform((upstream, scope) =>
     Effect.map(toTransform(self)(upstream, scope), (pull) => {
-      let childPull: Effect.Effect<OutElem1, OutErr1, Env1> | null = null
+      let childPull: Effect.Effect<OutElem1, OutErr1, Env1> | undefined
       const makePull: Effect.Effect<OutElem1, OutErr | OutErr1 | Halt<OutDone>, Env1> = pull.pipe(
-        Effect.flatMap((value) => toTransform(f(value))(upstream, scope)),
-        Effect.flatMap((pull) => {
-          childPull = catchHalt(pull, (_) => {
-            childPull = null
-            return makePull
-          }) as any
-          return childPull!
-        })
+        Effect.flatMap((value) =>
+          Effect.flatMap(scope.fork, (childScope) =>
+            Effect.flatMap(toTransform(f(value))(upstream, childScope), (pull) => {
+              childPull = catchHalt(pull, (_) => {
+                childPull = undefined
+                return Effect.andThen(childScope.close(Exit.succeed(_)), makePull)
+              }) as any
+              return childPull!
+            }))
+        )
       )
       return Effect.suspend(() => childPull ?? makePull)
     })
@@ -963,6 +969,37 @@ const flatMapConcurrent = <
   InDone & InDone1,
   Env | Env1
 > => self.pipe(map(f), mergeAll(options))
+
+/**
+ * @since 4.0.0
+ * @category utils
+ */
+export const flattenIterable = <
+  OutElem,
+  OutErr,
+  OutDone,
+  InElem,
+  InErr,
+  InDone,
+  Env
+>(
+  self: Channel<Iterable<OutElem>, OutErr, OutDone, InElem, InErr, InDone, Env>
+): Channel<OutElem, OutErr, OutDone, InElem, InErr, InDone, Env> =>
+  fromTransform(Effect.fnUntraced(function*(upstream, scope) {
+    const pull = yield* toTransform(self)(upstream, scope)
+    let iterator: Iterator<OutElem> | undefined
+    const pump: Effect.Effect<OutElem, OutErr | Halt<OutDone>> = Effect.suspend(() => {
+      const state = iterator && iterator.next()
+      if (!state || state.done) {
+        return Effect.flatMap(pull, (iterable) => {
+          iterator = iterable[Symbol.iterator]()
+          return pump
+        })
+      }
+      return Effect.succeed(state.value)
+    })
+    return pump
+  }))
 
 /**
  * Returns a new channel, which sequentially combines this channel, together
@@ -1686,6 +1723,15 @@ export const toPull: <OutElem, OutErr, OutDone, Env>(
   // ensure errors are redirected to the pull effect
   Effect.catchCause((cause) => Effect.succeed(Effect.failCause(cause)))
 ) as any
+
+/**
+ * @since 4.0.0
+ * @category constructors
+ */
+export const toPullScoped = <OutElem, OutErr, OutDone, Env>(
+  self: Channel<OutElem, OutErr, OutDone, unknown, unknown, unknown, Env>,
+  scope: Scope.Scope
+): Effect.Effect<Effect.Effect<OutElem, OutErr | Halt<OutDone>>, never, Env> => toTransform(self)(haltVoid, scope)
 
 /**
  * @since 4.0.0

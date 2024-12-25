@@ -8,6 +8,7 @@ Stream.fromIterable(Arr.range(1, 100_000)).pipe(
   Stream.mapEffect((i) => Effect.succeed(i + 1)),
   Stream.mapEffect((i) => Effect.succeed(i + 1)),
   Stream.runCount,
-  Effect.runSync
+  Effect.runSync,
+  console.log
 )
 console.timeEnd("Chunk")
