@@ -737,11 +737,10 @@ const mapEffectConcurrent = <
         ? Number.MAX_SAFE_INTEGER
         : options.concurrency
       const semaphore = Effect.unsafeMakeSemaphore(concurrencyN)
+      const mailbox = yield* internalMailbox.make<OutElem2, OutErr | EX | Halt<OutDone>>(0)
+      yield* forkedScope.addFinalizer(() => mailbox.shutdown)
 
       if (options.unordered) {
-        const mailbox = yield* internalMailbox.make<OutElem2, OutErr | EX | Halt<OutDone>>(0)
-        yield* forkedScope.addFinalizer(() => mailbox.shutdown)
-
         const handleExit = Effect.onExit((exit: Exit.Exit<OutElem2, EX>): Effect.Effect<void> =>
           Effect.andThen(
             exit._tag === "Success" ? mailbox.offer(exit.value) : mailbox.done(exit),
@@ -762,24 +761,33 @@ const mapEffectConcurrent = <
       }
 
       // ordered
-      const mailbox = yield* internalMailbox.make<Effect.Effect<OutElem2, OutErr | EX | Halt<OutDone>>>(
-        concurrencyN
-      )
+      const fibers = yield* internalMailbox.make<Fiber.Fiber<OutElem2>>(concurrencyN - 1)
       yield* forkedScope.addFinalizer(() => mailbox.shutdown)
 
-      yield* semaphore.take(1).pipe(
-        Effect.flatMap(() => pull),
-        Effect.flatMap((value) => Effect.fork(Effect.ensuring(f(value), semaphore.release(1)))),
-        Effect.flatMap((fiber) => mailbox.offer(Fiber.join(fiber))),
-        Effect.forever,
-        Effect.tapCause(() => semaphore.take(concurrencyN - 1)),
-        Effect.onExit((exit) => mailbox.offer(exit)),
+      yield* fibers.take.pipe(
+        Effect.flatMap((fiber) => Fiber.join(fiber)),
+        Effect.flatMap((value) => mailbox.offer(value)),
+        Effect.forever({ autoYield: false }),
         Effect.forkIn(forkedScope)
       )
 
-      return (mailbox.take as Effect.Effect<Effect.Effect<OutElem2, OutErr | EX | Halt<OutDone>>>).pipe(
-        Effect.flatMap(identity)
+      yield* semaphore.take(1).pipe(
+        Effect.flatMap(() => pull),
+        Effect.flatMap((value) =>
+          f(value).pipe(
+            Effect.catchCause((cause) => Effect.andThen(mailbox.failCause(cause), Effect.never)),
+            Effect.ensuring(semaphore.release(1)),
+            Effect.fork
+          )
+        ),
+        Effect.flatMap((fiber) => fibers.offer(fiber)),
+        Effect.forever,
+        Effect.tapCause(() => semaphore.take(concurrencyN - 1)),
+        Effect.onExit((exit) => mailbox.done(exit)),
+        Effect.forkIn(forkedScope)
       )
+
+      return mailboxToPull(mailbox)
     })
   )
 
