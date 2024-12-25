@@ -664,6 +664,7 @@ export const mapEffect: {
     options?: {
       readonly concurrency?: number | "unbounded" | undefined
       readonly bufferSize?: number | undefined
+      readonly unordered?: boolean | undefined
     }
   ): <OutErr, OutDone, InElem, InErr, InDone, Env>(
     self: Channel<OutElem, OutErr, OutDone, InElem, InErr, InDone, Env>
@@ -674,6 +675,7 @@ export const mapEffect: {
     options?: {
       readonly concurrency?: number | "unbounded" | undefined
       readonly bufferSize?: number | undefined
+      readonly unordered?: boolean | undefined
     }
   ): Channel<OutElem1, OutErr | OutErr1, OutDone, InElem, InErr, InDone, Env | Env1>
 } = dual(
@@ -684,6 +686,7 @@ export const mapEffect: {
     options?: {
       readonly concurrency?: number | "unbounded" | undefined
       readonly bufferSize?: number | undefined
+      readonly unordered?: boolean | undefined
     }
   ): Channel<OutElem1, OutErr | OutErr1, OutDone, InElem, InErr, InDone, Env | Env1> =>
     concurrencyIsSequential(options?.concurrency)
@@ -724,7 +727,7 @@ const mapEffectConcurrent = <
   f: (o: OutElem) => Effect.Effect<OutElem2, EX, RX>,
   options: {
     readonly concurrency: number | "unbounded"
-    readonly bufferSize?: number | undefined
+    readonly unordered?: boolean | undefined
   }
 ): Channel<OutElem2, OutErr | EX, OutDone, InElem, InErr, InDone, Env | RX> =>
   makeImplBracket(
@@ -734,28 +737,49 @@ const mapEffectConcurrent = <
         ? Number.MAX_SAFE_INTEGER
         : options.concurrency
       const semaphore = Effect.unsafeMakeSemaphore(concurrencyN)
-      const mailbox = yield* internalMailbox.make<OutElem2, OutErr | EX | Halt<OutDone>>(
-        options.bufferSize ?? 16
+
+      if (options.unordered) {
+        const mailbox = yield* internalMailbox.make<OutElem2, OutErr | EX | Halt<OutDone>>(0)
+        yield* forkedScope.addFinalizer(() => mailbox.shutdown)
+
+        const handleExit = Effect.onExit((exit: Exit.Exit<OutElem2, EX>): Effect.Effect<void> =>
+          Effect.andThen(
+            exit._tag === "Success" ? mailbox.offer(exit.value) : mailbox.done(exit),
+            semaphore.release(1)
+          )
+        )
+
+        yield* semaphore.take(1).pipe(
+          Effect.flatMap(() => pull),
+          Effect.flatMap((value) => Effect.fork(handleExit(f(value)))),
+          Effect.forever,
+          Effect.tapCause(() => semaphore.take(concurrencyN - 1)),
+          Effect.onExit((exit) => mailbox.done(exit)),
+          Effect.forkIn(forkedScope)
+        )
+
+        return mailboxToPull(mailbox)
+      }
+
+      // ordered
+      const mailbox = yield* internalMailbox.make<Effect.Effect<OutElem2, OutErr | EX | Halt<OutDone>>>(
+        concurrencyN
       )
       yield* forkedScope.addFinalizer(() => mailbox.shutdown)
 
-      const handleExit = Effect.onExit((exit: Exit.Exit<OutElem2, EX>): Effect.Effect<void> =>
-        Effect.andThen(
-          semaphore.release(1),
-          exit._tag === "Success" ? mailbox.offer(exit.value) : mailbox.done(exit)
-        )
-      )
-
       yield* semaphore.take(1).pipe(
         Effect.flatMap(() => pull),
-        Effect.flatMap((value) => Effect.fork(handleExit(f(value)))),
+        Effect.flatMap((value) => Effect.fork(Effect.ensuring(f(value), semaphore.release(1)))),
+        Effect.flatMap((fiber) => mailbox.offer(Fiber.join(fiber))),
         Effect.forever,
         Effect.tapCause(() => semaphore.take(concurrencyN - 1)),
-        Effect.onExit((exit) => mailbox.done(exit)),
+        Effect.onExit((exit) => mailbox.offer(exit)),
         Effect.forkIn(forkedScope)
       )
 
-      return mailboxToPull(mailbox)
+      return (mailbox.take as Effect.Effect<Effect.Effect<OutElem2, OutErr | EX | Halt<OutDone>>>).pipe(
+        Effect.flatMap(identity)
+      )
     })
   )
 

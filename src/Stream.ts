@@ -278,6 +278,7 @@ export const mapEffect: {
     options?: {
       readonly concurrency?: number | "unbounded" | undefined
       readonly bufferSize?: number | undefined
+      readonly unordered?: boolean | undefined
     } | undefined
   ): <E, R>(self: Stream<A, E, R>) => Stream<A2, E2 | E, R2 | R>
   <A, E, R, A2, E2, R2>(
@@ -286,6 +287,7 @@ export const mapEffect: {
     options?: {
       readonly concurrency?: number | "unbounded" | undefined
       readonly bufferSize?: number | undefined
+      readonly unordered?: boolean | undefined
     } | undefined
   ): Stream<A2, E | E2, R | R2>
 } = dual((args) => isStream(args[0]), <A, E, R, A2, E2, R2>(
@@ -294,6 +296,7 @@ export const mapEffect: {
   options?: {
     readonly concurrency?: number | "unbounded" | undefined
     readonly bufferSize?: number | undefined
+    readonly unordered?: boolean | undefined
   } | undefined
 ): Stream<A2, E | E2, R | R2> =>
   toChannel(self).pipe(
