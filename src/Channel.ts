@@ -745,15 +745,16 @@ const mapEffectConcurrent = <
 
       if (options.unordered) {
         const semaphore = Effect.unsafeMakeSemaphore(concurrencyN)
-        const handleExit = Effect.onExit((exit: Exit.Exit<OutElem2, EX>): Effect.Effect<void> =>
-          Effect.andThen(
-            exit._tag === "Success" ? mailbox.offer(exit.value) : mailbox.done(exit),
-            semaphore.release(1)
-          )
-        )
         yield* semaphore.take(1).pipe(
           Effect.flatMap(() => pull),
-          Effect.flatMap((value) => Effect.fork(handleExit(f(value)))),
+          Effect.flatMap((value) =>
+            f(value).pipe(
+              Effect.exit,
+              Effect.flatMap((exit) => exit._tag === "Success" ? mailbox.offer(exit.value) : mailbox.done(exit)),
+              Effect.flatMap(() => semaphore.release(1)),
+              Effect.fork
+            )
+          ),
           Effect.forever,
           Effect.tapCause(() => semaphore.take(concurrencyN - 1)),
           Effect.onExit((exit) => mailbox.done(exit)),
