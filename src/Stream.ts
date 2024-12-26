@@ -149,19 +149,19 @@ export const fromChannel = <A, E, R>(
 }
 
 /**
- * Creates a stream from a `Channel`.
+ * Derive a Stream from a pull effect.
  *
- * @since 2.0.0
- * @category constructors
+ * @since 4.0.0
+ * @category utils
  */
-export const transformPull = <A, E, R, B, E2, EX, RX>(
+export const transformPull = <A, E, R, B, E2, R2, EX, RX>(
   self: Stream<A, E, R>,
   f: (pull: Effect.Effect<ReadonlyArray<A>, E | Channel.Halt<void>>, scope: Scope.Scope) => Effect.Effect<
-    Effect.Effect<ReadonlyArray<B>, E2 | Channel.Halt<void>>,
+    Effect.Effect<ReadonlyArray<B>, E2 | Channel.Halt<void>, R2>,
     EX,
     RX
   >
-): Stream<B, EX | Channel.Halt.ExcludeHalt<E2>, R | RX> =>
+): Stream<B, EX | Channel.Halt.ExcludeHalt<E2>, R | R2 | RX> =>
   fromChannel(
     Channel.fromTransform((_, scope) =>
       Effect.flatMap(Channel.toPullScoped(toChannel(self), scope), (pull) => f(pull, scope))
@@ -385,17 +385,126 @@ export const take: {
   <A, E, R>(self: Stream<A, E, R>, n: number): Stream<A, E, R>
 } = dual(
   2,
-  <A, E, R>(self: Stream<A, E, R>, n: number): Stream<A, E, R> =>
+  <A, E, R>(self: Stream<A, E, R>, n: number): Stream<A, E, R> => takeUntil(self, (_, i) => i === n)
+)
+
+/**
+ * Takes all elements of the stream until the specified predicate evaluates to
+ * `true`.
+ *
+ * @example
+ * ```ts
+ * import { Effect, Stream } from "effect"
+ *
+ * const stream = Stream.takeUntil(Stream.iterate(0, (n) => n + 1), (n) => n === 4)
+ *
+ * // Effect.runPromise(Stream.runCollect(stream)).then(console.log)
+ * // { _id: 'Chunk', values: [ 0, 1, 2, 3, 4 ] }
+ * ```
+ *
+ * @since 2.0.0
+ * @category utils
+ */
+export const takeUntil: {
+  <A>(predicate: (a: NoInfer<A>, n: number) => boolean, options?: {
+    readonly excludeLast?: boolean | undefined
+  }): <E, R>(self: Stream<A, E, R>) => Stream<A, E, R>
+  <A, E, R>(self: Stream<A, E, R>, predicate: (a: A, n: number) => boolean, options?: {
+    readonly excludeLast?: boolean | undefined
+  }): Stream<A, E, R>
+} = dual(
+  (args) => isStream(args[0]),
+  <A, E, R>(self: Stream<A, E, R>, predicate: (a: A, n: number) => boolean, options?: {
+    readonly excludeLast?: boolean | undefined
+  }): Stream<A, E, R> =>
     transformPull(self, (pull, _scope) =>
       Effect.sync(() => {
-        let taken = 0
-        return Effect.suspend(() => taken >= n ? Channel.haltVoid : pull).pipe(
-          Effect.map((chunk) => {
-            taken += chunk.length
-            return taken > n ? chunk.slice(0, n - taken) : chunk
-          })
-        )
+        let i = 0
+        let done = false
+        const pump: Effect.Effect<ReadonlyArray<A>, Channel.Halt<void> | E> = Effect.flatMap(pull, (chunk) => {
+          if (done) return Channel.haltVoid
+          const index = chunk.findIndex((a) => predicate(a, i++))
+          if (index >= 0) {
+            done = true
+            return Effect.succeed(chunk.slice(0, options?.excludeLast ? index : index + 1))
+          }
+          return Effect.succeed(chunk)
+        })
+        return pump
       }))
+)
+
+/**
+ * Takes all elements of the stream until the specified effectual predicate
+ * evaluates to `true`.
+ *
+ * @since 2.0.0
+ * @category utils
+ */
+export const takeUntilEffect: {
+  <A, E2, R2>(
+    predicate: (a: NoInfer<A>, n: number) => Effect.Effect<boolean, E2, R2>,
+    options?: {
+      readonly excludeLast?: boolean | undefined
+    }
+  ): <E, R>(self: Stream<A, E, R>) => Stream<A, E2 | E, R2 | R>
+  <A, E, R, E2, R2>(
+    self: Stream<A, E, R>,
+    predicate: (a: A, n: number) => Effect.Effect<boolean, E2, R2>,
+    options?: {
+      readonly excludeLast?: boolean | undefined
+    }
+  ): Stream<A, E | E2, R | R2>
+} = dual(2, <A, E, R, E2, R2>(
+  self: Stream<A, E, R>,
+  predicate: (a: A, n: number) => Effect.Effect<boolean, E2, R2>,
+  options?: {
+    readonly excludeLast?: boolean | undefined
+  }
+): Stream<A, E | E2, R | R2> =>
+  transformPull(self, (pull, _scope) =>
+    Effect.sync(() => {
+      let i = 0
+      let done = false
+      return Effect.gen(function*() {
+        if (done) return yield* Channel.haltVoid
+        const chunk = yield* pull
+        for (let j = 0; j < chunk.length; j++) {
+          if (yield* predicate(chunk[j], i++)) {
+            done = true
+            return chunk.slice(0, options?.excludeLast ? j : j + 1)
+          }
+        }
+        return chunk
+      })
+    })))
+
+/**
+ * Takes all elements of the stream for as long as the specified predicate
+ * evaluates to `true`.
+ *
+ * @example
+ * ```ts
+ * import { Effect, Stream } from "effect"
+ *
+ * const stream = Stream.takeWhile(Stream.iterate(0, (n) => n + 1), (n) => n < 5)
+ *
+ * // Effect.runPromise(Stream.runCollect(stream)).then(console.log)
+ * // { _id: 'Chunk', values: [ 0, 1, 2, 3, 4 ] }
+ * ```
+ *
+ * @since 2.0.0
+ * @category utils
+ */
+export const takeWhile: {
+  <A, B extends A>(refinement: (a: NoInfer<A>, n: number) => a is B): <E, R>(self: Stream<A, E, R>) => Stream<B, E, R>
+  <A>(predicate: (a: NoInfer<A>, n: number) => boolean): <E, R>(self: Stream<A, E, R>) => Stream<A, E, R>
+  <A, E, R, B extends A>(self: Stream<A, E, R>, refinement: (a: NoInfer<A>, n: number) => a is B): Stream<B, E, R>
+  <A, E, R>(self: Stream<A, E, R>, predicate: (a: NoInfer<A>, n: number) => boolean): Stream<A, E, R>
+} = dual(
+  2,
+  <A, E, R, B extends A>(self: Stream<A, E, R>, refinement: (a: NoInfer<A>, n: number) => a is B): Stream<B, E, R> =>
+    takeUntil(self, (a, n) => !refinement(a, n), { excludeLast: true }) as any
 )
 
 /**
