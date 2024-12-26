@@ -740,18 +740,17 @@ const mapEffectConcurrent = <
       const concurrencyN = options.concurrency === "unbounded"
         ? Number.MAX_SAFE_INTEGER
         : options.concurrency
-      const semaphore = Effect.unsafeMakeSemaphore(concurrencyN)
       const mailbox = yield* internalMailbox.make<OutElem2, OutErr | EX | Halt<OutDone>>(0)
       yield* forkedScope.addFinalizer(() => mailbox.shutdown)
 
       if (options.unordered) {
+        const semaphore = Effect.unsafeMakeSemaphore(concurrencyN)
         const handleExit = Effect.onExit((exit: Exit.Exit<OutElem2, EX>): Effect.Effect<void> =>
           Effect.andThen(
             exit._tag === "Success" ? mailbox.offer(exit.value) : mailbox.done(exit),
             semaphore.release(1)
           )
         )
-
         yield* semaphore.take(1).pipe(
           Effect.flatMap(() => pull),
           Effect.flatMap((value) => Effect.fork(handleExit(f(value)))),
@@ -760,36 +759,35 @@ const mapEffectConcurrent = <
           Effect.onExit((exit) => mailbox.done(exit)),
           Effect.forkIn(forkedScope)
         )
+      } else {
+        // capacity is n - 2 because
+        // - 1 for the offer *after* starting a fiber
+        // - 1 for the current processing fiber
+        const fibers = yield* internalMailbox.make<
+          Effect.Effect<Exit.Exit<OutElem2, OutErr | EX | Halt<OutDone>>>
+        >(concurrencyN - 2)
+        yield* forkedScope.addFinalizer(() => mailbox.shutdown)
 
-        return mailboxToPull(mailbox)
+        yield* fibers.take.pipe(
+          Effect.flatMap(identity),
+          Effect.flatMap((exit) => exit._tag === "Success" ? mailbox.offer(exit.value) : mailbox.done(exit)),
+          Effect.forever({ autoYield: false }),
+          Effect.forkIn(forkedScope)
+        )
+
+        yield* pull.pipe(
+          Effect.flatMap((value) =>
+            f(value).pipe(
+              Effect.tapCause((cause) => mailbox.failCause(cause)),
+              Effect.fork
+            )
+          ),
+          Effect.flatMap((fiber) => fibers.offer(Fiber.await(fiber))),
+          Effect.forever,
+          Effect.onExit((exit) => fibers.offer(Effect.succeed(exit))),
+          Effect.forkIn(forkedScope)
+        )
       }
-
-      // ordered
-      const fibers = yield* internalMailbox.make<Fiber.Fiber<OutElem2>>(concurrencyN - 1)
-      yield* forkedScope.addFinalizer(() => mailbox.shutdown)
-
-      yield* fibers.take.pipe(
-        Effect.flatMap((fiber) => Fiber.join(fiber)),
-        Effect.flatMap((value) => mailbox.offer(value)),
-        Effect.forever({ autoYield: false }),
-        Effect.forkIn(forkedScope)
-      )
-
-      yield* semaphore.take(1).pipe(
-        Effect.flatMap(() => pull),
-        Effect.flatMap((value) =>
-          f(value).pipe(
-            Effect.catchCause((cause) => Effect.andThen(mailbox.failCause(cause), Effect.never)),
-            Effect.ensuring(semaphore.release(1)),
-            Effect.fork
-          )
-        ),
-        Effect.flatMap((fiber) => fibers.offer(fiber)),
-        Effect.forever,
-        Effect.tapCause(() => semaphore.take(concurrencyN - 1)),
-        Effect.onExit((exit) => mailbox.done(exit)),
-        Effect.forkIn(forkedScope)
-      )
 
       return mailboxToPull(mailbox)
     })

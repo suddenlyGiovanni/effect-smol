@@ -3,10 +3,10 @@ import * as Effect from "effect/Effect"
 import * as Stream from "effect/Stream"
 
 console.time("Chunk")
-Stream.fromIterable(Arr.range(1, 100_000)).pipe(
-  Stream.mapEffect((i) => Effect.succeed(i + 1)),
-  Stream.mapEffect((i) => Effect.succeed(i + 1)),
-  Stream.mapEffect((i) => Effect.succeed(i + 1)),
+Stream.fromIterable(Arr.range(1, 10_000)).pipe(
+  Stream.mapEffect((i) => Effect.succeed(i + 1), { concurrency: "unbounded" }),
+  Stream.mapEffect((i) => Effect.succeed(i + 1), { concurrency: "unbounded" }),
+  Stream.mapEffect((i) => Effect.succeed(i + 1), { concurrency: "unbounded" }),
   Stream.runCount,
   Effect.runSync,
   console.log
