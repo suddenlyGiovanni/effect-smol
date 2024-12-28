@@ -777,13 +777,9 @@ const mapEffectConcurrent = <
           Effect.forkIn(forkedScope)
         )
 
+        const handle = Effect.tapCause((cause: Cause.Cause<Types.NoInfer<EX>>) => mailbox.failCause(cause))
         yield* pull.pipe(
-          Effect.flatMap((value) =>
-            f(value).pipe(
-              Effect.tapCause((cause) => mailbox.failCause(cause)),
-              Effect.forkIn(forkedScope)
-            )
-          ),
+          Effect.flatMap((value) => Effect.fork(handle(f(value)))),
           Effect.flatMap((fiber) => fibers.offer(Fiber.await(fiber))),
           Effect.forever({ autoYield: false }),
           Effect.catchCause((cause) =>
