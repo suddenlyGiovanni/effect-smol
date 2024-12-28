@@ -756,8 +756,11 @@ const mapEffectConcurrent = <
             )
           ),
           Effect.forever,
-          Effect.tapCause(() => semaphore.take(concurrencyN - 1)),
-          Effect.onExit((exit) => mailbox.done(exit)),
+          Effect.catchCause((cause) =>
+            semaphore.withPermits(concurrencyN - 1)(
+              mailbox.failCause(cause)
+            )
+          ),
           Effect.forkIn(forkedScope)
         )
       } else {
@@ -785,7 +788,12 @@ const mapEffectConcurrent = <
           ),
           Effect.flatMap((fiber) => fibers.offer(Fiber.await(fiber))),
           Effect.forever,
-          Effect.onExit((exit) => fibers.offer(Effect.succeed(exit))),
+          Effect.catchCause((cause) =>
+            fibers.offer(Effect.succeed(Exit.failCause(cause))).pipe(
+              Effect.andThen(fibers.end),
+              Effect.andThen(fibers.await)
+            )
+          ),
           Effect.forkIn(forkedScope)
         )
       }
