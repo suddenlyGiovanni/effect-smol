@@ -2,7 +2,7 @@
  * @since 2.0.0
  */
 import type * as Arr from "./Array.js"
-import type { Cause, Failure, TimeoutError } from "./Cause.js"
+import type { Cause, Failure, NoSuchElementError, TimeoutError } from "./Cause.js"
 import type { Context, Reference, Tag } from "./Context.js"
 import type { DurationInput } from "./Duration.js"
 import type { Either } from "./Either.js"
@@ -19,6 +19,7 @@ import type { Request } from "./Request.js"
 import type { RequestResolver } from "./RequestResolver.js"
 import type { Scheduler } from "./Scheduler.js"
 import type { Scope } from "./Scope.js"
+import type { AnySpan, ParentSpan, Span, SpanLink, SpanOptions, Tracer } from "./Tracer.js"
 import type { Concurrency, Covariant, NoInfer, NotFunction } from "./Types.js"
 import type * as Unify from "./Unify.js"
 import type { YieldWrap } from "./Utils.js"
@@ -3548,6 +3549,212 @@ export const repeat: {
     options?: { while?: Predicate<A> | undefined; times?: number | undefined } | undefined
   ): Effect<A, E, R>
 } = core.repeat
+
+// -----------------------------------------------------------------------------
+// Tracing
+// -----------------------------------------------------------------------------
+
+/**
+ * @since 2.0.0
+ * @category Tracing
+ */
+export const tracer: Effect<Tracer> = core.tracer
+
+/**
+ * @since 2.0.0
+ * @category Tracing
+ */
+export const withTracer: {
+  (value: Tracer): <A, E, R>(effect: Effect<A, E, R>) => Effect<A, E, R>
+  <A, E, R>(effect: Effect<A, E, R>, value: Tracer): Effect<A, E, R>
+} = core.withTracer
+
+/**
+ * @since 2.0.0
+ * @category Tracing
+ */
+export const withTracerScoped: (value: Tracer) => Effect<void, never, Scope> = core.withTracerScoped
+
+/**
+ * Disable the tracer for the given Effect.
+ *
+ * @since 2.0.0
+ * @category Tracing
+ * @example
+ * ```ts
+ * import { Effect } from "effect"
+ *
+ * Effect.succeed(42).pipe(
+ *   Effect.withSpan("my-span"),
+ *   // the span will not be registered with the tracer
+ *   Effect.withTracerEnabled(false)
+ * )
+ * ```
+ */
+export const withTracerEnabled: {
+  (enabled: boolean): <A, E, R>(effect: Effect<A, E, R>) => Effect<A, E, R>
+  <A, E, R>(effect: Effect<A, E, R>, enabled: boolean): Effect<A, E, R>
+} = core.withTracerEnabled
+
+/**
+ * Adds an annotation to each span in this effect.
+ *
+ * @since 2.0.0
+ * @category Tracing
+ */
+export const annotateSpans: {
+  (key: string, value: unknown): <A, E, R>(effect: Effect<A, E, R>) => Effect<A, E, R>
+  (values: Record<string, unknown>): <A, E, R>(effect: Effect<A, E, R>) => Effect<A, E, R>
+  <A, E, R>(effect: Effect<A, E, R>, key: string, value: unknown): Effect<A, E, R>
+  <A, E, R>(effect: Effect<A, E, R>, values: Record<string, unknown>): Effect<A, E, R>
+} = core.annotateSpans
+
+/**
+ * Adds an annotation to the current span if available
+ *
+ * @since 2.0.0
+ * @category Tracing
+ */
+export const annotateCurrentSpan: {
+  (key: string, value: unknown): Effect<void>
+  (values: Record<string, unknown>): Effect<void>
+} = core.annotateCurrentSpan
+
+/**
+ * @since 2.0.0
+ * @category Tracing
+ */
+export const currentSpan: Effect<Span, NoSuchElementError> = core.currentSpan
+
+/**
+ * @since 2.0.0
+ * @category Tracing
+ */
+export const currentParentSpan: Effect<AnySpan, NoSuchElementError> = core.currentParentSpan
+
+/**
+ * @since 2.0.0
+ * @category Tracing
+ */
+export const spanAnnotations: Effect<Readonly<Record<string, unknown>>> = core.spanAnnotations
+
+/**
+ * @since 2.0.0
+ * @category Tracing
+ */
+export const spanLinks: Effect<ReadonlyArray<SpanLink>> = core.spanLinks
+
+/**
+ * For all spans in this effect, add a link with the provided span.
+ *
+ * @since 2.0.0
+ * @category Tracing
+ */
+export const linkSpans: {
+  (
+    span: AnySpan | ReadonlyArray<AnySpan>,
+    attributes?: Record<string, unknown>
+  ): <A, E, R>(self: Effect<A, E, R>) => Effect<A, E, R>
+  <A, E, R>(
+    self: Effect<A, E, R>,
+    span: AnySpan | ReadonlyArray<AnySpan>,
+    attributes?: Record<string, unknown>
+  ): Effect<A, E, R>
+} = core.linkSpans
+
+/**
+ * Create a new span for tracing.
+ *
+ * @since 2.0.0
+ * @category Tracing
+ */
+export const makeSpan: (
+  name: string,
+  options?: SpanOptions
+) => Effect<Span> = core.makeSpan
+
+/**
+ * Create a new span for tracing, and automatically close it when the Scope
+ * finalizes.
+ *
+ * The span is not added to the current span stack, so no child spans will be
+ * created for it.
+ *
+ * @since 2.0.0
+ * @category Tracing
+ */
+export const makeSpanScoped: (
+  name: string,
+  options?: SpanOptions | undefined
+) => Effect<Span, never, Scope> = core.makeSpanScoped
+
+/**
+ * Create a new span for tracing, and automatically close it when the effect
+ * completes.
+ *
+ * The span is not added to the current span stack, so no child spans will be
+ * created for it.
+ *
+ * @since 2.0.0
+ * @category Tracing
+ */
+export const useSpan: {
+  <A, E, R>(name: string, evaluate: (span: Span) => Effect<A, E, R>): Effect<A, E, R>
+  <A, E, R>(
+    name: string,
+    options: SpanOptions,
+    evaluate: (span: Span) => Effect<A, E, R>
+  ): Effect<A, E, R>
+} = core.useSpan
+
+/**
+ * Wraps the effect with a new span for tracing.
+ *
+ * @since 2.0.0
+ * @category Tracing
+ */
+export const withSpan: {
+  (
+    name: string,
+    options?: SpanOptions | undefined
+  ): <A, E, R>(self: Effect<A, E, R>) => Effect<A, E, Exclude<R, ParentSpan>>
+  <A, E, R>(
+    self: Effect<A, E, R>,
+    name: string,
+    options?: SpanOptions | undefined
+  ): Effect<A, E, Exclude<R, ParentSpan>>
+} = core.withSpan
+
+/**
+ * Wraps the effect with a new span for tracing.
+ *
+ * The span is ended when the Scope is finalized.
+ *
+ * @since 2.0.0
+ * @category Tracing
+ */
+export const withSpanScoped: {
+  (
+    name: string,
+    options?: SpanOptions
+  ): <A, E, R>(self: Effect<A, E, R>) => Effect<A, E, Exclude<R, ParentSpan> | Scope>
+  <A, E, R>(
+    self: Effect<A, E, R>,
+    name: string,
+    options?: SpanOptions
+  ): Effect<A, E, Exclude<R, ParentSpan> | Scope>
+} = core.withSpanScoped
+
+/**
+ * Adds the provided span to the current span stack.
+ *
+ * @since 2.0.0
+ * @category Tracing
+ */
+export const withParentSpan: {
+  (value: AnySpan): <A, E, R>(self: Effect<A, E, R>) => Effect<A, E, Exclude<R, ParentSpan>>
+  <A, E, R>(self: Effect<A, E, R>, value: AnySpan): Effect<A, E, Exclude<R, ParentSpan>>
+} = core.withParentSpan
 
 // -----------------------------------------------------------------------------
 // Batching

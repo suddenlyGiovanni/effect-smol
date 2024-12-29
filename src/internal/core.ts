@@ -1545,6 +1545,16 @@ export const serviceOption = <I, S>(
 ): Effect.Effect<Option.Option<S>> => withFiber((fiber) => succeed(Context.getOption(fiber.context, tag)))
 
 /** @internal */
+export const serviceOptional = <I, S>(
+  tag: Context.Tag<I, S>
+): Effect.Effect<S, Cause.NoSuchElementError> =>
+  withFiber((fiber) =>
+    fiber.context.unsafeMap.has(tag.key)
+      ? succeed(Context.unsafeGet(fiber.context, tag))
+      : fail(new NoSuchElementError())
+  )
+
+/** @internal */
 export const updateContext: {
   <R2, R>(
     f: (context: Context.Context<R2>) => Context.Context<NoInfer<R>>
@@ -1652,6 +1662,35 @@ export const provideService: {
 )
 
 /** @internal */
+export const makeProvideService = <I, S>(tag: Context.Tag<I, S>): {
+  (value: S): <A, E, R>(self: Effect.Effect<A, E, R>) => Effect.Effect<A, E, Exclude<R, I>>
+  <A, E, R>(self: Effect.Effect<A, E, R>, value: S): Effect.Effect<A, E, Exclude<R, I>>
+} =>
+  dual(
+    2,
+    <A, E, R>(self: Effect.Effect<A, E, R>, value: S): Effect.Effect<A, E, Exclude<R, I>> =>
+      provideService(self, tag, value)
+  )
+
+/** @internal */
+export const provideReferenceScoped = <I, S>(
+  tag: Context.Reference<I, S>,
+  service: S
+): Effect.Effect<void, never, Scope.Scope> =>
+  uninterruptible(withFiber((fiber) => {
+    const scope = Context.unsafeGet(fiber.context, scopeTag)
+    const prev = Context.getOption(fiber.context, tag)
+    fiber.context = Context.add(fiber.context, tag, service)
+    return scope.addFinalizer(() =>
+      sync(() => {
+        fiber.context = prev._tag === "Some"
+          ? Context.add(fiber.context, tag, prev.value)
+          : Context.omit(tag as any)(fiber.context as any)
+      })
+    )
+  }))
+
+/** @internal */
 export const provideServiceEffect: {
   <I, S, E2, R2>(
     tag: Context.Tag<I, S>,
@@ -1682,13 +1721,7 @@ export const withConcurrency: {
     self: Effect.Effect<A, E, R>,
     concurrency: "unbounded" | number
   ): Effect.Effect<A, E, R>
-} = dual(
-  2,
-  <A, E, R>(
-    self: Effect.Effect<A, E, R>,
-    concurrency: "unbounded" | number
-  ): Effect.Effect<A, E, R> => provideService(self, CurrentConcurrency, concurrency)
-)
+} = makeProvideService(CurrentConcurrency)
 
 // ----------------------------------------------------------------------------
 // zipping
@@ -2762,13 +2795,7 @@ export const provideScope: {
     self: Effect.Effect<A, E, R>,
     scope: Scope.Scope
   ): Effect.Effect<A, E, Exclude<R, Scope.Scope>>
-} = dual(
-  2,
-  <A, E, R>(
-    self: Effect.Effect<A, E, R>,
-    scope: Scope.Scope
-  ): Effect.Effect<A, E, Exclude<R, Scope.Scope>> => provideService(self, scopeTag, scope)
-)
+} = makeProvideService(scopeTag)
 
 /** @internal */
 export const scoped = <A, E, R>(
@@ -3552,7 +3579,35 @@ export const makeLatch = (open?: boolean | undefined) => sync(() => unsafeMakeLa
 // ----------------------------------------------------------------------------
 // Tracer
 // ----------------------------------------------------------------------------
-//
+
+/** @internal */
+export const tracer: Effect.Effect<Tracer.Tracer> = withFiber((fiber) => succeed(fiber.getRef(Tracer.CurrentTracer)))
+
+const tracerContextMiddleware = (fiber: FiberImpl, primitive: Primitive): Primitive | Yield => {
+  const tracer = fiber.getRef(Tracer.CurrentTracer)
+  if (!tracer.context) return primitive[evaluate](fiber)
+  return tracer.context(() => primitive[evaluate](fiber), fiber)
+}
+
+/** @internal */
+export const withTracer: {
+  (tracer: Tracer.Tracer): <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
+  <A, E, R>(effect: Effect.Effect<A, E, R>, tracer: Tracer.Tracer): Effect.Effect<A, E, R>
+} = dual(2, <A, E, R>(effect: Effect.Effect<A, E, R>, tracer: Tracer.Tracer): Effect.Effect<A, E, R> => {
+  fiberMiddleware.tracerContext = tracerContextMiddleware
+  return provideService(effect, Tracer.CurrentTracer, tracer)
+})
+
+/* @internal */
+export const withTracerScoped = (tracer: Tracer.Tracer): Effect.Effect<void, never, Scope.Scope> =>
+  provideReferenceScoped(Tracer.CurrentTracer, tracer)
+
+/** @internal */
+export const withTracerEnabled: {
+  (enabled: boolean): <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
+  <A, E, R>(effect: Effect.Effect<A, E, R>, enabled: boolean): Effect.Effect<A, E, R>
+} = makeProvideService(TracerEnabled)
+
 const bigint0 = BigInt(0)
 
 const NoopSpanProto: Omit<Tracer.Span, "parent" | "name" | "context"> = {
@@ -3662,13 +3717,82 @@ export const makeSpan = (
   return withFiber((fiber) => succeed(unsafeMakeSpan(fiber, name, options)))
 }
 
-/* @internal */
+/** @internal */
+export const makeSpanScoped = (
+  name: string,
+  options?: Tracer.SpanOptions | undefined
+): Effect.Effect<Tracer.Span, never, Scope.Scope> => {
+  options = addSpanStackTrace(options)
+  return uninterruptible(
+    withFiber((fiber) => {
+      const scope = Context.unsafeGet(fiber.context, scopeTag)
+      const span = unsafeMakeSpan(fiber, name, options)
+      const clock = fiber.getRef(CurrentClock)
+      return as(
+        scope.addFinalizer((exit) => endSpan(span, exit, clock)),
+        span
+      )
+    })
+  )
+}
+
+/** @internal */
+export const withSpanScoped: {
+  (
+    name: string,
+    options?: Tracer.SpanOptions
+  ): <A, E, R>(self: Effect.Effect<A, E, R>) => Effect.Effect<A, E, Scope.Scope | Exclude<R, Tracer.ParentSpan>>
+  <A, E, R>(
+    self: Effect.Effect<A, E, R>,
+    name: string,
+    options?: Tracer.SpanOptions
+  ): Effect.Effect<A, E, Scope.Scope | Exclude<R, Tracer.ParentSpan>>
+} = function() {
+  const dataFirst = typeof arguments[0] !== "string"
+  const name = dataFirst ? arguments[1] : arguments[0]
+  const options = addSpanStackTrace(dataFirst ? arguments[2] : arguments[1])
+  if (dataFirst) {
+    const self = arguments[0]
+    return flatMap(
+      makeSpanScoped(name, addSpanStackTrace(options)),
+      (span) => withParentSpan(self, span)
+    )
+  }
+  return (self: Effect.Effect<any, any, any>) =>
+    flatMap(
+      makeSpanScoped(name, addSpanStackTrace(options)),
+      (span) => withParentSpan(self, span)
+    )
+} as any
+
+/** @internal */
 export const spanAnnotations: Effect.Effect<Readonly<Record<string, unknown>>> = service(
   TracerSpanAnnotations
 )
 
-/* @internal */
+/** @internal */
 export const spanLinks: Effect.Effect<ReadonlyArray<Tracer.SpanLink>> = service(TracerSpanLinks)
+
+/** @internal */
+export const linkSpans: {
+  (
+    span: Tracer.AnySpan | ReadonlyArray<Tracer.AnySpan>,
+    attributes?: Record<string, unknown>
+  ): <A, E, R>(self: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
+  <A, E, R>(
+    self: Effect.Effect<A, E, R>,
+    span: Tracer.AnySpan | ReadonlyArray<Tracer.AnySpan>,
+    attributes?: Record<string, unknown>
+  ): Effect.Effect<A, E, R>
+} = dual((args) => isEffect(args[0]), <A, E, R>(
+  self: Effect.Effect<A, E, R>,
+  span: Tracer.AnySpan | ReadonlyArray<Tracer.AnySpan>,
+  attributes: Record<string, unknown> = {}
+): Effect.Effect<A, E, R> => {
+  const spans: Array<Tracer.AnySpan> = Array.isArray(span) ? span : [span]
+  const links = spans.map((span): Tracer.SpanLink => ({ _tag: "SpanLink", span, attributes }))
+  return updateService(self, TracerSpanLinks, (current) => [...current, ...links])
+})
 
 /** @internal */
 export const endSpan = <A, E>(span: Tracer.Span, exit: Exit.Exit<A, E>, clock: Clock.Clock) =>
@@ -3702,12 +3826,10 @@ export const useSpan: {
 }
 
 /** @internal */
-export const withParentSpan = dual<
-  (
-    span: Tracer.AnySpan
-  ) => <A, E, R>(self: Effect.Effect<A, E, R>) => Effect.Effect<A, E, Exclude<R, Tracer.ParentSpan>>,
-  <A, E, R>(self: Effect.Effect<A, E, R>, span: Tracer.AnySpan) => Effect.Effect<A, E, Exclude<R, Tracer.ParentSpan>>
->(2, (self, span) => provideService(self, Tracer.ParentSpan, span))
+export const withParentSpan: {
+  (value: Tracer.AnySpan): <A, E, R>(self: Effect.Effect<A, E, R>) => Effect.Effect<A, E, Exclude<R, Tracer.ParentSpan>>
+  <A, E, R>(self: Effect.Effect<A, E, R>, value: Tracer.AnySpan): Effect.Effect<A, E, Exclude<R, Tracer.ParentSpan>>
+} = makeProvideService(Tracer.ParentSpan)
 
 /** @internal */
 export const withSpan: {
@@ -3730,6 +3852,59 @@ export const withSpan: {
   }
   return (self: Effect.Effect<any, any, any>) => useSpan(name, options, (span) => withParentSpan(self, span))
 } as any
+
+/** @internal */
+export const annotateSpans: {
+  (key: string, value: unknown): <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
+  (values: Record<string, unknown>): <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
+  <A, E, R>(effect: Effect.Effect<A, E, R>, key: string, value: unknown): Effect.Effect<A, E, R>
+  <A, E, R>(effect: Effect.Effect<A, E, R>, values: Record<string, unknown>): Effect.Effect<A, E, R>
+} = dual(
+  (args) => isEffect(args[0]),
+  <A, E, R>(
+    effect: Effect.Effect<A, E, R>,
+    ...args: [Record<string, unknown>] | [key: string, value: unknown]
+  ): Effect.Effect<A, E, R> =>
+    updateService(effect, TracerSpanAnnotations, (annotations) => {
+      const newAnnotations = { ...annotations }
+      if (args.length === 1) {
+        Object.assign(newAnnotations, args[0])
+      } else {
+        newAnnotations[args[0]] = args[1]
+      }
+      return newAnnotations
+    })
+)
+
+/** @internal */
+export const annotateCurrentSpan: {
+  (key: string, value: unknown): Effect.Effect<void>
+  (values: Record<string, unknown>): Effect.Effect<void>
+} = (...args: [Record<string, unknown>] | [key: string, value: unknown]) =>
+  withFiber((fiber) => {
+    const span = Context.getOption(fiber.context, Tracer.ParentSpan)
+    if (span._tag === "Some" && span.value._tag === "Span") {
+      if (args.length === 1) {
+        for (const [key, value] of Object.entries(args[0])) {
+          span.value.attribute(key, value)
+        }
+      } else {
+        span.value.attribute(args[0], args[1])
+      }
+    }
+    return void_
+  })
+
+/** @internal */
+export const currentSpan: Effect.Effect<Tracer.Span, Cause.NoSuchElementError> = withFiber((fiber) => {
+  const span = Context.getOption(fiber.context, Tracer.ParentSpan)
+  return span._tag === "Some" && span.value._tag === "Span" ? succeed(span.value) : fail(new NoSuchElementError())
+})
+
+/** @internal */
+export const currentParentSpan: Effect.Effect<Tracer.AnySpan, Cause.NoSuchElementError> = serviceOptional(
+  Tracer.ParentSpan
+)
 
 // ----------------------------------------------------------------------------
 // Clock
