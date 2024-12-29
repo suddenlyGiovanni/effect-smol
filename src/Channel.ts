@@ -1,7 +1,7 @@
 /**
  * @since 2.0.0
  */
-import * as Cause from "./Cause.js"
+import type * as Cause from "./Cause.js"
 import * as Chunk from "./Chunk.js"
 import * as Context from "./Context.js"
 import * as Effect from "./Effect.js"
@@ -1222,7 +1222,7 @@ export const mergeAll: {
                 fibers.delete(fiber)
                 if (semaphore) yield* semaphore.release(1)
                 if (fibers.size === 0) yield* doneLatch.open
-                if (halt || Cause.isInterruptedOnly(cause)) return
+                if (halt) return
                 return yield* mailbox.failCause(cause as any)
               })),
               Effect.fork
@@ -1232,8 +1232,7 @@ export const mergeAll: {
             fibers.add(fiber)
           }
         }).pipe(
-          Effect.tapCause(() => doneLatch.await),
-          Effect.onExit((exit) => mailbox.done(exit)),
+          Effect.catchCause((cause) => doneLatch.whenOpen(mailbox.failCause(cause))),
           Effect.forkIn(forkedScope),
           Effect.interruptible
         )

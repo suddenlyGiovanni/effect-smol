@@ -149,6 +149,16 @@ export const fromChannel = <A, E, R>(
 }
 
 /**
+ * Creates a stream from a pull effect
+ *
+ * @since 2.0.0
+ * @category constructors
+ */
+export const fromPull = <A, E, R, EX, RX>(
+  pull: Effect.Effect<Effect.Effect<ReadonlyArray<A>, E | Channel.Halt<void>, R>, EX, RX>
+): Stream<A, Channel.Halt.ExcludeHalt<E> | EX, R | RX> => fromChannel(Channel.fromPull(pull))
+
+/**
  * Derive a Stream from a pull effect.
  *
  * @since 4.0.0
@@ -282,28 +292,22 @@ export const range = (
   max: number,
   chunkSize = Channel.DefaultChunkSize
 ): Stream<number> =>
-  min > max
-    ? empty
-    : fromChannel(
-      Channel.fromPull(
-        Effect.sync(() => {
-          let start = min
-          let done = false
-          return Effect.suspend(() => {
-            if (done) return Channel.haltVoid
-            const remaining = max - start + 1
-            if (remaining > chunkSize) {
-              const chunk = Arr.range(start, start + chunkSize - 1)
-              start += chunkSize
-              return Effect.succeed(chunk)
-            }
-            const chunk = Arr.range(start, start + remaining - 1)
-            done = true
-            return Effect.succeed(chunk)
-          })
-        })
-      )
-    )
+  min > max ? empty : fromPull(Effect.sync(() => {
+    let start = min
+    let done = false
+    return Effect.suspend(() => {
+      if (done) return Channel.haltVoid
+      const remaining = max - start + 1
+      if (remaining > chunkSize) {
+        const chunk = Arr.range(start, start + chunkSize - 1)
+        start += chunkSize
+        return Effect.succeed(chunk)
+      }
+      const chunk = Arr.range(start, start + remaining - 1)
+      done = true
+      return Effect.succeed(chunk)
+    })
+  }))
 
 /**
  * Creates a `Stream` that runs forever but never emits an output.
