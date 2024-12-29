@@ -1,8 +1,8 @@
 /**
  * @since 2.0.0
  */
-import * as Context from "./Context.js"
-import * as Duration from "./Duration.js"
+import type * as Context from "./Context.js"
+import type * as Duration from "./Duration.js"
 import type { Effect } from "./Effect.js"
 import * as core from "./internal/core.js"
 
@@ -40,83 +40,30 @@ export interface Clock {
  * @since 4.0.0
  * @category references
  */
-export class CurrentClock extends Context.Reference<CurrentClock>()("effect/Clock/CurrentClock", {
-  defaultValue: (): Clock => new ClockImpl()
-}) {}
-
-const MAX_TIMER_MILLIS = 2 ** 31 - 1
-
-class ClockImpl implements Clock {
-  unsafeCurrentTimeMillis(): number {
-    return Date.now()
-  }
-  readonly currentTimeMillis: Effect<number> = core.sync(() => this.unsafeCurrentTimeMillis())
-  unsafeCurrentTimeNanos(): bigint {
-    return processOrPerformanceNow()
-  }
-  readonly currentTimeNanos: Effect<bigint> = core.sync(() => this.unsafeCurrentTimeNanos())
-  sleep(duration: Duration.Duration): Effect<void> {
-    const millis = Duration.toMillis(duration)
-    return core.async((resume) => {
-      if (millis > MAX_TIMER_MILLIS) return
-      const handle = setTimeout(() => resume(core.void), millis)
-      return core.sync(() => {
-        clearTimeout(handle)
-      })
-    })
-  }
+export interface CurrentClock {
+  readonly _: unique symbol
 }
 
-const performanceNowNanos = (function() {
-  const bigint1e6 = BigInt(1_000_000)
-  if (typeof performance === "undefined") {
-    return () => BigInt(Date.now()) * bigint1e6
-  } else if (typeof performance.timeOrigin === "number" && performance.timeOrigin === 0) {
-    return () => BigInt(Math.round(performance.now() * 1_000_000))
-  }
-  const origin = (BigInt(Date.now()) * bigint1e6) - BigInt(Math.round(performance.now() * 1_000_000))
-  return () => origin + BigInt(Math.round(performance.now() * 1_000_000))
-})()
-const processOrPerformanceNow = (function() {
-  const processHrtime =
-    typeof process === "object" && "hrtime" in process && typeof process.hrtime.bigint === "function" ?
-      process.hrtime :
-      undefined
-  if (!processHrtime) {
-    return performanceNowNanos
-  }
-  const origin = performanceNowNanos() - processHrtime.bigint()
-  return () => origin + processHrtime.bigint()
-})()
+/**
+ * @since 4.0.0
+ * @category references
+ */
+export const CurrentClock: Context.Reference<CurrentClock, Clock> = core.CurrentClock
 
 /**
  * @since 2.0.0
  * @category constructors
  */
-export const clockWith = <A, E, R>(f: (clock: Clock) => Effect<A, E, R>): Effect<A, E, R> =>
-  core.withFiber((fiber) => f(fiber.getRef(CurrentClock)))
+export const clockWith: <A, E, R>(f: (clock: Clock) => Effect<A, E, R>) => Effect<A, E, R> = core.clockWith
 
 /**
  * @since 2.0.0
  * @category constructors
  */
-export const sleep = (duration: Duration.DurationInput): Effect<void> =>
-  clockWith((clock) => clock.sleep(Duration.decode(duration)))
+export const currentTimeMillis: Effect<number> = core.currentTimeMillis
 
 /**
  * @since 2.0.0
  * @category constructors
  */
-export const currentTimeMillis: Effect<number> = clockWith((clock) => clock.currentTimeMillis)
-
-/**
- * @since 2.0.0
- * @category constructors
- */
-export const currentTimeNanos: Effect<bigint> = clockWith((clock) => clock.currentTimeNanos)
-
-/**
- * @since 2.0.0
- * @category context
- */
-export const Clock: Context.Tag<Clock, Clock> = Context.GenericTag("effect/Clock")
+export const currentTimeNanos: Effect<bigint> = core.currentTimeNanos

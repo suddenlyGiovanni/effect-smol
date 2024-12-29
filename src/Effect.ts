@@ -4,6 +4,7 @@
 import type * as Arr from "./Array.js"
 import type { Cause, Failure, TimeoutError } from "./Cause.js"
 import type { Context, Reference, Tag } from "./Context.js"
+import type { DurationInput } from "./Duration.js"
 import type { Either } from "./Either.js"
 import type { Exit } from "./Exit.js"
 import type { Fiber } from "./Fiber.js"
@@ -2537,8 +2538,8 @@ export const orElseSucceed: {
  * @category delays & timeouts
  */
 export const timeout: {
-  (millis: number): <A, E, R>(self: Effect<A, E, R>) => Effect<A, E | TimeoutError, R>
-  <A, E, R>(self: Effect<A, E, R>, millis: number): Effect<A, E | TimeoutError, R>
+  (duration: DurationInput): <A, E, R>(self: Effect<A, E, R>) => Effect<A, E | TimeoutError, R>
+  <A, E, R>(self: Effect<A, E, R>, duration: DurationInput): Effect<A, E | TimeoutError, R>
 } = core.timeout
 
 /**
@@ -2591,8 +2592,8 @@ export const timeout: {
  * @category delays & timeouts
  */
 export const timeoutOption: {
-  (millis: number): <A, E, R>(self: Effect<A, E, R>) => Effect<Option<A>, E, R>
-  <A, E, R>(self: Effect<A, E, R>, millis: number): Effect<Option<A>, E, R>
+  (duration: DurationInput): <A, E, R>(self: Effect<A, E, R>) => Effect<Option<A>, E, R>
+  <A, E, R>(self: Effect<A, E, R>, duration: DurationInput): Effect<Option<A>, E, R>
 } = core.timeoutOption
 
 /**
@@ -2601,11 +2602,11 @@ export const timeoutOption: {
  */
 export const timeoutOrElse: {
   <A2, E2, R2>(
-    options: { readonly duration: number; readonly onTimeout: LazyArg<Effect<A2, E2, R2>> }
+    options: { readonly duration: DurationInput; readonly onTimeout: LazyArg<Effect<A2, E2, R2>> }
   ): <A, E, R>(self: Effect<A, E, R>) => Effect<A | A2, E | E2, R | R2>
   <A, E, R, A2, E2, R2>(
     self: Effect<A, E, R>,
-    options: { readonly duration: number; readonly onTimeout: LazyArg<Effect<A2, E2, R2>> }
+    options: { readonly duration: DurationInput; readonly onTimeout: LazyArg<Effect<A2, E2, R2>> }
   ): Effect<A | A2, E | E2, R | R2>
 } = core.timeoutOrElse
 
@@ -2617,8 +2618,8 @@ export const timeoutOrElse: {
  * @category delays & timeouts
  */
 export const delay: {
-  (millis: number): <A, E, R>(self: Effect<A, E, R>) => Effect<A, E, R>
-  <A, E, R>(self: Effect<A, E, R>, millis: number): Effect<A, E, R>
+  (duration: DurationInput): <A, E, R>(self: Effect<A, E, R>) => Effect<A, E, R>
+  <A, E, R>(self: Effect<A, E, R>, duration: DurationInput): Effect<A, E, R>
 } = core.delay
 
 /**
@@ -2628,7 +2629,7 @@ export const delay: {
  * @since 2.0.0
  * @category delays & timeouts
  */
-export const sleep: (millis: number) => Effect<void> = core.sleep
+export const sleep: (duration: DurationInput) => Effect<void> = core.sleep
 
 // -----------------------------------------------------------------------------
 // Racing

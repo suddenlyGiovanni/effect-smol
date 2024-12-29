@@ -116,12 +116,6 @@ export interface SpanLink {
 
 /**
  * @since 2.0.0
- * @category tags
- */
-export const Tracer: Context.Tag<Tracer, Tracer> = Context.GenericTag("effect/Tracer")
-
-/**
- * @since 2.0.0
  * @category constructors
  */
 export const make = (options: Tracer): Tracer => options
