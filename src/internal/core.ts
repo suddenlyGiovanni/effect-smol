@@ -3599,8 +3599,10 @@ export const withTracer: {
 })
 
 /* @internal */
-export const withTracerScoped = (tracer: Tracer.Tracer): Effect.Effect<void, never, Scope.Scope> =>
-  provideReferenceScoped(Tracer.CurrentTracer, tracer)
+export const withTracerScoped = (tracer: Tracer.Tracer): Effect.Effect<void, never, Scope.Scope> => {
+  fiberMiddleware.tracerContext = tracerContextMiddleware
+  return provideReferenceScoped(Tracer.CurrentTracer, tracer)
+}
 
 /** @internal */
 export const withTracerEnabled: {
