@@ -94,7 +94,7 @@ const processOrPerformanceNow = (function() {
  * @category constructors
  */
 export const clockWith = <A, E, R>(f: (clock: Clock) => Effect<A, E, R>): Effect<A, E, R> =>
-  core.withFiberUnknown((fiber) => f(Context.get(fiber.context, CurrentClock)))
+  core.withFiber((fiber) => f(fiber.getRef(CurrentClock)))
 
 /**
  * @since 2.0.0
