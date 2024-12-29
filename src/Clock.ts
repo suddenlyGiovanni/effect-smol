@@ -7,18 +7,6 @@ import type { Effect } from "./Effect.js"
 import * as core from "./internal/core.js"
 
 /**
- * @since 2.0.0
- * @category symbols
- */
-export const ClockTypeId: unique symbol = Symbol.for("effect/Clock")
-
-/**
- * @since 2.0.0
- * @category symbols
- */
-export type ClockTypeId = typeof ClockTypeId
-
-/**
  * Represents a time-based clock which provides functionality related to time
  * and scheduling.
  *
@@ -26,7 +14,6 @@ export type ClockTypeId = typeof ClockTypeId
  * @category models
  */
 export interface Clock {
-  readonly [ClockTypeId]: ClockTypeId
   /**
    * Unsafely returns the current time in milliseconds.
    */
@@ -60,7 +47,6 @@ export class CurrentClock extends Context.Reference<CurrentClock>()("effect/Cloc
 const MAX_TIMER_MILLIS = 2 ** 31 - 1
 
 class ClockImpl implements Clock {
-  readonly [ClockTypeId]: ClockTypeId = ClockTypeId
   unsafeCurrentTimeMillis(): number {
     return Date.now()
   }

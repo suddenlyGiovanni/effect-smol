@@ -10,18 +10,7 @@ import type * as Option from "./Option.js"
 /**
  * @since 2.0.0
  */
-export const TracerTypeId: unique symbol = Symbol.for("effect/Tracer")
-
-/**
- * @since 2.0.0
- */
-export type TracerTypeId = typeof TracerTypeId
-
-/**
- * @since 2.0.0
- */
 export interface Tracer {
-  readonly [TracerTypeId]: TracerTypeId
   span(
     name: string,
     parent: Option.Option<AnySpan>,
@@ -135,10 +124,7 @@ export const Tracer: Context.Tag<Tracer, Tracer> = Context.GenericTag("effect/Tr
  * @since 2.0.0
  * @category constructors
  */
-export const make = (options: Omit<Tracer, typeof TracerTypeId>): Tracer => ({
-  [TracerTypeId]: TracerTypeId,
-  ...options
-})
+export const make = (options: Tracer): Tracer => options
 
 /**
  * @since 2.0.0
