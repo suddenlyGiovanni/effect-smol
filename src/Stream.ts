@@ -140,9 +140,9 @@ const StreamProto = {
  * @since 2.0.0
  * @category constructors
  */
-export const fromChannel = <A, E, R>(
-  channel: Channel.Channel<ReadonlyArray<A>, E, void, unknown, unknown, unknown, R>
-): Stream<A, E, R> => {
+export const fromChannel = <Arr extends ReadonlyArray<any>, E, R>(
+  channel: Channel.Channel<Arr, E, void, unknown, unknown, unknown, R>
+): Stream<Arr extends ReadonlyArray<infer A> ? A : never, E, R> => {
   const self = Object.create(StreamProto)
   self.channel = channel
   return self
@@ -430,6 +430,45 @@ export const flatMap: {
     Channel.flatMap((a) => toChannel(f(a)), options),
     fromChannel
   ))
+
+/**
+ * @since 2.0.0
+ * @category sequencing
+ */
+export const flatten: {
+  (
+    options?: {
+      readonly concurrency?: number | "unbounded" | undefined
+      readonly bufferSize?: number | undefined
+    } | undefined
+  ): <A, E, R, E2, R2>(self: Stream<Stream<A, E, R>, E2, R2>) => Stream<A, E | E2, R | R2>
+  <A, E, R, E2, R2>(
+    self: Stream<Stream<A, E, R>, E2, R2>,
+    options?: {
+      readonly concurrency?: number | "unbounded" | undefined
+      readonly bufferSize?: number | undefined
+    } | undefined
+  ): Stream<A, E | E2, R | R2>
+} = dual((args) => isStream(args[0]), <A, E, R, E2, R2>(
+  self: Stream<Stream<A, E, R>, E2, R2>,
+  options?: {
+    readonly concurrency?: number | "unbounded" | undefined
+    readonly bufferSize?: number | undefined
+  } | undefined
+): Stream<A, E | E2, R | R2> => flatMap(self, identity, options))
+
+/**
+ * @since 2.0.0
+ * @category sequencing
+ */
+export const concat: {
+  <A2, E2, R2>(that: Stream<A2, E2, R2>): <A, E, R>(self: Stream<A, E, R>) => Stream<A | A2, E | E2, R | R2>
+  <A, E, R, A2, E2, R2>(self: Stream<A, E, R>, that: Stream<A2, E2, R2>): Stream<A | A2, E | E2, R | R2>
+} = dual(
+  2,
+  <A, E, R, A2, E2, R2>(self: Stream<A, E, R>, that: Stream<A2, E2, R2>): Stream<A | A2, E | E2, R | R2> =>
+    fromChannel(Channel.concat(toChannel(self), toChannel(that)))
+)
 
 /**
  * Takes the specified number of elements from this stream.

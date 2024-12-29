@@ -972,6 +972,217 @@ const flatMapConcurrent = <
 > => self.pipe(map(f), mergeAll(options))
 
 /**
+ * @since 2.0.0
+ * @category sequencing
+ */
+export const concatWith: {
+  <OutDone, OutElem1, OutErr1, OutDone1, InElem1, InErr1, InDone1, Env1>(
+    f: (leftover: Types.NoInfer<OutDone>) => Channel<OutElem1, OutErr1, OutDone1, InElem1, InErr1, InDone1, Env1>
+  ): <OutElem, OutErr, InElem, InErr, InDone, Env>(
+    self: Channel<OutElem, OutErr, OutDone, InElem, InErr, InDone, Env>
+  ) => Channel<
+    OutElem | OutElem1,
+    OutErr1 | OutErr,
+    OutDone1,
+    InElem & InElem1,
+    InErr & InErr1,
+    InDone & InDone1,
+    Env1 | Env
+  >
+  <
+    OutElem,
+    OutErr,
+    OutDone,
+    InElem,
+    InErr,
+    InDone,
+    Env,
+    OutElem1,
+    OutErr1,
+    OutDone1,
+    InElem1,
+    InErr1,
+    InDone1,
+    Env1
+  >(
+    self: Channel<OutElem, OutErr, OutDone, InElem, InErr, InDone, Env>,
+    f: (leftover: Types.NoInfer<OutDone>) => Channel<OutElem1, OutErr1, OutDone1, InElem1, InErr1, InDone1, Env1>
+  ): Channel<
+    OutElem | OutElem1,
+    OutErr1 | OutErr,
+    OutDone1,
+    InElem & InElem1,
+    InErr & InErr1,
+    InDone & InDone1,
+    Env1 | Env
+  >
+} = dual(2, <
+  OutElem,
+  OutErr,
+  OutDone,
+  InElem,
+  InErr,
+  InDone,
+  Env,
+  OutElem1,
+  OutErr1,
+  OutDone1,
+  InElem1,
+  InErr1,
+  InDone1,
+  Env1
+>(
+  self: Channel<OutElem, OutErr, OutDone, InElem, InErr, InDone, Env>,
+  f: (leftover: Types.NoInfer<OutDone>) => Channel<OutElem1, OutErr1, OutDone1, InElem1, InErr1, InDone1, Env1>
+): Channel<
+  OutElem | OutElem1,
+  OutErr1 | OutErr,
+  OutDone1,
+  InElem & InElem1,
+  InErr & InErr1,
+  InDone & InDone1,
+  Env1 | Env
+> =>
+  fromTransform((upstream, scope) =>
+    Effect.sync(() => {
+      let currentPull: Effect.Effect<OutElem | OutElem1, OutErr1 | OutErr | Halt<OutDone1>, Env1 | Env> | undefined
+      const makePull = Effect.flatMap(
+        scope.fork,
+        (forkedScope) =>
+          Effect.flatMap(toTransform(self)(upstream, forkedScope), (pull) => {
+            currentPull = catchHalt(pull, (leftover) =>
+              forkedScope.close(Exit.succeed(leftover)).pipe(
+                Effect.andThen(toTransform(f(leftover as OutDone))(upstream, scope)),
+                Effect.flatMap((pull) => {
+                  currentPull = pull
+                  return pull
+                })
+              ))
+            return currentPull
+          })
+      )
+      return Effect.suspend(() => currentPull ?? makePull)
+    })
+  ))
+
+/**
+ * @since 2.0.0
+ * @category sequencing
+ */
+export const concat: {
+  <OutElem1, OutErr1, OutDone1, InElem1, InErr1, InDone1, Env1>(
+    that: Channel<OutElem1, OutErr1, OutDone1, InElem1, InErr1, InDone1, Env1>
+  ): <OutElem, OutErr, OutDone, InElem, InErr, InDone, Env>(
+    self: Channel<OutElem, OutErr, OutDone, InElem, InErr, InDone, Env>
+  ) => Channel<
+    OutElem | OutElem1,
+    OutErr1 | OutErr,
+    OutDone1,
+    InElem & InElem1,
+    InErr & InErr1,
+    InDone & InDone1,
+    Env1 | Env
+  >
+  <
+    OutElem,
+    OutErr,
+    OutDone,
+    InElem,
+    InErr,
+    InDone,
+    Env,
+    OutElem1,
+    OutErr1,
+    OutDone1,
+    InElem1,
+    InErr1,
+    InDone1,
+    Env1
+  >(
+    self: Channel<OutElem, OutErr, OutDone, InElem, InErr, InDone, Env>,
+    that: Channel<OutElem1, OutErr1, OutDone1, InElem1, InErr1, InDone1, Env1>
+  ): Channel<
+    OutElem | OutElem1,
+    OutErr1 | OutErr,
+    OutDone1,
+    InElem & InElem1,
+    InErr & InErr1,
+    InDone & InDone1,
+    Env1 | Env
+  >
+} = dual(2, <
+  OutElem,
+  OutErr,
+  OutDone,
+  InElem,
+  InErr,
+  InDone,
+  Env,
+  OutElem1,
+  OutErr1,
+  OutDone1,
+  InElem1,
+  InErr1,
+  InDone1,
+  Env1
+>(
+  self: Channel<OutElem, OutErr, OutDone, InElem, InErr, InDone, Env>,
+  that: Channel<OutElem1, OutErr1, OutDone1, InElem1, InErr1, InDone1, Env1>
+): Channel<
+  OutElem | OutElem1,
+  OutErr1 | OutErr,
+  OutDone1,
+  InElem & InElem1,
+  InErr & InErr1,
+  InDone & InDone1,
+  Env1 | Env
+> => concatWith(self, (_) => that))
+
+/**
+ * Flatten a channel of channels.
+ *
+ * @since 2.0.0
+ * @category constructors
+ */
+export const flatten = <
+  OutElem,
+  OutErr,
+  OutDone,
+  InElem,
+  InErr,
+  InDone,
+  Env,
+  OutErr1,
+  OutDone1,
+  InElem1,
+  InErr1,
+  InDone1,
+  Env1
+>(
+  channels: Channel<
+    Channel<OutElem, OutErr, OutDone, InElem, InErr, InDone, Env>,
+    OutErr1,
+    OutDone1,
+    InElem1,
+    InErr1,
+    InDone1,
+    Env1
+  >
+): Channel<OutElem, OutErr | OutErr1, OutDone1, InElem & InElem1, InErr & InErr1, InDone & InDone1, Env | Env1> =>
+  flatMap(channels, identity)
+
+/**
+ * Returns a new channel, which sequentially combines this channel, together
+ * with the provided factory function, which creates a second channel based on
+ * the output values of this channel. The result is a channel that will first
+ * perform the functions of this channel, before performing the functions of
+ * the created channel (including yielding its terminal value).
+ *
+ * @since 2.0.0
+ * @category sequencing
+ */
+
+/**
  * @since 4.0.0
  * @category utils
  */
