@@ -17,9 +17,16 @@ import * as Option from "../Option.js"
 import { pipeArguments } from "../Pipeable.js"
 import type { Predicate, Refinement } from "../Predicate.js"
 import { hasProperty, isIterable, isObject, isTagged } from "../Predicate.js"
-import { CurrentConcurrency, CurrentScheduler } from "../References.js"
+import {
+  CurrentConcurrency,
+  CurrentScheduler,
+  TracerEnabled,
+  TracerSpanAnnotations,
+  TracerSpanLinks
+} from "../References.js"
 import * as Scheduler from "../Scheduler.js"
 import type * as Scope from "../Scope.js"
+import * as Tracer from "../Tracer.js"
 import type { Concurrency, Equals, NoInfer, NotFunction, Simplify } from "../Types.js"
 import type { YieldWrap } from "../Utils.js"
 import { yieldWrapGet } from "../Utils.js"
@@ -36,6 +43,7 @@ import {
   successCont,
   Yield
 } from "./effectable.js"
+import { addSpanStackTrace } from "./tracer.js"
 
 /** @internal */
 export const TypeId: Effect.TypeId = Symbol.for(
@@ -3540,6 +3548,188 @@ export const unsafeMakeLatch = (open?: boolean | undefined): Effect.Latch => new
 
 /** @internal */
 export const makeLatch = (open?: boolean | undefined) => sync(() => unsafeMakeLatch(open))
+
+// ----------------------------------------------------------------------------
+// Tracer
+// ----------------------------------------------------------------------------
+//
+const bigint0 = BigInt(0)
+
+const NoopSpanProto: Omit<Tracer.Span, "parent" | "name" | "context"> = {
+  _tag: "Span",
+  spanId: "noop",
+  traceId: "noop",
+  sampled: false,
+  status: {
+    _tag: "Ended",
+    startTime: bigint0,
+    endTime: bigint0,
+    exit: exitVoid
+  },
+  attributes: new Map(),
+  links: [],
+  kind: "internal",
+  attribute() {},
+  event() {},
+  end() {}
+}
+
+/** @internal */
+export const noopSpan = (options: {
+  readonly name: string
+  readonly parent: Option.Option<Tracer.AnySpan>
+  readonly context: Context.Context<never>
+}): Tracer.Span => Object.assign(Object.create(NoopSpanProto), options)
+
+const filterDisablePropagation: (self: Option.Option<Tracer.AnySpan>) => Option.Option<Tracer.AnySpan> = Option.flatMap(
+  (span) =>
+    Context.get(span.context, Tracer.DisablePropagation)
+      ? span._tag === "Span" ? filterDisablePropagation(span.parent) : Option.none()
+      : Option.some(span)
+)
+
+/** @internal */
+export const spanToTrace = globalValue("effect/Tracer/spanToTrace", () => new WeakMap())
+
+/** @internal */
+export const unsafeMakeSpan = <XA, XE>(
+  fiber: Fiber.Fiber<XA, XE>,
+  name: string,
+  options: Tracer.SpanOptions
+) => {
+  const disablePropagation = !fiber.getRef(TracerEnabled) ||
+    (options.context && Context.get(options.context, Tracer.DisablePropagation))
+  const parent = options.parent
+    ? Option.some(options.parent)
+    : options.root
+    ? Option.none()
+    : filterDisablePropagation(Context.getOption(fiber.context, Tracer.ParentSpan))
+
+  let span: Tracer.Span
+
+  if (disablePropagation) {
+    span = noopSpan({
+      name,
+      parent,
+      context: Context.add(
+        options.context ?? Context.empty(),
+        Tracer.DisablePropagation,
+        true
+      )
+    })
+  } else {
+    const tracer = fiber.getRef(Tracer.CurrentTracer)
+    const clock = fiber.getRef(CurrentClock)
+    const annotationsFromEnv = fiber.getRef(TracerSpanAnnotations)
+    const linksFromEnv = fiber.getRef(TracerSpanLinks)
+
+    const links = options.links !== undefined ?
+      [...linksFromEnv, ...options.links] :
+      linksFromEnv
+
+    span = tracer.span(
+      name,
+      parent,
+      options.context ?? Context.empty(),
+      links,
+      clock.unsafeCurrentTimeNanos(),
+      options.kind ?? "internal"
+    )
+
+    for (const [key, value] of Object.entries(annotationsFromEnv)) {
+      span.attribute(key, value)
+    }
+    if (options.attributes !== undefined) {
+      for (const [key, value] of Object.entries(options.attributes)) {
+        span.attribute(key, value)
+      }
+    }
+  }
+
+  if (typeof options.captureStackTrace === "function") {
+    spanToTrace.set(span, options.captureStackTrace)
+  }
+
+  return span
+}
+
+/** @internal */
+export const makeSpan = (
+  name: string,
+  options?: Tracer.SpanOptions
+): Effect.Effect<Tracer.Span> => {
+  options = addSpanStackTrace(options)
+  return withFiber((fiber) => succeed(unsafeMakeSpan(fiber, name, options)))
+}
+
+/* @internal */
+export const spanAnnotations: Effect.Effect<Readonly<Record<string, unknown>>> = service(
+  TracerSpanAnnotations
+)
+
+/* @internal */
+export const spanLinks: Effect.Effect<ReadonlyArray<Tracer.SpanLink>> = service(TracerSpanLinks)
+
+/** @internal */
+export const endSpan = <A, E>(span: Tracer.Span, exit: Exit.Exit<A, E>, clock: Clock.Clock) =>
+  sync(() => {
+    if (span.status._tag === "Ended") return
+    span.end(clock.unsafeCurrentTimeNanos(), exit)
+  })
+
+/** @internal */
+export const useSpan: {
+  <A, E, R>(name: string, evaluate: (span: Tracer.Span) => Effect.Effect<A, E, R>): Effect.Effect<A, E, R>
+  <A, E, R>(
+    name: string,
+    options: Tracer.SpanOptions,
+    evaluate: (span: Tracer.Span) => Effect.Effect<A, E, R>
+  ): Effect.Effect<A, E, R>
+} = <A, E, R>(
+  name: string,
+  ...args: [evaluate: (span: Tracer.Span) => Effect.Effect<A, E, R>] | [
+    options: any,
+    evaluate: (span: Tracer.Span) => Effect.Effect<A, E, R>
+  ]
+) => {
+  const options = addSpanStackTrace(args.length === 1 ? undefined : args[0])
+  const evaluate: (span: Tracer.Span) => Effect.Effect<A, E, R> = args[args.length - 1]
+  return withFiberUnknown((fiber) => {
+    const span = unsafeMakeSpan(fiber, name, options)
+    const clock = fiber.getRef(CurrentClock)
+    return onExit(evaluate(span), (exit) => endSpan(span, exit, clock))
+  })
+}
+
+/** @internal */
+export const withParentSpan = dual<
+  (
+    span: Tracer.AnySpan
+  ) => <A, E, R>(self: Effect.Effect<A, E, R>) => Effect.Effect<A, E, Exclude<R, Tracer.ParentSpan>>,
+  <A, E, R>(self: Effect.Effect<A, E, R>, span: Tracer.AnySpan) => Effect.Effect<A, E, Exclude<R, Tracer.ParentSpan>>
+>(2, (self, span) => provideService(self, Tracer.ParentSpan, span))
+
+/** @internal */
+export const withSpan: {
+  (
+    name: string,
+    options?: Tracer.SpanOptions | undefined
+  ): <A, E, R>(self: Effect.Effect<A, E, R>) => Effect.Effect<A, E, Exclude<R, Tracer.ParentSpan>>
+  <A, E, R>(
+    self: Effect.Effect<A, E, R>,
+    name: string,
+    options?: Tracer.SpanOptions | undefined
+  ): Effect.Effect<A, E, Exclude<R, Tracer.ParentSpan>>
+} = function() {
+  const dataFirst = typeof arguments[0] !== "string"
+  const name = dataFirst ? arguments[1] : arguments[0]
+  const options = addSpanStackTrace(dataFirst ? arguments[2] : arguments[1])
+  if (dataFirst) {
+    const self = arguments[0]
+    return useSpan(name, options, (span) => withParentSpan(self, span))
+  }
+  return (self: Effect.Effect<any, any, any>) => useSpan(name, options, (span) => withParentSpan(self, span))
+} as any
 
 // ----------------------------------------------------------------------------
 // Clock

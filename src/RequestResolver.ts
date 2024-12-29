@@ -2,13 +2,16 @@
  * @since 2.0.0
  */
 import type { NonEmptyArray } from "./Array.js"
+import * as Context from "./Context.js"
 import * as Duration from "./Duration.js"
 import type { Effect } from "./Effect.js"
 import { constTrue, dual, identity } from "./Function.js"
+import { CompletedRequestMap } from "./internal/completedRequestMap.js"
 import * as core from "./internal/core.js"
 import { type Pipeable, pipeArguments } from "./Pipeable.js"
 import { hasProperty } from "./Predicate.js"
 import * as Request from "./Request.js"
+import * as Tracer from "./Tracer.js"
 import type * as Types from "./Types.js"
 
 /**
@@ -327,3 +330,41 @@ export const race: {
   make(
     (requests) => core.race(self.runAll(requests), that.runAll(requests))
   ))
+
+/**
+ * Add a tracing span to the request resolver, which will also add any span
+ * links from the request context's.
+ *
+ * @since 4.0.0
+ * @category combinators
+ */
+export const withSpan: {
+  (
+    name: string,
+    options?: Tracer.SpanOptions | undefined
+  ): <A>(self: RequestResolver<A>) => RequestResolver<A>
+  <A>(
+    self: RequestResolver<A>,
+    name: string,
+    options?: Tracer.SpanOptions | undefined
+  ): RequestResolver<A>
+} = dual(2, <A>(
+  self: RequestResolver<A>,
+  name: string,
+  options?: Tracer.SpanOptions | undefined
+): RequestResolver<A> =>
+  makeProto({
+    ...self,
+    runAll: (requests) =>
+      core.withFiberUnknown((fiber) => {
+        const requestMap = fiber.getRef(CompletedRequestMap)
+        const links = options?.links ? options.links.slice() : []
+        for (const request of requests) {
+          const entry = requestMap.get(request as any)!
+          const span = Context.getOption(entry.context, Tracer.ParentSpan)
+          if (span._tag === "None") continue
+          links.push({ _tag: "SpanLink", span: span.value, attributes: {} })
+        }
+        return core.withSpan(self.runAll(requests), name, { ...options, links })
+      })
+  }))
