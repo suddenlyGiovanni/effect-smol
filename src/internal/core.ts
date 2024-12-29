@@ -3792,7 +3792,7 @@ export const linkSpans: {
   attributes: Record<string, unknown> = {}
 ): Effect.Effect<A, E, R> => {
   const spans: Array<Tracer.AnySpan> = Array.isArray(span) ? span : [span]
-  const links = spans.map((span): Tracer.SpanLink => ({ _tag: "SpanLink", span, attributes }))
+  const links = spans.map((span): Tracer.SpanLink => ({ span, attributes }))
   return updateService(self, TracerSpanLinks, (current) => [...current, ...links])
 })
 

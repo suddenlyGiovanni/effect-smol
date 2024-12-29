@@ -109,7 +109,6 @@ export interface Span {
  * @category models
  */
 export interface SpanLink {
-  readonly _tag: "SpanLink"
   readonly span: AnySpan
   readonly attributes: Readonly<Record<string, unknown>>
 }

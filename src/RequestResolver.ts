@@ -333,7 +333,7 @@ export const race: {
 
 /**
  * Add a tracing span to the request resolver, which will also add any span
- * links from the request context's.
+ * links from the request's.
  *
  * @since 4.0.0
  * @category combinators
@@ -363,7 +363,7 @@ export const withSpan: {
           const entry = requestMap.get(request as any)!
           const span = Context.getOption(entry.context, Tracer.ParentSpan)
           if (span._tag === "None") continue
-          links.push({ _tag: "SpanLink", span: span.value, attributes: {} })
+          links.push({ span: span.value, attributes: {} })
         }
         return core.withSpan(self.runAll(requests), name, { ...options, links })
       })
