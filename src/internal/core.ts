@@ -472,7 +472,9 @@ class FiberImpl<in out A = any, in out E = any> implements Fiber.Fiber<A, E> {
           const prev = current
           current = flatMap(yieldNow, () => prev as any) as any
         }
-        current = (current as any)[evaluate](this)
+        current = fiberMiddleware.tracerContext
+          ? fiberMiddleware.tracerContext(this, current as Primitive)
+          : (current as any)[evaluate](this)
         if (current === Yield) {
           const yielded = this._yielded!
           if (ExitTypeId in yielded) {
@@ -526,6 +528,9 @@ class FiberImpl<in out A = any, in out E = any> implements Fiber.Fiber<A, E> {
 const fiberMiddleware = globalValue("effect/Fiber/fiberMiddleware", () => ({
   interruptChildren: undefined as
     | ((fiber: FiberImpl) => Effect.Effect<void> | undefined)
+    | undefined,
+  tracerContext: undefined as
+    | ((fiber: FiberImpl, primitive: Primitive) => Primitive | Yield)
     | undefined
 }))
 
@@ -877,6 +882,11 @@ export const withFiber: <A, E = never, R = never>(
     return this[args](fiber)
   }
 })
+
+/** @internal */
+export const withFiberUnknown: <A, E, R>(
+  evaluate: (fiber: FiberImpl<unknown, unknown>) => Effect.Effect<A, E, R>
+) => Effect.Effect<A, E, R> = withFiber as any
 
 /** @internal */
 export const withFiberId = <A, E, R>(

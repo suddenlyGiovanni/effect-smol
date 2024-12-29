@@ -1107,6 +1107,14 @@ export const withFiber: <A, E = never, R = never>(
   evaluate: (fiber: Fiber<A, E>) => Effect<A, E, R>
 ) => Effect<A, E, R> = core.withFiber
 
+/**
+ * @since 4.0.0
+ * @category Creating Effects
+ */
+export const withFiberUnknown: <A, E, R>(
+  evaluate: (fiber: Fiber<unknown, unknown>) => Effect<A, E, R>
+) => Effect<A, E, R> = core.withFiberUnknown
+
 // -----------------------------------------------------------------------------
 // Mapping
 // -----------------------------------------------------------------------------
