@@ -356,13 +356,15 @@ export const withSpan: {
   makeProto({
     ...self,
     runAll: (requests) =>
-      core.withFiberUnknown((fiber) => {
+      core.withFiber((fiber) => {
         const requestMap = fiber.getRef(CompletedRequestMap)
         const links = options?.links ? options.links.slice() : []
+        const seen = new Set<Tracer.AnySpan>()
         for (const request of requests) {
           const entry = requestMap.get(request as any)!
           const span = Context.getOption(entry.context, Tracer.ParentSpan)
-          if (span._tag === "None") continue
+          if (span._tag === "None" || seen.has(span.value)) continue
+          seen.add(span.value)
           links.push({ span: span.value, attributes: {} })
         }
         return core.withSpan(self.runAll(requests), name, { ...options, links })
