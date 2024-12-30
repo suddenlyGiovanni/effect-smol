@@ -191,9 +191,11 @@ export const complete = dual<
 >(2, (self, result) =>
   core.withFiber((fiber) => {
     const map = fiber.getRef(CompletedRequestMap)
-    const entry = map.get(self)
-    if (!entry) return core.void
-    entry.resume(result)
+    const entries = map.get(self)
+    if (!entries) return core.void
+    for (const entry of entries) {
+      entry.resume(result)
+    }
     map.delete(self)
     return core.void
   }))
@@ -268,7 +270,7 @@ export const context = <R extends Request<any, any, any>>(
   core.withFiber((fiber) => {
     const entry = fiber.getRef(CompletedRequestMap).get(self)
     return entry
-      ? core.succeed(entry.context as any)
+      ? core.succeed(entry[0].context as any)
       : core.die(new Error("Request.context: request not found - it may have already been completed", { cause: self }))
   })
 

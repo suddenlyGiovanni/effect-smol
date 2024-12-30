@@ -59,7 +59,7 @@ export const request: {
 
 interface Batch {
   readonly resolver: RequestResolver<any>
-  readonly requestMap: Map<any, Entry<any>>
+  readonly requestMap: typeof CompletedRequestMap.Service
   readonly requests: NonEmptyArray<any>
   delayFiber?: Fiber<void> | undefined
 }
@@ -69,12 +69,16 @@ const pendingBatches = globalValue(
   () => new Map<RequestResolver<any>, Batch>()
 )
 
-const addEntry = <A>(resolver: RequestResolver<A>, entry: Entry<A>, fiber: Fiber<any, any>) => {
+const addEntry = <A extends Request<any, any, any>>(
+  resolver: RequestResolver<A>,
+  entry: Entry<A>,
+  fiber: Fiber<any, any>
+) => {
   let batch = pendingBatches.get(resolver)
   if (!batch) {
     batch = {
       resolver,
-      requestMap: new Map([[entry.request, entry]]),
+      requestMap: new Map([[entry.request, [entry]]]),
       requests: [entry.request]
     }
     pendingBatches.set(resolver, batch)
@@ -85,8 +89,13 @@ const addEntry = <A>(resolver: RequestResolver<A>, entry: Entry<A>, fiber: Fiber
     return
   }
 
-  batch.requestMap.set(entry.request, entry)
-  batch.requests.push(entry.request)
+  let entries = batch.requestMap.get(entry.request)
+  if (!entries) {
+    entries = []
+    batch.requestMap.set(entry.request, entries)
+    batch.requests.push(entry.request)
+  }
+  entries.push(entry)
   if (batch.resolver.collectWhile(batch.requests)) return
 
   batch.delayFiber!.unsafeInterrupt(fiber.id)
@@ -94,14 +103,24 @@ const addEntry = <A>(resolver: RequestResolver<A>, entry: Entry<A>, fiber: Fiber
   core.runFork(runBatch(batch), { scheduler: fiber.getRef(CurrentScheduler) })
 }
 
-const maybeRemoveEntry = <A>(resolver: RequestResolver<A>, entry: Entry<A>) =>
+const maybeRemoveEntry = <A extends Request<any, any, any>>(resolver: RequestResolver<A>, entry: Entry<A>) =>
   core.suspend(() => {
     const batch = pendingBatches.get(resolver)
     if (!batch) return core.void
-    const index = batch.requests.indexOf(entry)
+    const entries = batch.requestMap.get(entry.request)
+    if (!entries) return core.void
+
+    const index = entries.indexOf(entry)
     if (index < 0) return core.void
-    batch.requests.splice(index, 1)
+    entries.splice(index, 1)
+
+    if (entries.length > 0) return core.void
+
+    const requestIndex = batch.requests.indexOf(entry.request)
+    if (requestIndex < 0) return core.void
+    batch.requests.splice(requestIndex, 1)
     batch.requestMap.delete(entry.request)
+
     if (batch.requests.length === 0) {
       pendingBatches.delete(resolver)
       return batch.delayFiber ? core.fiberInterrupt(batch.delayFiber) : core.void
@@ -116,14 +135,16 @@ const runBatch = ({ requestMap, requests, resolver }: Batch) =>
     return core.onExit(
       core.provideService(resolver.runAll(requests), CompletedRequestMap, requestMap),
       (exit) => {
-        for (const entry of requestMap.values()) {
-          entry.resume(
-            exit._tag === "Success"
-              ? core.exitDie(
-                new Error("Effect.request: RequestResolver did not complete request", { cause: entry.request })
-              )
-              : exit
-          )
+        for (const entries of requestMap.values()) {
+          const request = entries[0].request
+          const exit_ = exit._tag === "Success"
+            ? core.exitDie(
+              new Error("Effect.request: RequestResolver did not complete request", { cause: request })
+            )
+            : exit
+          for (const entry of entries) {
+            entry.resume(exit_)
+          }
         }
         requests.length = 0
         requestMap.clear()
