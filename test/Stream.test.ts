@@ -32,5 +32,24 @@ describe("Stream", () => {
         )
         assert.deepStrictEqual(result, [1, 2, 3])
       }))
+
+    it.effect("take - short-circuits stream evaluation", () =>
+      Effect.gen(function*() {
+        const result = yield* Stream.succeed(1).pipe(
+          Stream.concat(Stream.never),
+          Stream.take(1),
+          Stream.runCollect
+        )
+        assert.deepStrictEqual(result, [1])
+      }))
+
+    it.effect("take - 0", () =>
+      Effect.gen(function*() {
+        const result = yield* Stream.range(1, 5).pipe(
+          Stream.take(0),
+          Stream.runCollect
+        )
+        assert.deepStrictEqual(result, [])
+      }))
   })
 })
