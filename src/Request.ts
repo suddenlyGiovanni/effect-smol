@@ -2,7 +2,7 @@
  * @since 2.0.0
  */
 import type * as Cause from "./Cause.js"
-import * as Context from "./Context.js"
+import type * as Context from "./Context.js"
 import type * as Effect from "./Effect.js"
 import type * as Exit from "./Exit.js"
 import { dual } from "./Function.js"
@@ -190,10 +190,11 @@ export const complete = dual<
   ) => Effect.Effect<void>
 >(2, (self, result) =>
   core.withFiber((fiber) => {
-    const entry = fiber.getRef(CompletedRequestMap).get(self)
-    if (!entry || entry.completed) return core.void
-    entry.completed = true
+    const map = fiber.getRef(CompletedRequestMap)
+    const entry = map.get(self)
+    if (!entry) return core.void
     entry.resume(result)
+    map.delete(self)
     return core.void
   }))
 
@@ -266,7 +267,9 @@ export const context = <R extends Request<any, any, any>>(
 ): Effect.Effect<Context.Context<Request.Context<R>>> =>
   core.withFiber((fiber) => {
     const entry = fiber.getRef(CompletedRequestMap).get(self)
-    return core.succeed(entry ? entry.context as any : Context.empty())
+    return entry
+      ? core.succeed(entry.context as any)
+      : core.die(new Error("Request.context: request not found - it may have already been completed"))
   })
 
 /**
@@ -284,7 +287,6 @@ export interface Entry<out R> {
       [R] extends [Request<infer _A, infer _E, infer _R>] ? _E : never
     >
   ) => void
-  completed: boolean
 }
 
 /**
@@ -302,7 +304,4 @@ export const makeEntry = <R>(options: {
       [R] extends [Request<infer _A, infer _E, infer _R>] ? _E : never
     >
   ) => void
-}): Entry<R> => ({
-  ...options,
-  completed: false
-})
+}): Entry<R> => options

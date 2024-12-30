@@ -116,19 +116,14 @@ const runBatch = ({ requestMap, requests, resolver }: Batch) =>
     return core.onExit(
       core.provideService(resolver.runAll(requests), CompletedRequestMap, requestMap),
       (exit) => {
-        for (let i = 0; i < requests.length; i++) {
-          const request = requests[i]
-          const entry = requestMap.get(request)!
-          if (!entry.completed) {
-            entry.completed = true
-            entry.resume(
-              exit._tag === "Success"
-                ? core.exitDie(
-                  new Error("Effect.request: RequestResolver did not complete request", { cause: request })
-                )
-                : exit
-            )
-          }
+        for (const entry of requestMap.values()) {
+          entry.resume(
+            exit._tag === "Success"
+              ? core.exitDie(
+                new Error("Effect.request: RequestResolver did not complete request", { cause: entry.request })
+              )
+              : exit
+          )
         }
         requests.length = 0
         requestMap.clear()
