@@ -3,17 +3,19 @@ import * as Effect from "effect/Effect"
 import * as Request from "effect/Request"
 import * as Resolver from "effect/RequestResolver"
 
-class GetNameById extends Request.TaggedClass("GetNameById")<string, string, {
+class GetNameById extends Request.TaggedClass("GetNameById")<{
   readonly id: number
-}> {}
+}, string> {}
 
 const UserResolver = Resolver.make((requests: Array.NonEmptyArray<GetNameById>) =>
   Effect.forEach(requests, (request) => Request.succeed(request, `User ${request.id}`), { discard: true })
 )
 
-const effect = Effect.forEach(Array.range(1, 1000), (id) => Effect.request(new GetNameById({ id }), UserResolver), {
-  concurrency: "unbounded"
-})
+const effect = Effect.forEach(
+  Array.range(1, 1000),
+  (id) => Effect.request(new GetNameById({ id }), UserResolver),
+  { concurrency: "unbounded" }
+)
 
 for (let i = 0; i < 10; i++) {
   Effect.runSync(effect)

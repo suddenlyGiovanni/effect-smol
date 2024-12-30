@@ -269,7 +269,7 @@ export const context = <R extends Request<any, any, any>>(
     const entry = fiber.getRef(CompletedRequestMap).get(self)
     return entry
       ? core.succeed(entry.context as any)
-      : core.die(new Error("Request.context: request not found - it may have already been completed"))
+      : core.die(new Error("Request.context: request not found - it may have already been completed", { cause: self }))
   })
 
 /**
