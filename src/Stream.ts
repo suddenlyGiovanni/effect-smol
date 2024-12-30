@@ -265,6 +265,12 @@ export const fromIterable = <A>(iterable: Iterable<A>): Stream<A> => fromChannel
  * @since 4.0.0
  * @category constructors
  */
+export const fromArray = <A>(array: ReadonlyArray<A>): Stream<A> => fromChannel(Channel.succeed(array))
+
+/**
+ * @since 4.0.0
+ * @category constructors
+ */
 export const fromMailbox = <A, E>(mailbox: Mailbox.ReadonlyMailbox<A, E>): Stream<A, E> =>
   fromChannel(Channel.fromMailboxArray(mailbox))
 
@@ -467,7 +473,7 @@ export const concat: {
 } = dual(
   2,
   <A, E, R, A2, E2, R2>(self: Stream<A, E, R>, that: Stream<A2, E2, R2>): Stream<A | A2, E | E2, R | R2> =>
-    fromChannel(Channel.concat(toChannel(self), toChannel(that)))
+    flatten(fromArray<Stream<A | A2, E | E2, R | R2>>([self, that]))
 )
 
 /**
