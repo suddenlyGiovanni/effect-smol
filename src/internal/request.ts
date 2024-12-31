@@ -7,7 +7,7 @@ import { CurrentScheduler } from "../References.js"
 import type { Entry, Request } from "../Request.js"
 import { makeEntry } from "../Request.js"
 import type { RequestResolver } from "../RequestResolver.js"
-import { CompletedRequestMap } from "./completedRequestMap.js"
+import type { CompletedRequestMap } from "./completedRequestMap.js"
 import * as core from "./core.js"
 
 /** @internal */
@@ -44,12 +44,7 @@ export const request: {
         Request.Context<A>
       >((fiber) =>
         core.async((resume) => {
-          const entry = makeEntry({
-            request: self,
-            context: fiber.context as any,
-            resume
-          })
-          addEntry(resolver, entry, fiber)
+          const entry = addEntry(resolver, self, resume, fiber)
           return maybeRemoveEntry(resolver, entry)
         })
       )
@@ -59,8 +54,8 @@ export const request: {
 
 interface Batch {
   readonly resolver: RequestResolver<any>
-  readonly requestMap: typeof CompletedRequestMap.Service
-  readonly requests: NonEmptyArray<any>
+  readonly entrySet: typeof CompletedRequestMap.Service
+  readonly entries: NonEmptyArray<Entry<any>>
   delayFiber?: Fiber<void> | undefined
 }
 
@@ -71,83 +66,80 @@ const pendingBatches = globalValue(
 
 const addEntry = <A extends Request<any, any, any>>(
   resolver: RequestResolver<A>,
-  entry: Entry<A>,
+  request: A,
+  resume: (effect: Effect<any, any, any>) => void,
   fiber: Fiber<any, any>
 ) => {
   let batch = pendingBatches.get(resolver)
   if (!batch) {
     batch = {
       resolver,
-      requestMap: new Map([[entry.request, [entry]]]),
-      requests: [entry.request]
+      entrySet: new Set(),
+      entries: [] as any
     }
     pendingBatches.set(resolver, batch)
     batch.delayFiber = core.runFork(
       core.andThen(resolver.delay, runBatch(batch)),
       { scheduler: fiber.getRef(CurrentScheduler) }
     )
-    return
   }
 
-  let entries = batch.requestMap.get(entry.request)
-  if (!entries) {
-    entries = []
-    batch.requestMap.set(entry.request, entries)
-    batch.requests.push(entry.request)
-  }
-  entries.push(entry)
-  if (batch.resolver.collectWhile(batch.requests)) return
+  const entry = makeEntry({
+    request,
+    context: fiber.context as any,
+    unsafeComplete(effect) {
+      resume(effect)
+      batch.entrySet.delete(entry)
+    }
+  })
+
+  batch.entrySet.add(entry)
+  batch.entries.push(entry)
+  if (batch.resolver.collectWhile(batch.entries)) return entry
 
   batch.delayFiber!.unsafeInterrupt(fiber.id)
   batch.delayFiber = undefined
   core.runFork(runBatch(batch), { scheduler: fiber.getRef(CurrentScheduler) })
+  return entry
 }
 
-const maybeRemoveEntry = <A extends Request<any, any, any>>(resolver: RequestResolver<A>, entry: Entry<A>) =>
+const maybeRemoveEntry = <A extends Request<any, any, any>>(
+  resolver: RequestResolver<A>,
+  entry: Entry<A>
+) =>
   core.suspend(() => {
     const batch = pendingBatches.get(resolver)
     if (!batch) return core.void
-    const entries = batch.requestMap.get(entry.request)
-    if (!entries) return core.void
 
-    const index = entries.indexOf(entry)
+    const index = batch.entries.indexOf(entry)
     if (index < 0) return core.void
-    entries.splice(index, 1)
+    batch.entries.splice(index, 1)
+    batch.entrySet.delete(entry)
 
-    if (entries.length > 0) return core.void
-
-    const requestIndex = batch.requests.indexOf(entry.request)
-    if (requestIndex < 0) return core.void
-    batch.requests.splice(requestIndex, 1)
-    batch.requestMap.delete(entry.request)
-
-    if (batch.requests.length === 0) {
+    if (batch.entries.length === 0) {
       pendingBatches.delete(resolver)
       return batch.delayFiber ? core.fiberInterrupt(batch.delayFiber) : core.void
     }
     return core.void
   })
 
-const runBatch = ({ requestMap, requests, resolver }: Batch) =>
+const runBatch = ({ entries, entrySet, resolver }: Batch) =>
   core.suspend(() => {
     if (!pendingBatches.has(resolver)) return core.void
     pendingBatches.delete(resolver)
     return core.onExit(
-      core.provideService(resolver.runAll(requests), CompletedRequestMap, requestMap),
+      resolver.runAll(entries),
       (exit) => {
-        for (const entries of requestMap.values()) {
-          const request = entries[0].request
-          const exit_ = exit._tag === "Success"
-            ? core.exitDie(
-              new Error("Effect.request: RequestResolver did not complete request", { cause: request })
-            )
-            : exit
-          for (const entry of entries) {
-            entry.resume(exit_)
-          }
+        for (const entry of entrySet) {
+          entry.unsafeComplete(
+            exit._tag === "Success"
+              ? core.exitDie(
+                new Error("Effect.request: RequestResolver did not complete request", { cause: entry.request })
+              )
+              : exit
+          )
         }
-        requests.length = 0
-        requestMap.clear()
+        entries.length = 0
         return core.void
       }
     )

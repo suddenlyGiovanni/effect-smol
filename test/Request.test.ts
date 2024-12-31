@@ -49,11 +49,11 @@ const makeUserResolver = Effect.gen(function*() {
   const counter = yield* Effect.service(Counter)
   const requests_ = yield* Effect.service(Requests)
 
-  const resolver = Resolver.make(Effect.fnUntraced(function*(requests: Array<UserRequest>) {
+  const resolver = Resolver.make<UserRequest>(Effect.fnUntraced(function*(entries) {
     counter.count++
-    requests_.count += requests.length
-    for (const request of requests) {
-      yield* delay(processRequest(request))
+    requests_.count += entries.length
+    for (const entry of entries) {
+      yield* delay(processRequest(entry))
     }
   })).pipe(Resolver.batchN(15))
 
@@ -85,8 +85,8 @@ const makeUserResolverTagged = Effect.gen(function*() {
       const names: Array<string> = []
       for (let i = 0; i < reqs.length; i++) {
         const req = reqs[i]
-        if (!userNames.has(req.id)) return yield* Effect.fail("Not Found")
-        names.push(userNames.get(req.id)!)
+        if (!userNames.has(req.request.id)) return yield* Effect.fail("Not Found")
+        names.push(userNames.get(req.request.id)!)
       }
       return names
     })
@@ -101,17 +101,17 @@ const makeUserResolverTagged = Effect.gen(function*() {
   return { allNames, getIds, getNameById } as const
 })
 
-const processRequest = (request: UserRequest): Effect.Effect<void> => {
-  switch (request._tag) {
+const processRequest = (entry: Request.Entry<UserRequest>): Effect.Effect<void> => {
+  switch (entry.request._tag) {
     case "GetAllIds": {
-      return Request.complete(request, Exit.succeed(userIds))
+      return Request.complete(entry, Exit.succeed(userIds))
     }
     case "GetNameById": {
-      if (userNames.has(request.id)) {
-        const userName = userNames.get(request.id)!
-        return Request.complete(request, Exit.succeed(userName))
+      if (userNames.has(entry.request.id)) {
+        const userName = userNames.get(entry.request.id)!
+        return Request.complete(entry, Exit.succeed(userName))
       }
-      return Request.completeEffect(request, Exit.fail("Not Found"))
+      return Request.completeEffect(entry, Exit.fail("Not Found"))
     }
   }
 }

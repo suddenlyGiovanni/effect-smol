@@ -6,7 +6,6 @@ import type * as Context from "./Context.js"
 import type * as Effect from "./Effect.js"
 import type * as Exit from "./Exit.js"
 import { dual } from "./Function.js"
-import { CompletedRequestMap } from "./internal/completedRequestMap.js"
 import * as core from "./internal/core.js"
 import { StructuralPrototype } from "./internal/effectable.js"
 import type * as Option from "./Option.js"
@@ -183,22 +182,12 @@ export const TaggedClass = <Tag extends string>(
 export const complete = dual<
   <A extends Request<any, any, any>>(
     result: Request.Result<A>
-  ) => (self: A) => Effect.Effect<void>,
+  ) => (self: Entry<A>) => Effect.Effect<void>,
   <A extends Request<any, any, any>>(
-    self: A,
+    self: Entry<A>,
     result: Request.Result<A>
   ) => Effect.Effect<void>
->(2, (self, result) =>
-  core.withFiber((fiber) => {
-    const map = fiber.getRef(CompletedRequestMap)
-    const entries = map.get(self)
-    if (!entries) return core.void
-    for (const entry of entries) {
-      entry.resume(result)
-    }
-    map.delete(self)
-    return core.void
-  }))
+>(2, (self, result) => core.sync(() => self.unsafeComplete(result)))
 
 /**
  * @since 2.0.0
@@ -207,9 +196,9 @@ export const complete = dual<
 export const completeEffect = dual<
   <A extends Request<any, any, any>, R>(
     effect: Effect.Effect<Request.Success<A>, Request.Error<A>, R>
-  ) => (self: A) => Effect.Effect<void, never, R>,
+  ) => (self: Entry<A>) => Effect.Effect<void, never, R>,
   <A extends Request<any, any, any>, R>(
-    self: A,
+    self: Entry<A>,
     effect: Effect.Effect<Request.Success<A>, Request.Error<A>, R>
   ) => Effect.Effect<void, never, R>
 >(2, (self, effect) =>
@@ -225,9 +214,9 @@ export const completeEffect = dual<
 export const fail = dual<
   <A extends Request<any, any, any>>(
     error: Request.Error<A>
-  ) => (self: A) => Effect.Effect<void>,
+  ) => (self: Entry<A>) => Effect.Effect<void>,
   <A extends Request<any, any, any>>(
-    self: A,
+    self: Entry<A>,
     error: Request.Error<A>
   ) => Effect.Effect<void>
 >(2, (self, error) => complete(self, core.exitFail(error) as any))
@@ -239,9 +228,9 @@ export const fail = dual<
 export const failCause = dual<
   <A extends Request<any, any, any>>(
     cause: Cause.Cause<Request.Error<A>>
-  ) => (self: A) => Effect.Effect<void>,
+  ) => (self: Entry<A>) => Effect.Effect<void>,
   <A extends Request<any, any, any>>(
-    self: A,
+    self: Entry<A>,
     cause: Cause.Cause<Request.Error<A>>
   ) => Effect.Effect<void>
 >(2, (self, cause) => complete(self, core.exitFailCause(cause) as any))
@@ -253,26 +242,12 @@ export const failCause = dual<
 export const succeed = dual<
   <A extends Request<any, any, any>>(
     value: Request.Success<A>
-  ) => (self: A) => Effect.Effect<void>,
+  ) => (self: Entry<A>) => Effect.Effect<void>,
   <A extends Request<any, any, any>>(
-    self: A,
+    self: Entry<A>,
     value: Request.Success<A>
   ) => Effect.Effect<void>
 >(2, (self, value) => complete(self, core.exitSucceed(value) as any))
-
-/**
- * @since 4.0.0
- * @category context
- */
-export const context = <R extends Request<any, any, any>>(
-  self: R
-): Effect.Effect<Context.Context<Request.Context<R>>> =>
-  core.withFiber((fiber) => {
-    const entry = fiber.getRef(CompletedRequestMap).get(self)
-    return entry
-      ? core.succeed(entry[0].context as any)
-      : core.die(new Error("Request.context: request not found - it may have already been completed", { cause: self }))
-  })
 
 /**
  * @since 2.0.0
@@ -283,7 +258,7 @@ export interface Entry<out R> {
   readonly context: Context.Context<
     [R] extends [Request<infer _A, infer _E, infer _R>] ? _R : never
   >
-  readonly resume: (
+  readonly unsafeComplete: (
     effect: Effect.Effect<
       [R] extends [Request<infer _A, infer _E, infer _R>] ? _A : never,
       [R] extends [Request<infer _A, infer _E, infer _R>] ? _E : never
@@ -300,7 +275,7 @@ export const makeEntry = <R>(options: {
   readonly context: Context.Context<
     [R] extends [Request<infer _A, infer _E, infer _R>] ? _R : never
   >
-  readonly resume: (
+  readonly unsafeComplete: (
     effect: Effect.Effect<
       [R] extends [Request<infer _A, infer _E, infer _R>] ? _A : never,
       [R] extends [Request<infer _A, infer _E, infer _R>] ? _E : never

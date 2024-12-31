@@ -6,7 +6,6 @@ import * as Context from "./Context.js"
 import * as Duration from "./Duration.js"
 import type { Effect } from "./Effect.js"
 import { constTrue, dual, identity } from "./Function.js"
-import { CompletedRequestMap } from "./internal/completedRequestMap.js"
 import * as core from "./internal/core.js"
 import { type Pipeable, pipeArguments } from "./Pipeable.js"
 import { hasProperty } from "./Predicate.js"
@@ -56,12 +55,12 @@ export interface RequestResolver<in A> extends RequestResolver.Variance<A>, Pipe
    * Should the resolver continue collecting requests? Otherwise, it will
    * immediately execute the collected requests cutting the delay short.
    */
-  collectWhile(requests: NonEmptyArray<A>): boolean
+  collectWhile(entries: NonEmptyArray<Request.Entry<A>>): boolean
 
   /**
    * Execute a collection of requests.
    */
-  runAll(requests: NonEmptyArray<A>): Effect<void>
+  runAll(entries: NonEmptyArray<Request.Entry<A>>): Effect<void>
 }
 
 /**
@@ -99,8 +98,8 @@ export const isRequestResolver = (u: unknown): u is RequestResolver<unknown> => 
 
 const makeProto = <A>(options: {
   readonly delay: Effect<void>
-  readonly collectWhile: (requests: NonEmptyArray<A>) => boolean
-  readonly runAll: (requests: NonEmptyArray<A>) => Effect<void>
+  readonly collectWhile: (requests: NonEmptyArray<Request.Entry<A>>) => boolean
+  readonly runAll: (entries: NonEmptyArray<Request.Entry<A>>) => Effect<void>
 }): RequestResolver<A> => {
   const self = Object.create(RequestResolverProto)
   self.delay = options.delay
@@ -117,7 +116,7 @@ const makeProto = <A>(options: {
  * @category constructors
  */
 export const make = <A>(
-  runAll: (requests: NonEmptyArray<A>) => Effect<void>
+  runAll: (entries: NonEmptyArray<Request.Entry<A>>) => Effect<void>
 ): RequestResolver<A> => makeProto({ delay: core.yieldNow, collectWhile: constTrue, runAll })
 
 /**
@@ -127,15 +126,16 @@ export const make = <A>(
  * @category constructors
  */
 export const fromFunction = <A extends Request.Request<any>>(
-  f: (request: A) => Request.Request.Success<A>
+  f: (entry: Request.Entry<A>) => Request.Request.Success<A>
 ): RequestResolver<A> =>
   make(
-    (requests) =>
-      core.forEach(
-        requests,
-        (request) => Request.complete(request, core.exitSucceed(f(request)) as any),
-        { discard: true }
-      )
+    (entries) =>
+      core.sync(() => {
+        for (let i = 0; i < entries.length; i++) {
+          const entry = entries[i]
+          entry.unsafeComplete(core.exitSucceed(f(entry)))
+        }
+      })
   )
 
 /**
@@ -147,12 +147,16 @@ export const fromFunction = <A extends Request.Request<any>>(
  * @category constructors
  */
 export const fromFunctionBatched = <A extends Request.Request<any>>(
-  f: (requests: NonEmptyArray<A>) => Iterable<Request.Request.Success<A>>
+  f: (entries: NonEmptyArray<Request.Entry<A>>) => Iterable<Request.Request.Success<A>>
 ): RequestResolver<A> =>
   make(
-    (requests) =>
-      core.forEach(f(requests), (result, i) => Request.complete(requests[i], core.exitSucceed(result) as any), {
-        discard: true
+    (entries) =>
+      core.sync(() => {
+        let i = 0
+        for (const result of f(entries)) {
+          const entry = entries[i++]
+          entry.unsafeComplete(core.exitSucceed(result))
+        }
       })
   )
 
@@ -163,10 +167,13 @@ export const fromFunctionBatched = <A extends Request.Request<any>>(
  * @category constructors
  */
 export const fromEffect = <A extends Request.Request<any>>(
-  f: (a: A) => Effect<Request.Request.Success<A>, Request.Request.Error<A>>
+  f: (entry: Request.Entry<A>) => Effect<Request.Request.Success<A>, Request.Request.Error<A>>
 ): RequestResolver<A> =>
   make(
-    (requests) => core.forEach(requests, (request) => Request.completeEffect(request, f(request)), { discard: true })
+    (entries) =>
+      core.forEach(entries, (entry) => Request.completeEffect(entry, f(entry)), {
+        discard: true
+      })
   )
 
 /**
@@ -183,37 +190,41 @@ export const fromEffectTagged = <A extends Request.Request<any, any, any> & { re
   Fns extends {
     readonly [Tag in A["_tag"]]: [Extract<A, { readonly _tag: Tag }>] extends [infer Req]
       ? Req extends Request.Request<infer ReqA, infer ReqE, infer _ReqR> ?
-        (requests: Array<Req>) => Effect<Iterable<ReqA>, ReqE>
+        (requests: Array<Request.Entry<Req>>) => Effect<Iterable<ReqA>, ReqE>
       : never
       : never
   }
 >(
   fns: Fns
 ): RequestResolver<A> =>
-  make(
-    (requests: NonEmptyArray<A>): Effect<void> => {
-      const grouped: Record<string, Array<A>> = {}
+  make<A>(
+    (entries): Effect<void> => {
+      const grouped: Record<string, Array<Request.Entry<A>>> = {}
       const tags: Array<A["_tag"]> = []
-      for (let i = 0, len = requests.length; i < len; i++) {
-        if (tags.includes(requests[i]._tag)) {
-          grouped[requests[i]._tag].push(requests[i])
+      for (let i = 0, len = entries.length; i < len; i++) {
+        if (tags.includes(entries[i].request._tag)) {
+          grouped[entries[i].request._tag].push(entries[i])
         } else {
-          grouped[requests[i]._tag] = [requests[i]]
-          tags.push(requests[i]._tag)
+          grouped[entries[i].request._tag] = [entries[i]]
+          tags.push(entries[i].request._tag)
         }
       }
       return core.forEach(
         tags,
         (tag) =>
-          core.matchCauseEffect((fns[tag] as any)(grouped[tag]) as Effect<Array<any>, unknown, unknown>, {
-            onFailure: (cause) =>
-              core.forEach(grouped[tag], (req) => Request.complete(req, core.exitFail(cause) as any), {
-                discard: true
-              }),
-            onSuccess: (res) =>
-              core.forEach(grouped[tag], (req, i) => Request.complete(req, core.exitSucceed(res[i]) as any), {
-                discard: true
-              })
+          core.matchCause((fns[tag] as any)(grouped[tag]) as Effect<Array<any>, unknown, unknown>, {
+            onFailure: (cause) => {
+              for (let i = 0; i < grouped[tag].length; i++) {
+                const entry = grouped[tag][i]
+                entry.unsafeComplete(core.exitFail(cause) as any)
+              }
+            },
+            onSuccess: (res) => {
+              for (let i = 0; i < res.length; i++) {
+                const entry = grouped[tag][i]
+                entry.unsafeComplete(core.exitSucceed(res[i]) as any)
+              }
+            }
           }),
         { concurrency: "unbounded", discard: true }
       ) as Effect<void>
@@ -259,26 +270,26 @@ export const setDelay: {
  */
 export const around: {
   <A, A2, X>(
-    before: (requests: NonEmptyArray<NoInfer<A>>) => Effect<A2>,
-    after: (requests: NonEmptyArray<NoInfer<A>>, a: A2) => Effect<X>
+    before: (entries: NonEmptyArray<Request.Entry<NoInfer<A>>>) => Effect<A2>,
+    after: (entries: NonEmptyArray<Request.Entry<NoInfer<A>>>, a: A2) => Effect<X>
   ): (self: RequestResolver<A>) => RequestResolver<A>
   <A, A2, X>(
     self: RequestResolver<A>,
-    before: (requests: NonEmptyArray<NoInfer<A>>) => Effect<A2>,
-    after: (requests: NonEmptyArray<NoInfer<A>>, a: A2) => Effect<X>
+    before: (entries: NonEmptyArray<Request.Entry<NoInfer<A>>>) => Effect<A2>,
+    after: (entries: NonEmptyArray<Request.Entry<NoInfer<A>>>, a: A2) => Effect<X>
   ): RequestResolver<A>
 } = dual(3, <A, A2, X>(
   self: RequestResolver<A>,
-  before: (requests: NonEmptyArray<NoInfer<A>>) => Effect<A2>,
-  after: (requests: NonEmptyArray<NoInfer<A>>, a: A2) => Effect<X>
+  before: (entries: NonEmptyArray<Request.Entry<NoInfer<A>>>) => Effect<A2>,
+  after: (entries: NonEmptyArray<Request.Entry<NoInfer<A>>>, a: A2) => Effect<X>
 ): RequestResolver<A> =>
   makeProto({
     ...self,
-    runAll: (requests) =>
+    runAll: (entries) =>
       core.acquireUseRelease(
-        before(requests),
-        () => self.runAll(requests),
-        (a) => after(requests, a)
+        before(entries),
+        () => self.runAll(entries),
+        (a) => after(entries, a)
       )
   }))
 
@@ -355,18 +366,16 @@ export const withSpan: {
 ): RequestResolver<A> =>
   makeProto({
     ...self,
-    runAll: (requests) =>
-      core.withFiber((fiber) => {
-        const requestMap = fiber.getRef(CompletedRequestMap)
+    runAll: (entries) =>
+      core.suspend(() => {
         const links = options?.links ? options.links.slice() : []
         const seen = new Set<Tracer.AnySpan>()
-        for (const request of requests) {
-          const entry = requestMap.get(request as any)!
+        for (const entry of entries) {
           const span = Context.getOption(entry.context, Tracer.ParentSpan)
           if (span._tag === "None" || seen.has(span.value)) continue
           seen.add(span.value)
           links.push({ span: span.value, attributes: {} })
         }
-        return core.withSpan(self.runAll(requests), name, { ...options, links })
+        return core.withSpan(self.runAll(entries), name, { ...options, links })
       })
   }))

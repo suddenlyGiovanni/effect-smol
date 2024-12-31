@@ -7,8 +7,12 @@ class GetNameById extends Request.TaggedClass("GetNameById")<{
   readonly id: number
 }, string> {}
 
-const UserResolver = Resolver.make((requests: Array.NonEmptyArray<GetNameById>) =>
-  Effect.forEach(requests, (request) => Request.succeed(request, `User ${request.id}`), { discard: true })
+const UserResolver = Resolver.make<GetNameById>((entries) =>
+  Effect.sync(() => {
+    for (const entry of entries) {
+      entry.unsafeComplete(Effect.succeed(`User ${entry.request.id}`))
+    }
+  })
 )
 
 const effect = Effect.forEach(
