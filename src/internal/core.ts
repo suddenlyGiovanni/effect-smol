@@ -991,7 +991,7 @@ export const async = <A, E = never, R = never>(
 ): Effect.Effect<A, E, R> => asyncOptions(register as any, register.length >= 2)
 
 /** @internal */
-export const never: Effect.Effect<never> = async<never>(() => void_)
+export const never: Effect.Effect<never> = async<never>(constVoid)
 
 /** @internal */
 export const gen = <
