@@ -7,7 +7,6 @@ import { CurrentScheduler } from "../References.js"
 import type { Entry, Request } from "../Request.js"
 import { makeEntry } from "../Request.js"
 import type { RequestResolver } from "../RequestResolver.js"
-import type { CompletedRequestMap } from "./completedRequestMap.js"
 import * as core from "./core.js"
 
 /** @internal */
@@ -54,7 +53,7 @@ export const request: {
 
 interface Batch {
   readonly resolver: RequestResolver<any>
-  readonly entrySet: typeof CompletedRequestMap.Service
+  readonly entrySet: Set<Entry<any>>
   readonly entries: NonEmptyArray<Entry<any>>
   delayFiber?: Fiber<void> | undefined
 }
