@@ -383,6 +383,24 @@ const fiberIdStore = globalValue("effect/Fiber/fiberIdStore", () => ({
 
 const currentFiberUri = "effect/Fiber/currentFiber"
 
+const keepAlive = globalValue("effect/Fiber/keepAlive", () => {
+  let count = 0
+  let running: ReturnType<typeof globalThis.setInterval> | undefined = undefined
+  return ({
+    increment() {
+      count++
+      running ??= globalThis.setInterval(constVoid, 2_147_483_647)
+    },
+    decrement() {
+      count--
+      if (count === 0 && running !== undefined) {
+        globalThis.clearInterval(running)
+        running = undefined
+      }
+    }
+  })
+})
+
 class FiberImpl<in out A = any, in out E = any> implements Fiber.Fiber<A, E> {
   readonly [FiberTypeId]: Fiber.Fiber.Variance<A, E>
 
@@ -399,6 +417,7 @@ class FiberImpl<in out A = any, in out E = any> implements Fiber.Fiber<A, E> {
     public interruptible = true
   ) {
     this[FiberTypeId] = fiberVariance
+    keepAlive.increment()
   }
 
   getRef<I, A>(ref: Context.Reference<I, A>): A {
@@ -459,6 +478,7 @@ class FiberImpl<in out A = any, in out E = any> implements Fiber.Fiber<A, E> {
     }
 
     this._exit = exit
+    keepAlive.decrement()
     for (let i = 0; i < this._observers.length; i++) {
       this._observers[i](exit)
     }
@@ -971,10 +991,7 @@ export const async = <A, E = never, R = never>(
 ): Effect.Effect<A, E, R> => asyncOptions(register as any, register.length >= 2)
 
 /** @internal */
-export const never: Effect.Effect<never> = async<never>(function() {
-  const interval = setInterval(constVoid, 2147483646)
-  return sync(() => clearInterval(interval))
-})
+export const never: Effect.Effect<never> = async<never>(() => void_)
 
 /** @internal */
 export const gen = <
