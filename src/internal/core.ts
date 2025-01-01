@@ -417,6 +417,7 @@ class FiberImpl<in out A = any, in out E = any> implements Fiber.Fiber<A, E> {
     public interruptible = true
   ) {
     this[FiberTypeId] = fiberVariance
+    keepAlive.increment()
   }
 
   getRef<I, A>(ref: Context.Reference<I, A>): A {
@@ -459,14 +460,13 @@ class FiberImpl<in out A = any, in out E = any> implements Fiber.Fiber<A, E> {
     if (this._exit) {
       return
     } else if (this._yielded !== undefined) {
-      keepAlive.decrement()
       const yielded = this._yielded as () => void
       this._yielded = undefined
       yielded()
     }
     const exit = this.runLoop(effect)
     if (exit === Yield) {
-      return keepAlive.increment()
+      return
     }
 
     // the interruptChildren middlware is added in Effect.fork, so it can be
@@ -478,6 +478,7 @@ class FiberImpl<in out A = any, in out E = any> implements Fiber.Fiber<A, E> {
     }
 
     this._exit = exit
+    keepAlive.decrement()
     for (let i = 0; i < this._observers.length; i++) {
       this._observers[i](exit)
     }
