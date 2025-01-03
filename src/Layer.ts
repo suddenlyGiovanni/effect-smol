@@ -138,6 +138,17 @@ const LayerProto = {
   }
 }
 
+const fromBuildUnsafe = <ROut, E, RIn>(
+  build: (
+    memoMap: MemoMap,
+    scope: Scope.Scope
+  ) => Effect.Effect<Context.Context<ROut>, E, RIn>
+): Layer<ROut, E, RIn> => {
+  const self = Object.create(LayerProto)
+  self.build = build
+  return self
+}
+
 /**
  * @since 4.0.0
  * @category constructors
@@ -147,16 +158,14 @@ export const fromBuild = <ROut, E, RIn>(
     memoMap: MemoMap,
     scope: Scope.Scope
   ) => Effect.Effect<Context.Context<ROut>, E, RIn>
-): Layer<ROut, E, RIn> => {
-  const self = Object.create(LayerProto)
-  self.build = (memoMap: MemoMap, scope: Scope.Scope) =>
+): Layer<ROut, E, RIn> =>
+  fromBuildUnsafe((memoMap: MemoMap, scope: Scope.Scope) =>
     Effect.flatMap(scope.fork, (scope) =>
       Effect.onExit(
         build(memoMap, scope),
         (exit) => exit._tag === "Failure" ? scope.close(exit) : Effect.void
       ))
-  return self
-}
+  )
 
 /**
  * @since 4.0.0
@@ -226,10 +235,18 @@ class MemoMapImpl implements MemoMap {
 /**
  * Constructs a `MemoMap` that can be used to build additional layers.
  *
- * @since 2.0.0
+ * @since 4.0.0
  * @category memo map
  */
 export const unsafeMakeMemoMap = (): MemoMap => new MemoMapImpl()
+
+/**
+ * Constructs a `MemoMap` that can be used to build additional layers.
+ *
+ * @since 2.0.0
+ * @category memo map
+ */
+export const makeMemoMap: Effect.Effect<MemoMap> = Effect.sync(unsafeMakeMemoMap)
 
 /**
  * Builds a layer into an `Effect` value, using the specified `MemoMap` to memoize
@@ -309,7 +326,8 @@ export const succeed: {
  * @since 2.0.0
  * @category constructors
  */
-export const succeedContext = <A>(context: Context.Context<A>): Layer<A> => fromBuild(constant(Effect.succeed(context)))
+export const succeedContext = <A>(context: Context.Context<A>): Layer<A> =>
+  fromBuildUnsafe(constant(Effect.succeed(context)))
 
 /**
  * A Layer that constructs an empty Context.
@@ -345,7 +363,8 @@ export const sync: {
  * @since 2.0.0
  * @category constructors
  */
-export const syncContext = <A>(evaluate: LazyArg<Context.Context<A>>): Layer<A> => effectContext(Effect.sync(evaluate))
+export const syncContext = <A>(evaluate: LazyArg<Context.Context<A>>): Layer<A> =>
+  fromBuildUnsafe(constant(Effect.sync(evaluate)))
 
 /**
  * Constructs a layer from the specified scoped effect.
@@ -612,7 +631,7 @@ export const flatMap: {
  * @category error handling
  */
 export const orDie = <A, E, R>(self: Layer<A, E, R>): Layer<A, never, R> =>
-  fromBuild((memoMap, scope) => Effect.orDie(self.build(memoMap, scope)))
+  fromBuildUnsafe((memoMap, scope) => Effect.orDie(self.build(memoMap, scope)))
 
 const catch_: {
   <E, RIn2, E2, ROut2>(
@@ -626,7 +645,7 @@ const catch_: {
   self: Layer<ROut, E, RIn>,
   onError: (error: E) => Layer<ROut2, E2, RIn2>
 ): Layer<ROut & ROut2, E2, RIn | RIn2> =>
-  fromBuild((memoMap, scope) =>
+  fromBuildUnsafe((memoMap, scope) =>
     Effect.catch(
       self.build(memoMap, scope),
       (e) => onError(e).build(memoMap, scope)
@@ -661,7 +680,7 @@ export const catchCause: {
   self: Layer<ROut, E, RIn>,
   onError: (cause: Cause.Cause<E>) => Layer<ROut2, E2, RIn2>
 ): Layer<ROut & ROut2, E2, RIn | RIn2> =>
-  fromBuild((memoMap, scope) =>
+  fromBuildUnsafe((memoMap, scope) =>
     Effect.catchCause(
       self.build(memoMap, scope),
       (cause) => onError(cause).build(memoMap, scope)
@@ -675,7 +694,7 @@ export const catchCause: {
  * @category utils
  */
 export const fresh = <A, E, R>(self: Layer<A, E, R>): Layer<A, E, R> =>
-  fromBuild((_, scope) => self.build(unsafeMakeMemoMap(), scope))
+  fromBuildUnsafe((_, scope) => self.build(unsafeMakeMemoMap(), scope))
 
 /**
  * Builds this layer and uses it until it is interrupted. This is useful when
