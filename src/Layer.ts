@@ -168,13 +168,7 @@ export const fromBuildMemo = <ROut, E, RIn>(
     scope: Scope.Scope
   ) => Effect.Effect<Context.Context<ROut>, E, RIn>
 ): Layer<ROut, E, RIn> => {
-  const self = Object.create(LayerProto)
-  self.build = (memoMap: MemoMap, scope: Scope.Scope) =>
-    Effect.flatMap(scope.fork, (scope) =>
-      Effect.onExit(
-        memoMap.getOrElseMemoize(self, scope, build),
-        (exit) => exit._tag === "Failure" ? scope.close(exit) : Effect.void
-      ))
+  const self: Layer<ROut, E, RIn> = fromBuild((memoMap, scope) => memoMap.getOrElseMemoize(self, scope, build))
   return self
 }
 
