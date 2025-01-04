@@ -8,6 +8,7 @@ import type { LazyArg } from "./Function.js"
 import { dual, identity } from "./Function.js"
 import type { TypeLambda } from "./HKT.js"
 import type * as Mailbox from "./Mailbox.js"
+import * as Option from "./Option.js"
 import { type Pipeable, pipeArguments } from "./Pipeable.js"
 import { hasProperty } from "./Predicate.js"
 import type * as Scope from "./Scope.js"
@@ -273,6 +274,92 @@ export const fromArray = <A>(array: ReadonlyArray<A>): Stream<A> => fromChannel(
  */
 export const fromMailbox = <A, E>(mailbox: Mailbox.ReadonlyMailbox<A, E>): Stream<A, E> =>
   fromChannel(Channel.fromMailboxArray(mailbox))
+
+/**
+ * Like `Stream.unfold`, but allows the emission of values to end one step further
+ * than the unfolding of the state. This is useful for embedding paginated
+ * APIs, hence the name.
+ *
+ * @example
+ * ```ts
+ * import { Effect, Option, Stream } from "effect"
+ *
+ * const stream = Stream.paginate(0, (n) => [
+ *   n,
+ *   n < 3 ? Option.some(n + 1) : Option.none()
+ * ])
+ *
+ * // Effect.runPromise(Stream.runCollect(stream)).then(console.log)
+ * // { _id: 'Chunk', values: [ 0, 1, 2, 3 ] }
+ * ```
+ *
+ * @since 2.0.0
+ * @category constructors
+ */
+export const paginate = <S, A>(s: S, f: (s: S) => readonly [A, Option.Option<S>]): Stream<A> =>
+  paginateChunk(s, (s) => {
+    const [a, s2] = f(s)
+    return [[a], s2]
+  })
+
+/**
+ * Like `Stream.unfoldChunk`, but allows the emission of values to end one step
+ * further than the unfolding of the state. This is useful for embedding
+ * paginated APIs, hence the name.
+ *
+ * @since 2.0.0
+ * @category constructors
+ */
+export const paginateChunk = <S, A>(
+  s: S,
+  f: (s: S) => readonly [ReadonlyArray<A>, Option.Option<S>]
+): Stream<A> => paginateChunkEffect(s, (s) => Effect.succeed(f(s)))
+
+/**
+ * Like `Stream.unfoldChunkEffect`, but allows the emission of values to end one step
+ * further than the unfolding of the state. This is useful for embedding
+ * paginated APIs, hence the name.
+ *
+ * @since 2.0.0
+ * @category constructors
+ */
+export const paginateChunkEffect = <S, A, E, R>(
+  s: S,
+  f: (s: S) => Effect.Effect<readonly [ReadonlyArray<A>, Option.Option<S>], E, R>
+): Stream<A, E, R> =>
+  fromPull(Effect.sync(() => {
+    let state = s
+    let done = false
+    return Effect.suspend((): Effect.Effect<ReadonlyArray<A>, E | Channel.Halt<void>, R> => {
+      if (done) return Channel.haltVoid
+      return Effect.map(f(state), ([a, s]) => {
+        if (Option.isNone(s)) {
+          done = true
+        } else {
+          state = s.value
+        }
+        return a
+      })
+    })
+  }))
+
+/**
+ * Like `Stream.unfoldEffect` but allows the emission of values to end one step
+ * further than the unfolding of the state. This is useful for embedding
+ * paginated APIs, hence the name.
+ *
+ * @since 2.0.0
+ * @category constructors
+ */
+export const paginateEffect = <S, A, E, R>(
+  s: S,
+  f: (s: S) => Effect.Effect<readonly [A, Option.Option<S>], E, R>
+): Stream<A, E, R> =>
+  paginateChunkEffect(s, (s) =>
+    Effect.map(
+      f(s),
+      ([a, s]) => [[a], s]
+    ))
 
 /**
  * Creates a new `Stream` which will emit all numeric values from `min` to `max`
@@ -686,6 +773,19 @@ export const drop: {
         return pump
       }))
 )
+
+/**
+ * Exposes the underlying chunks of the stream as a stream of chunks of
+ * elements.
+ *
+ * @since 2.0.0
+ * @category utils
+ */
+export const chunks = <A, E, R>(self: Stream<A, E, R>): Stream<ReadonlyArray<A>, E, R> =>
+  toChannel(self).pipe(
+    Channel.map(Arr.of),
+    fromChannel
+  )
 
 /**
  * Runs the sink on the stream to produce either the sink's result or an error.
