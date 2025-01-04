@@ -1,3 +1,4 @@
+import * as Arr from "./Array.js"
 import * as Clock from "./Clock.js"
 import * as Data from "./Data.js"
 import * as Duration from "./Duration.js"
@@ -99,14 +100,23 @@ const defaultOptions: Required<TestClock.Options> = {
   warningDelay: "1 second"
 }
 
+const SleepOrder = Order.reverse(Order.struct({
+  timestamp: Order.number,
+  sequence: Order.number
+}))
+
 export const make = Effect.fnUntraced(function*(
   options?: TestClock.Options
 ) {
   const config = Object.assign({}, defaultOptions, options)
-  let sleeps: Array<[number, Effect.Latch]> = []
+  let sequence = 0
+  const sleeps: Array<{
+    readonly sequence: number
+    readonly timestamp: number
+    readonly latch: Effect.Latch
+  }> = []
   const liveClock = yield* Clock.clockWith(Effect.succeed)
   const warningSemaphore = yield* Effect.makeSemaphore(1)
-  const SleepOrder = Order.tuple(Order.number, Order.empty<Effect.Latch>())
 
   let currentTimestamp: number = new Date(0).getTime()
   let warningState: WarningState = WarningState.Start()
@@ -172,7 +182,12 @@ export const make = Effect.fnUntraced(function*(
     const end = currentTimestamp + millis
     if (end <= currentTimestamp) return
     const latch = Effect.unsafeMakeLatch()
-    sleeps.push([end, latch])
+    sleeps.push({
+      sequence: sequence++,
+      timestamp: end,
+      latch
+    })
+    sleeps.sort(SleepOrder)
     yield* warningStart
     yield* latch.await
   })
@@ -181,28 +196,13 @@ export const make = Effect.fnUntraced(function*(
   const run = Effect.fnUntraced(function*(step: (currentTimestamp: number) => number) {
     yield* Effect.yieldNow
     const endTimestamp = step(currentTimestamp)
-    const remaining: Array<[number, Effect.Latch]> = []
-    let index = 0
-    while (true) {
-      const toRun: Array<[number, Effect.Latch]> = []
-      for (; index < sleeps.length; index++) {
-        const entry = sleeps[index]
-        if (entry[0] <= endTimestamp) {
-          toRun.push(entry)
-        } else {
-          remaining.push(entry)
-        }
-      }
-      if (toRun.length === 0) break
-      toRun.sort(SleepOrder)
-      for (const sleep of toRun) {
-        const [timestamp, latch] = sleep
-        currentTimestamp = timestamp
-        yield* latch.open
-        yield* Effect.yieldNow
-      }
+    while (Arr.isNonEmptyArray(sleeps)) {
+      if (Arr.lastNonEmpty(sleeps).timestamp > endTimestamp) break
+      const entry = sleeps.pop()!
+      currentTimestamp = entry.timestamp
+      yield* entry.latch.open
+      yield* Effect.yieldNow
     }
-    sleeps = remaining
     currentTimestamp = endTimestamp
   }, runSemaphore.withPermits(1))
 

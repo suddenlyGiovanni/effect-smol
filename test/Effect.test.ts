@@ -337,7 +337,7 @@ describe.concurrent("Effect", () => {
       assert.deepStrictEqual(interrupted, [500, 300, 200])
     }))
 
-  it.effect.skip("raceAllFirst", () =>
+  it.effect("raceAllFirst", () =>
     Effect.gen(function*() {
       const interrupted: Array<number> = []
       const fiber = yield* Effect.raceAllFirst([500, 300, 200, 0, 100].map((ms) =>
@@ -353,7 +353,8 @@ describe.concurrent("Effect", () => {
       yield* TestClock.adjust("500 millis")
       const result = yield* Fiber.join(fiber)
       assert.deepStrictEqual(result, Exit.fail("boom"))
-      assert.deepStrictEqual(interrupted, [500, 300, 200, 100])
+      // 100 doesn't start because 0 finishes the race first
+      assert.deepStrictEqual(interrupted, [500, 300, 200])
     }))
 
   describe("repeat", () => {
