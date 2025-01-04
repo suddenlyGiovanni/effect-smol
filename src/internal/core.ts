@@ -3377,7 +3377,10 @@ export const forkIn: {
       flatMap(scope.fork, (scope) =>
         tap(
           restore(forkDaemon(onExit(self, (exit) => scope.close(exit)))),
-          (fiber) => scope.addFinalizer((_) => fiberInterrupt(fiber))
+          (fiber) =>
+            scope.addFinalizer((_) =>
+              withFiber((interruptor) => interruptor.id === fiber.id ? void_ : fiberInterrupt(fiber))
+            )
         ))
     )
 )
