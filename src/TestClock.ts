@@ -177,6 +177,7 @@ export const make = Effect.fnUntraced(function*(
     yield* latch.await
   })
 
+  const runSemaphore = yield* Effect.makeSemaphore(1)
   const run = Effect.fnUntraced(function*(step: (currentTimestamp: number) => number) {
     yield* Effect.yieldNow
     const endTimestamp = step(currentTimestamp)
@@ -204,7 +205,7 @@ export const make = Effect.fnUntraced(function*(
       }
       currentTimestamp = endTimestamp
     }
-  })
+  }, runSemaphore.withPermits(1))
 
   function adjust(duration: Duration.DurationInput) {
     const millis = Duration.toMillis(duration)
