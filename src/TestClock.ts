@@ -181,10 +181,10 @@ export const make = Effect.fnUntraced(function*(
   const run = Effect.fnUntraced(function*(step: (currentTimestamp: number) => number) {
     yield* Effect.yieldNow
     const endTimestamp = step(currentTimestamp)
+    const remaining: Array<[number, Effect.Latch]> = []
     let index = 0
     while (true) {
       const toRun: Array<[number, Effect.Latch]> = []
-      const remaining: Array<[number, Effect.Latch]> = []
       for (; index < sleeps.length; index++) {
         const entry = sleeps[index]
         if (entry[0] <= endTimestamp) {
@@ -194,8 +194,6 @@ export const make = Effect.fnUntraced(function*(
         }
       }
       if (toRun.length === 0) break
-      sleeps = remaining
-      index = remaining.length
       toRun.sort(SleepOrder)
       for (const sleep of toRun) {
         const [timestamp, latch] = sleep
@@ -203,8 +201,9 @@ export const make = Effect.fnUntraced(function*(
         yield* latch.open
         yield* Effect.yieldNow
       }
-      currentTimestamp = endTimestamp
     }
+    sleeps = remaining
+    currentTimestamp = endTimestamp
   }, runSemaphore.withPermits(1))
 
   function adjust(duration: Duration.DurationInput) {
