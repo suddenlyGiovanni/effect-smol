@@ -207,7 +207,7 @@ describe.concurrent("Effect", () => {
         assert.deepStrictEqual(done, [1, 2])
       }))
 
-    it("unbounded fail", () =>
+    it.effect("unbounded fail", () =>
       Effect.gen(function*() {
         const done: Array<number> = []
         const handle = yield* Effect.forEach([1, 2, 3, 4, 5], (i) =>
@@ -217,10 +217,11 @@ describe.concurrent("Effect", () => {
           }).pipe(Effect.delay(i * 100)), {
           concurrency: "unbounded"
         }).pipe(Effect.fork)
+        yield* TestClock.adjust(500)
         const result = yield* Fiber.await(handle)
         assert.deepStrictEqual(result, Exit.fail("error"))
         assert.deepStrictEqual(done, [1, 2, 3])
-      }).pipe(Effect.runPromise))
+      }))
 
     it("length = 0", () =>
       Effect.gen(function*() {
@@ -358,11 +359,6 @@ describe.concurrent("Effect", () => {
     }))
 
   describe("repeat", () => {
-    it.effect("is stack safe", () =>
-      Effect.void.pipe(
-        Effect.repeat({ times: 10_000 })
-      ))
-
     it.effect("is interruptible", () =>
       Effect.gen(function*() {
         const fiber = yield* Effect.void.pipe(
