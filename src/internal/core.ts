@@ -2,7 +2,7 @@ import * as Arr from "../Array.js"
 import type * as Cause from "../Cause.js"
 import type * as Clock from "../Clock.js"
 import type * as Console from "../Console.js"
-import type * as Context from "../Context.js"
+import * as Context from "../Context.js"
 import * as Duration from "../Duration.js"
 import type * as Effect from "../Effect.js"
 import * as Either from "../Either.js"
@@ -10,10 +10,10 @@ import * as Equal from "../Equal.js"
 import type * as Exit from "../Exit.js"
 import type * as Fiber from "../Fiber.js"
 import type { LazyArg } from "../Function.js"
-import { constant, constTrue, constVoid, dual, identity } from "../Function.js"
+import { constant, constTrue, constUndefined, constVoid, dual, identity } from "../Function.js"
 import { globalValue } from "../GlobalValue.js"
 import * as Hash from "../Hash.js"
-import { format, NodeInspectSymbol, redact, toJSON } from "../Inspectable.js"
+import { format, NodeInspectSymbol, redact, toJSON, toStringUnknown } from "../Inspectable.js"
 import type * as Logger from "../Logger.js"
 import type * as LogLevel from "../LogLevel.js"
 import * as Option from "../Option.js"
@@ -4227,6 +4227,8 @@ export const structuredMessage = (u: unknown): unknown => {
   }
 }
 
+const getSpan = Context.getOrElse(Tracer.ParentSpan, constUndefined)
+
 /** @internal */
 export const logWithLevel = (level?: LogLevel.LogLevel) =>
 (
@@ -4236,12 +4238,12 @@ export const logWithLevel = (level?: LogLevel.LogLevel) =>
   for (let i = 0, len = message.length; i < len; i++) {
     const msg = message[i]
     if (isCause(msg)) {
-      if (cause !== undefined) {
-        cause = causeFromFailures(cause.failures.concat(msg.failures))
+      if (cause) {
+        ;(message as Array<any>).splice(i, 1)
       } else {
-        cause = msg
+        message = message.slice(0, i).concat(message.slice(i + 1))
       }
-      message = [...message.slice(0, i), ...message.slice(i + 1)]
+      cause = cause ? causeFromFailures(cause.failures.concat(msg.failures)) : msg
       i--
     }
   }
@@ -4249,13 +4251,13 @@ export const logWithLevel = (level?: LogLevel.LogLevel) =>
     cause = causeFromFailures([])
   }
   return withFiber((fiber) => {
-    const clock = fiber.getRef(CurrentClock)
-    const loggers = fiber.getRef(CurrentLoggers)
     const logLevel = level ?? fiber.getRef(CurrentLogLevel)
     const minimumLogLevel = fiber.getRef(MinimumLogLevel)
     if (logLevelGreaterThan(minimumLogLevel, logLevel)) {
       return void_
     }
+    const clock = fiber.getRef(CurrentClock)
+    const loggers = fiber.getRef(CurrentLoggers)
     if (loggers.size > 0) {
       const date = new Date(clock.unsafeCurrentTimeMillis())
       for (const logger of loggers) {
@@ -4267,6 +4269,19 @@ export const logWithLevel = (level?: LogLevel.LogLevel) =>
           message
         })
       }
+    }
+    const span = getSpan(fiber.context)
+    if (span && span._tag === "Span") {
+      span.event(
+        toStringUnknown(Array.isArray(message) ? message[0] : message),
+        clock.unsafeCurrentTimeNanos(),
+        {
+          ...fiber.getRef(CurrentLogAnnotations),
+          ["effect.fiberId"]: fiber.id,
+          ["effect.logLevel"]: logLevel
+          // TODO: add cause
+        }
+      )
     }
     return void_
   })
