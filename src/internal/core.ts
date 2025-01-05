@@ -2418,13 +2418,12 @@ export const ignore = <A, E, R>(
   self: Effect.Effect<A, E, R>
 ): Effect.Effect<void, never, R> => matchEffect(self, { onFailure: (_) => void_, onSuccess: (_) => void_ })
 
-// TODO: Logger
 /** @internal */
 export const ignoreLogged = <A, E, R>(
   self: Effect.Effect<A, E, R>
 ): Effect.Effect<void, never, R> =>
-  matchEffect(self, {
-    onFailure: (error) => sync(() => console.error(error)),
+  matchCauseEffect(self, {
+    onFailure: (cause) => logWithLevel("Debug")("Effect.ignoreLogged", cause),
     onSuccess: (_) => void_
   })
 
@@ -2836,10 +2835,15 @@ export const provideScope: {
 /** @internal */
 export const scoped = <A, E, R>(
   self: Effect.Effect<A, E, R>
-): Effect.Effect<A, E, Exclude<R, Scope.Scope>> =>
+): Effect.Effect<A, E, Exclude<R, Scope.Scope>> => scopedWith((scope) => provideScope(self, scope))
+
+/** @internal */
+export const scopedWith = <A, E, R>(
+  f: (scope: Scope.Scope) => Effect.Effect<A, E, R>
+): Effect.Effect<A, E, R> =>
   suspend(() => {
     const scope = new ScopeImpl()
-    return onExit(provideService(self, scopeTag, scope), (exit) => scope.close(exit))
+    return onExit(f(scope), (exit) => scope.close(exit))
   })
 
 /** @internal */
@@ -2968,6 +2972,74 @@ export const acquireUseRelease = <Resource, E, R, A, E2, R2, E3, R3>(
   uninterruptibleMask((restore) =>
     flatMap(acquire, (a) => flatMap(exit(restore(use(a))), (exit) => andThen(release(a, exit), exit)))
   )
+
+// ----------------------------------------------------------------------------
+// Caching
+// ----------------------------------------------------------------------------
+
+/** @internal */
+export const cachedInvalidateWithTTL: {
+  (timeToLive: Duration.DurationInput): <A, E, R>(
+    self: Effect.Effect<A, E, R>
+  ) => Effect.Effect<[Effect.Effect<A, E>, Effect.Effect<void>], never, R>
+  <A, E, R>(
+    self: Effect.Effect<A, E, R>,
+    timeToLive: Duration.DurationInput
+  ): Effect.Effect<[Effect.Effect<A, E>, Effect.Effect<void>], never, R>
+} = dual(2, <A, E, R>(
+  self: Effect.Effect<A, E, R>,
+  ttl: Duration.DurationInput
+): Effect.Effect<[Effect.Effect<A, E>, Effect.Effect<void>], never, R> =>
+  withFiber((fiber) => {
+    const context = fiber.context as Context.Context<R>
+    const ttlMillis = Duration.toMillis(ttl)
+    const latch = unsafeMakeLatch(false)
+    let expiresAt = 0
+    let running = false
+    let exit: Exit.Exit<A, E> | undefined
+    const wait = flatMap(latch.await, () => exit!)
+    return succeed([
+      withFiber((fiber) => {
+        const now = fiber.getRef(CurrentClock).unsafeCurrentTimeMillis()
+        if (running || now < expiresAt) return exit ?? wait
+        running = true
+        latch.unsafeClose()
+        exit = undefined
+        return onExit(provideContext(self, context), (exit_) => {
+          running = false
+          expiresAt = now + ttlMillis
+          exit = exit_
+          return latch.open
+        })
+      }),
+      sync(() => {
+        expiresAt = 0
+        latch.unsafeClose()
+        exit = undefined
+      })
+    ])
+  }))
+
+/** @internal */
+export const cachedWithTTL: {
+  (
+    timeToLive: Duration.DurationInput
+  ): <A, E, R>(self: Effect.Effect<A, E, R>) => Effect.Effect<Effect.Effect<A, E>, never, R>
+  <A, E, R>(
+    self: Effect.Effect<A, E, R>,
+    timeToLive: Duration.DurationInput
+  ): Effect.Effect<Effect.Effect<A, E>, never, R>
+} = dual(
+  2,
+  <A, E, R>(
+    self: Effect.Effect<A, E, R>,
+    timeToLive: Duration.DurationInput
+  ): Effect.Effect<Effect.Effect<A, E>, never, R> => map(cachedInvalidateWithTTL(self, timeToLive), (tuple) => tuple[0])
+)
+
+/** @internal */
+export const cached = <A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<Effect.Effect<A, E>, never, R> =>
+  cachedWithTTL(self, Duration.infinity)
 
 // ----------------------------------------------------------------------------
 // interruption

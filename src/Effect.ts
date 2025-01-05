@@ -11,7 +11,9 @@ import type { Fiber } from "./Fiber.js"
 import { dual, type LazyArg } from "./Function.js"
 import type { TypeLambda } from "./HKT.js"
 import * as core from "./internal/core.js"
+import * as internalLayer from "./internal/layer.js"
 import * as internalRequest from "./internal/request.js"
+import type { Layer } from "./Layer.js"
 import type { Logger } from "./Logger.js"
 import type { Option } from "./Option.js"
 import type { Pipeable } from "./Pipeable.js"
@@ -3181,6 +3183,39 @@ export const context: <R>() => Effect<Context<R>, never, R> = core.context
  * @since 2.0.0
  * @category Environment
  */
+export const provide: {
+  <const Layers extends [Layer.Any, ...Array<Layer.Any>]>(
+    layers: Layers
+  ): <A, E, R>(
+    self: Effect<A, E, R>
+  ) => Effect<
+    A,
+    E | Layer.Error<Layers[number]>,
+    Layer.Context<Layers[number]> | Exclude<R, Layer.Success<Layers[number]>>
+  >
+  <ROut, E2, RIn>(
+    layer: Layer<ROut, E2, RIn>
+  ): <A, E, R>(self: Effect<A, E, R>) => Effect<A, E | E2, RIn | Exclude<R, ROut>>
+  <R2>(context: Context<R2>): <A, E, R>(self: Effect<A, E, R>) => Effect<A, E, Exclude<R, R2>>
+  <A, E, R, const Layers extends [Layer.Any, ...Array<Layer.Any>]>(
+    self: Effect<A, E, R>,
+    layers: Layers
+  ): Effect<
+    A,
+    E | Layer.Error<Layers[number]>,
+    Layer.Context<Layers[number]> | Exclude<R, Layer.Success<Layers[number]>>
+  >
+  <A, E, R, ROut, E2, RIn>(
+    self: Effect<A, E, R>,
+    layer: Layer<ROut, E2, RIn>
+  ): Effect<A, E | E2, RIn | Exclude<R, ROut>>
+  <A, E, R, R2>(self: Effect<A, E, R>, context: Context<R2>): Effect<A, E, Exclude<R, R2>>
+} = internalLayer.provide
+
+/**
+ * @since 2.0.0
+ * @category Environment
+ */
 export const provideContext: {
   <XR>(
     context: Context<XR>
@@ -3332,6 +3367,12 @@ export const scoped: <A, E, R>(
 ) => Effect<A, E, Exclude<R, Scope>> = core.scoped
 
 /**
+ * @since 2.0.0
+ * @category scoping, resources & finalization
+ */
+export const scopedWith: <A, E, R>(f: (scope: Scope) => Effect<A, E, R>) => Effect<A, E, R> = core.scopedWith
+
+/**
  * This function constructs a scoped resource from an `acquire` and `release`
  * `Effect` value.
  *
@@ -3453,6 +3494,225 @@ export const onExit: {
     cleanup: (exit: Exit<A, E>) => Effect<X, never, R2>
   ): Effect<A, E, R | R2>
 } = core.onExit
+
+// -----------------------------------------------------------------------------
+// Caching
+// -----------------------------------------------------------------------------
+
+/**
+ * Returns an effect that lazily computes a result and caches it for subsequent
+ * evaluations.
+ *
+ * **Details**
+ *
+ * This function wraps an effect and ensures that its result is computed only
+ * once. Once the result is computed, it is cached, meaning that subsequent
+ * evaluations of the same effect will return the cached result without
+ * re-executing the logic.
+ *
+ * **When to Use**
+ *
+ * Use this function when you have an expensive or time-consuming operation that
+ * you want to avoid repeating. The first evaluation will compute the result,
+ * and all following evaluations will immediately return the cached value,
+ * improving performance and reducing unnecessary work.
+ *
+ * @see {@link cachedWithTTL} for a similar function that includes a
+ * time-to-live duration for the cached value.
+ * @see {@link cachedInvalidateWithTTL} for a similar function that includes an
+ * additional effect for manually invalidating the cached value.
+ *
+ * @example
+ * ```ts
+ * import { Effect, Console } from "effect"
+ *
+ * let i = 1
+ * const expensiveTask = Effect.promise<string>(() => {
+ *   console.log("expensive task...")
+ *   return new Promise((resolve) => {
+ *     setTimeout(() => {
+ *       resolve(`result ${i++}`)
+ *     }, 100)
+ *   })
+ * })
+ *
+ * const program = Effect.gen(function* () {
+ *   console.log("non-cached version:")
+ *   yield* expensiveTask.pipe(Effect.andThen(Console.log))
+ *   yield* expensiveTask.pipe(Effect.andThen(Console.log))
+ *   console.log("cached version:")
+ *   const cached = yield* Effect.cached(expensiveTask)
+ *   yield* cached.pipe(Effect.andThen(Console.log))
+ *   yield* cached.pipe(Effect.andThen(Console.log))
+ * })
+ *
+ * Effect.runFork(program)
+ * // Output:
+ * // non-cached version:
+ * // expensive task...
+ * // result 1
+ * // expensive task...
+ * // result 2
+ * // cached version:
+ * // expensive task...
+ * // result 3
+ * // result 3
+ * ```
+ *
+ * @since 2.0.0
+ * @category Caching
+ */
+export const cached: <A, E, R>(self: Effect<A, E, R>) => Effect<Effect<A, E>, never, R> = core.cached
+
+/**
+ * Returns an effect that caches its result for a specified `Duration`,
+ * known as "timeToLive" (TTL).
+ *
+ * **Details**
+ *
+ * This function is used to cache the result of an effect for a specified amount
+ * of time. This means that the first time the effect is evaluated, its result
+ * is computed and stored.
+ *
+ * If the effect is evaluated again within the specified `timeToLive`, the
+ * cached result will be used, avoiding recomputation.
+ *
+ * After the specified duration has passed, the cache expires, and the effect
+ * will be recomputed upon the next evaluation.
+ *
+ * **When to Use**
+ *
+ * Use this function when you have an effect that involves costly operations or
+ * computations, and you want to avoid repeating them within a short time frame.
+ *
+ * It's ideal for scenarios where the result of an effect doesn't change
+ * frequently and can be reused for a specified duration.
+ *
+ * By caching the result, you can improve efficiency and reduce unnecessary
+ * computations, especially in performance-critical applications.
+ *
+ * @see {@link cached} for a similar function that caches the result
+ * indefinitely.
+ * @see {@link cachedInvalidateWithTTL} for a similar function that includes an
+ * additional effect for manually invalidating the cached value.
+ *
+ * @example
+ * ```ts
+ * import { Effect, Console } from "effect"
+ *
+ * let i = 1
+ * const expensiveTask = Effect.promise<string>(() => {
+ *   console.log("expensive task...")
+ *   return new Promise((resolve) => {
+ *     setTimeout(() => {
+ *       resolve(`result ${i++}`)
+ *     }, 100)
+ *   })
+ * })
+ *
+ * const program = Effect.gen(function* () {
+ *   const cached = yield* Effect.cachedWithTTL(expensiveTask, "150 millis")
+ *   yield* cached.pipe(Effect.andThen(Console.log))
+ *   yield* cached.pipe(Effect.andThen(Console.log))
+ *   yield* Effect.sleep("100 millis")
+ *   yield* cached.pipe(Effect.andThen(Console.log))
+ * })
+ *
+ * Effect.runFork(program)
+ * // Output:
+ * // expensive task...
+ * // result 1
+ * // result 1
+ * // expensive task...
+ * // result 2
+ * ```
+ *
+ * @since 2.0.0
+ * @category Caching
+ */
+export const cachedWithTTL: {
+  (timeToLive: DurationInput): <A, E, R>(self: Effect<A, E, R>) => Effect<Effect<A, E>, never, R>
+  <A, E, R>(self: Effect<A, E, R>, timeToLive: DurationInput): Effect<Effect<A, E>, never, R>
+} = core.cachedWithTTL
+
+/**
+ * Caches an effect's result for a specified duration and allows manual
+ * invalidation before expiration.
+ *
+ * **Details**
+ *
+ * This function behaves similarly to {@link cachedWithTTL} by caching the
+ * result of an effect for a specified period of time. However, it introduces an
+ * additional feature: it provides an effect that allows you to manually
+ * invalidate the cached result before it naturally expires.
+ *
+ * This gives you more control over the cache, allowing you to refresh the
+ * result when needed, even if the original cache has not yet expired.
+ *
+ * Once the cache is invalidated, the next time the effect is evaluated, the
+ * result will be recomputed, and the cache will be refreshed.
+ *
+ * **When to Use**
+ *
+ * Use this function when you have an effect whose result needs to be cached for
+ * a certain period, but you also want the option to refresh the cache manually
+ * before the expiration time.
+ *
+ * This is useful when you need to ensure that the cached data remains valid for
+ * a certain period but still want to invalidate it if the underlying data
+ * changes or if you want to force a recomputation.
+ *
+ * @see {@link cached} for a similar function that caches the result
+ * indefinitely.
+ * @see {@link cachedWithTTL} for a similar function that caches the result for
+ * a specified duration but does not include an effect for manual invalidation.
+ *
+ * @example
+ * ```ts
+ * import { Effect, Console } from "effect"
+ *
+ * let i = 1
+ * const expensiveTask = Effect.promise<string>(() => {
+ *   console.log("expensive task...")
+ *   return new Promise((resolve) => {
+ *     setTimeout(() => {
+ *       resolve(`result ${i++}`)
+ *     }, 100)
+ *   })
+ * })
+ *
+ * const program = Effect.gen(function* () {
+ *   const [cached, invalidate] = yield* Effect.cachedInvalidateWithTTL(
+ *     expensiveTask,
+ *     "1 hour"
+ *   )
+ *   yield* cached.pipe(Effect.andThen(Console.log))
+ *   yield* cached.pipe(Effect.andThen(Console.log))
+ *   yield* invalidate
+ *   yield* cached.pipe(Effect.andThen(Console.log))
+ * })
+ *
+ * Effect.runFork(program)
+ * // Output:
+ * // expensive task...
+ * // result 1
+ * // result 1
+ * // expensive task...
+ * // result 2
+ * ```
+ *
+ * @since 2.0.0
+ * @category Caching
+ */
+export const cachedInvalidateWithTTL: {
+  (timeToLive: DurationInput): <A, E, R>(
+    self: Effect<A, E, R>
+  ) => Effect<[Effect<A, E>, Effect<void>], never, R>
+  <A, E, R>(
+    self: Effect<A, E, R>,
+    timeToLive: DurationInput
+  ): Effect<[Effect<A, E>, Effect<void>], never, R>
+} = core.cachedInvalidateWithTTL
 
 // -----------------------------------------------------------------------------
 // Interruption
