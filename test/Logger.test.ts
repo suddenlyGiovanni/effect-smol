@@ -23,7 +23,7 @@ describe("Logger", () => {
       assert.deepStrictEqual(result[3], { key: "value" })
     }))
 
-  it.scoped(
+  it.effect(
     "replace loggers",
     Effect.fnUntraced(function*() {
       const result: Array<string> = []

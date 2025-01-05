@@ -36,7 +36,7 @@ describe.concurrent("Layer", () => {
       assert.deepStrictEqual(array, [acquire1, release1])
     }))
 
-  it.scoped("sharing itself with merge", () =>
+  it.effect("sharing itself with merge", () =>
     Effect.gen(function*() {
       const service1 = new Service1()
       const layer = Layer.succeed(Service1Tag, service1)
