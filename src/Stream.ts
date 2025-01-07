@@ -11,6 +11,7 @@ import type * as Mailbox from "./Mailbox.js"
 import * as Option from "./Option.js"
 import { type Pipeable, pipeArguments } from "./Pipeable.js"
 import { hasProperty } from "./Predicate.js"
+import * as Pull from "./Pull.js"
 import type * as Scope from "./Scope.js"
 import * as Sink from "./Sink.js"
 import type { Covariant } from "./Types.js"
@@ -156,8 +157,8 @@ export const fromChannel = <Arr extends ReadonlyArray<any>, E, R>(
  * @category constructors
  */
 export const fromPull = <A, E, R, EX, RX>(
-  pull: Effect.Effect<Effect.Effect<ReadonlyArray<A>, E | Channel.Halt<void>, R>, EX, RX>
-): Stream<A, Channel.Halt.ExcludeHalt<E> | EX, R | RX> => fromChannel(Channel.fromPull(pull))
+  pull: Effect.Effect<Pull.Pull<ReadonlyArray<A>, E, void, R>, EX, RX>
+): Stream<A, Pull.ExcludeHalt<E> | EX, R | RX> => fromChannel(Channel.fromPull(pull))
 
 /**
  * Derive a Stream from a pull effect.
@@ -167,12 +168,12 @@ export const fromPull = <A, E, R, EX, RX>(
  */
 export const transformPull = <A, E, R, B, E2, R2, EX, RX>(
   self: Stream<A, E, R>,
-  f: (pull: Effect.Effect<ReadonlyArray<A>, E | Channel.Halt<void>>, scope: Scope.Scope) => Effect.Effect<
-    Effect.Effect<ReadonlyArray<B>, E2 | Channel.Halt<void>, R2>,
+  f: (pull: Pull.Pull<ReadonlyArray<A>, E>, scope: Scope.Scope) => Effect.Effect<
+    Pull.Pull<ReadonlyArray<B>, E2, void, R2>,
     EX,
     RX
   >
-): Stream<B, EX | Channel.Halt.ExcludeHalt<E2>, R | R2 | RX> =>
+): Stream<B, EX | Pull.ExcludeHalt<E2>, R | R2 | RX> =>
   fromChannel(
     Channel.fromTransform((_, scope) =>
       Effect.flatMap(Channel.toPullScoped(toChannel(self), scope), (pull) => f(pull, scope))
@@ -330,8 +331,8 @@ export const paginateChunkEffect = <S, A, E, R>(
   fromPull(Effect.sync(() => {
     let state = s
     let done = false
-    return Effect.suspend((): Effect.Effect<ReadonlyArray<A>, E | Channel.Halt<void>, R> => {
-      if (done) return Channel.haltVoid
+    return Effect.suspend((): Pull.Pull<ReadonlyArray<A>, E, void, R> => {
+      if (done) return Pull.haltVoid
       return Effect.map(f(state), ([a, s]) => {
         if (Option.isNone(s)) {
           done = true
@@ -389,7 +390,7 @@ export const range = (
     let start = min
     let done = false
     return Effect.suspend(() => {
-      if (done) return Channel.haltVoid
+      if (done) return Pull.haltVoid
       const remaining = max - start + 1
       if (remaining > chunkSize) {
         const chunk = Arr.range(start, start + chunkSize - 1)
@@ -621,8 +622,8 @@ export const takeUntil: {
       Effect.sync(() => {
         let i = 0
         let done = false
-        const pump: Effect.Effect<ReadonlyArray<A>, Channel.Halt<void> | E> = Effect.flatMap(
-          Effect.suspend(() => done ? Channel.haltVoid : pull),
+        const pump: Pull.Pull<ReadonlyArray<A>, E> = Effect.flatMap(
+          Effect.suspend(() => done ? Pull.haltVoid : pull),
           (chunk) => {
             const index = chunk.findIndex((a) => predicate(a, i++))
             if (index >= 0) {
@@ -669,7 +670,7 @@ export const takeUntilEffect: {
       let i = 0
       let done = false
       return Effect.gen(function*() {
-        if (done) return yield* Channel.haltVoid
+        if (done) return yield* Pull.haltVoid
         const chunk = yield* pull
         for (let j = 0; j < chunk.length; j++) {
           if (yield* predicate(chunk[j], i++)) {
@@ -762,7 +763,7 @@ export const drop: {
     transformPull(self, (pull, _scope) =>
       Effect.sync(() => {
         let dropped = 0
-        const pump: Effect.Effect<ReadonlyArray<A>, Channel.Halt<void> | E> = pull.pipe(
+        const pump: Pull.Pull<ReadonlyArray<A>, E> = pull.pipe(
           Effect.flatMap((chunk) => {
             if (dropped >= n) return Effect.succeed(chunk)
             dropped += chunk.length
@@ -836,6 +837,26 @@ export const runCollect = <A, E, R>(self: Stream<A, E, R>): Effect.Effect<Array<
  */
 export const runCount = <A, E, R>(self: Stream<A, E, R>): Effect.Effect<number, E, R> =>
   Channel.runFold(toChannel(self), () => 0, (acc, chunk) => acc + chunk.length)
+
+/**
+ * Consumes all elements of the stream, passing them to the specified
+ * callback.
+ *
+ * @since 2.0.0
+ * @category destructors
+ */
+export const runForEach: {
+  <A, X, E2, R2>(
+    f: (a: A) => Effect.Effect<X, E2, R2>
+  ): <E, R>(self: Stream<A, E, R>) => Effect.Effect<void, E2 | E, R2 | R>
+  <A, E, R, X, E2, R2>(
+    self: Stream<A, E, R>,
+    f: (a: A) => Effect.Effect<X, E2, R2>
+  ): Effect.Effect<void, E | E2, R | R2>
+} = dual(2, <A, E, R, X, E2, R2>(
+  self: Stream<A, E, R>,
+  f: (a: A) => Effect.Effect<X, E2, R2>
+): Effect.Effect<void, E | E2, R | R2> => Channel.runForEach(toChannel(self), Effect.forEach(f, { discard: true })))
 
 /**
  * Runs the stream only for its effects. The emitted elements are discarded.
