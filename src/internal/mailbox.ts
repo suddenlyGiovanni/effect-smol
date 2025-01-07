@@ -511,27 +511,31 @@ const emptyChunk = (): Chunk<never> => ({
 })
 
 class MutableList<A> {
-  private head: Chunk<A> = emptyChunk()
-  private tail: Chunk<A> = this.head
+  private head: Chunk<A> | undefined
+  private tail: Chunk<A> | undefined
   public length = 0
 
   append(message: A) {
-    this.tail.array.push(message)
-    this.tail.length++
+    if (!this.tail) {
+      this.head = this.tail = emptyChunk()
+    }
+    this.tail!.array.push(message)
+    this.tail!.length++
     this.length++
   }
 
   appendAll(messages: Iterable<A>) {
     const array = Array.from(messages)
-    this.tail.next = {
+    const chunk: Chunk<A> = {
       array,
       offset: 0,
       length: array.length,
       next: undefined
     }
-    this.tail = this.tail.next
-    if (this.head.length === 0) {
-      this.head = this.tail
+    if (this.head) {
+      this.tail = this.tail!.next = chunk
+    } else {
+      this.head = this.tail = chunk
     }
     this.length += array.length
     return array.length
@@ -558,7 +562,7 @@ class MutableList<A> {
   }
 
   takeAll() {
-    if (this.head === this.tail && this.head.offset === 0) {
+    if (this.head && this.head === this.tail && this.head.offset === 0) {
       const array = this.head.array
       this.clear()
       return array
@@ -577,11 +581,7 @@ class MutableList<A> {
   }
 
   take(): A | undefined {
-    if (this.length === 0) {
-      return undefined
-    } else if (this.head.length === 0) {
-      this.head = this.head.next!
-    }
+    if (!this.head) return undefined
     const message = this.head.array[this.head.offset]
     this.head.array[this.head.offset++] = undefined as any
     this.length--
@@ -596,7 +596,7 @@ class MutableList<A> {
   }
 
   clear() {
-    this.head = this.tail = emptyChunk()
+    this.head = this.tail = undefined
     this.length = 0
   }
 }
