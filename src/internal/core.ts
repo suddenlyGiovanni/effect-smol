@@ -1654,6 +1654,11 @@ export const context = <R = never>(): Effect.Effect<Context.Context<R>> => getCo
 const getContext = withFiber((fiber) => succeed(fiber.context))
 
 /** @internal */
+export const contextWith = <R, A, E, R2>(
+  f: (context: Context.Context<R>) => Effect.Effect<A, E, R2>
+): Effect.Effect<A, E, R | R2> => withFiber((fiber) => f(fiber.context as Context.Context<R>))
+
+/** @internal */
 export const provideContext: {
   <XR>(
     context: Context.Context<XR>
@@ -1894,99 +1899,6 @@ export const when: {
 // ----------------------------------------------------------------------------
 // repetition
 // ----------------------------------------------------------------------------
-
-/** @internal */
-export const repeatExit: {
-  <A, E>(options: {
-    while: Predicate<Exit.Exit<A, E>>
-    times?: number | undefined
-    // schedule?: EffectSchedule | undefined
-  }): <R>(self: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
-  <A, E, R>(
-    self: Effect.Effect<A, E, R>,
-    options: {
-      while: Predicate<Exit.Exit<A, E>>
-      times?: number | undefined
-      // schedule?: EffectSchedule | undefined
-    }
-  ): Effect.Effect<A, E, R>
-} = dual(
-  2,
-  <A, E, R>(
-    self: Effect.Effect<A, E, R>,
-    options: {
-      while: Predicate<Exit.Exit<A, E>>
-      times?: number | undefined
-      // schedule?: EffectSchedule | undefined
-    }
-  ): Effect.Effect<A, E, R> =>
-    suspend(() => {
-      // const startedAt = options.schedule ? Date.now() : 0
-      let attempt = 0
-
-      const loop: Effect.Effect<A, E, R> = flatMap(exit(self), (exit) => {
-        if (options.while !== undefined && !options.while(exit)) {
-          return exit
-        } else if (options.times !== undefined && attempt >= options.times) {
-          return exit
-        }
-        attempt++
-        const delayEffect = yieldNow
-        // if (options.schedule !== undefined) {
-        //   const elapsed = Date.now() - startedAt
-        //   const duration = options.schedule(attempt, elapsed)
-        //   if (Option.isNone(duration)) {
-        //     return exit
-        //   }
-        //   delayEffect = sleep(duration.value)
-        // }
-        return flatMap(delayEffect, () => loop)
-      })
-
-      return loop
-    })
-)
-
-/** @internal */
-export const repeat: {
-  <A, E>(
-    options?:
-      | {
-        while?: Predicate<A> | undefined
-        times?: number | undefined
-        // schedule?: EffectSchedule | undefined
-      }
-      | undefined
-  ): <R>(self: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
-  <A, E, R>(
-    self: Effect.Effect<A, E, R>,
-    options?:
-      | {
-        while?: Predicate<A> | undefined
-        times?: number | undefined
-        // schedule?: EffectSchedule | undefined
-      }
-      | undefined
-  ): Effect.Effect<A, E, R>
-} = dual(
-  (args) => isEffect(args[0]),
-  <A, E, R>(
-    self: Effect.Effect<A, E, R>,
-    options?:
-      | {
-        while?: Predicate<A> | undefined
-        times?: number | undefined
-        // schedule?: EffectSchedule | undefined
-      }
-      | undefined
-  ): Effect.Effect<A, E, R> =>
-    repeatExit(self, {
-      ...options,
-      while: (exit) =>
-        exit._tag === "Success" &&
-        (options?.while === undefined || options.while(exit.value))
-    })
-)
 
 /** @internal */
 export const replicate: {
@@ -2435,53 +2347,6 @@ export const option = <A, E, R>(
 export const either = <A, E, R>(
   self: Effect.Effect<A, E, R>
 ): Effect.Effect<Either.Either<A, E>, never, R> => match(self, { onFailure: Either.left, onSuccess: Either.right })
-
-/** @internal */
-export const retry: {
-  <A, E>(
-    options?:
-      | {
-        readonly while?: Predicate<E> | undefined
-        readonly times?: number | undefined
-        // schedule?: EffectSchedule | undefined
-      }
-      | undefined
-  ): <R>(self: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
-  <A, E, R>(
-    self: Effect.Effect<A, E, R>,
-    options?:
-      | {
-        readonly while?: Predicate<E> | undefined
-        readonly times?: number | undefined
-        // schedule?: EffectSchedule | undefined
-      }
-      | undefined
-  ): Effect.Effect<A, E, R>
-} = dual(
-  (args) => isEffect(args[0]),
-  <A, E, R>(
-    self: Effect.Effect<A, E, R>,
-    options?:
-      | {
-        readonly while?: Predicate<E> | undefined
-        readonly times?: number | undefined
-        // schedule?: EffectSchedule | undefined
-      }
-      | undefined
-  ): Effect.Effect<A, E, R> =>
-    repeatExit(self, {
-      ...options,
-      while: (exit) => {
-        const fail = exit._tag === "Failure"
-          ? exit.cause.failures.find(failureIsFail)
-          : undefined
-        return (
-          fail !== undefined &&
-          (options?.while === undefined || options.while(fail.error))
-        )
-      }
-    })
-)
 
 // ----------------------------------------------------------------------------
 // pattern matching
