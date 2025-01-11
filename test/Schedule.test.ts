@@ -3,10 +3,46 @@ import { constant, constUndefined } from "effect/Function"
 import { describe, expect, it } from "./utils/extend.js"
 
 describe("Schedule", () => {
+  describe("collecting", () => {
+    it.effect("collectInputs - should collect all schedule inputs", () =>
+      Effect.gen(function*() {
+        const schedule = Schedule.collectInputs(Schedule.forever)
+        const inputs = Array.range(1, 5)
+        const outputs = yield* runLast(schedule, inputs)
+        expect(outputs).toEqual(inputs)
+      }))
+
+    it.effect("collectOutputs - should collect all schedule outputs", () =>
+      Effect.gen(function*() {
+        const schedule = Schedule.collectOutputs(Schedule.forever)
+        const inputs = Array.makeBy(5, constUndefined)
+        const outputs = yield* runLast(schedule, inputs)
+        expect(outputs).toEqual([0, 1, 2, 3, 4])
+      }))
+
+    it.effect("collectWhile - should collect while the predicate holds", () =>
+      Effect.gen(function*() {
+        const schedule = Schedule.collectWhile(Schedule.forever, ({ output }) => output < 3)
+        const inputs = Array.makeBy(5, constUndefined)
+        const outputs = yield* runLast(schedule, inputs)
+        expect(outputs).toEqual([0, 1, 2, 3])
+      }))
+
+    it.effect("collectWhileEffect - should collect while the effectful predicate holds", () =>
+      Effect.gen(function*() {
+        const schedule = Schedule.collectWhileEffect(Schedule.forever, ({ output }) => Effect.succeed(output < 3))
+        const inputs = Array.makeBy(5, constUndefined)
+        const outputs = yield* runLast(schedule, inputs)
+        expect(outputs).toEqual([0, 1, 2, 3])
+      }))
+  })
+
   describe("spaced", () => {
     it.effect("constant delays", () =>
       Effect.gen(function*() {
-        const output = yield* runDelays(Schedule.spaced(Duration.seconds(1)), Array.makeBy(5, constUndefined))
+        const schedule = Schedule.spaced(Duration.seconds(1))
+        const inputs = Array.makeBy(5, constUndefined)
+        const output = yield* runDelays(schedule, inputs)
         expect(output).toEqual(Array.makeBy(5, constant(Duration.seconds(1))))
       }))
   })
@@ -14,7 +50,9 @@ describe("Schedule", () => {
   describe("fixed", () => {
     it.effect("constant delays", () =>
       Effect.gen(function*() {
-        const output = yield* runDelays(Schedule.fixed(Duration.seconds(1)), Array.makeBy(5, constUndefined))
+        const schedule = Schedule.fixed(Duration.seconds(1))
+        const inputs = Array.makeBy(5, constUndefined)
+        const output = yield* runDelays(schedule, inputs)
         expect(output).toEqual(Array.makeBy(5, constant(Duration.seconds(1))))
       }))
   })
@@ -22,8 +60,36 @@ describe("Schedule", () => {
   describe("windowed", () => {
     it.effect("constant delays", () =>
       Effect.gen(function*() {
-        const output = yield* runDelays(Schedule.windowed(Duration.seconds(1)), Array.makeBy(5, constUndefined))
+        const schedule = Schedule.windowed(Duration.seconds(1))
+        const inputs = Array.makeBy(5, constUndefined)
+        const output = yield* runDelays(schedule, inputs)
         expect(output).toEqual(Array.makeBy(5, constant(Duration.seconds(1))))
+      }))
+
+    it.effect("delays until the nearest window boundary", () =>
+      Effect.gen(function*() {
+        const delays: Array<Duration.Duration> = []
+        const schedule = Schedule.windowed("1 seconds").pipe(
+          Schedule.while(({ recurrence }) => recurrence < 5),
+          Schedule.delays,
+          Schedule.map((delay) => {
+            delays.push(delay)
+            return delays
+          })
+        )
+        yield* Effect.sleep("1.5 seconds").pipe(
+          Effect.schedule(schedule),
+          Effect.fork
+        )
+        yield* TestClock.setTime(Number.POSITIVE_INFINITY)
+        expect(delays).toEqual([
+          Duration.millis(1000),
+          Duration.millis(500),
+          Duration.millis(500),
+          Duration.millis(500),
+          Duration.millis(500),
+          Duration.zero
+        ])
       }))
   })
 })
@@ -55,3 +121,11 @@ const runDelays = <Output, Input, Error, Env>(
   schedule: Schedule.Schedule<Output, Input, Error, Env>,
   input: Iterable<Input>
 ) => runCollect(Schedule.delays(schedule), input)
+
+const runLast = <Output, Input, Error, Env>(
+  schedule: Schedule.Schedule<Output, Input, Error, Env>,
+  input: Iterable<Input>
+) =>
+  runCollect(schedule, input).pipe(
+    Effect.map((outputs) => outputs[outputs.length - 1])
+  )
