@@ -46,6 +46,12 @@ jobs:
         with:
           path: base
           ref: ${{ github.event.pull_request.base.ref }}
+      - name: Build base ref
+        shell: bash
+        run: |
+          cd base
+          pnpm install
+          pnpm build
       - name: Compare bundle size
         id: bundle
         shell: bash
@@ -58,7 +64,7 @@ jobs:
           output+="\n|:----------|:------------:|:-------------:|:----------:|"
           for filename in bundle/*.ts; do
             current=$(compute_bundle_size "${filename}")
-            previous=$([[ -f "head/bundle/${filename}" ]] && compute_bundle_size "head/bundle/${filename}" || echo "0")
+            previous=$([[ -f "base/${filename}" ]] && compute_bundle_size "base/${filename}" || echo "0")
             line="$(awk -v filename=${filename} -v current="${current}" -v previous="${previous}" '
               BEGIN {
                 if (previous == 0) previous = current
