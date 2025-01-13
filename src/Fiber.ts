@@ -5,6 +5,7 @@ import type * as Context from "./Context.js"
 import type { Effect } from "./Effect.js"
 import type { Exit } from "./Exit.js"
 import * as core from "./internal/core.js"
+import type { Option } from "./Option.js"
 import type { Pipeable } from "./Pipeable.js"
 import { hasProperty } from "./Predicate.js"
 import type { Scheduler } from "./Scheduler.js"
@@ -92,3 +93,9 @@ export const interruptAll: <A extends Iterable<Fiber<any, any>>>(
 export const isFiber = (
   u: unknown
 ): u is Fiber<unknown, unknown> => hasProperty(u, core.FiberTypeId)
+
+/**
+ * @since 2.0.0
+ * @category accessors
+ */
+export const getCurrent: () => Option<Fiber<any, any>> = core.getCurrentFiber

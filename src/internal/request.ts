@@ -3,7 +3,6 @@ import type { Effect } from "../Effect.js"
 import type { Fiber } from "../Fiber.js"
 import { dual } from "../Function.js"
 import { globalValue } from "../GlobalValue.js"
-import { CurrentScheduler } from "../References.js"
 import type { Entry, Request } from "../Request.js"
 import { makeEntry } from "../Request.js"
 import type { RequestResolver } from "../RequestResolver.js"
@@ -37,16 +36,14 @@ export const request: {
     Request.Context<A> | RX
   > => {
     const withResolver = (resolver: RequestResolver<A>) =>
-      core.withFiber<
+      core.async<
         Request.Success<A>,
         Request.Error<A>,
         Request.Context<A>
-      >((fiber) =>
-        core.async((resume) => {
-          const entry = addEntry(resolver, self, resume, fiber)
-          return maybeRemoveEntry(resolver, entry)
-        })
-      )
+      >((resume) => {
+        const entry = addEntry(resolver, self, resume, core.getCurrentFiberOrUndefined()!)
+        return maybeRemoveEntry(resolver, entry)
+      })
     return core.isEffect(resolver) ? core.flatMap(resolver, withResolver) : withResolver(resolver)
   }
 )
@@ -79,7 +76,7 @@ const addEntry = <A extends Request<any, any, any>>(
     pendingBatches.set(resolver, batch)
     batch.delayFiber = core.runFork(
       core.andThen(resolver.delay, runBatch(batch)),
-      { scheduler: fiber.getRef(CurrentScheduler) }
+      { scheduler: fiber.currentScheduler }
     )
   }
 
@@ -98,7 +95,7 @@ const addEntry = <A extends Request<any, any, any>>(
 
   batch.delayFiber!.unsafeInterrupt(fiber.id)
   batch.delayFiber = undefined
-  core.runFork(runBatch(batch), { scheduler: fiber.getRef(CurrentScheduler) })
+  core.runFork(runBatch(batch), { scheduler: fiber.currentScheduler })
   return entry
 }
 

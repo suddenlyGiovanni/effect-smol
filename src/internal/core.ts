@@ -391,6 +391,13 @@ const fiberIdStore = globalValue("effect/Fiber/fiberIdStore", () => ({
 
 const currentFiberUri = "effect/Fiber/currentFiber"
 
+/** @internal */
+export const getCurrentFiberOrUndefined = (): Fiber.Fiber<any, any> | undefined => (globalThis as any)[currentFiberUri]
+
+/** @internal */
+export const getCurrentFiber = (): Option.Option<Fiber.Fiber<any, any>> =>
+  Option.fromNullable((globalThis as any)[currentFiberUri])
+
 const keepAlive = globalValue("effect/Fiber/keepAlive", () => {
   let count = 0
   let running: ReturnType<typeof globalThis.setInterval> | undefined = undefined

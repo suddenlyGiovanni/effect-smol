@@ -16,17 +16,15 @@ const UserResolver = Resolver.make<GetNameById>((entries) =>
 )
 
 const effect = Effect.forEach(
-  Array.range(1, 1000),
+  Array.range(1, 100_000),
   (id) => Effect.request(new GetNameById({ id }), UserResolver),
   { concurrency: "unbounded" }
 )
 
-for (let i = 0; i < 10; i++) {
-  Effect.runSync(effect)
-}
-
-console.time("smol batching")
-for (let i = 0; i < 100; i++) {
-  Effect.runSync(effect)
-}
-console.timeEnd("smol batching")
+Effect.gen(function*() {
+  while (true) {
+    console.time("batching")
+    yield* effect
+    console.timeEnd("batching")
+  }
+}).pipe(Effect.runSync)
