@@ -1,6 +1,8 @@
 /**
  * @since 2.0.0
  */
+import * as Cron from "./Cron.js"
+import type * as DateTime from "./DateTime.js"
 import * as Duration from "./Duration.js"
 import type { Effect } from "./Effect.js"
 import * as Either from "./Either.js"
@@ -458,6 +460,26 @@ export const collectWhile: {
     outputs.push(output)
     return outputs
   }))
+
+/**
+ * Returns a new `Schedule` that recurs on the specified `Cron` schedule and
+ * outputs the duration between recurrences.
+ *
+ * @since 4.0.0
+ * @category constructors
+ */
+export const cron: {
+  (expression: Cron.Cron): Schedule<Duration.Duration, unknown, Cron.ParseError>
+  (expression: string, tz?: string | DateTime.TimeZone): Schedule<Duration.Duration, unknown, Cron.ParseError>
+} = (expression: string | Cron.Cron, tz?: string | DateTime.TimeZone) => {
+  const parsed = Cron.isCron(expression) ? Either.right(expression) : Cron.parse(expression, tz)
+  return fromStep(core.map(core.fromEither(parsed), (cron) => (now, _) =>
+    core.sync(() => {
+      const next = Cron.next(cron, now).getTime()
+      const duration = Duration.millis(next - now)
+      return [duration, duration]
+    })))
+}
 
 /**
  * Returns a new schedule that outputs the delay between each occurence.

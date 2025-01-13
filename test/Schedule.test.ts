@@ -58,6 +58,79 @@ describe("Schedule", () => {
       }))
   })
 
+  describe("cron", () => {
+    it.effect("should recur on interval matching cron expression", () =>
+      Effect.gen(function*() {
+        const now = new Date(2024, 0, 1, 0, 0, 35).getTime()
+        // At every second minute
+        const schedule = Schedule.cron("*/2 * * * *")
+        const inputs = Array.makeBy(4, constUndefined)
+        yield* TestClock.setTime(now)
+        const [, outputs] = yield* runDelays(schedule, inputs).pipe(
+          Effect.map(Array.mapAccum(now, (next, delay) => {
+            const timestamp = next + Duration.toMillis(delay)
+            return [timestamp, format(timestamp)]
+          }))
+        )
+        expect(outputs).toEqual([
+          "Mon Jan 01 2024 00:02:00",
+          "Mon Jan 01 2024 00:04:00",
+          "Mon Jan 01 2024 00:06:00",
+          "Mon Jan 01 2024 00:08:00"
+        ])
+      }))
+
+    it.effect("should recur on interval matching cron expression (second granularity))", () =>
+      Effect.gen(function*() {
+        const now = new Date(2024, 0, 1, 0, 0, 0).getTime()
+        // At every third minute
+        const schedule = Schedule.cron("*/3 * * * * *")
+        const inputs = Array.makeBy(10, constUndefined)
+        yield* TestClock.setTime(now)
+        const [, outputs] = yield* runDelays(schedule, inputs).pipe(
+          Effect.map(Array.mapAccum(now, (next, delay) => {
+            const timestamp = next + Duration.toMillis(delay)
+            return [timestamp, format(timestamp)]
+          }))
+        )
+        expect(outputs).toEqual([
+          "Mon Jan 01 2024 00:00:03",
+          "Mon Jan 01 2024 00:00:06",
+          "Mon Jan 01 2024 00:00:09",
+          "Mon Jan 01 2024 00:00:12",
+          "Mon Jan 01 2024 00:00:15",
+          "Mon Jan 01 2024 00:00:18",
+          "Mon Jan 01 2024 00:00:21",
+          "Mon Jan 01 2024 00:00:24",
+          "Mon Jan 01 2024 00:00:27",
+          "Mon Jan 01 2024 00:00:30"
+        ])
+      }))
+
+    it.effect("should recur at time matching cron expression", () =>
+      Effect.gen(function*() {
+        const now = new Date(2024, 0, 1, 0, 0, 0).getTime()
+        // At 04:30 on day-of-month 5 and 15 and on Wednesday.
+        const schedule = Schedule.cron("30 4 5,15 * WED")
+        const inputs = Array.makeBy(6, constUndefined)
+        yield* TestClock.setTime(now)
+        const [, outputs] = yield* runDelays(schedule, inputs).pipe(
+          Effect.map(Array.mapAccum(now, (next, delay) => {
+            const timestamp = next + Duration.toMillis(delay)
+            return [timestamp, format(timestamp)]
+          }))
+        )
+        expect(outputs).toEqual([
+          "Wed Jan 03 2024 04:30:00",
+          "Fri Jan 05 2024 04:30:00",
+          "Wed Jan 10 2024 04:30:00",
+          "Mon Jan 15 2024 04:30:00",
+          "Wed Jan 17 2024 04:30:00",
+          "Wed Jan 24 2024 04:30:00"
+        ])
+      }))
+  })
+
   describe("spaced", () => {
     it.effect("constant delays", () =>
       Effect.gen(function*() {
@@ -150,3 +223,11 @@ const runLast = <Output, Input, Error, Env>(
   runCollect(schedule, input).pipe(
     Effect.map((outputs) => outputs[outputs.length - 1])
   )
+
+const format = (timestamp: number | string | Date): string => {
+  const date = new Date(timestamp)
+  const hours = `0${date.getHours()}`.slice(-2)
+  const minutes = `0${date.getMinutes()}`.slice(-2)
+  const seconds = `0${date.getSeconds()}`.slice(-2)
+  return `${date.toDateString()} ${hours}:${minutes}:${seconds}`
+}
