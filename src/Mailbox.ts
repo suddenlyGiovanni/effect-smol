@@ -663,9 +663,7 @@ const exitFailNone = core.exitFail(Option.none())
 
 const releaseTaker = <A, E>(self: Mailbox<A, E>) => {
   self.scheduleRunning = false
-  if (self.state._tag === "Done") {
-    return
-  } else if (self.state.takers.size === 0) {
+  if (self.state._tag === "Done" || self.state.takers.size === 0) {
     return
   }
   const taker = Iterable.unsafeHead(self.state.takers)
@@ -674,7 +672,7 @@ const releaseTaker = <A, E>(self: Mailbox<A, E>) => {
 }
 
 const scheduleReleaseTaker = <A, E>(self: Mailbox<A, E>) => {
-  if (self.scheduleRunning) {
+  if (self.scheduleRunning || self.state._tag === "Done" || self.state.takers.size === 0) {
     return
   }
   self.scheduleRunning = true
