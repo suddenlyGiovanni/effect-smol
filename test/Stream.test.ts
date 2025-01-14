@@ -1,4 +1,4 @@
-import { Effect, Exit, Fiber, Mailbox, Option, Stream } from "effect"
+import { Effect, Exit, Fiber, Queue, Option, Stream } from "effect"
 import { assert, describe, it } from "./utils/extend.js"
 
 describe("Stream", () => {
@@ -8,7 +8,7 @@ describe("Stream", () => {
         const array = [1, 2, 3, 4, 5]
         const result = yield* Stream.async<number>((mb) => {
           array.forEach((n) => {
-            Mailbox.unsafeOffer(mb, n)
+            Queue.unsafeOffer(mb, n)
           })
         }).pipe(
           Stream.take(array.length),
@@ -27,7 +27,7 @@ describe("Stream", () => {
               cleanup = true
             })
           )
-          yield* Mailbox.offer(mb, void 0)
+          yield* Queue.offer(mb, void 0)
         })).pipe(
           Stream.tap(() => latch.open),
           Stream.runDrain,
@@ -41,7 +41,7 @@ describe("Stream", () => {
     it.effect("signals the end of the stream", () =>
       Effect.gen(function*() {
         const result = yield* Stream.async<number>((mb) => {
-          Mailbox.unsafeDone(mb, Exit.void)
+          Queue.unsafeDone(mb, Exit.void)
           return Effect.void
         }).pipe(Stream.runCollect)
         assert.isTrue(result.length === 0)
@@ -51,7 +51,7 @@ describe("Stream", () => {
       Effect.gen(function*() {
         const error = new Error("boom")
         const result = yield* Stream.async<number, Error>((mb) => {
-          Mailbox.unsafeDone(mb, Exit.fail(error))
+          Queue.unsafeDone(mb, Exit.fail(error))
           return Effect.void
         }).pipe(
           Stream.runCollect,
@@ -82,7 +82,7 @@ describe("Stream", () => {
             [1, 2, 3, 4, 5, 6, 7],
             Effect.fnUntraced(function*(n) {
               count++
-              yield* Mailbox.offer(mb, n)
+              yield* Queue.offer(mb, n)
               offered++
             }),
             { concurrency: "unbounded" }

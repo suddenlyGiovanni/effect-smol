@@ -1,6 +1,5 @@
 /**
  * @since 3.8.0
- * @experimental
  */
 import * as Arr from "./Array.js"
 import type { Cause } from "./Cause.js"
@@ -19,97 +18,94 @@ import type * as Types from "./Types.js"
 
 /**
  * @since 3.8.0
- * @experimental
  * @category type ids
  */
-export const TypeId: unique symbol = Symbol.for("effect/Mailbox")
+export const TypeId: unique symbol = Symbol.for("effect/Queue")
 
 /**
  * @since 3.8.0
- * @experimental
  * @category type ids
  */
 export type TypeId = typeof TypeId
 
 /**
  * @since 3.8.0
- * @experimental
  * @category type ids
  */
-export const ReadonlyTypeId: unique symbol = Symbol.for("effect/Mailbox/ReadonlyMailbox")
+export const DequeueTypeId: unique symbol = Symbol.for("effect/Queue/Dequeue")
 
 /**
  * @since 3.8.0
- * @experimental
  * @category type ids
  */
-export type ReadonlyTypeId = typeof ReadonlyTypeId
+export type ReadonlyTypeId = typeof DequeueTypeId
 
 /**
  * @since 3.8.0
- * @experimental
  * @category guards
  */
-export const isMailbox = <A = unknown, E = unknown>(
+export const isQueue = <A = unknown, E = unknown>(
   u: unknown
-): u is Mailbox<A, E> => hasProperty(u, TypeId)
+): u is Queue<A, E> => hasProperty(u, TypeId)
 
 /**
  * @since 3.8.0
- * @experimental
  * @category guards
  */
-export const isReadonlyMailbox = <A = unknown, E = unknown>(
+export const isDequeue = <A = unknown, E = unknown>(
   u: unknown
-): u is ReadonlyMailbox<A, E> => hasProperty(u, ReadonlyTypeId)
+): u is Dequeue<A, E> => hasProperty(u, DequeueTypeId)
 
 /**
- * A `Mailbox` is a queue that can be signaled to be done or failed.
+ * A `Dequeue` is a queue that can be taken from.
  *
  * @since 3.8.0
- * @experimental
  * @category models
  */
-export interface ReadonlyMailbox<out A, out E = never> extends Inspectable {
-  readonly [ReadonlyTypeId]: Mailbox.ReadonlyVariance<A, E>
+export interface Dequeue<out A, out E = never> extends Inspectable {
+  readonly [DequeueTypeId]: Dequeue.Variance<A, E>
   readonly strategy: "suspend" | "dropping" | "sliding"
   readonly scheduler: Scheduler
   capacity: number
   messages: MutableList.MutableList<any>
-  state: Mailbox.State<any, any>
+  state: Queue.State<any, any>
   scheduleRunning: boolean
 }
 
 /**
- * A `Mailbox` is a queue that can be signaled to be done or failed.
- *
- * @since 3.8.0
- * @experimental
+ * @since 4.0.0
  * @category models
  */
-export interface Mailbox<in out A, in out E = never> extends ReadonlyMailbox<A, E> {
-  readonly [TypeId]: Mailbox.Variance<A, E>
+export declare namespace Dequeue {
+  /**
+   * @since 3.8.0
+   * @category models
+   */
+  export interface Variance<A, E> {
+    _A: Types.Covariant<A>
+    _E: Types.Covariant<E>
+  }
+}
+
+/**
+ * A `Queue` is an asynchronous queue that can be offered to and taken from.
+ *
+ * It also supports signaling that it is done or failed.
+ *
+ * @since 3.8.0
+ * @category models
+ */
+export interface Queue<in out A, in out E = never> extends Dequeue<A, E> {
+  readonly [TypeId]: Queue.Variance<A, E>
 }
 
 /**
  * @since 3.8.0
- * @experimental
  * @category models
  */
-export declare namespace Mailbox {
+export declare namespace Queue {
   /**
    * @since 3.8.0
-   * @experimental
-   * @category models
-   */
-  export interface ReadonlyVariance<A, E> {
-    _A: Types.Covariant<A>
-    _E: Types.Covariant<E>
-  }
-
-  /**
-   * @since 3.8.0
-   * @experimental
    * @category models
    */
   export interface Variance<A, E> {
@@ -158,15 +154,15 @@ export declare namespace Mailbox {
     }
 }
 
-const MailboxProto = {
+const QueueProto = {
   [TypeId]: {
     _A: identity,
     _E: identity
   },
   ...PipeInspectableProto,
-  toJSON(this: Mailbox<unknown, unknown>) {
+  toJSON(this: Queue<unknown, unknown>) {
     return {
-      _id: "effect/Mailbox",
+      _id: "effect/Queue",
       state: this.state._tag,
       size: unsafeSize(this).toJSON()
     }
@@ -174,36 +170,37 @@ const MailboxProto = {
 }
 
 /**
- * A `Mailbox` is a queue that can be signaled to be done or failed.
+ * A `Queue` is an asynchronous queue that can be offered to and taken from.
+ *
+ * It also supports signaling that it is done or failed.
  *
  * @since 3.8.0
- * @experimental
  * @category constructors
  * @example
  * ```ts
- * import { Effect, Mailbox } from "effect"
+ * import { Effect, Queue } from "effect"
  *
  * Effect.gen(function*() {
- *   const mailbox = yield* Mailbox.make<number, string>()
+ *   const queue = yield* Queue.make<number, string>()
  *
- *   // add messages to the mailbox
- *   yield* mailbox.offer(1)
- *   yield* mailbox.offer(2)
- *   yield* mailbox.offerAll([3, 4, 5])
+ *   // add messages to the queue
+ *   yield* Queue.offer(queue, 1)
+ *   yield* Queue.offer(queue, 2)
+ *   yield* Queue.offerAll(queue, [3, 4, 5])
  *
- *   // take messages from the mailbox
- *   const [messages, done] = yield* mailbox.takeAll
+ *   // take messages from the queue
+ *   const [messages, done] = yield* Queue.takeAll(queue)
  *   assert.deepStrictEqual(messages, [1, 2, 3, 4, 5])
  *   assert.strictEqual(done, false)
  *
- *   // signal that the mailbox is done
- *   yield* mailbox.end
- *   const [messages2, done2] = yield* mailbox.takeAll
+ *   // signal that the queue is done
+ *   yield* Queue.end(queue)
+ *   const [messages2, done2] = yield* Queue.takeAll(queue)
  *   assert.deepStrictEqual(messages2, [])
  *   assert.strictEqual(done2, true)
  *
- *   // signal that the mailbox has failed
- *   yield* mailbox.fail("boom")
+ *   // signal that the queue has failed
+ *   yield* Queue.fail(queue, "boom")
  * })
  * ```
  */
@@ -215,9 +212,9 @@ export const make = <A, E = never>(
       readonly strategy?: "suspend" | "dropping" | "sliding" | undefined
     }
     | undefined
-): Effect<Mailbox<A, E>> =>
+): Effect<Queue<A, E>> =>
   core.withFiber((fiber) => {
-    const self = Object.create(MailboxProto)
+    const self = Object.create(QueueProto)
     self.scheduler = fiber.currentScheduler
     self.capacity = typeof capacity === "number" ? capacity : (capacity?.capacity ?? Number.POSITIVE_INFINITY)
     self.strategy = typeof capacity === "number" ? "suspend" : (capacity?.strategy ?? "suspend")
@@ -233,13 +230,12 @@ export const make = <A, E = never>(
   })
 
 /**
- * Add a message to the mailbox. Returns `false` if the mailbox is done.
+ * Add a message to the queue. Returns `false` if the queue is done.
  *
- * @experimental
  * @category offering
  * @since 4.0.0
  */
-export const offer = <A, E>(self: Mailbox<A, E>, message: A): Effect<boolean> =>
+export const offer = <A, E>(self: Queue<A, E>, message: A): Effect<boolean> =>
   core.suspend(() => {
     if (self.state._tag !== "Open") {
       return exitFalse
@@ -266,13 +262,12 @@ export const offer = <A, E>(self: Mailbox<A, E>, message: A): Effect<boolean> =>
   })
 
 /**
- * Add a message to the mailbox. Returns `false` if the mailbox is done.
+ * Add a message to the queue. Returns `false` if the queue is done.
  *
- * @experimental
  * @category offering
  * @since 4.0.0
  */
-export const unsafeOffer = <A, E>(self: Mailbox<A, E>, message: A): boolean => {
+export const unsafeOffer = <A, E>(self: Queue<A, E>, message: A): boolean => {
   if (self.state._tag !== "Open") {
     return false
   } else if (self.messages.length >= self.capacity) {
@@ -293,14 +288,13 @@ export const unsafeOffer = <A, E>(self: Mailbox<A, E>, message: A): boolean => {
 }
 
 /**
- * Add multiple messages to the mailbox. Returns the remaining messages that
+ * Add multiple messages to the queue. Returns the remaining messages that
  * were not added.
  *
- * @experimental
  * @category offering
  * @since 4.0.0
  */
-export const offerAll = <A, E>(self: Mailbox<A, E>, messages: Iterable<A>): Effect<Array<A>> =>
+export const offerAll = <A, E>(self: Queue<A, E>, messages: Iterable<A>): Effect<Array<A>> =>
   core.suspend(() => {
     if (self.state._tag !== "Open") {
       return core.succeed(Arr.fromIterable(messages))
@@ -315,14 +309,13 @@ export const offerAll = <A, E>(self: Mailbox<A, E>, messages: Iterable<A>): Effe
   })
 
 /**
- * Add multiple messages to the mailbox. Returns the remaining messages that
+ * Add multiple messages to the queue. Returns the remaining messages that
  * were not added.
  *
- * @experimental
  * @category offering
  * @since 4.0.0
  */
-export const unsafeOfferAll = <A, E>(self: Mailbox<A, E>, messages: Iterable<A>): Array<A> => {
+export const unsafeOfferAll = <A, E>(self: Queue<A, E>, messages: Iterable<A>): Array<A> => {
   if (self.state._tag !== "Open") {
     return Arr.fromIterable(messages)
   } else if (
@@ -357,55 +350,50 @@ export const unsafeOfferAll = <A, E>(self: Mailbox<A, E>, messages: Iterable<A>)
 }
 
 /**
- * Fail the mailbox with an error. If the mailbox is already done, `false` is
+ * Fail the queue with an error. If the queue is already done, `false` is
  * returned.
  *
- * @experimental
  * @category completion
  * @since 4.0.0
  */
-export const fail = <A, E>(self: Mailbox<A, E>, error: E) => done(self, core.exitFail(error))
+export const fail = <A, E>(self: Queue<A, E>, error: E) => done(self, core.exitFail(error))
 
 /**
- * Fail the mailbox with a cause. If the mailbox is already done, `false` is
+ * Fail the queue with a cause. If the queue is already done, `false` is
  * returned.
  *
- * @experimental
  * @category completion
  * @since 4.0.0
  */
-export const failCause = <A, E>(self: Mailbox<A, E>, cause: Cause<E>) => done(self, core.exitFailCause(cause))
+export const failCause = <A, E>(self: Queue<A, E>, cause: Cause<E>) => done(self, core.exitFailCause(cause))
 
 /**
- * Signal that the mailbox is complete. If the mailbox is already done, `false` is
+ * Signal that the queue is complete. If the queue is already done, `false` is
  * returned.
  *
- * @experimental
  * @category completion
  * @since 4.0.0
  */
-export const end = <A, E>(self: Mailbox<A, E>): Effect<boolean> => done(self, core.exitVoid)
+export const end = <A, E>(self: Queue<A, E>): Effect<boolean> => done(self, core.exitVoid)
 
 /**
- * Signal that the mailbox is done. If the mailbox is already done, `false` is
+ * Signal that the queue is done. If the queue is already done, `false` is
  * returned.
  *
- * @experimental
  * @category completion
  * @since 4.0.0
  */
-export const done = <A, E>(self: Mailbox<A, E>, exit: Exit<void, E>): Effect<boolean> =>
+export const done = <A, E>(self: Queue<A, E>, exit: Exit<void, E>): Effect<boolean> =>
   core.sync(() => unsafeDone(self, exit))
 
 /**
- * Signal that the mailbox is done. If the mailbox is already done, `false` is
+ * Signal that the queue is done. If the queue is already done, `false` is
  * returned.
  *
- * @experimental
  * @category completion
  * @since 4.0.0
  */
-export const unsafeDone = <A, E>(self: Mailbox<A, E>, exit: Exit<void, E>): boolean => {
+export const unsafeDone = <A, E>(self: Queue<A, E>, exit: Exit<void, E>): boolean => {
   if (self.state._tag !== "Open") {
     return false
   } else if (
@@ -420,14 +408,13 @@ export const unsafeDone = <A, E>(self: Mailbox<A, E>, exit: Exit<void, E>): bool
 }
 
 /**
- * Shutdown the mailbox, canceling any pending operations.
- * If the mailbox is already done, `false` is returned.
+ * Shutdown the queue, canceling any pending operations.
+ * If the queue is already done, `false` is returned.
  *
- * @experimental
  * @category completion
  * @since 4.0.0
  */
-export const shutdown = <A, E>(self: Mailbox<A, E>): Effect<boolean> =>
+export const shutdown = <A, E>(self: Queue<A, E>): Effect<boolean> =>
   core.sync(() => {
     if (self.state._tag === "Done") {
       return true
@@ -449,14 +436,13 @@ export const shutdown = <A, E>(self: Mailbox<A, E>): Effect<boolean> =>
   })
 
 /**
- * Take all messages from the mailbox, returning an empty array if the mailbox
+ * Take all messages from the queue, returning an empty array if the queue
  * is empty or done.
  *
- * @experimental
  * @category taking
  * @since 4.0.0
  */
-export const clear = <A, E>(self: ReadonlyMailbox<A, E>): Effect<Array<A>, E> =>
+export const clear = <A, E>(self: Dequeue<A, E>): Effect<Array<A>, E> =>
   core.suspend(() => {
     if (self.state._tag === "Done") {
       return core.exitAs(self.state.exit, empty)
@@ -467,80 +453,75 @@ export const clear = <A, E>(self: ReadonlyMailbox<A, E>): Effect<Array<A>, E> =>
   })
 
 /**
- * Take all messages from the mailbox, or wait for messages to be available.
+ * Take all messages from the queue, or wait for messages to be available.
  *
- * If the mailbox is done, the `done` flag will be `true`. If the mailbox
+ * If the queue is done, the `done` flag will be `true`. If the queue
  * fails, the Effect will fail with the error.
  *
- * @experimental
  * @category taking
  * @since 4.0.0
  */
-export const takeAll = <A, E>(self: ReadonlyMailbox<A, E>): Effect<readonly [messages: Array<A>, done: boolean], E> =>
+export const takeAll = <A, E>(self: Dequeue<A, E>): Effect<readonly [messages: Array<A>, done: boolean], E> =>
   takeBetween(self, 1, Number.POSITIVE_INFINITY)
 
 /**
- * Take a specified number of messages from the mailbox. It will only take
- * up to the capacity of the mailbox.
+ * Take a specified number of messages from the queue. It will only take
+ * up to the capacity of the queue.
  *
- * If the mailbox is done, the `done` flag will be `true`. If the mailbox
+ * If the queue is done, the `done` flag will be `true`. If the queue
  * fails, the Effect will fail with the error.
  *
- * @experimental
  * @category taking
  * @since 4.0.0
  */
 export const takeN = <A, E>(
-  self: ReadonlyMailbox<A, E>,
+  self: Dequeue<A, E>,
   n: number
 ): Effect<readonly [messages: Array<A>, done: boolean], E> => takeBetween(self, n, n)
 
 /**
- * Take a variable number of messages from the mailbox, between specified min and max.
- * It will only take up to the capacity of the mailbox.
+ * Take a variable number of messages from the queue, between specified min and max.
+ * It will only take up to the capacity of the queue.
  *
- * If the mailbox is done, the `done` flag will be `true`. If the mailbox
+ * If the queue is done, the `done` flag will be `true`. If the queue
  * fails, the Effect will fail with the error.
  *
- * @experimental
  * @category taking
  * @since 4.0.0
  */
 export const takeBetween = <A, E>(
-  self: ReadonlyMailbox<A, E>,
+  self: Dequeue<A, E>,
   min: number,
   max: number
 ): Effect<readonly [messages: Array<A>, done: boolean], E> =>
   core.suspend(() => unsafeTakeBetween(self, min, max) ?? core.andThen(awaitTake(self), takeBetween(self, 1, max)))
 
 /**
- * Take a single message from the mailbox, or wait for a message to be
+ * Take a single message from the queue, or wait for a message to be
  * available.
  *
- * If the mailbox is done, it will fail with `Option.None`. If the
- * mailbox fails, the Effect will fail with `Option.some(error)`.
+ * If the queue is done, it will fail with `Option.None`. If the
+ * queue fails, the Effect will fail with `Option.some(error)`.
  *
- * @experimental
  * @category taking
  * @since 4.0.0
  */
-export const take = <A, E>(self: ReadonlyMailbox<A, E>): Effect<A, Option.Option<E>> =>
+export const take = <A, E>(self: Dequeue<A, E>): Effect<A, Option.Option<E>> =>
   core.suspend(
     () => unsafeTake(self) ?? core.andThen(awaitTakeOption(self), take(self))
   )
 
 /**
- * Take a single message from the mailbox, or wait for a message to be
+ * Take a single message from the queue, or wait for a message to be
  * available.
  *
- * If the mailbox is done, it will fail with `Option.None`. If the
- * mailbox fails, the Effect will fail with `Option.some(error)`.
+ * If the queue is done, it will fail with `Option.None`. If the
+ * queue fails, the Effect will fail with `Option.some(error)`.
  *
- * @experimental
  * @category taking
  * @since 4.0.0
  */
-export const unsafeTake = <A, E>(self: ReadonlyMailbox<A, E>): Exit<A, Option.Option<E>> | undefined => {
+export const unsafeTake = <A, E>(self: Dequeue<A, E>): Exit<A, Option.Option<E>> | undefined => {
   if (self.state._tag === "Done") {
     const exit = self.state.exit
     if (exit._tag === "Success") return exitFailNone
@@ -562,7 +543,7 @@ export const unsafeTake = <A, E>(self: ReadonlyMailbox<A, E>): Exit<A, Option.Op
   return undefined
 }
 
-const await_ = <A, E>(self: ReadonlyMailbox<A, E>): Effect<void, E> =>
+const await_ = <A, E>(self: Dequeue<A, E>): Effect<void, E> =>
   core.async<void, E>((resume) => {
     if (self.state._tag === "Done") {
       return resume(self.state.exit)
@@ -577,9 +558,8 @@ const await_ = <A, E>(self: ReadonlyMailbox<A, E>): Effect<void, E> =>
 
 export {
   /**
-   * Wait for the mailbox to be done.
+   * Wait for the queue to be done.
    *
-   * @experimental
    * @category completion
    * @since 4.0.0
    */
@@ -587,59 +567,54 @@ export {
 }
 
 /**
- * Check the size of the mailbox.
+ * Check the size of the queue.
  *
- * If the mailbox is complete, it will return `None`.
+ * If the queue is complete, it will return `None`.
  *
- * @experimental
  * @category size
  * @since 4.0.0
  */
-export const size = <A, E>(self: ReadonlyMailbox<A, E>): Effect<Option.Option<number>> =>
-  core.sync(() => unsafeSize(self))
+export const size = <A, E>(self: Dequeue<A, E>): Effect<Option.Option<number>> => core.sync(() => unsafeSize(self))
 
 /**
- * Check the size of the mailbox.
+ * Check the size of the queue.
  *
- * If the mailbox is complete, it will return `None`.
+ * If the queue is complete, it will return `None`.
  *
- * @experimental
  * @category size
  * @since 4.0.0
  */
-export const unsafeSize = <A, E>(self: ReadonlyMailbox<A, E>): Option.Option<number> =>
+export const unsafeSize = <A, E>(self: Dequeue<A, E>): Option.Option<number> =>
   self.state._tag === "Done" ? Option.none() : Option.some(self.messages.length)
 
 /**
  * @since 4.0.0
- * @experimental
  * @category conversions
  */
-export const asReadonly: <A, E>(self: Mailbox<A, E>) => ReadonlyMailbox<A, E> = identity
+export const asDequeue: <A, E>(self: Queue<A, E>) => Dequeue<A, E> = identity
 
 /**
- * Run an `Effect` into a `Mailbox`, where success ends the mailbox and failure
- * fails the mailbox.
+ * Run an `Effect` into a `Queue`, where success ends the queue and failure
+ * fails the queue.
  *
  * @since 3.8.0
- * @experimental
  * @category combinators
  */
 export const into: {
   <A, E>(
-    self: Mailbox<A, E>
+    self: Queue<A, E>
   ): <AX, EX extends E, RX>(
     effect: Effect<AX, EX, RX>
   ) => Effect<boolean, never, RX>
   <AX, E, EX extends E, RX, A>(
     effect: Effect<AX, EX, RX>,
-    self: Mailbox<A, E>
+    self: Queue<A, E>
   ): Effect<boolean, never, RX>
 } = dual(
   2,
   <AX, E, EX extends E, RX, A>(
     effect: Effect<AX, EX, RX>,
-    self: Mailbox<A, E>
+    self: Queue<A, E>
   ): Effect<boolean, never, RX> =>
     core.uninterruptibleMask((restore) =>
       core.matchCauseEffect(restore(effect), {
@@ -661,7 +636,7 @@ const exitTrue = core.exitSucceed(true)
 const constDone = [empty, true] as const
 const exitFailNone = core.exitFail(Option.none())
 
-const releaseTaker = <A, E>(self: Mailbox<A, E>) => {
+const releaseTaker = <A, E>(self: Queue<A, E>) => {
   self.scheduleRunning = false
   if (self.state._tag === "Done" || self.state.takers.size === 0) {
     return
@@ -671,7 +646,7 @@ const releaseTaker = <A, E>(self: Mailbox<A, E>) => {
   taker(core.exitVoid)
 }
 
-const scheduleReleaseTaker = <A, E>(self: Mailbox<A, E>) => {
+const scheduleReleaseTaker = <A, E>(self: Queue<A, E>) => {
   if (self.scheduleRunning || self.state._tag === "Done" || self.state.takers.size === 0) {
     return
   }
@@ -680,7 +655,7 @@ const scheduleReleaseTaker = <A, E>(self: Mailbox<A, E>) => {
 }
 
 const unsafeTakeBetween = <A, E>(
-  self: ReadonlyMailbox<A, E>,
+  self: Dequeue<A, E>,
   min: number,
   max: number
 ): Exit<readonly [messages: Array<A>, done: boolean], E> | undefined => {
@@ -702,12 +677,12 @@ const unsafeTakeBetween = <A, E>(
   }
 }
 
-const offerRemainingSingle = <A, E>(self: Mailbox<A, E>, message: A) => {
+const offerRemainingSingle = <A, E>(self: Queue<A, E>, message: A) => {
   return core.async<boolean>((resume) => {
     if (self.state._tag !== "Open") {
       return resume(exitFalse)
     }
-    const entry: Mailbox.OfferEntry<A> = { _tag: "Single", message, resume }
+    const entry: Queue.OfferEntry<A> = { _tag: "Single", message, resume }
     self.state.offers.add(entry)
     return core.sync(() => {
       if (self.state._tag === "Open") {
@@ -717,12 +692,12 @@ const offerRemainingSingle = <A, E>(self: Mailbox<A, E>, message: A) => {
   })
 }
 
-const offerRemainingArray = <A, E>(self: Mailbox<A, E>, remaining: Array<A>) => {
+const offerRemainingArray = <A, E>(self: Queue<A, E>, remaining: Array<A>) => {
   return core.async<Array<A>>((resume) => {
     if (self.state._tag !== "Open") {
       return resume(core.exitSucceed(remaining))
     }
-    const entry: Mailbox.OfferEntry<A> = {
+    const entry: Queue.OfferEntry<A> = {
       _tag: "Array",
       remaining,
       offset: 0,
@@ -737,7 +712,7 @@ const offerRemainingArray = <A, E>(self: Mailbox<A, E>, remaining: Array<A>) => 
   })
 }
 
-const releaseCapacity = <A, E>(self: ReadonlyMailbox<A, E>): boolean => {
+const releaseCapacity = <A, E>(self: Dequeue<A, E>): boolean => {
   if (self.state._tag === "Done") {
     return self.state.exit._tag === "Success"
   } else if (self.state.offers.size === 0) {
@@ -771,7 +746,7 @@ const releaseCapacity = <A, E>(self: ReadonlyMailbox<A, E>): boolean => {
   return false
 }
 
-const awaitTake = <A, E>(self: ReadonlyMailbox<A, E>) =>
+const awaitTake = <A, E>(self: Dequeue<A, E>) =>
   core.async<void, E>((resume) => {
     if (self.state._tag === "Done") {
       return resume(self.state.exit)
@@ -784,9 +759,9 @@ const awaitTake = <A, E>(self: ReadonlyMailbox<A, E>) =>
     })
   })
 
-const awaitTakeOption = <A, E>(self: ReadonlyMailbox<A, E>) => core.mapError(awaitTake(self), Option.some)
+const awaitTakeOption = <A, E>(self: Dequeue<A, E>) => core.mapError(awaitTake(self), Option.some)
 
-const unsafeTakeAll = <A, E>(self: ReadonlyMailbox<A, E>) => {
+const unsafeTakeAll = <A, E>(self: Dequeue<A, E>) => {
   if (self.messages.length > 0) {
     return MutableList.takeAll(self.messages)
   } else if (self.state._tag !== "Done" && self.state.offers.size > 0) {
@@ -798,7 +773,7 @@ const unsafeTakeAll = <A, E>(self: ReadonlyMailbox<A, E>) => {
   return empty
 }
 
-const finalize = <A, E>(self: ReadonlyMailbox<A, E>, exit: Exit<void, E>) => {
+const finalize = <A, E>(self: Dequeue<A, E>, exit: Exit<void, E>) => {
   if (self.state._tag === "Done") {
     return
   }

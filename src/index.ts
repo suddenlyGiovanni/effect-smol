@@ -241,12 +241,6 @@ export * as LogLevel from "./LogLevel.js"
 export * as Logger from "./Logger.js"
 
 /**
- * @since 3.8.0
- * @experimental
- */
-export * as Mailbox from "./Mailbox.js"
-
-/**
  * @since 1.0.0
  */
 export * as Match from "./Match.js"
@@ -269,7 +263,7 @@ export * as MutableHashMap from "./MutableHashMap.js"
 export * as MutableHashSet from "./MutableHashSet.js"
 
 /**
- * @since 2.0.0
+ * @since 4.0.0
  */
 export * as MutableList from "./MutableList.js"
 
@@ -338,9 +332,19 @@ export * as Predicate from "./Predicate.js"
 export * as PrimaryKey from "./PrimaryKey.js"
 
 /**
+ * @since 2.0.0
+ */
+export * as PubSub from "./PubSub.js"
+
+/**
  * @since 4.0.0
  */
 export * as Pull from "./Pull.js"
+
+/**
+ * @since 3.8.0
+ */
+export * as Queue from "./Queue.js"
 
 /**
  * @since 3.5.0

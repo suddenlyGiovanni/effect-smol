@@ -2,7 +2,7 @@ import * as Channel from "effect/Channel"
 import * as Effect from "effect/Effect"
 import * as Exit from "effect/Exit"
 import * as Fiber from "effect/Fiber"
-import * as Mailbox from "effect/Mailbox"
+import * as Queue from "effect/Queue"
 import { assert, describe, it } from "./utils/extend.js"
 
 describe("Channel", () => {
@@ -83,19 +83,19 @@ describe("Channel", () => {
     it.effect("merge - interrupts left side if halt strategy is set to 'right'", () =>
       Effect.gen(function*() {
         const latch = yield* Effect.makeLatch(false)
-        const leftMailbox = yield* Mailbox.make<number>()
-        const rightMailbox = yield* Mailbox.make<number>()
-        const left = Channel.fromMailbox(rightMailbox)
-        const right = Channel.fromMailbox(leftMailbox).pipe(
+        const leftQueue = yield* Queue.make<number>()
+        const rightQueue = yield* Queue.make<number>()
+        const left = Channel.fromQueue(rightQueue)
+        const right = Channel.fromQueue(leftQueue).pipe(
           Channel.ensuring(latch.open)
         )
         const fiber = yield* Channel.merge(left, right, {
           haltStrategy: "right"
         }).pipe(Channel.runCollect, Effect.fork)
-        yield* Mailbox.offerAll(leftMailbox, [1, 2])
-        yield* Mailbox.end(leftMailbox)
+        yield* Queue.offerAll(leftQueue, [1, 2])
+        yield* Queue.end(leftQueue)
         yield* latch.await
-        yield* Mailbox.offerAll(rightMailbox, [3, 4])
+        yield* Queue.offerAll(rightQueue, [3, 4])
         const result = yield* Fiber.join(fiber)
         assert.deepStrictEqual(result, [1, 2])
       }))
@@ -103,19 +103,19 @@ describe("Channel", () => {
     it.effect("merge - interrupts right side if halt strategy is set to 'left'", () =>
       Effect.gen(function*() {
         const latch = yield* Effect.makeLatch(false)
-        const leftMailbox = yield* Mailbox.make<number>()
-        const rightMailbox = yield* Mailbox.make<number>()
-        const left = Channel.fromMailbox(leftMailbox).pipe(
+        const leftQueue = yield* Queue.make<number>()
+        const rightQueue = yield* Queue.make<number>()
+        const left = Channel.fromQueue(leftQueue).pipe(
           Channel.ensuring(latch.open)
         )
-        const right = Channel.fromMailbox(rightMailbox)
+        const right = Channel.fromQueue(rightQueue)
         const fiber = yield* Channel.merge(left, right, {
           haltStrategy: "left"
         }).pipe(Channel.runCollect, Effect.fork)
-        yield* Mailbox.offerAll(leftMailbox, [1, 2])
-        yield* Mailbox.end(leftMailbox)
+        yield* Queue.offerAll(leftQueue, [1, 2])
+        yield* Queue.end(leftQueue)
         yield* latch.await
-        yield* Mailbox.offerAll(rightMailbox, [3, 4])
+        yield* Queue.offerAll(rightQueue, [3, 4])
         const result = yield* Fiber.join(fiber)
         assert.deepStrictEqual(result, [1, 2])
       }))

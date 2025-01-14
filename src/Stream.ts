@@ -7,11 +7,11 @@ import * as Effect from "./Effect.js"
 import type { LazyArg } from "./Function.js"
 import { dual, identity } from "./Function.js"
 import type { TypeLambda } from "./HKT.js"
-import type * as Mailbox from "./Mailbox.js"
 import * as Option from "./Option.js"
 import { type Pipeable, pipeArguments } from "./Pipeable.js"
 import { hasProperty } from "./Predicate.js"
 import * as Pull from "./Pull.js"
+import type * as Queue from "./Queue.js"
 import type * as Scope from "./Scope.js"
 import * as Sink from "./Sink.js"
 import type { Covariant } from "./Types.js"
@@ -191,7 +191,7 @@ export const toChannel = <A, E, R>(
 ): Channel.Channel<ReadonlyArray<A>, E, void, unknown, unknown, unknown, R> => (stream as any).channel
 
 const async_ = <A, E = never, R = never>(
-  f: (mailbox: Mailbox.Mailbox<A, E>) => void | Effect.Effect<unknown, E, R | Scope.Scope>,
+  f: (Queue: Queue.Queue<A, E>) => void | Effect.Effect<unknown, E, R | Scope.Scope>,
   options?: {
     readonly bufferSize?: number | undefined
     readonly strategy?: "sliding" | "dropping" | "suspend" | undefined
@@ -202,7 +202,7 @@ export {
   /**
    * Creates a stream from an external resource.
    *
-   * You can use the `mailbox` with the apis from the `Mailbox` module to emit
+   * You can use the `Queue` with the apis from the `Queue` module to emit
    * values to the stream or to signal the stream ending.
    *
    * By default it uses an "unbounded" buffer size.
@@ -211,13 +211,13 @@ export {
    *
    * @example
    * ```ts
-   * import { Effect, Mailbox, Stream } from "effect"
+   * import { Effect, Queue, Stream } from "effect"
    *
-   * Stream.async<string>((mailbox) =>
+   * Stream.async<string>((Queue) =>
    *   Effect.acquireRelease(
    *     Effect.gen(function*() {
    *       yield* Effect.log("subscribing")
-   *       return setInterval(() => Mailbox.unsafeOffer(mailbox, "tick"), 1000)
+   *       return setInterval(() => Queue.unsafeOffer(Queue, "tick"), 1000)
    *     }),
    *     (handle) =>
    *       Effect.gen(function*() {
@@ -315,8 +315,7 @@ export const fromArray = <A>(array: ReadonlyArray<A>): Stream<A> => fromChannel(
  * @since 4.0.0
  * @category constructors
  */
-export const fromMailbox = <A, E>(mailbox: Mailbox.Mailbox<A, E>): Stream<A, E> =>
-  fromChannel(Channel.fromMailboxArray(mailbox))
+export const fromQueue = <A, E>(Queue: Queue.Dequeue<A, E>): Stream<A, E> => fromChannel(Channel.fromQueueArray(Queue))
 
 /**
  * Like `Stream.unfold`, but allows the emission of values to end one step further

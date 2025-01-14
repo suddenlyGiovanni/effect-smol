@@ -1,16 +1,16 @@
 import * as Effect from "effect/Effect"
-import * as Mailbox from "effect/Mailbox"
+import * as Queue from "effect/Queue"
 
 const program = Effect.gen(function*() {
   while (true) {
-    const queue = yield* Mailbox.make<number>()
+    const queue = yield* Queue.make<number>()
 
-    yield* Mailbox.offerAll(queue, Array.from({ length: 1_000_000 }, (_, i) => i))
-    yield* Mailbox.end(queue)
+    yield* Queue.offerAll(queue, Array.from({ length: 1_000_000 }, (_, i) => i))
+    yield* Queue.end(queue)
 
-    console.time("Mailbox.take")
-    yield* Effect.ignore(Effect.forever(Mailbox.take(queue), { autoYield: false }))
-    console.timeEnd("Mailbox.take")
+    console.time("Queue.take")
+    yield* Effect.ignore(Effect.forever(Queue.take(queue), { autoYield: false }))
+    console.timeEnd("Queue.take")
   }
 })
 

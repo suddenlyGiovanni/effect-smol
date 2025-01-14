@@ -1,14 +1,14 @@
-import { Exit, Mailbox } from "effect"
+import { Exit, Queue } from "effect"
 import * as Channel from "effect/Channel"
 import * as Effect from "effect/Effect"
 
 const abc = Channel.async<string>(
   Effect.fnUntraced(function*(mb) {
     yield* Effect.addFinalizer(() => Effect.sync(() => console.log("finalizer")))
-    Mailbox.unsafeOffer(mb, "a")
-    Mailbox.unsafeOffer(mb, "b")
-    Mailbox.unsafeOffer(mb, "c")
-    Mailbox.unsafeDone(mb, Exit.void)
+    Queue.unsafeOffer(mb, "a")
+    Queue.unsafeOffer(mb, "b")
+    Queue.unsafeOffer(mb, "c")
+    Queue.unsafeDone(mb, Exit.void)
   })
 )
 
