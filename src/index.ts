@@ -270,6 +270,11 @@ export * as MutableList from "./MutableList.js"
 /**
  * @since 2.0.0
  */
+export * as MutableQueue from "./MutableQueue.js"
+
+/**
+ * @since 2.0.0
+ */
 export * as MutableRef from "./MutableRef.js"
 
 /**

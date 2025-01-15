@@ -1470,6 +1470,9 @@ export const exitFail = <E>(e: E): Exit.Exit<never, E> => exitFailCause(causeFai
 export const exitDie = (defect: unknown): Exit.Exit<never> => exitFailCause(causeDie(defect))
 
 /** @internal */
+export const exitInterrupt = (fiberId: number): Exit.Exit<never> => exitFailCause(causeInterrupt(fiberId))
+
+/** @internal */
 export const exitIsSuccess = <A, E>(
   self: Exit.Exit<A, E>
 ): self is Exit.Success<A, E> => self._tag === "Success"

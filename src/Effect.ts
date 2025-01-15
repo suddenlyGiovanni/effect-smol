@@ -3001,6 +3001,71 @@ export const filter: <A, E, R>(
 ) => Effect<Array<A>, E, R> = core.filter
 
 // -----------------------------------------------------------------------------
+// Conditional Operators
+// -----------------------------------------------------------------------------
+
+/**
+ * Conditionally executes an effect based on a boolean condition.
+ *
+ * **Details**
+ *
+ * This function allows you to run an effect only if a given condition evaluates
+ * to `true`. If the condition is `true`, the effect is executed, and its result
+ * is wrapped in an `Option.some`. If the condition is `false`, the effect is
+ * skipped, and the result is `Option.none`.
+ *
+ * **When to Use**
+ *
+ * This function is useful for scenarios where you need to dynamically decide
+ * whether to execute an effect based on runtime logic, while also representing
+ * the skipped case explicitly.
+ *
+ * @see {@link whenEffect} for a version that allows the condition to be an effect.
+ * @see {@link unless} for a version that executes the effect when the condition is `false`.
+ *
+ * @example
+ * ```ts
+ * // Title: Conditional Effect Execution
+ * import { Effect, Option } from "effect"
+ *
+ * const validateWeightOption = (
+ *   weight: number
+ * ): Effect.Effect<Option.Option<number>> =>
+ *   // Conditionally execute the effect if the weight is non-negative
+ *   Effect.succeed(weight).pipe(Effect.when(() => weight >= 0))
+ *
+ * // Run with a valid weight
+ * // Effect.runPromise(validateWeightOption(100)).then(console.log)
+ * // Output:
+ * // {
+ * //   _id: "Option",
+ * //   _tag: "Some",
+ * //   value: 100
+ * // }
+ *
+ * // Run with an invalid weight
+ * // Effect.runPromise(validateWeightOption(-5)).then(console.log)
+ * // Output:
+ * // {
+ * //   _id: "Option",
+ * //   _tag: "None"
+ * // }
+ * ```
+ *
+ * @since 2.0.0
+ * @category Conditional Operators
+ */
+export const when: {
+  <E2 = never, R2 = never>(
+    condition: LazyArg<boolean> | Effect<boolean, E2, R2>
+  ): <A, E, R>(self: Effect<A, E, R>) => Effect<Option.Option<A>, E | E2, R | R2>
+  <A, E, R, E2 = never, R2 = never>(
+    self: Effect<A, E, R>,
+    condition: LazyArg<boolean> | Effect<boolean, E2, R2>
+  ): Effect<Option.Option<A>, E | E2, R | R2>
+} = core.when
+
+// -----------------------------------------------------------------------------
 // Pattern matching
 // -----------------------------------------------------------------------------
 

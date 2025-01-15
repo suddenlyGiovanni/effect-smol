@@ -31,6 +31,18 @@ export declare namespace MutableList {
 
 /**
  * @since 4.0.0
+ * @category Symbols
+ */
+export const Empty: unique symbol = Symbol.for("effect/MutableList/Empty")
+
+/**
+ * @since 4.0.0
+ * @category Symbols
+ */
+export type Empty = typeof Empty
+
+/**
+ * @since 4.0.0
  * @category constructors
  */
 export const make = <A>(): MutableList<A> => ({
@@ -50,7 +62,7 @@ const emptyBucket = (): MutableList.Bucket<never> => ({
  * @since 4.0.0
  * @category appending
  */
-export const append = <A>(self: MutableList<A>, message: A) => {
+export const append = <A>(self: MutableList<A>, message: A): void => {
   if (!self.tail) {
     self.head = self.tail = emptyBucket()
   } else if (!self.tail.mutable) {
@@ -65,7 +77,35 @@ export const append = <A>(self: MutableList<A>, message: A) => {
  * @since 4.0.0
  * @category appending
  */
-export const appendAll = <A>(self: MutableList<A>, messages: Iterable<A>) => {
+export const prepend = <A>(self: MutableList<A>, message: A): void => {
+  self.head = {
+    array: [message],
+    mutable: true,
+    offset: 0,
+    next: self.head
+  }
+  self.length++
+}
+
+/**
+ * @since 4.0.0
+ * @category appending
+ */
+export const prependAll = <A>(self: MutableList<A>, messages: Iterable<A>): void => {
+  self.head = {
+    array: Array.isArray(messages) ? messages : Array.from(messages),
+    mutable: !Array.isArray(messages),
+    offset: 0,
+    next: self.head
+  }
+  self.length += self.head.array.length
+}
+
+/**
+ * @since 4.0.0
+ * @category appending
+ */
+export const appendAll = <A>(self: MutableList<A>, messages: Iterable<A>): number => {
   const array = Array.isArray(messages) ? messages : Array.from(messages)
   const chunk: MutableList.Bucket<A> = {
     array,
@@ -86,7 +126,7 @@ export const appendAll = <A>(self: MutableList<A>, messages: Iterable<A>) => {
  * @since 4.0.0
  * @category taking
  */
-export const clear = <A>(self: MutableList<A>) => {
+export const clear = <A>(self: MutableList<A>): void => {
   self.head = self.tail = undefined
   self.length = 0
 }
@@ -95,7 +135,7 @@ export const clear = <A>(self: MutableList<A>) => {
  * @since 4.0.0
  * @category taking
  */
-export const takeN = <A>(self: MutableList<A>, n: number) => {
+export const takeN = <A>(self: MutableList<A>, n: number): Array<A> => {
   n = Math.min(n, self.length)
   if (n === self.length && self.head?.offset === 0 && !self.head.next) {
     const array = self.head.array
@@ -126,14 +166,14 @@ export const takeN = <A>(self: MutableList<A>, n: number) => {
  * @since 4.0.0
  * @category taking
  */
-export const takeAll = <A>(self: MutableList<A>) => takeN(self, self.length)
+export const takeAll = <A>(self: MutableList<A>): Array<A> => takeN(self, self.length)
 
 /**
  * @since 4.0.0
  * @category taking
  */
-export const take = <A>(self: MutableList<A>) => {
-  if (!self.head) return undefined
+export const take = <A>(self: MutableList<A>): Empty | A => {
+  if (!self.head) return Empty
   const message = self.head.array[self.head.offset]
   if (self.head.mutable) self.head.array[self.head.offset] = undefined as any
   self.head.offset++

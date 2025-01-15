@@ -90,6 +90,12 @@ export const fail: <E>(e: E) => Exit<never, E> = core.exitFail
  */
 export const die: (defect: unknown) => Exit<never> = core.exitDie
 
+/**
+ * @since 2.0.0
+ * @category constructors
+ */
+export const interrupt: (fiberId: number) => Exit<never> = core.exitInterrupt
+
 const void_: Exit<void> = core.exitVoid
 export {
   /**

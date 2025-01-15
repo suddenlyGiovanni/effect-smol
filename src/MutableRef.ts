@@ -3,9 +3,9 @@
  */
 import * as Equal from "./Equal.js"
 import * as Dual from "./Function.js"
-import { format, type Inspectable, NodeInspectSymbol, toJSON } from "./Inspectable.js"
+import { type Inspectable, toJSON } from "./Inspectable.js"
+import { PipeInspectableProto } from "./internal/effectable.js"
 import type { Pipeable } from "./Pipeable.js"
-import { pipeArguments } from "./Pipeable.js"
 
 const TypeId: unique symbol = Symbol.for("effect/MutableRef") as TypeId
 
@@ -28,20 +28,12 @@ export interface MutableRef<out T> extends Pipeable, Inspectable {
 
 const MutableRefProto: Omit<MutableRef<unknown>, "current"> = {
   [TypeId]: TypeId,
-  toString<A>(this: MutableRef<A>): string {
-    return format(this.toJSON())
-  },
+  ...PipeInspectableProto,
   toJSON<A>(this: MutableRef<A>) {
     return {
       _id: "MutableRef",
       current: toJSON(this.current)
     }
-  },
-  [NodeInspectSymbol]() {
-    return this.toJSON()
-  },
-  pipe() {
-    return pipeArguments(this, arguments)
   }
 }
 
