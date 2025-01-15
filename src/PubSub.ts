@@ -5,6 +5,7 @@ import * as Arr from "./Array.js"
 import * as Deferred from "./Deferred.js"
 import * as Effect from "./Effect.js"
 import * as Exit from "./Exit.js"
+import type { LazyArg } from "./Function.js"
 import { dual, identity } from "./Function.js"
 import * as MutableList from "./MutableList.js"
 import * as MutableRef from "./MutableRef.js"
@@ -183,6 +184,27 @@ export interface Subscription<out A> extends Pipeable {
 }
 
 /**
+ * @since 4.0.0
+ * @category constructors
+ */
+export const make = <A>(
+  options: {
+    readonly atomicPubSub: LazyArg<PubSub.Atomic<A>>
+    readonly strategy: LazyArg<PubSub.Strategy<A>>
+  }
+): Effect.Effect<PubSub<A>> =>
+  Effect.sync(() =>
+    unsafeMakePubSub(
+      options.atomicPubSub(),
+      new Map(),
+      Scope.unsafeMake(),
+      Effect.unsafeMakeLatch(false),
+      MutableRef.make(false),
+      options.strategy()
+    )
+  )
+
+/**
  * Creates a bounded `PubSub` with the back pressure strategy. The `PubSub` will retain
  * messages until they have been taken by all subscribers, applying back
  * pressure to publishers if the `PubSub` is at capacity.
@@ -198,9 +220,9 @@ export const bounded = <A>(
     readonly replay?: number | undefined
   }
 ): Effect.Effect<PubSub<A>> =>
-  Effect.sync(() => {
-    const pubsub = makeBoundedPubSub<A>(capacity)
-    return makePubSub(pubsub, new BackPressureStrategy())
+  make({
+    atomicPubSub: () => makeAtomicBounded(capacity),
+    strategy: () => new BackPressureStrategy()
   })
 
 /**
@@ -218,9 +240,9 @@ export const dropping = <A>(
     readonly replay?: number | undefined
   }
 ): Effect.Effect<PubSub<A>> =>
-  Effect.sync(() => {
-    const pubsub = makeBoundedPubSub<A>(capacity)
-    return makePubSub(pubsub, new DroppingStrategy())
+  make({
+    atomicPubSub: () => makeAtomicBounded(capacity),
+    strategy: () => new DroppingStrategy()
   })
 
 /**
@@ -238,9 +260,9 @@ export const sliding = <A>(
     readonly replay?: number | undefined
   }
 ): Effect.Effect<PubSub<A>> =>
-  Effect.sync(() => {
-    const pubsub = makeBoundedPubSub<A>(capacity)
-    return makePubSub(pubsub, new SlidingStrategy())
+  make({
+    atomicPubSub: () => makeAtomicBounded(capacity),
+    strategy: () => new SlidingStrategy()
   })
 
 /**
@@ -252,10 +274,40 @@ export const sliding = <A>(
 export const unbounded = <A>(options?: {
   readonly replay?: number | undefined
 }): Effect.Effect<PubSub<A>> =>
-  Effect.sync(() => {
-    const pubsub = makeUnboundedPubSub<A>(options)
-    return makePubSub(pubsub, new DroppingStrategy())
+  make({
+    atomicPubSub: () => makeAtomicUnbounded(options),
+    strategy: () => new DroppingStrategy()
   })
+
+/**
+ * @since 4.0.0
+ * @category Atomic
+ */
+export const makeAtomicBounded = <A>(
+  capacity: number | {
+    readonly capacity: number
+    readonly replay?: number | undefined
+  }
+): PubSub.Atomic<A> => {
+  const options = typeof capacity === "number" ? { capacity } : capacity
+  ensureCapacity(options.capacity)
+  const replayBuffer = options.replay && options.replay > 0 ? new ReplayBuffer<A>(Math.ceil(options.replay)) : undefined
+  if (options.capacity === 1) {
+    return new BoundedPubSubSingle(replayBuffer)
+  } else if (nextPow2(options.capacity) === options.capacity) {
+    return new BoundedPubSubPow2(options.capacity, replayBuffer)
+  } else {
+    return new BoundedPubSubArb(options.capacity, replayBuffer)
+  }
+}
+
+/**
+ * @since 4.0.0
+ * @category Atomic
+ */
+export const makeAtomicUnbounded = <A>(options?: {
+  readonly replay?: number | undefined
+}): PubSub.Atomic<A> => new UnboundedPubSub(options?.replay ? new ReplayBuffer(options.replay) : undefined)
 
 /**
  *  Returns the number of elements the queue can hold.
@@ -656,28 +708,6 @@ const removeSubscribers = <A>(
     subscribers.delete(subscription)
   }
 }
-
-const makeBoundedPubSub = <A>(
-  capacity: number | {
-    readonly capacity: number
-    readonly replay?: number | undefined
-  }
-): PubSub.Atomic<A> => {
-  const options = typeof capacity === "number" ? { capacity } : capacity
-  ensureCapacity(options.capacity)
-  const replayBuffer = options.replay && options.replay > 0 ? new ReplayBuffer<A>(Math.ceil(options.replay)) : undefined
-  if (options.capacity === 1) {
-    return new BoundedPubSubSingle(replayBuffer)
-  } else if (nextPow2(options.capacity) === options.capacity) {
-    return new BoundedPubSubPow2(options.capacity, replayBuffer)
-  } else {
-    return new BoundedPubSubArb(options.capacity, replayBuffer)
-  }
-}
-
-const makeUnboundedPubSub = <A>(options?: {
-  readonly replay?: number | undefined
-}): PubSub.Atomic<A> => new UnboundedPubSub(options?.replay ? new ReplayBuffer(options.replay) : undefined)
 
 const unsafeMakeSubscription = <A>(
   pubsub: PubSub.Atomic<A>,
@@ -1417,19 +1447,6 @@ class PubSubImpl<in out A> implements PubSub<A> {
   }
 }
 
-const makePubSub = <A>(
-  pubsub: PubSub.Atomic<A>,
-  strategy: PubSub.Strategy<A>
-): PubSub<A> =>
-  unsafeMakePubSub(
-    pubsub,
-    new Map(),
-    Scope.unsafeMake(),
-    Effect.unsafeMakeLatch(false),
-    MutableRef.make(false),
-    strategy
-  )
-
 const unsafeMakePubSub = <A>(
   pubsub: PubSub.Atomic<A>,
   subscribers: PubSub.Subscribers<A>,
@@ -1455,21 +1472,23 @@ const ensureCapacity = (capacity: number): void => {
  * published to the `PubSub` while they are subscribed. However, it creates the
  * risk that a slow subscriber will slow down the rate at which messages
  * are published and received by other subscribers.
+ *
+ * @since 4.0.0
+ * @category Strategy
  */
-class BackPressureStrategy<in out A> implements PubSub.Strategy<A> {
+export class BackPressureStrategy<in out A> implements PubSub.Strategy<A> {
   publishers: MutableList.MutableList<
     readonly [A, Deferred.Deferred<boolean>, boolean]
   > = MutableList.make()
 
   get shutdown(): Effect.Effect<void> {
-    return Effect.withFiber((fiber) => {
-      const publishers = MutableList.takeAll(this.publishers)
-      return Effect.forEach(
-        publishers,
+    return Effect.withFiber((fiber) =>
+      Effect.forEach(
+        MutableList.takeAll(this.publishers),
         ([_, deferred, last]) => last ? Deferred.interruptWith(deferred, fiber.id) : Effect.void,
         { concurrency: "unbounded", discard: true }
       )
-    })
+    )
   }
 
   handleSurplus(
@@ -1553,8 +1572,11 @@ class BackPressureStrategy<in out A> implements PubSub.Strategy<A> {
  * subscriber will slow down the rate at which messages are received by
  * other subscribers and that subscribers may not receive all messages
  * published to the `PubSub` while they are subscribed.
+ *
+ * @since 4.0.0
+ * @category Strategy
  */
-class DroppingStrategy<in out A> implements PubSub.Strategy<A> {
+export class DroppingStrategy<in out A> implements PubSub.Strategy<A> {
   get shutdown(): Effect.Effect<void> {
     return Effect.void
   }
@@ -1595,8 +1617,11 @@ class DroppingStrategy<in out A> implements PubSub.Strategy<A> {
  * the rate at which messages are published and received by other
  * subscribers. However, it creates the risk that a slow subscriber will
  * not receive some messages published to the `PubSub` while it is subscribed.
+ *
+ * @since 4.0.0
+ * @category Strategy
  */
-class SlidingStrategy<in out A> implements PubSub.Strategy<A> {
+export class SlidingStrategy<in out A> implements PubSub.Strategy<A> {
   get shutdown(): Effect.Effect<void> {
     return Effect.void
   }

@@ -205,19 +205,16 @@ const QueueProto = {
  * ```
  */
 export const make = <A, E = never>(
-  capacity?:
-    | number
-    | {
-      readonly capacity?: number | undefined
-      readonly strategy?: "suspend" | "dropping" | "sliding" | undefined
-    }
-    | undefined
+  options?: {
+    readonly capacity?: number | undefined
+    readonly strategy?: "suspend" | "dropping" | "sliding" | undefined
+  } | undefined
 ): Effect<Queue<A, E>> =>
   core.withFiber((fiber) => {
     const self = Object.create(QueueProto)
     self.scheduler = fiber.currentScheduler
-    self.capacity = typeof capacity === "number" ? capacity : (capacity?.capacity ?? Number.POSITIVE_INFINITY)
-    self.strategy = typeof capacity === "number" ? "suspend" : (capacity?.strategy ?? "suspend")
+    self.capacity = options?.capacity ?? Number.POSITIVE_INFINITY
+    self.strategy = options?.strategy ?? "suspend"
     self.messages = MutableList.make()
     self.scheduleRunning = false
     self.state = {
@@ -228,6 +225,31 @@ export const make = <A, E = never>(
     }
     return core.succeed(self)
   })
+
+/**
+ * @since 2.0.0
+ * @category constructors
+ */
+export const bounded = <A, E = never>(capacity: number): Effect<Queue<A, E>> => make({ capacity })
+
+/**
+ * @since 2.0.0
+ * @category constructors
+ */
+export const sliding = <A, E = never>(capacity: number): Effect<Queue<A, E>> => make({ capacity, strategy: "sliding" })
+
+/**
+ * @since 2.0.0
+ * @category constructors
+ */
+export const dropping = <A, E = never>(capacity: number): Effect<Queue<A, E>> =>
+  make({ capacity, strategy: "dropping" })
+
+/**
+ * @since 2.0.0
+ * @category constructors
+ */
+export const unbounded = <A, E = never>(): Effect<Queue<A, E>> => make()
 
 /**
  * Add a message to the queue. Returns `false` if the queue is done.
