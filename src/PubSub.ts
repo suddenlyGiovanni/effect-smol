@@ -338,12 +338,6 @@ export const subscribe: <A>(self: PubSub<A>) => Effect.Effect<Subscription<A>, n
  * @since 4.0.0
  * @category Subscription
  */
-export const unsubscribe: <A>(self: Subscription<A>) => Effect.Effect<void> = internal.unsubscribe
-
-/**
- * @since 4.0.0
- * @category Subscription
- */
 export const take: <A>(self: Subscription<A>) => Effect.Effect<A> = internal.take
 
 /**
