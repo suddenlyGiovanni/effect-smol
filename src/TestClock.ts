@@ -1,3 +1,6 @@
+/**
+ * @since 2.0.0
+ */
 import * as Arr from "./Array.js"
 import * as Clock from "./Clock.js"
 import * as Data from "./Data.js"

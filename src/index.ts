@@ -369,6 +369,11 @@ export * as Record from "./Record.js"
 export * as Redacted from "./Redacted.js"
 
 /**
+ * @since 2.0.0
+ */
+export * as Ref from "./Ref.js"
+
+/**
  * @since 4.0.0
  */
 export * as References from "./References.js"
@@ -437,40 +442,6 @@ export * as Struct from "./Struct.js"
 export * as Symbol from "./Symbol.js"
 
 /**
- * A `TestClock` simplifies deterministically and efficiently testing effects
- * which involve the passage of time.
- *
- * Instead of waiting for actual time to pass, `sleep` and methods implemented
- * in terms of it schedule effects to take place at a given clock time. Users
- * can adjust the clock time using the `adjust` and `setTime` methods, and all
- * effects scheduled to take place on or before that time will automatically be
- * run in order.
- *
- * For example, here is how we can test `Effect.timeout` using `TestClock`:
- *
- * ```ts
- * import { Duration, Effect, Fiber, TestClock, Option } from "effect"
- *
- * Effect.gen(function*() {
- *   const fiber = yield* pipe(
- *     Effect.sleep("5 minutes"),
- *     Effect.timeout("1 minute"),
- *     Effect.fork
- *   )
- *   yield* TestClock.adjust("1 minute")
- *   const result = yield* Fiber.join(fiber)
- *   assert.deepStrictEqual(result, Option.none())
- * })
- * ```
- *
- * Note how we forked the fiber that `sleep` was invoked on. Calls to `sleep`
- * and methods derived from it will semantically block until the time is set to
- * on or after the time they are scheduled to run. If we didn't fork the fiber
- * on which we called sleep we would never get to set the time on the line
- * below. Thus, a useful pattern when using `TestClock` is to fork the effect
- * being tested, then adjust the clock time, and finally verify that the
- * expected effects have been performed.
- *
  * @since 2.0.0
  */
 export * as TestClock from "./TestClock.js"
