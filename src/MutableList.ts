@@ -187,3 +187,22 @@ export const take = <A>(self: MutableList<A>): Empty | A => {
   }
   return message
 }
+
+/**
+ * @since 4.0.0
+ * @category filtering
+ */
+export const filter = <A>(self: MutableList<A>, f: (value: A, i: number) => boolean): void => {
+  self.head = self.tail = {
+    array: takeAll(self).filter(f),
+    mutable: true,
+    offset: 0,
+    next: undefined
+  }
+}
+
+/**
+ * @since 4.0.0
+ * @category filtering
+ */
+export const remove = <A>(self: MutableList<A>, value: A): void => filter(self, (v) => v !== value)
