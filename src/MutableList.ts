@@ -1,6 +1,7 @@
 /**
  * @since 4.0.0
  */
+import * as Arr from "./Array.js"
 
 /**
  * @since 4.0.0
@@ -91,10 +92,17 @@ export const prepend = <A>(self: MutableList<A>, message: A): void => {
  * @since 4.0.0
  * @category appending
  */
-export const prependAll = <A>(self: MutableList<A>, messages: Iterable<A>): void => {
+export const prependAll = <A>(self: MutableList<A>, messages: Iterable<A>): void =>
+  unsafePrependAll(self, Arr.fromIterable(messages), !Array.isArray(messages))
+
+/**
+ * @since 4.0.0
+ * @category appending
+ */
+export const unsafePrependAll = <A>(self: MutableList<A>, messages: ReadonlyArray<A>, mutable = false): void => {
   self.head = {
-    array: Array.isArray(messages) ? messages : Array.from(messages),
-    mutable: !Array.isArray(messages),
+    array: messages as Array<A>,
+    mutable,
     offset: 0,
     next: self.head
   }
@@ -105,11 +113,17 @@ export const prependAll = <A>(self: MutableList<A>, messages: Iterable<A>): void
  * @since 4.0.0
  * @category appending
  */
-export const appendAll = <A>(self: MutableList<A>, messages: Iterable<A>): number => {
-  const array = Array.isArray(messages) ? messages : Array.from(messages)
+export const appendAll = <A>(self: MutableList<A>, messages: Iterable<A>): number =>
+  unsafeAppendAll(self, Arr.fromIterable(messages), !Array.isArray(messages))
+
+/**
+ * @since 4.0.0
+ * @category appending
+ */
+export const unsafeAppendAll = <A>(self: MutableList<A>, messages: ReadonlyArray<A>, mutable = false): number => {
   const chunk: MutableList.Bucket<A> = {
-    array,
-    mutable: !Array.isArray(messages),
+    array: messages as Array<A>,
+    mutable,
     offset: 0,
     next: undefined
   }
@@ -118,8 +132,8 @@ export const appendAll = <A>(self: MutableList<A>, messages: Iterable<A>): numbe
   } else {
     self.head = self.tail = chunk
   }
-  self.length += array.length
-  return array.length
+  self.length += messages.length
+  return messages.length
 }
 
 /**
@@ -193,8 +207,18 @@ export const take = <A>(self: MutableList<A>): Empty | A => {
  * @category filtering
  */
 export const filter = <A>(self: MutableList<A>, f: (value: A, i: number) => boolean): void => {
+  const array: Array<A> = []
+  let chunk: MutableList.Bucket<A> | undefined = self.head
+  while (chunk) {
+    for (let i = chunk.offset; i < chunk.array.length; i++) {
+      if (f(chunk.array[i], i)) {
+        array.push(chunk.array[i])
+      }
+    }
+    chunk = chunk.next
+  }
   self.head = self.tail = {
-    array: takeAll(self).filter(f),
+    array,
     mutable: true,
     offset: 0,
     next: undefined
