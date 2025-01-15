@@ -1,4 +1,4 @@
-import { Effect, Exit, Fiber, Queue, Option, Stream } from "effect"
+import { Effect, Exit, Fiber, Option, Queue, Stream } from "effect"
 import { assert, describe, it } from "./utils/extend.js"
 
 describe("Stream", () => {

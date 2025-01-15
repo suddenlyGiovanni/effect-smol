@@ -605,7 +605,11 @@ const fiberInterruptChildren = (fiber: FiberImpl) => {
 /** @internal */
 export const fiberAwait = <A, E>(
   self: Fiber.Fiber<A, E>
-): Effect.Effect<Exit.Exit<A, E>> => async((resume) => sync(self.addObserver((exit) => resume(succeed(exit)))))
+): Effect.Effect<Exit.Exit<A, E>> => {
+  const impl = self as FiberImpl<A, E>
+  if (impl._exit) return succeed(impl._exit)
+  return async((resume) => sync(self.addObserver((exit) => resume(succeed(exit)))))
+}
 
 /** @internal */
 export const fiberJoin = <A, E>(self: Fiber.Fiber<A, E>): Effect.Effect<A, E> => flatten(fiberAwait(self))

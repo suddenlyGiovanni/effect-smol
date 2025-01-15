@@ -610,7 +610,7 @@ const mapEffectConcurrent = <
         })
         yield* semaphore.take(1).pipe(
           Effect.flatMap(() => pull),
-          Effect.flatMap((value) => Effect.fork(handle(f(value)))),
+          Effect.flatMap((value) => Effect.fork(handle(f(value)), { startImmediately: true })),
           Effect.forever({ autoYield: false }),
           Effect.catchCause((cause) =>
             semaphore.withPermits(concurrencyN - 1)(
@@ -638,7 +638,7 @@ const mapEffectConcurrent = <
 
         const handle = Effect.tapCause((cause: Cause.Cause<Types.NoInfer<EX>>) => Queue.failCause(queue, cause))
         yield* pull.pipe(
-          Effect.flatMap((value) => Effect.fork(handle(f(value)))),
+          Effect.flatMap((value) => Effect.fork(handle(f(value)), { startImmediately: true })),
           Effect.flatMap((fiber) => Queue.offer(fibers, Fiber.await(fiber))),
           Effect.forever({ autoYield: false }),
           Effect.catchCause((cause) =>
@@ -1621,11 +1621,11 @@ export const embedInput: {
       upstream: Pull.Pull<InElem, InErr, InDone>
     ) => Effect.Effect<void, never, R>
   ): Channel<OutElem, OutErr, OutDone, InElem, InErr, InDone, Env | R> =>
-    makeImplBracket(
-      Effect.fnUntraced(function*(upstream, scope, forkedScope) {
-        yield* Effect.interruptible(Effect.forkIn(input(upstream), forkedScope))
-        return yield* toTransform(self)(Pull.haltVoid, scope)
-      })
+    makeImplBracket((upstream, scope, forkedScope) =>
+      Effect.andThen(
+        Effect.interruptible(Effect.forkIn(input(upstream), forkedScope)),
+        toTransform(self)(Pull.haltVoid, scope)
+      )
     )
 )
 
