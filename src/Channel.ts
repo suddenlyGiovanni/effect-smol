@@ -14,6 +14,7 @@ import * as Option from "./Option.js"
 import type { Pipeable } from "./Pipeable.js"
 import { pipeArguments } from "./Pipeable.js"
 import { hasProperty } from "./Predicate.js"
+import * as PubSub from "./PubSub.js"
 import * as Pull from "./Pull.js"
 import * as Queue from "./Queue.js"
 import * as Scope from "./Scope.js"
@@ -483,6 +484,53 @@ export const fromQueue = <A, E>(
 export const fromQueueArray = <A, E>(
   queue: Queue.Dequeue<A, E>
 ): Channel<ReadonlyArray<A>, E> => fromPull(Effect.succeed(queueToPullArray(queue)))
+
+/**
+ * Create a channel from a PubSub subscription
+ *
+ * @since 4.0.0
+ * @category constructors
+ */
+export const fromSubscription = <A>(
+  subscription: PubSub.Subscription<A>
+): Channel<A> => fromPull(Effect.succeed(Effect.onInterrupt(PubSub.take(subscription), Pull.haltVoid)))
+
+/**
+ * Create a channel from a PubSub subscription
+ *
+ * @since 4.0.0
+ * @category constructors
+ */
+export const fromSubscriptionArray = <A>(
+  subscription: PubSub.Subscription<A>,
+  chunkSize = DefaultChunkSize
+): Channel<ReadonlyArray<A>> =>
+  fromPull(Effect.succeed(Effect.onInterrupt(
+    PubSub.takeBetween(subscription, 1, chunkSize),
+    Pull.haltVoid
+  )))
+
+/**
+ * Create a channel from a PubSub
+ *
+ * @since 4.0.0
+ * @category constructors
+ */
+export const fromPubSub = <A>(
+  pubsub: PubSub.PubSub<A>
+): Channel<A> => unwrapScoped(Effect.map(PubSub.subscribe(pubsub), fromSubscription))
+
+/**
+ * Create a channel from a PubSub
+ *
+ * @since 4.0.0
+ * @category constructors
+ */
+export const fromPubSubArray = <A>(
+  pubsub: PubSub.PubSub<A>,
+  chunkSize = DefaultChunkSize
+): Channel<ReadonlyArray<A>> =>
+  unwrapScoped(Effect.map(PubSub.subscribe(pubsub), (sub) => fromSubscriptionArray(sub, chunkSize)))
 
 /**
  * Maps the output of this channel using the specified function.

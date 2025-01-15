@@ -10,6 +10,7 @@ import type { TypeLambda } from "./HKT.js"
 import * as Option from "./Option.js"
 import { type Pipeable, pipeArguments } from "./Pipeable.js"
 import { hasProperty } from "./Predicate.js"
+import type * as PubSub from "./PubSub.js"
 import * as Pull from "./Pull.js"
 import type * as Queue from "./Queue.js"
 import type * as Scope from "./Scope.js"
@@ -191,7 +192,7 @@ export const toChannel = <A, E, R>(
 ): Channel.Channel<ReadonlyArray<A>, E, void, unknown, unknown, unknown, R> => (stream as any).channel
 
 const async_ = <A, E = never, R = never>(
-  f: (Queue: Queue.Queue<A, E>) => void | Effect.Effect<unknown, E, R | Scope.Scope>,
+  f: (queue: Queue.Queue<A, E>) => void | Effect.Effect<unknown, E, R | Scope.Scope>,
   options?: {
     readonly bufferSize?: number | undefined
     readonly strategy?: "sliding" | "dropping" | "suspend" | undefined
@@ -315,7 +316,21 @@ export const fromArray = <A>(array: ReadonlyArray<A>): Stream<A> => fromChannel(
  * @since 4.0.0
  * @category constructors
  */
-export const fromQueue = <A, E>(Queue: Queue.Dequeue<A, E>): Stream<A, E> => fromChannel(Channel.fromQueueArray(Queue))
+export const fromQueue = <A, E>(queue: Queue.Dequeue<A, E>): Stream<A, E> => fromChannel(Channel.fromQueueArray(queue))
+
+/**
+ * @since 4.0.0
+ * @category constructors
+ */
+export const fromPubSub = <A>(pubsub: PubSub.PubSub<A>, chunkSize?: number): Stream<A> =>
+  fromChannel(Channel.fromPubSubArray(pubsub, chunkSize))
+
+/**
+ * @since 4.0.0
+ * @category constructors
+ */
+export const fromSubscription = <A>(pubsub: PubSub.Subscription<A>, chunkSize?: number): Stream<A> =>
+  fromChannel(Channel.fromSubscriptionArray(pubsub, chunkSize))
 
 /**
  * Like `Stream.unfold`, but allows the emission of values to end one step further
