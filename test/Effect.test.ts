@@ -311,9 +311,10 @@ describe.concurrent("Effect", () => {
             Effect.sync(() => {
               release = true
             })
-        ).pipe(Effect.scoped, Effect.fork)
-        yield* Effect.yieldNow
-        yield* Effect.yieldNow
+        ).pipe(
+          Effect.scoped,
+          Effect.fork({ startImmediately: true })
+        )
         fiber.unsafeInterrupt()
         yield* Fiber.await(fiber)
         assert.strictEqual(release, true)
@@ -739,10 +740,8 @@ describe.concurrent("Effect", () => {
           Effect.ensuring(Effect.sync(() => {
             ensuring = true
           })),
-          Effect.fork
+          Effect.fork({ startImmediately: true })
         )
-        yield* Effect.yieldNow
-        yield* Effect.yieldNow
         yield* Fiber.interrupt(handle)
         assert.isFalse(catchFailure)
         assert.isTrue(ensuring)
@@ -760,10 +759,8 @@ describe.concurrent("Effect", () => {
             })
           ),
           Effect.uninterruptible,
-          Effect.fork
+          Effect.fork({ startImmediately: true })
         )
-        yield* Effect.yieldNow
-        yield* Effect.yieldNow
         yield* Fiber.interrupt(fiber)
         assert.isTrue(recovered)
       }))
@@ -784,10 +781,8 @@ describe.concurrent("Effect", () => {
             counter++
           })),
           Effect.uninterruptible,
-          Effect.fork
+          Effect.fork({ startImmediately: true })
         )
-        yield* Effect.yieldNow
-        yield* Effect.yieldNow
         yield* Fiber.interrupt(fiber)
         assert.strictEqual(counter, 2)
       }))
@@ -806,10 +801,8 @@ describe.concurrent("Effect", () => {
           () => Effect.void
         ).pipe(
           Effect.uninterruptible,
-          Effect.fork
+          Effect.fork({ startImmediately: true })
         )
-        yield* Effect.yieldNow
-        yield* Effect.yieldNow
         yield* Fiber.interrupt(fiber)
         assert.isTrue(ref)
       }))
@@ -822,10 +815,8 @@ describe.concurrent("Effect", () => {
             ref = true
           }),
           Effect.uninterruptible,
-          Effect.fork
+          Effect.fork({ startImmediately: true })
         )
-        yield* Effect.yieldNow
-        yield* Effect.yieldNow
         yield* Fiber.interrupt(fiber)
         assert.isTrue(ref)
       }))
@@ -838,10 +829,8 @@ describe.concurrent("Effect", () => {
           }, 10)
         }).pipe(
           Effect.onInterrupt(Effect.sleep(30)),
-          Effect.fork
+          Effect.fork({ startImmediately: true })
         )
-        yield* Effect.yieldNow
-        yield* Effect.yieldNow
         yield* Fiber.interrupt(fiber)
         assert.isTrue(Exit.hasInterrupt(fiber.unsafePoll()!))
       }))
@@ -855,9 +844,7 @@ describe.concurrent("Effect", () => {
             ref = true
           })
         )
-        const fiber = yield* child.pipe(Effect.uninterruptible, Effect.fork)
-        yield* Effect.yieldNow
-        yield* Effect.yieldNow
+        const fiber = yield* child.pipe(Effect.uninterruptible, Effect.fork({ startImmediately: true }))
         yield* Fiber.interrupt(fiber)
         assert.isTrue(ref)
       }))
@@ -867,9 +854,7 @@ describe.concurrent("Effect", () => {
         let signal: AbortSignal
         const fiber = yield* Effect.async<void>((_cb, signal_) => {
           signal = signal_
-        }).pipe(Effect.fork)
-        yield* Effect.yieldNow
-        yield* Effect.yieldNow
+        }).pipe(Effect.fork({ startImmediately: true }))
         yield* Fiber.interrupt(fiber)
         assert.strictEqual(signal!.aborted, true)
       }))
@@ -884,17 +869,14 @@ describe.concurrent("Effect", () => {
           Effect.onInterrupt(Effect.sync(() => {
             child = true
           })),
-          Effect.fork,
+          Effect.fork({ startImmediately: true }),
           Effect.andThen(Effect.never),
           Effect.onInterrupt(Effect.sync(() => {
             parent = true
           })),
-          Effect.fork
+          Effect.fork({ startImmediately: true })
         )
-        yield* Effect.yieldNow
-        yield* Effect.yieldNow
         yield* Fiber.interrupt(fiber)
-        yield* Effect.yieldNow
         assert.isTrue(child)
         assert.isTrue(parent)
       }))
@@ -914,9 +896,8 @@ describe.concurrent("Effect", () => {
           Effect.onInterrupt(Effect.sync(() => {
             parent = true
           })),
-          Effect.fork
+          Effect.fork({ startImmediately: true })
         )
-        yield* Effect.yieldNow
         yield* Fiber.interrupt(handle)
         assert.isFalse(child)
         assert.isTrue(parent)
@@ -932,9 +913,8 @@ describe.concurrent("Effect", () => {
           Effect.onInterrupt(Effect.sync(() => {
             interrupted = true
           })),
-          Effect.forkIn(scope)
+          Effect.forkIn(scope, { startImmediately: true })
         )
-        yield* Effect.yieldNow
         yield* scope.close(Exit.void)
         assert.isTrue(interrupted)
       }))
@@ -949,10 +929,9 @@ describe.concurrent("Effect", () => {
           Effect.onInterrupt(Effect.sync(() => {
             interrupted = true
           })),
-          Effect.forkScoped,
+          Effect.forkScoped({ startImmediately: true }),
           Scope.provide(scope)
         )
-        yield* Effect.yieldNow
         yield* scope.close(Exit.void)
         assert.isTrue(interrupted)
       }))

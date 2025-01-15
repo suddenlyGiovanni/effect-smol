@@ -423,19 +423,18 @@ interface FiberImpl<in out A = any, in out E = any> extends Fiber.Fiber<A, E> {
   readonly currentScheduler: Scheduler.Scheduler
   readonly maxOpsBeforeYield: number
   interruptible: boolean
-  _stack: Array<Primitive>
-  _observers: Array<(exit: Exit.Exit<A, E>) => void>
+  readonly _stack: Array<Primitive>
+  readonly _observers: Array<(exit: Exit.Exit<A, E>) => void>
   _exit: Exit.Exit<A, E> | undefined
   _children: Set<FiberImpl<any, any>> | undefined
   _interruptedCause: Cause.Cause<never> | undefined
   _yielded: Exit.Exit<any, any> | (() => void) | undefined
   evaluate(effect: Primitive): void
-  runLoop(effect: Primitive): Exit.Exit<A, E> | Yield
+  runLoop<A, E>(this: FiberImpl<A, E>, effect: Primitive): Exit.Exit<A, E> | Yield
   getRef<A, E, I, X>(this: Fiber.Fiber<A, E>, ref: Context.Reference<I, X>): X
   addObserver<A, E>(this: FiberImpl<A, E>, cb: (exit: Exit.Exit<A, E>) => void): () => void
   unsafeInterrupt<A, E>(this: FiberImpl<A, E>, fiberId?: number | undefined): void
   unsafePoll<A, E>(this: FiberImpl<A, E>): Exit.Exit<A, E> | undefined
-  runLoop<A, E>(this: FiberImpl<A, E>, effect: Primitive): Exit.Exit<A, E> | Yield
   getCont<A, E, S extends successCont | failureCont>(this: FiberImpl<A, E>, symbol: S):
     | (Primitive & Record<S, (value: any, fiber: FiberImpl) => Primitive>)
     | undefined
@@ -3275,13 +3274,32 @@ export {
 // ----------------------------------------------------------------------------
 
 /** @internal */
-export const fork = <A, E, R>(
-  self: Effect.Effect<A, E, R>
+export const fork: {
+  <
+    Args extends [
+      self: Effect.Effect<any, any, any>,
+      options?: {
+        readonly startImmediately?: boolean | undefined
+      } | undefined
+    ] | [
+      options?: {
+        readonly startImmediately?: boolean | undefined
+      } | undefined
+    ]
+  >(
+    ...args: Args
+  ): [Args[0]] extends [Effect.Effect<infer _A, infer _E, infer _R>] ? Effect.Effect<Fiber.Fiber<_A, _E>, never, _R>
+    : <A, E, R>(self: Effect.Effect<A, E, R>) => Effect.Effect<Fiber.Fiber<A, E>, never, R>
+} = dual((args) => isEffect(args[0]), <A, E, R>(
+  self: Effect.Effect<A, E, R>,
+  options?: {
+    readonly startImmediately?: boolean
+  }
 ): Effect.Effect<Fiber.Fiber<A, E>, never, R> =>
   withFiber((fiber) => {
     fiberMiddleware.interruptChildren ??= fiberInterruptChildren
-    return succeed(unsafeFork(fiber, self))
-  })
+    return succeed(unsafeFork(fiber, self, options?.startImmediately))
+  }))
 
 const unsafeFork = <FA, FE, A, E, R>(
   parent: FiberImpl<FA, FE>,
@@ -3303,31 +3321,60 @@ const unsafeFork = <FA, FE, A, E, R>(
 }
 
 /** @internal */
-export const forkDaemon = <A, E, R>(
-  self: Effect.Effect<A, E, R>
-): Effect.Effect<Fiber.Fiber<A, E>, never, R> => withFiber((fiber) => succeed(unsafeFork(fiber, self, false, true)))
+export const forkDaemon: {
+  <
+    Args extends [
+      self: Effect.Effect<any, any, any>,
+      options?: {
+        readonly startImmediately?: boolean | undefined
+      } | undefined
+    ] | [
+      options?: {
+        readonly startImmediately?: boolean | undefined
+      } | undefined
+    ]
+  >(
+    ...args: Args
+  ): [Args[0]] extends [Effect.Effect<infer _A, infer _E, infer _R>] ? Effect.Effect<Fiber.Fiber<_A, _E>, never, _R>
+    : <A, E, R>(self: Effect.Effect<A, E, R>) => Effect.Effect<Fiber.Fiber<A, E>, never, R>
+} = dual((args) => isEffect(args[0]), <A, E, R>(
+  self: Effect.Effect<A, E, R>,
+  options?: {
+    readonly startImmediately?: boolean
+  }
+): Effect.Effect<Fiber.Fiber<A, E>, never, R> =>
+  withFiber((fiber) => succeed(unsafeFork(fiber, self, options?.startImmediately, true))))
 
 /** @internal */
 export const forkIn: {
   (
-    scope: Scope.Scope
+    scope: Scope.Scope,
+    options?: {
+      readonly startImmediately?: boolean | undefined
+    }
   ): <A, E, R>(
     self: Effect.Effect<A, E, R>
   ) => Effect.Effect<Fiber.Fiber<A, E>, never, R>
   <A, E, R>(
     self: Effect.Effect<A, E, R>,
-    scope: Scope.Scope
+    scope: Scope.Scope,
+    options?: {
+      readonly startImmediately?: boolean | undefined
+    }
   ): Effect.Effect<Fiber.Fiber<A, E>, never, R>
 } = dual(
-  2,
+  (args) => isEffect(args[0]),
   <A, E, R>(
     self: Effect.Effect<A, E, R>,
-    scope: Scope.Scope
+    scope: Scope.Scope,
+    options?: {
+      readonly startImmediately?: boolean | undefined
+    }
   ): Effect.Effect<Fiber.Fiber<A, E>, never, R> =>
     uninterruptibleMask((restore) =>
       flatMap(scope.fork, (scope) =>
         tap(
-          restore(forkDaemon(onExit(self, (exit) => scope.close(exit)))),
+          restore(forkDaemon(onExit(self, (exit) => scope.close(exit)), options)),
           (fiber) =>
             scope.addFinalizer((_) =>
               withFiber((interruptor) => interruptor.id === fiber.id ? void_ : fiberInterrupt(fiber))
@@ -3337,9 +3384,29 @@ export const forkIn: {
 )
 
 /** @internal */
-export const forkScoped = <A, E, R>(
-  self: Effect.Effect<A, E, R>
-): Effect.Effect<Fiber.Fiber<A, E>, never, R | Scope.Scope> => flatMap(scope, (scope) => forkIn(self, scope))
+export const forkScoped: {
+  <
+    Args extends [
+      self: Effect.Effect<any, any, any>,
+      options?: {
+        readonly startImmediately?: boolean | undefined
+      } | undefined
+    ] | [
+      options?: {
+        readonly startImmediately?: boolean | undefined
+      } | undefined
+    ]
+  >(
+    ...args: Args
+  ): [Args[0]] extends [Effect.Effect<infer _A, infer _E, infer _R>] ?
+    Effect.Effect<Fiber.Fiber<_A, _E>, never, _R | Scope.Scope>
+    : <A, E, R>(self: Effect.Effect<A, E, R>) => Effect.Effect<Fiber.Fiber<A, E>, never, R | Scope.Scope>
+} = dual((args) => isEffect(args[0]), <A, E, R>(
+  self: Effect.Effect<A, E, R>,
+  options?: {
+    readonly startImmediately?: boolean
+  }
+): Effect.Effect<Fiber.Fiber<A, E>, never, R | Scope.Scope> => flatMap(scope, (scope) => forkIn(self, scope, options)))
 
 // ----------------------------------------------------------------------------
 // execution

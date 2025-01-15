@@ -4462,9 +4462,23 @@ export const request: {
  * @since 2.0.0
  * @category supervision & fibers
  */
-export const fork: <A, E, R>(
-  self: Effect<A, E, R>
-) => Effect<Fiber<A, E>, never, R> = core.fork
+export const fork: <
+  Args extends
+    | [
+      self: Effect<any, any, any>,
+      options?: {
+        readonly startImmediately?: boolean | undefined
+      } | undefined
+    ]
+    | [
+      options?: {
+        readonly startImmediately?: boolean | undefined
+      } | undefined
+    ]
+>(
+  ...args: Args
+) => [Args[0]] extends [Effect<infer _A, infer _E, infer _R>] ? Effect<Fiber<_A, _E>, never, _R>
+  : <A, E, R>(self: Effect<A, E, R>) => Effect<Fiber<A, E>, never, R> = core.fork
 
 /**
  * Forks the effect in the specified scope. The fiber will be interrupted
@@ -4475,9 +4489,18 @@ export const fork: <A, E, R>(
  */
 export const forkIn: {
   (
-    scope: Scope
+    scope: Scope,
+    options?: {
+      readonly startImmediately?: boolean | undefined
+    }
   ): <A, E, R>(self: Effect<A, E, R>) => Effect<Fiber<A, E>, never, R>
-  <A, E, R>(self: Effect<A, E, R>, scope: Scope): Effect<Fiber<A, E>, never, R>
+  <A, E, R>(
+    self: Effect<A, E, R>,
+    scope: Scope,
+    options?: {
+      readonly startImmediately?: boolean | undefined
+    }
+  ): Effect<Fiber<A, E>, never, R>
 } = core.forkIn
 
 /**
@@ -4486,9 +4509,23 @@ export const forkIn: {
  * @since 2.0.0
  * @category supervision & fibers
  */
-export const forkScoped: <A, E, R>(
-  self: Effect<A, E, R>
-) => Effect<Fiber<A, E>, never, Scope | R> = core.forkScoped
+export const forkScoped: <
+  Args extends
+    | [
+      self: Effect<any, any, any>,
+      options?: {
+        readonly startImmediately?: boolean | undefined
+      } | undefined
+    ]
+    | [
+      options?: {
+        readonly startImmediately?: boolean | undefined
+      } | undefined
+    ]
+>(
+  ...args: Args
+) => [Args[0]] extends [Effect<infer _A, infer _E, infer _R>] ? Effect<Fiber<_A, _E>, never, _R | Scope>
+  : <A, E, R>(self: Effect<A, E, R>) => Effect<Fiber<A, E>, never, R | Scope> = core.forkScoped
 
 /**
  * Forks the effect into a new fiber attached to the global scope. Because the
@@ -4498,7 +4535,23 @@ export const forkScoped: <A, E, R>(
  * @since 2.0.0
  * @category supervision & fibers
  */
-export const forkDaemon: <A, E, R>(self: Effect<A, E, R>) => Effect<Fiber<A, E>, never, R> = core.forkDaemon
+export const forkDaemon: <
+  Args extends
+    | [
+      self: Effect<any, any, any>,
+      options?: {
+        readonly startImmediately?: boolean | undefined
+      } | undefined
+    ]
+    | [
+      options?: {
+        readonly startImmediately?: boolean | undefined
+      } | undefined
+    ]
+>(
+  ...args: Args
+) => [Args[0]] extends [Effect<infer _A, infer _E, infer _R>] ? Effect<Fiber<_A, _E>, never, _R>
+  : <A, E, R>(self: Effect<A, E, R>) => Effect<Fiber<A, E>, never, R> = core.forkDaemon
 
 // -----------------------------------------------------------------------------
 // Running Effects
