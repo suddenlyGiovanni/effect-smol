@@ -311,6 +311,7 @@ export const isFull = <A>(self: PubSub<A>): Effect.Effect<boolean> =>
  * @category getters
  */
 export const isEmpty = <A>(self: PubSub<A>): Effect.Effect<boolean> => Effect.map(size(self), (size) => size === 0)
+
 /**
  * Interrupts any fibers that are suspended on `offer` or `take`. Future calls
  * to `offer*` and `take*` will be interrupted immediately.
@@ -448,11 +449,30 @@ export const subscribe: <A>(self: PubSub<A>) => Effect.Effect<Subscription<A>, n
     return subscription = unsafeMakeSubscription(self.pubsub, self.subscribers, self.strategy)
   })
 
+const unsubscribe = <A>(self: Subscription<A>): Effect.Effect<void> =>
+  Effect.uninterruptible(
+    Effect.withFiber<void>((state) => {
+      MutableRef.set(self.shutdownFlag, true)
+      return Effect.forEach(
+        MutableList.takeAll(self.pollers),
+        (d) => Deferred.interruptWith(d, state.id),
+        { discard: true, concurrency: "unbounded" }
+      ).pipe(
+        Effect.tap(() => {
+          self.subscribers.delete(self.subscription)
+          self.subscription.unsubscribe()
+          self.strategy.unsafeOnPubSubEmptySpace(self.pubsub, self.subscribers)
+        }),
+        Effect.when(self.shutdownHook.open),
+        Effect.asVoid
+      )
+    })
+  )
+
 /**
  * @since 4.0.0
  * @category Subscription
  */
-/** @internal */
 export const take = <A>(self: Subscription<A>): Effect.Effect<A> =>
   Effect.suspend(() => {
     if (self.shutdownFlag.current) {
@@ -490,30 +510,6 @@ export const take = <A>(self: Subscription<A>): Effect.Effect<A> =>
       return Effect.succeed(message)
     }
   })
-
-/**
- * @since 4.0.0
- * @category Subscription
- */
-export const unsubscribe = <A>(self: Subscription<A>): Effect.Effect<void> =>
-  Effect.uninterruptible(
-    Effect.withFiber<void>((state) => {
-      MutableRef.set(self.shutdownFlag, true)
-      return Effect.forEach(
-        MutableList.takeAll(self.pollers),
-        (d) => Deferred.interruptWith(d, state.id),
-        { discard: true, concurrency: "unbounded" }
-      ).pipe(
-        Effect.tap(() => {
-          self.subscribers.delete(self.subscription)
-          self.subscription.unsubscribe()
-          self.strategy.unsafeOnPubSubEmptySpace(self.pubsub, self.subscribers)
-        }),
-        Effect.when(self.shutdownHook.open),
-        Effect.asVoid
-      )
-    })
-  )
 
 /**
  * @since 4.0.0
@@ -661,7 +657,6 @@ const removeSubscribers = <A>(
   }
 }
 
-/** @internal */
 const makeBoundedPubSub = <A>(
   capacity: number | {
     readonly capacity: number
@@ -680,12 +675,10 @@ const makeBoundedPubSub = <A>(
   }
 }
 
-/** @internal */
 const makeUnboundedPubSub = <A>(options?: {
   readonly replay?: number | undefined
 }): PubSub.Atomic<A> => new UnboundedPubSub(options?.replay ? new ReplayBuffer(options.replay) : undefined)
 
-/** @internal */
 const unsafeMakeSubscription = <A>(
   pubsub: PubSub.Atomic<A>,
   subscribers: PubSub.Subscribers<A>,
@@ -702,7 +695,6 @@ const unsafeMakeSubscription = <A>(
     pubsub.replayWindow()
   )
 
-/** @internal */
 class BoundedPubSubArb<in out A> implements PubSub.Atomic<A> {
   array: Array<A>
   publisherIndex = 0
@@ -882,7 +874,6 @@ class BoundedPubSubArbSubscription<in out A> implements PubSub.BackingSubscripti
   }
 }
 
-/** @internal */
 class BoundedPubSubPow2<in out A> implements PubSub.Atomic<A> {
   array: Array<A>
   mask: number
@@ -977,7 +968,6 @@ class BoundedPubSubPow2<in out A> implements PubSub.Atomic<A> {
   }
 }
 
-/** @internal */
 class BoundedPubSubPow2Subscription<in out A> implements PubSub.BackingSubscription<A> {
   constructor(
     private self: BoundedPubSubPow2<A>,
@@ -1064,7 +1054,6 @@ class BoundedPubSubPow2Subscription<in out A> implements PubSub.BackingSubscript
   }
 }
 
-/** @internal */
 class BoundedPubSubSingle<in out A> implements PubSub.Atomic<A> {
   publisherIndex = 0
   subscriberCount = 0
@@ -1143,7 +1132,6 @@ class BoundedPubSubSingle<in out A> implements PubSub.Atomic<A> {
   }
 }
 
-/** @internal */
 class BoundedPubSubSingleSubscription<in out A> implements PubSub.BackingSubscription<A> {
   constructor(
     private self: BoundedPubSubSingle<A>,
@@ -1204,14 +1192,12 @@ class BoundedPubSubSingleSubscription<in out A> implements PubSub.BackingSubscri
   }
 }
 
-/** @internal */
 interface Node<out A> {
   value: A | AbsentValue
   subscribers: number
   next: Node<A> | null
 }
 
-/** @internal */
 class UnboundedPubSub<in out A> implements PubSub.Atomic<A> {
   publisherHead: Node<A> = {
     value: AbsentValue,
@@ -1291,7 +1277,6 @@ class UnboundedPubSub<in out A> implements PubSub.Atomic<A> {
   }
 }
 
-/** @internal */
 class UnboundedPubSubSubscription<in out A> implements PubSub.BackingSubscription<A> {
   constructor(
     private self: UnboundedPubSub<A>,
@@ -1392,7 +1377,6 @@ class UnboundedPubSubSubscription<in out A> implements PubSub.BackingSubscriptio
   }
 }
 
-/** @internal */
 class SubscriptionImpl<in out A> implements Subscription<A> {
   readonly [SubscriptionTypeId] = {
     _A: identity
