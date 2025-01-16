@@ -2932,14 +2932,14 @@ const unsafeFork = <FA, FE, A, E, R>(
   daemon = false
 ): Fiber.Fiber<A, E> => {
   const child = makeFiber<A, E>(parent.context, parent.interruptible)
-  if (!daemon) {
-    parent.children().add(child)
-    child.addObserver(() => parent._children!.delete(child))
-  }
   if (immediate) {
     child.evaluate(effect as any)
   } else {
     parent.currentScheduler.scheduleTask(() => child.evaluate(effect as any), 0)
+  }
+  if (!daemon && !child._exit) {
+    parent.children().add(child)
+    child.addObserver(() => parent._children!.delete(child))
   }
   return child
 }
