@@ -518,7 +518,7 @@ export const YieldableError: new(
       return exitFail(this)
     }
   }
-  Object.assign(YieldableError.prototype, StructuralPrototype)
+  Object.assign(YieldableError.prototype, StructuralPrototype, YieldableProto)
   return YieldableError as any
 })()
 

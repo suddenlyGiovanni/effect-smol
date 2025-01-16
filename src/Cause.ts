@@ -164,6 +164,7 @@ export const causeHasInterrupt: <E>(self: Cause<E>) => boolean = effect.causeHas
  * @category errors
  */
 export interface YieldableError extends Readonly<Error> {
+  [Symbol.iterator](): Effect.EffectIterator<this>
   asEffect(): Effect.Effect<never, this, never>
 }
 
