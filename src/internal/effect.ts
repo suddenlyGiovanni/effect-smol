@@ -788,7 +788,8 @@ export const andThen: {
     f: any
   ): Effect.Effect<B, E | E2, R | R2> =>
     flatMap(self, (a) => {
-      const value = isEffect(f) ? f : typeof f === "function" ? f(a) : f
+      if (isEffect(f)) return f
+      const value = typeof f === "function" ? f(a) : f
       return isEffect(value) ? value : succeed(value)
     })
 )

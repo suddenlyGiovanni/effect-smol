@@ -552,7 +552,7 @@ export const provide: {
 } = dual(2, (
   self: Layer<any, any, any>,
   that: Layer<any, any, any> | ReadonlyArray<Layer<any, any, any>>
-) => provideWith(self, that, (context) => context))
+) => provideWith(self, that, identity))
 
 /**
  * Feeds the output services of this layer into the input of the specified
