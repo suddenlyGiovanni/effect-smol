@@ -1,4 +1,4 @@
-import type { NonEmptyArray } from "effect/Array"
+import type { NonEmptyArray } from "../Array.js"
 import type { Effect } from "../Effect.js"
 import type { Fiber } from "../Fiber.js"
 import { dual } from "../Function.js"
