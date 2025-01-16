@@ -48,7 +48,7 @@ export interface Left<out L, out R> extends Pipeable, Inspectable, Yieldable<R, 
     readonly _R: Covariant<R>
     readonly _L: Covariant<L>
   }
-  [Symbol.iterator](): EffectIterator<Left<L, R>>
+  [Symbol.iterator](): EffectIterator<Either<R, L>>
   [Unify.typeSymbol]?: unknown
   [Unify.unifySymbol]?: EitherUnify<this>
   [Unify.ignoreSymbol]?: EitherUnifyIgnore
@@ -66,7 +66,7 @@ export interface Right<out L, out R> extends Pipeable, Inspectable, Yieldable<R,
     readonly _R: Covariant<R>
     readonly _L: Covariant<L>
   }
-  [Symbol.iterator](): EffectIterator<Right<L, R>>
+  [Symbol.iterator](): EffectIterator<Either<R, L>>
   [Unify.typeSymbol]?: unknown
   [Unify.unifySymbol]?: EitherUnify<this>
   [Unify.ignoreSymbol]?: EitherUnifyIgnore
