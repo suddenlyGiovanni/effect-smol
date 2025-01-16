@@ -29,6 +29,7 @@ import type { AnySpan, ParentSpan, Span, SpanLink, SpanOptions, Tracer } from ".
 import type { Concurrency, Covariant, NoInfer, NotFunction } from "./Types.js"
 import type * as Unify from "./Unify.js"
 import type { YieldWrap } from "./Utils.js"
+import { SingleShotGen } from "./Utils.js"
 
 /**
  * @since 4.0.0
@@ -69,10 +70,21 @@ export interface Effect<out A, out E = never, out R = never> extends Pipeable, Y
 
 /**
  * @since 4.0.0
- * @category Models
+ * @category Yieldable
  */
 export interface Yieldable<out A, out E = never, out R = never> {
   asEffect(): Effect<A, E, R>
+}
+
+/**
+ * @since 4.0.0
+ * @category Yieldable
+ */
+export abstract class YieldableClass<A, E = never, R = never> implements Yieldable<A, E, R> {
+  [Symbol.iterator](): EffectIterator<this> {
+    return new SingleShotGen(this) as any
+  }
+  abstract asEffect(): Effect<A, E, R>
 }
 
 /**
