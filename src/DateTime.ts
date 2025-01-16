@@ -1,7 +1,7 @@
 /**
  * @since 3.6.0
  */
-import type { IllegalArgumentException } from "./Cause.js"
+import type { IllegalArgumentError } from "./Cause.js"
 import * as Context from "./Context.js"
 import type * as Duration from "./Duration.js"
 import * as Effect from "./Effect.js"
@@ -291,7 +291,7 @@ export const clamp: {
 /**
  * Create a `DateTime` from a `Date`.
  *
- * If the `Date` is invalid, an `IllegalArgumentException` will be thrown.
+ * If the `Date` is invalid, an `IllegalArgumentError` will be thrown.
  *
  * @since 3.6.0
  * @category constructors
@@ -302,7 +302,7 @@ export const unsafeFromDate: (date: Date) => Utc = Internal.unsafeFromDate
  * Create a `DateTime` from one of the following:
  *
  * - A `DateTime`
- * - A `Date` instance (invalid dates will throw an `IllegalArgumentException`)
+ * - A `Date` instance (invalid dates will throw an `IllegalArgumentError`)
  * - The `number` of milliseconds since the Unix epoch
  * - An object with the parts of a date
  * - A `string` that can be parsed by `Date.parse`
@@ -374,7 +374,7 @@ export const makeZoned: (
  * Create a `DateTime` from one of the following:
  *
  * - A `DateTime`
- * - A `Date` instance (invalid dates will throw an `IllegalArgumentException`)
+ * - A `Date` instance (invalid dates will throw an `IllegalArgumentError`)
  * - The `number` of milliseconds since the Unix epoch
  * - An object with the parts of a date
  * - A `string` that can be parsed by `Date.parse`
@@ -495,7 +495,7 @@ export const setZoneOffset: {
 /**
  * Attempt to create a named time zone from a IANA time zone identifier.
  *
- * If the time zone is invalid, an `IllegalArgumentException` will be thrown.
+ * If the time zone is invalid, an `IllegalArgumentError` will be thrown.
  *
  * @since 3.6.0
  * @category time zones
@@ -521,12 +521,12 @@ export const zoneMakeNamed: (zoneId: string) => Option.Option<TimeZone.Named> = 
 
 /**
  * Create a named time zone from a IANA time zone identifier. If the time zone
- * is invalid, it will fail with an `IllegalArgumentException`.
+ * is invalid, it will fail with an `IllegalArgumentError`.
  *
  * @since 3.6.0
  * @category time zones
  */
-export const zoneMakeNamedEffect: (zoneId: string) => Effect.Effect<TimeZone.Named, IllegalArgumentException> =
+export const zoneMakeNamedEffect: (zoneId: string) => Effect.Effect<TimeZone.Named, IllegalArgumentError> =
   Internal.zoneMakeNamedEffect
 
 /**
@@ -591,7 +591,7 @@ export const setZoneNamed: {
 
 /**
  * Set the time zone of a `DateTime` from an IANA time zone identifier. If the
- * time zone is invalid, an `IllegalArgumentException` will be thrown.
+ * time zone is invalid, an `IllegalArgumentError` will be thrown.
  *
  * @since 3.6.0
  * @category time zones
@@ -953,7 +953,7 @@ export const setPartsUtc: {
  * @since 3.11.0
  * @category current time zone
  */
-export class CurrentTimeZone extends Context.Tag("effect/DateTime/CurrentTimeZone")<CurrentTimeZone, TimeZone>() {}
+export class CurrentTimeZone extends Context.Tag<CurrentTimeZone, TimeZone>()("effect/DateTime/CurrentTimeZone") {}
 
 /**
  * Set the time zone of a `DateTime` to the current time zone, which is
@@ -974,7 +974,7 @@ export class CurrentTimeZone extends Context.Tag("effect/DateTime/CurrentTimeZon
  * ```
  */
 export const setZoneCurrent = (self: DateTime): Effect.Effect<Zoned, never, CurrentTimeZone> =>
-  Effect.map(CurrentTimeZone, (zone) => setZone(self, zone))
+  Effect.map(Effect.service(CurrentTimeZone), (zone) => setZone(self, zone))
 
 /**
  * Provide the `CurrentTimeZone` to an effect.
@@ -1056,7 +1056,7 @@ export const withCurrentZoneOffset: {
  * Provide the `CurrentTimeZone` to an effect using an IANA time zone
  * identifier.
  *
- * If the time zone is invalid, it will fail with an `IllegalArgumentException`.
+ * If the time zone is invalid, it will fail with an `IllegalArgumentError`.
  *
  * @since 3.6.0
  * @category current time zone
@@ -1073,17 +1073,17 @@ export const withCurrentZoneOffset: {
 export const withCurrentZoneNamed: {
   (zone: string): <A, E, R>(
     effect: Effect.Effect<A, E, R>
-  ) => Effect.Effect<A, E | IllegalArgumentException, Exclude<R, CurrentTimeZone>>
+  ) => Effect.Effect<A, E | IllegalArgumentError, Exclude<R, CurrentTimeZone>>
   <A, E, R>(
     effect: Effect.Effect<A, E, R>,
     zone: string
-  ): Effect.Effect<A, E | IllegalArgumentException, Exclude<R, CurrentTimeZone>>
+  ): Effect.Effect<A, E | IllegalArgumentError, Exclude<R, CurrentTimeZone>>
 } = dual(
   2,
   <A, E, R>(
     effect: Effect.Effect<A, E, R>,
     zone: string
-  ): Effect.Effect<A, E | IllegalArgumentException, Exclude<R, CurrentTimeZone>> =>
+  ): Effect.Effect<A, E | IllegalArgumentError, Exclude<R, CurrentTimeZone>> =>
     Effect.provideServiceEffect(effect, CurrentTimeZone, zoneMakeNamedEffect(zone))
 )
 
@@ -1554,7 +1554,7 @@ export const layerCurrentZoneOffset = (offset: number): Layer.Layer<CurrentTimeZ
  */
 export const layerCurrentZoneNamed = (
   zoneId: string
-): Layer.Layer<CurrentTimeZone, IllegalArgumentException> =>
+): Layer.Layer<CurrentTimeZone, IllegalArgumentError> =>
   Layer.effect(CurrentTimeZone, Internal.zoneMakeNamedEffect(zoneId))
 
 /**
