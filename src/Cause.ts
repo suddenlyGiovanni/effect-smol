@@ -231,3 +231,36 @@ export interface TimeoutError extends YieldableError {
  * @category errors
  */
 export const TimeoutError: new(message?: string) => TimeoutError = core.TimeoutError
+
+/**
+ * @since 4.0.0
+ * @category errors
+ */
+export const IllegalArgumentErrorTypeId: unique symbol = core.IllegalArgumentErrorTypeId
+
+/**
+ * @since 4.0.0
+ * @category errors
+ */
+export type IllegalArgumentErrorTypeId = typeof IllegalArgumentErrorTypeId
+
+/**
+ * @since 4.0.0
+ * @category errors
+ */
+export const isIllegalArgumentError: (u: unknown) => u is IllegalArgumentError = core.isIllegalArgumentError
+
+/**
+ * @since 4.0.0
+ * @category errors
+ */
+export interface IllegalArgumentError extends YieldableError {
+  readonly [IllegalArgumentErrorTypeId]: IllegalArgumentErrorTypeId
+  readonly _tag: "IllegalArgumentError"
+}
+
+/**
+ * @since 4.0.0
+ * @category errors
+ */
+export const IllegalArgumentError: new(message?: string) => IllegalArgumentError = core.IllegalArgumentError

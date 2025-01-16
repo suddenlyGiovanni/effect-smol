@@ -4138,6 +4138,24 @@ export class TimeoutError extends TaggedError("TimeoutError") {
   }
 }
 
+/** @internal */
+export const IllegalArgumentErrorTypeId: Cause.IllegalArgumentErrorTypeId = Symbol.for(
+  "effect/Cause/IllegalArgumentError"
+) as Cause.IllegalArgumentErrorTypeId
+
+/** @internal */
+export const isIllegalArgumentError = (
+  u: unknown
+): u is Cause.IllegalArgumentError => hasProperty(u, IllegalArgumentErrorTypeId)
+
+/** @internal */
+export class IllegalArgumentError extends TaggedError("IllegalArgumentError") {
+  readonly [IllegalArgumentErrorTypeId]: Cause.IllegalArgumentErrorTypeId = IllegalArgumentErrorTypeId
+  constructor(message?: string) {
+    super({ message } as any)
+  }
+}
+
 // ----------------------------------------------------------------------------
 // Console
 // ----------------------------------------------------------------------------

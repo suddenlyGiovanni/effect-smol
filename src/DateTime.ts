@@ -1,6 +1,7 @@
 /**
  * @since 3.6.0
  */
+import type { IllegalArgumentException } from "./Cause.js"
 import * as Context from "./Context.js"
 import type * as Duration from "./Duration.js"
 import * as Effect from "./Effect.js"
@@ -42,8 +43,7 @@ export type DateTime = Utc | Zoned
 export interface Utc extends DateTime.Proto {
   readonly _tag: "Utc"
   readonly epochMillis: number
-  /** @internal */
-  partsUtc: DateTime.PartsWithWeekday
+  partsUtc: DateTime.PartsWithWeekday | undefined
 }
 
 /**
@@ -54,12 +54,9 @@ export interface Zoned extends DateTime.Proto {
   readonly _tag: "Zoned"
   readonly epochMillis: number
   readonly zone: TimeZone
-  /** @internal */
-  adjustedEpochMillis?: number
-  /** @internal */
-  partsAdjusted?: DateTime.PartsWithWeekday
-  /** @internal */
-  partsUtc?: DateTime.PartsWithWeekday
+  adjustedEpochMillis: number | undefined
+  partsAdjusted: DateTime.PartsWithWeekday | undefined
+  partsUtc: DateTime.PartsWithWeekday | undefined
 }
 
 /**
@@ -278,8 +275,13 @@ export const Order: order.Order<DateTime> = Internal.Order
  * @since 3.6.0
  */
 export const clamp: {
-  (options: { minimum: DateTime; maximum: DateTime }): (self: DateTime) => DateTime
-  (self: DateTime, options: { minimum: DateTime; maximum: DateTime }): DateTime
+  <Min extends DateTime, Max extends DateTime>(
+    options: { readonly minimum: Min; readonly maximum: Max }
+  ): <A extends DateTime>(self: A) => A | Min | Max
+  <A extends DateTime, Min extends DateTime, Max extends DateTime>(
+    self: A,
+    options: { readonly minimum: Min; readonly maximum: Max }
+  ): A | Min | Max
 } = Internal.clamp
 
 // =============================================================================
@@ -524,7 +526,7 @@ export const zoneMakeNamed: (zoneId: string) => Option.Option<TimeZone.Named> = 
  * @since 3.6.0
  * @category time zones
  */
-export const zoneMakeNamedEffect: (zoneId: string) => Effect.Effect<TimeZone.Named, Error> =
+export const zoneMakeNamedEffect: (zoneId: string) => Effect.Effect<TimeZone.Named, IllegalArgumentException> =
   Internal.zoneMakeNamedEffect
 
 /**
@@ -703,8 +705,8 @@ export const distanceDuration: {
  * @category comparisons
  */
 export const min: {
-  (that: DateTime): (self: DateTime) => DateTime
-  (self: DateTime, that: DateTime): DateTime
+  <That extends DateTime>(that: That): <Self extends DateTime>(self: Self) => Self | That
+  <Self extends DateTime, That extends DateTime>(self: Self, that: That): Self | That
 } = Internal.min
 
 /**
@@ -712,8 +714,8 @@ export const min: {
  * @category comparisons
  */
 export const max: {
-  (that: DateTime): (self: DateTime) => DateTime
-  (self: DateTime, that: DateTime): DateTime
+  <That extends DateTime>(that: That): <Self extends DateTime>(self: Self) => Self | That
+  <Self extends DateTime, That extends DateTime>(self: Self, that: That): Self | That
 } = Internal.max
 
 /**
@@ -928,13 +930,8 @@ export const getPart: {
  * @category parts
  */
 export const setParts: {
-  (
-    parts: Partial<DateTime.PartsWithWeekday>
-  ): <A extends DateTime>(self: A) => DateTime.PreserveZone<A>
-  <A extends DateTime>(
-    self: A,
-    parts: Partial<DateTime.PartsWithWeekday>
-  ): DateTime.PreserveZone<A>
+  (parts: Partial<DateTime.PartsWithWeekday>): <A extends DateTime>(self: A) => A
+  <A extends DateTime>(self: A, parts: Partial<DateTime.PartsWithWeekday>): A
 } = Internal.setParts
 
 /**
@@ -944,13 +941,8 @@ export const setParts: {
  * @category parts
  */
 export const setPartsUtc: {
-  (
-    parts: Partial<DateTime.PartsWithWeekday>
-  ): <A extends DateTime>(self: A) => DateTime.PreserveZone<A>
-  <A extends DateTime>(
-    self: A,
-    parts: Partial<DateTime.PartsWithWeekday>
-  ): DateTime.PreserveZone<A>
+  (parts: Partial<DateTime.PartsWithWeekday>): <A extends DateTime>(self: A) => A
+  <A extends DateTime>(self: A, parts: Partial<DateTime.PartsWithWeekday>): A
 } = Internal.setPartsUtc
 
 // =============================================================================
@@ -961,7 +953,7 @@ export const setPartsUtc: {
  * @since 3.11.0
  * @category current time zone
  */
-export class CurrentTimeZone extends Context.Tag<CurrentTimeZone, TimeZone>()("effect/DateTime/CurrentTimeZone") {}
+export class CurrentTimeZone extends Context.Tag("effect/DateTime/CurrentTimeZone")<CurrentTimeZone, TimeZone>() {}
 
 /**
  * Set the time zone of a `DateTime` to the current time zone, which is
@@ -982,7 +974,7 @@ export class CurrentTimeZone extends Context.Tag<CurrentTimeZone, TimeZone>()("e
  * ```
  */
 export const setZoneCurrent = (self: DateTime): Effect.Effect<Zoned, never, CurrentTimeZone> =>
-  Effect.map(Effect.service(CurrentTimeZone), (zone) => setZone(self, zone))
+  Effect.map(CurrentTimeZone, (zone) => setZone(self, zone))
 
 /**
  * Provide the `CurrentTimeZone` to an effect.
@@ -1081,17 +1073,17 @@ export const withCurrentZoneOffset: {
 export const withCurrentZoneNamed: {
   (zone: string): <A, E, R>(
     effect: Effect.Effect<A, E, R>
-  ) => Effect.Effect<A, E | Error, Exclude<R, CurrentTimeZone>>
+  ) => Effect.Effect<A, E | IllegalArgumentException, Exclude<R, CurrentTimeZone>>
   <A, E, R>(
     effect: Effect.Effect<A, E, R>,
     zone: string
-  ): Effect.Effect<A, E | Error, Exclude<R, CurrentTimeZone>>
+  ): Effect.Effect<A, E | IllegalArgumentException, Exclude<R, CurrentTimeZone>>
 } = dual(
   2,
   <A, E, R>(
     effect: Effect.Effect<A, E, R>,
     zone: string
-  ): Effect.Effect<A, E | Error, Exclude<R, CurrentTimeZone>> =>
+  ): Effect.Effect<A, E | IllegalArgumentException, Exclude<R, CurrentTimeZone>> =>
     Effect.provideServiceEffect(effect, CurrentTimeZone, zoneMakeNamedEffect(zone))
 )
 
@@ -1126,8 +1118,8 @@ export const nowInCurrentZone: Effect.Effect<Zoned, never, CurrentTimeZone> = Ef
  * @category mapping
  */
 export const mutate: {
-  (f: (date: Date) => void): <A extends DateTime>(self: A) => DateTime.PreserveZone<A>
-  <A extends DateTime>(self: A, f: (date: Date) => void): DateTime.PreserveZone<A>
+  (f: (date: Date) => void): <A extends DateTime>(self: A) => A
+  <A extends DateTime>(self: A, f: (date: Date) => void): A
 } = Internal.mutate
 
 /**
@@ -1137,8 +1129,8 @@ export const mutate: {
  * @category mapping
  */
 export const mutateUtc: {
-  (f: (date: Date) => void): <A extends DateTime>(self: A) => DateTime.PreserveZone<A>
-  <A extends DateTime>(self: A, f: (date: Date) => void): DateTime.PreserveZone<A>
+  (f: (date: Date) => void): <A extends DateTime>(self: A) => A
+  <A extends DateTime>(self: A, f: (date: Date) => void): A
 } = Internal.mutateUtc
 
 /**
@@ -1158,8 +1150,8 @@ export const mutateUtc: {
  * ```
  */
 export const mapEpochMillis: {
-  (f: (millis: number) => number): <A extends DateTime>(self: A) => DateTime.PreserveZone<A>
-  <A extends DateTime>(self: A, f: (millis: number) => number): DateTime.PreserveZone<A>
+  (f: (millis: number) => number): <A extends DateTime>(self: A) => A
+  <A extends DateTime>(self: A, f: (millis: number) => number): A
 } = Internal.mapEpochMillis
 
 /**
@@ -1239,8 +1231,8 @@ export const match: {
  * ```
  */
 export const addDuration: {
-  (duration: Duration.DurationInput): <A extends DateTime>(self: A) => DateTime.PreserveZone<A>
-  <A extends DateTime>(self: A, duration: Duration.DurationInput): DateTime.PreserveZone<A>
+  (duration: Duration.DurationInput): <A extends DateTime>(self: A) => A
+  <A extends DateTime>(self: A, duration: Duration.DurationInput): A
 } = Internal.addDuration
 
 /**
@@ -1259,8 +1251,8 @@ export const addDuration: {
  * ```
  */
 export const subtractDuration: {
-  (duration: Duration.DurationInput): <A extends DateTime>(self: A) => DateTime.PreserveZone<A>
-  <A extends DateTime>(self: A, duration: Duration.DurationInput): DateTime.PreserveZone<A>
+  (duration: Duration.DurationInput): <A extends DateTime>(self: A) => A
+  <A extends DateTime>(self: A, duration: Duration.DurationInput): A
 } = Internal.subtractDuration
 
 /**
@@ -1282,13 +1274,8 @@ export const subtractDuration: {
  * ```
  */
 export const add: {
-  (
-    parts: Partial<DateTime.PartsForMath>
-  ): <A extends DateTime>(self: A) => DateTime.PreserveZone<A>
-  <A extends DateTime>(
-    self: A,
-    parts: Partial<DateTime.PartsForMath>
-  ): DateTime.PreserveZone<A>
+  (parts: Partial<DateTime.PartsForMath>): <A extends DateTime>(self: A) => A
+  <A extends DateTime>(self: A, parts: Partial<DateTime.PartsForMath>): A
 } = Internal.add
 
 /**
@@ -1307,13 +1294,8 @@ export const add: {
  * ```
  */
 export const subtract: {
-  (
-    parts: Partial<DateTime.PartsForMath>
-  ): <A extends DateTime>(self: A) => DateTime.PreserveZone<A>
-  <A extends DateTime>(
-    self: A,
-    parts: Partial<DateTime.PartsForMath>
-  ): DateTime.PreserveZone<A>
+  (parts: Partial<DateTime.PartsForMath>): <A extends DateTime>(self: A) => A
+  <A extends DateTime>(self: A, parts: Partial<DateTime.PartsForMath>): A
 } = Internal.subtract
 
 /**
@@ -1336,12 +1318,15 @@ export const subtract: {
  * ```
  */
 export const startOf: {
-  (part: DateTime.UnitSingular, options?: {
-    readonly weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6 | undefined
-  }): <A extends DateTime>(self: A) => DateTime.PreserveZone<A>
-  <A extends DateTime>(self: A, part: DateTime.UnitSingular, options?: {
-    readonly weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6 | undefined
-  }): DateTime.PreserveZone<A>
+  (
+    part: DateTime.UnitSingular,
+    options?: { readonly weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6 | undefined }
+  ): <A extends DateTime>(self: A) => A
+  <A extends DateTime>(
+    self: A,
+    part: DateTime.UnitSingular,
+    options?: { readonly weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6 | undefined }
+  ): A
 } = Internal.startOf
 
 /**
@@ -1364,12 +1349,15 @@ export const startOf: {
  * ```
  */
 export const endOf: {
-  (part: DateTime.UnitSingular, options?: {
-    readonly weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6 | undefined
-  }): <A extends DateTime>(self: A) => DateTime.PreserveZone<A>
-  <A extends DateTime>(self: A, part: DateTime.UnitSingular, options?: {
-    readonly weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6 | undefined
-  }): DateTime.PreserveZone<A>
+  (
+    part: DateTime.UnitSingular,
+    options?: { readonly weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6 | undefined }
+  ): <A extends DateTime>(self: A) => A
+  <A extends DateTime>(
+    self: A,
+    part: DateTime.UnitSingular,
+    options?: { readonly weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6 | undefined }
+  ): A
 } = Internal.endOf
 
 /**
@@ -1392,12 +1380,15 @@ export const endOf: {
  * ```
  */
 export const nearest: {
-  (part: DateTime.UnitSingular, options?: {
-    readonly weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6 | undefined
-  }): <A extends DateTime>(self: A) => DateTime.PreserveZone<A>
-  <A extends DateTime>(self: A, part: DateTime.UnitSingular, options?: {
-    readonly weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6 | undefined
-  }): DateTime.PreserveZone<A>
+  (
+    part: DateTime.UnitSingular,
+    options?: { readonly weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6 | undefined }
+  ): <A extends DateTime>(self: A) => A
+  <A extends DateTime>(
+    self: A,
+    part: DateTime.UnitSingular,
+    options?: { readonly weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6 | undefined }
+  ): A
 } = Internal.nearest
 
 // =============================================================================
@@ -1563,7 +1554,8 @@ export const layerCurrentZoneOffset = (offset: number): Layer.Layer<CurrentTimeZ
  */
 export const layerCurrentZoneNamed = (
   zoneId: string
-): Layer.Layer<CurrentTimeZone, Error> => Layer.effect(CurrentTimeZone, Internal.zoneMakeNamedEffect(zoneId))
+): Layer.Layer<CurrentTimeZone, IllegalArgumentException> =>
+  Layer.effect(CurrentTimeZone, Internal.zoneMakeNamedEffect(zoneId))
 
 /**
  * Create a Layer from the systems local time zone.

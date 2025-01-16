@@ -1,3 +1,4 @@
+import { IllegalArgumentError } from "../Cause.js"
 import * as Clock from "../Clock.js"
 import type * as DateTime from "../DateTime.js"
 import * as Duration from "../Duration.js"
@@ -127,7 +128,21 @@ export const makeZonedProto = (
   const self = Object.create(ProtoZoned)
   self.epochMillis = epochMillis
   self.zone = zone
-  self.partsUtc = partsUtc
+  Object.defineProperty(self, "partsUtc", {
+    value: partsUtc,
+    enumerable: false,
+    writable: true
+  })
+  Object.defineProperty(self, "adjustedEpochMillis", {
+    value: undefined,
+    enumerable: false,
+    writable: true
+  })
+  Object.defineProperty(self, "partsAdjusted", {
+    value: undefined,
+    enumerable: false,
+    writable: true
+  })
   return self
 }
 
@@ -171,8 +186,13 @@ export const Order: order.Order<DateTime.DateTime> = order.make((self, that) =>
 
 /** @internal */
 export const clamp: {
-  (options: { minimum: DateTime.DateTime; maximum: DateTime.DateTime }): (self: DateTime.DateTime) => DateTime.DateTime
-  (self: DateTime.DateTime, options: { minimum: DateTime.DateTime; maximum: DateTime.DateTime }): DateTime.DateTime
+  <Min extends DateTime.DateTime, Max extends DateTime.DateTime>(
+    options: { readonly minimum: Min; readonly maximum: Max }
+  ): <A extends DateTime.DateTime>(self: A) => A | Min | Max
+  <A extends DateTime.DateTime, Min extends DateTime.DateTime, Max extends DateTime.DateTime>(
+    self: A,
+    options: { readonly minimum: Min; readonly maximum: Max }
+  ): A | Min | Max
 } = order.clamp(Order)
 
 // =============================================================================
@@ -182,6 +202,11 @@ export const clamp: {
 const makeUtc = (epochMillis: number): DateTime.Utc => {
   const self = Object.create(ProtoUtc)
   self.epochMillis = epochMillis
+  Object.defineProperty(self, "partsUtc", {
+    value: undefined,
+    enumerable: false,
+    writable: true
+  })
   return self
 }
 
@@ -189,7 +214,7 @@ const makeUtc = (epochMillis: number): DateTime.Utc => {
 export const unsafeFromDate = (date: Date): DateTime.Utc => {
   const epochMillis = date.getTime()
   if (Number.isNaN(epochMillis)) {
-    throw new Error("Invalid date")
+    throw new IllegalArgumentError("Invalid date")
   }
   return makeUtc(epochMillis)
 }
@@ -208,6 +233,9 @@ export const unsafeMake = <A extends DateTime.DateTime.Input>(input: A): DateTim
   return unsafeFromDate(new Date(input)) as DateTime.DateTime.PreserveZone<A>
 }
 
+const minEpochMillis = -8640000000000000 + (12 * 60 * 60 * 1000)
+const maxEpochMillis = 8640000000000000 - (14 * 60 * 60 * 1000)
+
 /** @internal */
 export const unsafeMakeZoned = (input: DateTime.DateTime.Input, options?: {
   readonly timeZone?: number | string | DateTime.TimeZone | undefined
@@ -217,6 +245,9 @@ export const unsafeMakeZoned = (input: DateTime.DateTime.Input, options?: {
     return input
   }
   const self = unsafeMake(input)
+  if (self.epochMillis < minEpochMillis || self.epochMillis > maxEpochMillis) {
+    throw new IllegalArgumentError(`Epoch millis out of range: ${self.epochMillis}`)
+  }
   let zone: DateTime.TimeZone
   if (options?.timeZone === undefined) {
     const offset = new Date(self.epochMillis).getTimezoneOffset() * -60 * 1000
@@ -228,7 +259,7 @@ export const unsafeMakeZoned = (input: DateTime.DateTime.Input, options?: {
   } else {
     const parsedZone = zoneFromString(options.timeZone)
     if (Option.isNone(parsedZone)) {
-      throw new Error(`Invalid time zone: ${options.timeZone}`)
+      throw new IllegalArgumentError(`Invalid time zone: ${options.timeZone}`)
     }
     zone = parsedZone.value
   }
@@ -341,7 +372,7 @@ export const zoneUnsafeMakeNamed = (zoneId: string): DateTime.TimeZone.Named => 
     )
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
   } catch (_) {
-    throw new Error(`Invalid time zone: ${zoneId}`)
+    throw new IllegalArgumentError(`Invalid time zone: ${zoneId}`)
   }
 }
 
@@ -358,10 +389,10 @@ export const zoneMakeNamed: (zoneId: string) => Option.Option<DateTime.TimeZone.
 )
 
 /** @internal */
-export const zoneMakeNamedEffect = (zoneId: string): Effect.Effect<DateTime.TimeZone.Named, Error> =>
+export const zoneMakeNamedEffect = (zoneId: string): Effect.Effect<DateTime.TimeZone.Named, IllegalArgumentError> =>
   core.try({
     try: () => zoneUnsafeMakeNamed(zoneId),
-    catch: (e) => e as Error
+    catch: (e) => e as IllegalArgumentError
   })
 
 /** @internal */
@@ -450,14 +481,14 @@ export const distanceDuration: {
 
 /** @internal */
 export const min: {
-  (that: DateTime.DateTime): (self: DateTime.DateTime) => DateTime.DateTime
-  (self: DateTime.DateTime, that: DateTime.DateTime): DateTime.DateTime
+  <That extends DateTime.DateTime>(that: That): <Self extends DateTime.DateTime>(self: Self) => Self | That
+  <Self extends DateTime.DateTime, That extends DateTime.DateTime>(self: Self, that: That): Self | That
 } = order.min(Order)
 
 /** @internal */
 export const max: {
-  (that: DateTime.DateTime): (self: DateTime.DateTime) => DateTime.DateTime
-  (self: DateTime.DateTime, that: DateTime.DateTime): DateTime.DateTime
+  <That extends DateTime.DateTime>(that: That): <Self extends DateTime.DateTime>(self: Self) => Self | That
+  <Self extends DateTime.DateTime, That extends DateTime.DateTime>(self: Self, that: That): Self | That
 } = order.max(Order)
 
 /** @internal */
@@ -640,11 +671,11 @@ const setPartsDate = (date: Date, parts: Partial<DateTime.DateTime.PartsWithWeek
 export const setParts: {
   (
     parts: Partial<DateTime.DateTime.PartsWithWeekday>
-  ): <A extends DateTime.DateTime>(self: A) => DateTime.DateTime.PreserveZone<A>
+  ): <A extends DateTime.DateTime>(self: A) => A
   <A extends DateTime.DateTime>(
     self: A,
     parts: Partial<DateTime.DateTime.PartsWithWeekday>
-  ): DateTime.DateTime.PreserveZone<A>
+  ): A
 } = dual(
   2,
   (self: DateTime.DateTime, parts: Partial<DateTime.DateTime.PartsWithWeekday>): DateTime.DateTime =>
@@ -655,11 +686,11 @@ export const setParts: {
 export const setPartsUtc: {
   (
     parts: Partial<DateTime.DateTime.PartsWithWeekday>
-  ): <A extends DateTime.DateTime>(self: A) => DateTime.DateTime.PreserveZone<A>
+  ): <A extends DateTime.DateTime>(self: A) => A
   <A extends DateTime.DateTime>(
     self: A,
     parts: Partial<DateTime.DateTime.PartsWithWeekday>
-  ): DateTime.DateTime.PreserveZone<A>
+  ): A
 } = dual(
   2,
   (self: DateTime.DateTime, parts: Partial<DateTime.DateTime.PartsWithWeekday>): DateTime.DateTime =>
@@ -700,8 +731,8 @@ const calculateNamedOffset = (adjustedMillis: number, zone: DateTime.TimeZone.Na
 
 /** @internal */
 export const mutate: {
-  (f: (date: Date) => void): <A extends DateTime.DateTime>(self: A) => DateTime.DateTime.PreserveZone<A>
-  <A extends DateTime.DateTime>(self: A, f: (date: Date) => void): DateTime.DateTime.PreserveZone<A>
+  (f: (date: Date) => void): <A extends DateTime.DateTime>(self: A) => A
+  <A extends DateTime.DateTime>(self: A, f: (date: Date) => void): A
 } = dual(2, (self: DateTime.DateTime, f: (date: Date) => void): DateTime.DateTime => {
   if (self._tag === "Utc") {
     const date = toDateUtc(self)
@@ -716,8 +747,8 @@ export const mutate: {
 
 /** @internal */
 export const mutateUtc: {
-  (f: (date: Date) => void): <A extends DateTime.DateTime>(self: A) => DateTime.DateTime.PreserveZone<A>
-  <A extends DateTime.DateTime>(self: A, f: (date: Date) => void): DateTime.DateTime.PreserveZone<A>
+  (f: (date: Date) => void): <A extends DateTime.DateTime>(self: A) => A
+  <A extends DateTime.DateTime>(self: A, f: (date: Date) => void): A
 } = dual(2, (self: DateTime.DateTime, f: (date: Date) => void): DateTime.DateTime =>
   mapEpochMillis(self, (millis) => {
     const date = new Date(millis)
@@ -727,8 +758,8 @@ export const mutateUtc: {
 
 /** @internal */
 export const mapEpochMillis: {
-  (f: (millis: number) => number): <A extends DateTime.DateTime>(self: A) => DateTime.DateTime.PreserveZone<A>
-  <A extends DateTime.DateTime>(self: A, f: (millis: number) => number): DateTime.DateTime.PreserveZone<A>
+  (f: (millis: number) => number): <A extends DateTime.DateTime>(self: A) => A
+  <A extends DateTime.DateTime>(self: A, f: (millis: number) => number): A
 } = dual(2, (self: DateTime.DateTime, f: (millis: number) => number): DateTime.DateTime => {
   const millis = f(toEpochMillis(self))
   return self._tag === "Utc" ? makeUtc(millis) : makeZonedProto(millis, self.zone)
@@ -767,8 +798,8 @@ export const match: {
 
 /** @internal */
 export const addDuration: {
-  (duration: Duration.DurationInput): <A extends DateTime.DateTime>(self: A) => DateTime.DateTime.PreserveZone<A>
-  <A extends DateTime.DateTime>(self: A, duration: Duration.DurationInput): DateTime.DateTime.PreserveZone<A>
+  (duration: Duration.DurationInput): <A extends DateTime.DateTime>(self: A) => A
+  <A extends DateTime.DateTime>(self: A, duration: Duration.DurationInput): A
 } = dual(
   2,
   (self: DateTime.DateTime, duration: Duration.DurationInput): DateTime.DateTime =>
@@ -777,8 +808,8 @@ export const addDuration: {
 
 /** @internal */
 export const subtractDuration: {
-  (duration: Duration.DurationInput): <A extends DateTime.DateTime>(self: A) => DateTime.DateTime.PreserveZone<A>
-  <A extends DateTime.DateTime>(self: A, duration: Duration.DurationInput): DateTime.DateTime.PreserveZone<A>
+  (duration: Duration.DurationInput): <A extends DateTime.DateTime>(self: A) => A
+  <A extends DateTime.DateTime>(self: A, duration: Duration.DurationInput): A
 } = dual(
   2,
   (self: DateTime.DateTime, duration: Duration.DurationInput): DateTime.DateTime =>
@@ -793,11 +824,11 @@ const addMillis = (date: Date, amount: number): void => {
 export const add: {
   (
     parts: Partial<DateTime.DateTime.PartsForMath>
-  ): <A extends DateTime.DateTime>(self: A) => DateTime.DateTime.PreserveZone<A>
+  ): <A extends DateTime.DateTime>(self: A) => A
   <A extends DateTime.DateTime>(
     self: A,
     parts: Partial<DateTime.DateTime.PartsForMath>
-  ): DateTime.DateTime.PreserveZone<A>
+  ): A
 } = dual(
   2,
   (self: DateTime.DateTime, parts: Partial<DateTime.DateTime.PartsForMath>): DateTime.DateTime =>
@@ -846,11 +877,11 @@ export const add: {
 export const subtract: {
   (
     parts: Partial<DateTime.DateTime.PartsForMath>
-  ): <A extends DateTime.DateTime>(self: A) => DateTime.DateTime.PreserveZone<A>
+  ): <A extends DateTime.DateTime>(self: A) => A
   <A extends DateTime.DateTime>(
     self: A,
     parts: Partial<DateTime.DateTime.PartsForMath>
-  ): DateTime.DateTime.PreserveZone<A>
+  ): A
 } = dual(2, (self: DateTime.DateTime, parts: Partial<DateTime.DateTime.PartsForMath>): DateTime.DateTime => {
   const newParts = {} as Partial<Mutable<DateTime.DateTime.PartsForMath>>
   for (const key in parts) {
@@ -904,10 +935,10 @@ const startOfDate = (date: Date, part: DateTime.DateTime.UnitSingular, options?:
 export const startOf: {
   (part: DateTime.DateTime.UnitSingular, options?: {
     readonly weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6 | undefined
-  }): <A extends DateTime.DateTime>(self: A) => DateTime.DateTime.PreserveZone<A>
+  }): <A extends DateTime.DateTime>(self: A) => A
   <A extends DateTime.DateTime>(self: A, part: DateTime.DateTime.UnitSingular, options?: {
     readonly weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6 | undefined
-  }): DateTime.DateTime.PreserveZone<A>
+  }): A
 } = dual(isDateTimeArgs, (self: DateTime.DateTime, part: DateTime.DateTime.UnitSingular, options?: {
   readonly weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6 | undefined
 }): DateTime.DateTime => mutate(self, (date) => startOfDate(date, part, options)))
@@ -957,10 +988,10 @@ const endOfDate = (date: Date, part: DateTime.DateTime.UnitSingular, options?: {
 export const endOf: {
   (part: DateTime.DateTime.UnitSingular, options?: {
     readonly weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6 | undefined
-  }): <A extends DateTime.DateTime>(self: A) => DateTime.DateTime.PreserveZone<A>
+  }): <A extends DateTime.DateTime>(self: A) => A
   <A extends DateTime.DateTime>(self: A, part: DateTime.DateTime.UnitSingular, options?: {
     readonly weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6 | undefined
-  }): DateTime.DateTime.PreserveZone<A>
+  }): A
 } = dual(isDateTimeArgs, (self: DateTime.DateTime, part: DateTime.DateTime.UnitSingular, options?: {
   readonly weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6 | undefined
 }): DateTime.DateTime => mutate(self, (date) => endOfDate(date, part, options)))
@@ -969,10 +1000,10 @@ export const endOf: {
 export const nearest: {
   (part: DateTime.DateTime.UnitSingular, options?: {
     readonly weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6 | undefined
-  }): <A extends DateTime.DateTime>(self: A) => DateTime.DateTime.PreserveZone<A>
+  }): <A extends DateTime.DateTime>(self: A) => A
   <A extends DateTime.DateTime>(self: A, part: DateTime.DateTime.UnitSingular, options?: {
     readonly weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6 | undefined
-  }): DateTime.DateTime.PreserveZone<A>
+  }): A
 } = dual(isDateTimeArgs, (self: DateTime.DateTime, part: DateTime.DateTime.UnitSingular, options?: {
   readonly weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6 | undefined
 }): DateTime.DateTime =>
