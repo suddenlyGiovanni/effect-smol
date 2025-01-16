@@ -3,8 +3,8 @@
  */
 import type * as Cause from "./Cause.js"
 import * as core from "./internal/core.js"
+import { StructuralPrototype } from "./internal/core.js"
 import * as internal from "./internal/data.js"
-import { StructuralPrototype } from "./internal/effectable.js"
 import * as Predicate from "./Predicate.js"
 import type * as Types from "./Types.js"
 import type { Unify } from "./Unify.js"

@@ -7,7 +7,8 @@ import type * as Effect from "./Effect.js"
 import type * as Exit from "./Exit.js"
 import { dual } from "./Function.js"
 import * as core from "./internal/core.js"
-import { StructuralPrototype } from "./internal/effectable.js"
+import { StructuralPrototype } from "./internal/core.js"
+import * as internalEffect from "./internal/effect.js"
 import type * as Option from "./Option.js"
 import { hasProperty } from "./Predicate.js"
 import type * as Types from "./Types.js"
@@ -187,7 +188,7 @@ export const complete = dual<
     self: Entry<A>,
     result: Request.Result<A>
   ) => Effect.Effect<void>
->(2, (self, result) => core.sync(() => self.unsafeComplete(result)))
+>(2, (self, result) => internalEffect.sync(() => self.unsafeComplete(result)))
 
 /**
  * @since 2.0.0
@@ -202,7 +203,7 @@ export const completeEffect = dual<
     effect: Effect.Effect<Request.Success<A>, Request.Error<A>, R>
   ) => Effect.Effect<void, never, R>
 >(2, (self, effect) =>
-  core.matchEffect(effect, {
+  internalEffect.matchEffect(effect, {
     onFailure: (error) => complete(self, core.exitFail(error) as any),
     onSuccess: (value) => complete(self, core.exitSucceed(value) as any)
   }))

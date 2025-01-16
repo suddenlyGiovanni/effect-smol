@@ -5,6 +5,7 @@ import type * as Context from "./Context.js"
 import type * as Effect from "./Effect.js"
 import { dual } from "./Function.js"
 import * as core from "./internal/core.js"
+import * as effect from "./internal/effect.js"
 import type * as Scope from "./Scope.js"
 
 /**
@@ -45,7 +46,7 @@ export interface CurrentConsole {
  * @since 4.0.0
  * @category references
  */
-export const CurrentConsole: Context.Reference<CurrentConsole, Console> = core.CurrentConsole
+export const CurrentConsole: Context.Reference<CurrentConsole, Console> = effect.CurrentConsole
 
 /**
  * @since 2.0.0
@@ -60,7 +61,7 @@ export const consoleWith = <A, E, R>(f: (console: Console) => Effect.Effect<A, E
  */
 export const assert = (condition: boolean, ...args: ReadonlyArray<any>): Effect.Effect<void> =>
   consoleWith((console) =>
-    core.sync(() => {
+    effect.sync(() => {
       console.assert(condition, ...args)
     })
   )
@@ -70,7 +71,7 @@ export const assert = (condition: boolean, ...args: ReadonlyArray<any>): Effect.
  * @category accessor
  */
 export const clear: Effect.Effect<void> = consoleWith((console) =>
-  core.sync(() => {
+  effect.sync(() => {
     console.clear()
   })
 )
@@ -81,7 +82,7 @@ export const clear: Effect.Effect<void> = consoleWith((console) =>
  */
 export const count = (label?: string): Effect.Effect<void> =>
   consoleWith((console) =>
-    core.sync(() => {
+    effect.sync(() => {
       console.count(label)
     })
   )
@@ -92,7 +93,7 @@ export const count = (label?: string): Effect.Effect<void> =>
  */
 export const countReset = (label?: string): Effect.Effect<void> =>
   consoleWith((console) =>
-    core.sync(() => {
+    effect.sync(() => {
       console.countReset(label)
     })
   )
@@ -103,7 +104,7 @@ export const countReset = (label?: string): Effect.Effect<void> =>
  */
 export const debug = (...args: ReadonlyArray<any>): Effect.Effect<void> =>
   consoleWith((console) =>
-    core.sync(() => {
+    effect.sync(() => {
       console.debug(...args)
     })
   )
@@ -114,7 +115,7 @@ export const debug = (...args: ReadonlyArray<any>): Effect.Effect<void> =>
  */
 export const dir = (item: any, options?: any): Effect.Effect<void> =>
   consoleWith((console) =>
-    core.sync(() => {
+    effect.sync(() => {
       console.dir(item, options)
     })
   )
@@ -125,7 +126,7 @@ export const dir = (item: any, options?: any): Effect.Effect<void> =>
  */
 export const dirxml = (...args: ReadonlyArray<any>): Effect.Effect<void> =>
   consoleWith((console) =>
-    core.sync(() => {
+    effect.sync(() => {
       console.dirxml(...args)
     })
   )
@@ -136,7 +137,7 @@ export const dirxml = (...args: ReadonlyArray<any>): Effect.Effect<void> =>
  */
 export const error = (...args: ReadonlyArray<any>): Effect.Effect<void> =>
   consoleWith((console) =>
-    core.sync(() => {
+    effect.sync(() => {
       console.error(...args)
     })
   )
@@ -149,8 +150,8 @@ export const group = (
   options?: { label?: string | undefined; collapsed?: boolean | undefined } | undefined
 ): Effect.Effect<void, never, Scope.Scope> =>
   consoleWith((console) =>
-    core.acquireRelease(
-      core.sync(() => {
+    effect.acquireRelease(
+      effect.sync(() => {
         if (options?.collapsed) {
           console.groupCollapsed(options.label)
         } else {
@@ -158,7 +159,7 @@ export const group = (
         }
       }),
       () =>
-        core.sync(() => {
+        effect.sync(() => {
           console.groupEnd()
         })
     )
@@ -170,7 +171,7 @@ export const group = (
  */
 export const info = (...args: ReadonlyArray<any>): Effect.Effect<void> =>
   consoleWith((console) =>
-    core.sync(() => {
+    effect.sync(() => {
       console.info(...args)
     })
   )
@@ -181,7 +182,7 @@ export const info = (...args: ReadonlyArray<any>): Effect.Effect<void> =>
  */
 export const log = (...args: ReadonlyArray<any>): Effect.Effect<void> =>
   consoleWith((console) =>
-    core.sync(() => {
+    effect.sync(() => {
       console.log(...args)
     })
   )
@@ -192,7 +193,7 @@ export const log = (...args: ReadonlyArray<any>): Effect.Effect<void> =>
  */
 export const table = (tabularData: any, properties?: ReadonlyArray<string>): Effect.Effect<void> =>
   consoleWith((console) =>
-    core.sync(() => {
+    effect.sync(() => {
       console.table(tabularData, properties)
     })
   )
@@ -203,12 +204,12 @@ export const table = (tabularData: any, properties?: ReadonlyArray<string>): Eff
  */
 export const time = (label?: string | undefined): Effect.Effect<void, never, Scope.Scope> =>
   consoleWith((console) =>
-    core.acquireRelease(
-      core.sync(() => {
+    effect.acquireRelease(
+      effect.sync(() => {
         console.time(label)
       }),
       () =>
-        core.sync(() => {
+        effect.sync(() => {
           console.timeEnd(label)
         })
     )
@@ -220,7 +221,7 @@ export const time = (label?: string | undefined): Effect.Effect<void, never, Sco
  */
 export const timeLog = (label?: string, ...args: ReadonlyArray<any>): Effect.Effect<void> =>
   consoleWith((console) =>
-    core.sync(() => {
+    effect.sync(() => {
       console.timeLog(label, ...args)
     })
   )
@@ -231,7 +232,7 @@ export const timeLog = (label?: string, ...args: ReadonlyArray<any>): Effect.Eff
  */
 export const trace = (...args: ReadonlyArray<any>): Effect.Effect<void> =>
   consoleWith((console) =>
-    core.sync(() => {
+    effect.sync(() => {
       console.trace(...args)
     })
   )
@@ -242,7 +243,7 @@ export const trace = (...args: ReadonlyArray<any>): Effect.Effect<void> =>
  */
 export const warn = (...args: ReadonlyArray<any>): Effect.Effect<void> =>
   consoleWith((console) =>
-    core.sync(() => {
+    effect.sync(() => {
       console.warn(...args)
     })
   )
@@ -267,8 +268,8 @@ export const withGroup = dual<
   ) => Effect.Effect<A, E, R>
 >((args) => core.isEffect(args[0]), (self, options) =>
   consoleWith((console) =>
-    core.acquireUseRelease(
-      core.sync(() => {
+    effect.acquireUseRelease(
+      effect.sync(() => {
         if (options?.collapsed) {
           console.groupCollapsed(options.label)
         } else {
@@ -277,7 +278,7 @@ export const withGroup = dual<
       }),
       () => self,
       () =>
-        core.sync(() => {
+        effect.sync(() => {
           console.groupEnd()
         })
     )
@@ -292,13 +293,13 @@ export const withTime = dual<
   <A, E, R>(self: Effect.Effect<A, E, R>, label?: string) => Effect.Effect<A, E, R>
 >((args) => core.isEffect(args[0]), (self, label) =>
   consoleWith((console) =>
-    core.acquireUseRelease(
-      core.sync(() => {
+    effect.acquireUseRelease(
+      effect.sync(() => {
         console.time(label)
       }),
       () => self,
       () =>
-        core.sync(() => {
+        effect.sync(() => {
           console.timeEnd(label)
         })
     )
