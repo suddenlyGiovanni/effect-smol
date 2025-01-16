@@ -95,9 +95,20 @@ describe.concurrent("Effect", () => {
         Effect.tap((error) => assert.ok(error instanceof Cause.NoSuchElementError)),
         Effect.runPromise
       ))
+
+    it.effect("yieldable", () =>
+      Effect.gen(function*() {
+        const result = yield* Option.some("A")
+        assert.strictEqual(result, "A")
+
+        const error = yield* Effect.gen(function*() {
+          yield* Option.none()
+        }).pipe(Effect.flip)
+        assert.deepStrictEqual(error, new Cause.NoSuchElementError())
+      }))
   })
 
-  describe("fromEither", () => {
+  describe("Either.asEffect", () => {
     it("from a right", () =>
       Either.right("A").asEffect().pipe(
         Effect.tap((_) => Effect.sync(() => assert.strictEqual(_, "A"))),
@@ -110,6 +121,17 @@ describe.concurrent("Effect", () => {
         Effect.tap((error) => Effect.sync(() => assert.strictEqual(error, "error"))),
         Effect.runPromise
       ))
+
+    it.effect("yieldable", () =>
+      Effect.gen(function*() {
+        const result = yield* Either.right("A")
+        assert.strictEqual(result, "A")
+
+        const error = yield* Effect.gen(function*() {
+          yield* Either.left("error")
+        }).pipe(Effect.flip)
+        assert.strictEqual(error, "error")
+      }))
   })
 
   describe("gen", () => {
