@@ -3000,9 +3000,13 @@ export const forkIn: {
       const fiber = unsafeFork(parent, self, options?.startImmediately, true)
       if (!(fiber as FiberImpl<any, any>)._exit) {
         const scopeImpl = scope as ScopeImpl
-        const finalizer = () => withFiberId((interruptor) => interruptor === fiber.id ? void_ : fiberInterrupt(fiber))
-        scopeImpl.unsafeAddFinalizer(finalizer)
-        fiber.addObserver(() => scopeImpl.unsafeRemoveFinalizer(finalizer))
+        if (scopeImpl.state._tag === "Open") {
+          const finalizer = () => withFiberId((interruptor) => interruptor === fiber.id ? void_ : fiberInterrupt(fiber))
+          scopeImpl.unsafeAddFinalizer(finalizer)
+          fiber.addObserver(() => scopeImpl.unsafeRemoveFinalizer(finalizer))
+        } else {
+          fiber.unsafeInterrupt(parent.id)
+        }
       }
       return succeed(fiber)
     })
