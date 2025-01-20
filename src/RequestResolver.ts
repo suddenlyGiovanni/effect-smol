@@ -8,6 +8,7 @@ import type { Effect } from "./Effect.js"
 import { constTrue, dual, identity } from "./Function.js"
 import { exitFail, exitSucceed } from "./internal/core.js"
 import * as effect from "./internal/effect.js"
+import * as MutableHashMap from "./MutableHashMap.js"
 import { type Pipeable, pipeArguments } from "./Pipeable.js"
 import { hasProperty } from "./Predicate.js"
 import * as Request from "./Request.js"
@@ -110,8 +111,7 @@ const makeProto = <A>(options: {
 }
 
 /**
- * Constructs a data source with the specified identifier and method to run
- * requests.
+ * Constructs a request resolver with the specified method to run requests.
  *
  * @since 2.0.0
  * @category constructors
@@ -121,7 +121,36 @@ export const make = <A>(
 ): RequestResolver<A> => makeProto({ delay: effect.yieldNow, collectWhile: constTrue, runAll })
 
 /**
- * Constructs a data source from a pure function.
+ * Constructs a request resolver with the requests grouped by a calculated key.
+ *
+ * The key can use the Equal trait to determine if two keys are equal.
+ *
+ * @since 4.0.0
+ * @category constructors
+ */
+export const makeGrouped = <A, K>(options: {
+  readonly key: (entry: Request.Entry<A>) => K
+  readonly resolver: (entries: NonEmptyArray<Request.Entry<A>>, key: K) => Effect<void>
+}): RequestResolver<A> =>
+  make((entries) => {
+    const groups = MutableHashMap.empty<K, NonEmptyArray<Request.Entry<A>>>()
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i]
+      const key = options.key(entry)
+      const group = MutableHashMap.get(groups, key)
+      if (group._tag === "None") {
+        MutableHashMap.set(groups, key, [entry])
+      } else {
+        group.value.push(entry)
+      }
+    }
+    return effect.forEach(groups, ([key, entries]) => options.resolver(entries, key), {
+      discard: true
+    })
+  })
+
+/**
+ * Constructs a request resolver from a pure function.
  *
  * @since 2.0.0
  * @category constructors
@@ -140,7 +169,7 @@ export const fromFunction = <A extends Request.Request<any>>(
   )
 
 /**
- * Constructs a data source from a pure function that takes a list of requests
+ * Constructs a request resolver from a pure function that takes a list of requests
  * and returns a list of results of the same size. Each item in the result
  * list must correspond to the item at the same index in the request list.
  *
@@ -162,7 +191,7 @@ export const fromFunctionBatched = <A extends Request.Request<any>>(
   )
 
 /**
- * Constructs a data source from an effectual function.
+ * Constructs a request resolver from an effectual function.
  *
  * @since 2.0.0
  * @category constructors
@@ -178,7 +207,7 @@ export const fromEffect = <A extends Request.Request<any>>(
   )
 
 /**
- * Constructs a data source from a list of tags paired to functions, that takes
+ * Constructs a request resolver from a list of tags paired to functions, that takes
  * a list of requests and returns a list of results of the same size. Each item
  * in the result list must correspond to the item at the same index in the
  * request list.
@@ -200,29 +229,28 @@ export const fromEffectTagged = <A extends Request.Request<any, any, any> & { re
 ): RequestResolver<A> =>
   make<A>(
     (entries): Effect<void> => {
-      const grouped: Record<string, Array<Request.Entry<A>>> = {}
-      const tags: Array<A["_tag"]> = []
+      const grouped = new Map<A["_tag"], Array<Request.Entry<A>>>()
       for (let i = 0, len = entries.length; i < len; i++) {
-        if (tags.includes(entries[i].request._tag)) {
-          grouped[entries[i].request._tag].push(entries[i])
+        const group = grouped.get(entries[i].request._tag)
+        if (group) {
+          group.push(entries[i])
         } else {
-          grouped[entries[i].request._tag] = [entries[i]]
-          tags.push(entries[i].request._tag)
+          grouped.set(entries[i].request._tag, [entries[i]])
         }
       }
       return effect.forEach(
-        tags,
-        (tag) =>
-          effect.matchCause((fns[tag] as any)(grouped[tag]) as Effect<Array<any>, unknown, unknown>, {
+        grouped,
+        ([tag, requests]) =>
+          effect.matchCause((fns[tag] as any)(requests) as Effect<Array<any>, unknown, unknown>, {
             onFailure: (cause) => {
-              for (let i = 0; i < grouped[tag].length; i++) {
-                const entry = grouped[tag][i]
+              for (let i = 0; i < requests.length; i++) {
+                const entry = requests[i]
                 entry.unsafeComplete(exitFail(cause) as any)
               }
             },
             onSuccess: (res) => {
               for (let i = 0; i < res.length; i++) {
-                const entry = grouped[tag][i]
+                const entry = requests[i]
                 entry.unsafeComplete(exitSucceed(res[i]) as any)
               }
             }
@@ -233,7 +261,7 @@ export const fromEffectTagged = <A extends Request.Request<any, any, any> & { re
   ) as any
 
 /**
- * Sets the batch delay effect for this data source.
+ * Sets the batch delay effect for this request resolver.
  *
  * @since 4.0.0
  * @category delay
@@ -248,7 +276,7 @@ export const setDelayEffect: {
   }))
 
 /**
- * Sets the batch delay window for this data source to the specified duration.
+ * Sets the batch delay window for this request resolver to the specified duration.
  *
  * @since 4.0.0
  * @category delay
@@ -263,7 +291,7 @@ export const setDelay: {
   }))
 
 /**
- * A data source aspect that executes requests between two effects, `before`
+ * A request resolver aspect that executes requests between two effects, `before`
  * and `after`, where the result of `before` can be used by `after`.
  *
  * @since 2.0.0
@@ -295,7 +323,7 @@ export const around: {
   }))
 
 /**
- * A data source that never executes requests.
+ * A request resolver that never executes requests.
  *
  * @since 2.0.0
  * @category constructors
@@ -303,7 +331,7 @@ export const around: {
 export const never: RequestResolver<never> = make(() => effect.never)
 
 /**
- * Returns a data source that executes at most `n` requests in parallel.
+ * Returns a request resolver that executes at most `n` requests in parallel.
  *
  * @since 2.0.0
  * @category combinators
@@ -318,11 +346,27 @@ export const batchN: {
   }))
 
 /**
- * Returns a new data source that executes requests by sending them to this
- * data source and that data source, returning the results from the first data
+ * Transform a request resolver by grouping requests using the specified key
+ * function.
+ *
+ * @since 4.0.0
+ * @category combinators
+ */
+export const grouped: {
+  <A, K>(f: (entry: Request.Entry<A>) => K): (self: RequestResolver<A>) => RequestResolver<A>
+  <A, K>(self: RequestResolver<A>, f: (entry: Request.Entry<A>) => K): RequestResolver<A>
+} = dual(2, <A, K>(self: RequestResolver<A>, f: (entry: Request.Entry<A>) => K): RequestResolver<A> =>
+  makeGrouped({
+    key: f,
+    resolver: self.runAll
+  }))
+
+/**
+ * Returns a new request resolver that executes requests by sending them to this
+ * request resolver and that request resolver, returning the results from the first data
  * source to complete and safely interrupting the loser.
  *
- * The batch delay is determined by the first data source.
+ * The batch delay is determined by the first request resolver.
  *
  * @since 2.0.0
  * @category combinators
@@ -377,6 +421,13 @@ export const withSpan: {
           seen.add(span.value)
           links.push({ span: span.value, attributes: {} })
         }
-        return effect.withSpan(self.runAll(entries), name, { ...options, links })
+        return effect.withSpan(self.runAll(entries), name, {
+          ...options,
+          links,
+          attributes: {
+            batchSize: entries.length,
+            ...options?.attributes
+          }
+        })
       })
   }))
