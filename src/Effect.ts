@@ -5,6 +5,7 @@ import type * as Arr from "./Array.js"
 import type { Cause, Failure, NoSuchElementError, TimeoutError } from "./Cause.js"
 import type { Context, Reference, Tag } from "./Context.js"
 import type { DurationInput } from "./Duration.js"
+import type { Either } from "./Either.js"
 import type { Exit } from "./Exit.js"
 import type { Fiber } from "./Fiber.js"
 import { dual, type LazyArg } from "./Function.js"
@@ -16,7 +17,7 @@ import * as internalRequest from "./internal/request.js"
 import * as internalSchedule from "./internal/schedule.js"
 import type { Layer } from "./Layer.js"
 import type { Logger } from "./Logger.js"
-import type * as Option from "./Option.js"
+import type { Option } from "./Option.js"
 import type { Pipeable } from "./Pipeable.js"
 import { type Predicate, type Refinement } from "./Predicate.js"
 import { CurrentLogAnnotations, CurrentLogSpans } from "./References.js"
@@ -673,7 +674,7 @@ export const succeed: <A>(value: A) => Effect<A> = internal.succeed
  * @since 2.0.0
  * @category Creating Effects
  */
-export const succeedNone: Effect<Option.Option<never>> = internal.succeedNone
+export const succeedNone: Effect<Option<never>> = internal.succeedNone
 
 /**
  * Returns an effect which succeeds with the value wrapped in a `Some`.
@@ -681,7 +682,7 @@ export const succeedNone: Effect<Option.Option<never>> = internal.succeedNone
  * @since 2.0.0
  * @category Creating Effects
  */
-export const succeedSome: <A>(value: A) => Effect<Option.Option<A>> = internal.succeedSome
+export const succeedSome: <A>(value: A) => Effect<Option<A>> = internal.succeedSome
 
 /**
  * Delays the creation of an `Effect` until it is actually needed.
@@ -1202,6 +1203,30 @@ export const withFiber: <A, E = never, R = never>(
 export const withFiberUnknown: <A, E, R>(
   evaluate: (fiber: Fiber<unknown, unknown>) => Effect<A, E, R>
 ) => Effect<A, E, R> = core.withFiberUnknown
+
+// -----------------------------------------------------------------------------
+// Conversions
+// -----------------------------------------------------------------------------
+
+/**
+ * @since 4.0.0
+ * @category Conversions
+ */
+export const fromEither: <A, E>(
+  either: Either<A, E>
+) => Effect<A, E> = internal.fromEither
+
+/**
+ * @since 4.0.0
+ * @category Conversions
+ */
+export const fromOption: <A>(option: Option<A>) => Effect<A, NoSuchElementError> = internal.fromOption
+
+/**
+ * @since 4.0.0
+ * @category Conversions
+ */
+export const fromYieldable: <A, E, R>(yieldable: Yieldable<A, E, R>) => Effect<A, E, R> = internal.fromYieldable
 
 // -----------------------------------------------------------------------------
 // Mapping
@@ -2782,8 +2807,8 @@ export const timeout: {
  * @category delays & timeouts
  */
 export const timeoutOption: {
-  (duration: DurationInput): <A, E, R>(self: Effect<A, E, R>) => Effect<Option.Option<A>, E, R>
-  <A, E, R>(self: Effect<A, E, R>, duration: DurationInput): Effect<Option.Option<A>, E, R>
+  (duration: DurationInput): <A, E, R>(self: Effect<A, E, R>) => Effect<Option<A>, E, R>
+  <A, E, R>(self: Effect<A, E, R>, duration: DurationInput): Effect<Option<A>, E, R>
 } = internal.timeoutOption
 
 /**
@@ -3048,7 +3073,7 @@ export const filter: <A, E, R>(
  *
  * const validateWeightOption = (
  *   weight: number
- * ): Effect.Effect<Option.Option<number>> =>
+ * ): Effect.Effect<Option<number>> =>
  *   // Conditionally execute the effect if the weight is non-negative
  *   Effect.succeed(weight).pipe(Effect.when(() => weight >= 0))
  *
@@ -3076,11 +3101,11 @@ export const filter: <A, E, R>(
 export const when: {
   <E2 = never, R2 = never>(
     condition: LazyArg<boolean> | Effect<boolean, E2, R2>
-  ): <A, E, R>(self: Effect<A, E, R>) => Effect<Option.Option<A>, E | E2, R | R2>
+  ): <A, E, R>(self: Effect<A, E, R>) => Effect<Option<A>, E | E2, R | R2>
   <A, E, R, E2 = never, R2 = never>(
     self: Effect<A, E, R>,
     condition: LazyArg<boolean> | Effect<boolean, E2, R2>
-  ): Effect<Option.Option<A>, E | E2, R | R2>
+  ): Effect<Option<A>, E | E2, R | R2>
 } = internal.when
 
 // -----------------------------------------------------------------------------
@@ -3415,10 +3440,19 @@ export const provideContext: {
 } = internal.provideContext
 
 /**
+ * @since 4.0.0
+ * @category Context
+ */
+export const service: {
+  <I, S>(tag: Reference<I, S>): Effect<S>
+  <I, S>(tag: Tag<I, S>): Effect<S, never, I>
+} = internal.service
+
+/**
  * @since 2.0.0
  * @category Context
  */
-export const serviceOption: <I, S>(tag: Tag<I, S>) => Effect<Option.Option<S>> = internal.serviceOption
+export const serviceOption: <I, S>(tag: Tag<I, S>) => Effect<Option<S>> = internal.serviceOption
 
 /**
  * Updates the service with the required service entry.
@@ -3948,7 +3982,7 @@ export interface Semaphore {
   /** only if the given permits are available, run the effect and release the permits when finished */
   withPermitsIfAvailable(
     permits: number
-  ): <A, E, R>(self: Effect<A, E, R>) => Effect<Option.Option<A>, E, R>
+  ): <A, E, R>(self: Effect<A, E, R>) => Effect<Option<A>, E, R>
   /** take the given amount of permits, suspending if they are not yet available */
   take(permits: number): Effect<number>
   /** release the given amount of permits, and return the resulting available permits */
@@ -4209,12 +4243,12 @@ export const repeat: {
 export const repeatOrElse: {
   <R2, A, B, E, E2, E3, R3>(
     schedule: Schedule<B, A, E2, R2>,
-    orElse: (error: E | E2, option: Option.Option<B>) => Effect<B, E3, R3>
+    orElse: (error: E | E2, option: Option<B>) => Effect<B, E3, R3>
   ): <R>(self: Effect<A, E, R>) => Effect<B, E3, R | R2 | R3>
   <A, E, R, R2, B, E2, E3, R3>(
     self: Effect<A, E, R>,
     schedule: Schedule<B, A, E2, R2>,
-    orElse: (error: E | E2, option: Option.Option<B>) => Effect<B, E3, R3>
+    orElse: (error: E | E2, option: Option<B>) => Effect<B, E3, R3>
   ): Effect<B, E3, R | R2 | R3>
 } = internalSchedule.repeatOrElse
 

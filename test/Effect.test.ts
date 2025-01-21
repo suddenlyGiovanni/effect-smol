@@ -108,9 +108,10 @@ describe.concurrent("Effect", () => {
       }))
   })
 
-  describe("Either.asEffect", () => {
+  describe("fromEither", () => {
     it("from a right", () =>
-      Either.right("A").asEffect().pipe(
+      Either.right("A").pipe(
+        Effect.fromEither,
         Effect.tap((_) => Effect.sync(() => assert.strictEqual(_, "A"))),
         Effect.runPromise
       ))

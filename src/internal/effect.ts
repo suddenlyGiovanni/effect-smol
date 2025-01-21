@@ -508,6 +508,16 @@ export const suspend: <A, E, R>(
 })
 
 /** @internal */
+export const fromYieldable = <A, E, R>(yieldable: Effect.Yieldable<A, E, R>): Effect.Effect<A, E, R> =>
+  yieldable.asEffect()
+
+/** @internal */
+export const fromOption: <A>(option: Option.Option<A>) => Effect.Effect<A, Cause.NoSuchElementError> = fromYieldable
+
+/** @internal */
+export const fromEither: <A, E>(either: Either.Either<A, E>) => Effect.Effect<A, E> = fromYieldable
+
+/** @internal */
 export const yieldNowWith: (priority?: number) => Effect.Effect<void> = makePrimitive({
   op: "Yield",
   eval(fiber) {
@@ -1210,6 +1220,12 @@ export const exitAsVoidAll = <I extends Iterable<Exit.Exit<any, any>>>(
 // ----------------------------------------------------------------------------
 // environment
 // ----------------------------------------------------------------------------
+
+/** @internal */
+export const service: {
+  <I, S>(tag: Context.Reference<I, S>): Effect.Effect<S>
+  <I, S>(tag: Context.Tag<I, S>): Effect.Effect<S, never, I>
+} = fromYieldable as any
 
 /** @internal */
 export const serviceOption = <I, S>(
