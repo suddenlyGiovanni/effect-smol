@@ -439,6 +439,41 @@ export const fiberAwait = <A, E>(
 }
 
 /** @internal */
+export const fiberAwaitAll = <Fiber extends Fiber.Fiber<any, any>>(
+  self: Iterable<Fiber>
+): Effect.Effect<
+  Array<
+    Exit.Exit<
+      Fiber extends Fiber.Fiber<infer _A, infer _E> ? _A : never,
+      Fiber extends Fiber.Fiber<infer _A, infer _E> ? _E : never
+    >
+  >
+> =>
+  async((resume) => {
+    const fibers = Arr.fromIterable(self) as any as Array<FiberImpl<any, any>>
+    const exits = new Array<Exit.Exit<any, any>>(fibers.length)
+    const cancels: Array<() => void> = []
+    let done = 0
+    function onExit(i: number, exit: Exit.Exit<any, any>) {
+      exits[i] = exit
+      done++
+      if (done === fibers.length) {
+        resume(succeed(exits))
+      }
+    }
+    for (let i = 0; i < fibers.length; i++) {
+      if (fibers[i]._exit) {
+        onExit(i, fibers[i]._exit!)
+      } else {
+        cancels.push(fibers[i].addObserver((exit) => onExit(i, exit)))
+      }
+    }
+    return sync(() => {
+      for (const cancel of cancels) cancel()
+    })
+  })
+
+/** @internal */
 export const fiberJoin = <A, E>(self: Fiber.Fiber<A, E>): Effect.Effect<A, E> => flatten(fiberAwait(self))
 
 /** @internal */
@@ -1209,12 +1244,14 @@ export const exitAsVoidAll = <I extends Iterable<Exit.Exit<any, any>>>(
   void,
   I extends Iterable<Exit.Exit<infer _A, infer _E>> ? _E : never
 > => {
+  const failures: Array<Cause.Failure<any>> = []
   for (const exit of exits) {
     if (exit._tag === "Failure") {
-      return exit
+      // eslint-disable-next-line no-restricted-syntax
+      failures.push(...exit.cause.failures)
     }
   }
-  return exitVoid
+  return failures.length === 0 ? exitVoid : exitFailCause(causeFromFailures(failures))
 }
 
 // ----------------------------------------------------------------------------
@@ -1345,7 +1382,16 @@ export const provideService: {
 )
 
 /** @internal */
-export const makeProvideService = <I, S>(tag: Context.Tag<I, S>): {
+export const makeProvideService: {
+  <S>(tag: Context.Reference<S>): {
+    (value: S): <A, E, R>(self: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
+    <A, E, R>(self: Effect.Effect<A, E, R>, value: S): Effect.Effect<A, E, R>
+  }
+  <I, S>(tag: Context.Tag<I, S>): {
+    (value: S): <A, E, R>(self: Effect.Effect<A, E, R>) => Effect.Effect<A, E, Exclude<R, I>>
+    <A, E, R>(self: Effect.Effect<A, E, R>, value: S): Effect.Effect<A, E, Exclude<R, I>>
+  }
+} = (<I, S>(tag: Context.Tag<I, S>): {
   (value: S): <A, E, R>(self: Effect.Effect<A, E, R>) => Effect.Effect<A, E, Exclude<R, I>>
   <A, E, R>(self: Effect.Effect<A, E, R>, value: S): Effect.Effect<A, E, Exclude<R, I>>
 } =>
@@ -1353,13 +1399,13 @@ export const makeProvideService = <I, S>(tag: Context.Tag<I, S>): {
     2,
     <A, E, R>(self: Effect.Effect<A, E, R>, value: S): Effect.Effect<A, E, Exclude<R, I>> =>
       provideService(self, tag, value)
-  )
+  )) as any
 
 /** @internal */
 export const provideServiceScoped = <I, S>(
   tag: Context.Tag<I, S>,
   service: S
-): Effect.Effect<void, never, Scope.Scope> =>
+): Effect.Effect<void> =>
   uninterruptible(withFiber((fiber) => {
     const scope = InternalContext.unsafeGet(fiber.context, scopeTag)
     const prev = InternalContext.getOption(fiber.context, tag)
@@ -2237,15 +2283,17 @@ export const ScopeTypeId: Scope.TypeId = Symbol.for(
   "effect/Scope"
 ) as Scope.TypeId
 
-export const scopeTag: Context.Tag<Scope.Scope, Scope.Scope> = InternalContext.makeGenericTag<Scope.Scope>(
-  "effect/Scope"
+export const scopeTag: Context.Reference<Scope.Scope> = InternalContext.GenericReference<Scope.Scope>(
+  "effect/Scope",
+  { defaultValue: () => scopeUnsafeMake() }
 )
 
-class ScopeImpl implements Scope.Scope.Closeable {
-  readonly [ScopeTypeId]: Scope.TypeId
-  state:
+const ScopeProto = {
+  [ScopeTypeId]: ScopeTypeId,
+  state: undefined as any as (
     | {
       readonly _tag: "Open"
+      readonly finalizerStrategy: "Sequential" | "Parallel"
       readonly finalizers: Set<
         (exit: Exit.Exit<any, any>) => Effect.Effect<void>
       >
@@ -2253,19 +2301,14 @@ class ScopeImpl implements Scope.Scope.Closeable {
     | {
       readonly _tag: "Closed"
       readonly exit: Exit.Exit<any, any>
-    } = { _tag: "Open", finalizers: new Set() }
-
-  constructor() {
-    this[ScopeTypeId] = ScopeTypeId
-  }
-
-  unsafeAddFinalizer(
-    finalizer: (exit: Exit.Exit<any, any>) => Effect.Effect<void>
-  ): void {
+    }
+  ),
+  unsafeAddFinalizer(finalizer: (exit: Exit.Exit<any, any>) => Effect.Effect<void>): void {
     if (this.state._tag === "Open") {
       this.state.finalizers.add(finalizer)
     }
-  }
+  },
+
   addFinalizer(
     finalizer: (exit: Exit.Exit<any, any>) => Effect.Effect<void>
   ): Effect.Effect<void> {
@@ -2276,35 +2319,41 @@ class ScopeImpl implements Scope.Scope.Closeable {
       }
       return finalizer(this.state.exit)
     })
-  }
+  },
   unsafeRemoveFinalizer(
     finalizer: (exit: Exit.Exit<any, any>) => Effect.Effect<void>
   ): void {
     if (this.state._tag === "Open") {
       this.state.finalizers.delete(finalizer)
     }
-  }
-  close(microExit: Exit.Exit<any, any>): Effect.Effect<void> {
-    return suspend(() => {
-      if (this.state._tag === "Open") {
-        const finalizers = this.state.finalizers
-        this.state = { _tag: "Closed", exit: microExit }
-        if (finalizers.size === 0) {
-          return void_
-        } else if (finalizers.size === 1) {
-          return asVoid(finalizers.values().next().value!(microExit))
-        }
-        return flatMap(
-          forEach(Array.from(finalizers).reverse(), (finalizer) => exit(finalizer(microExit))),
-          exitAsVoidAll
-        )
+  },
+  close: fnUntraced(function*(this: Scope.Scope.Closeable, microExit: Exit.Exit<any, any>) {
+    if (this.state._tag === "Closed") return
+    const { finalizerStrategy, finalizers } = this.state
+    this.state = { _tag: "Closed", exit: microExit }
+    if (finalizers.size === 0) {
+      return
+    } else if (finalizers.size === 1) {
+      yield* finalizers.values().next().value!(microExit)
+      return
+    }
+    let exits: Array<Exit.Exit<any, any>> = []
+    const fibers: Array<Fiber.Fiber<any, any>> = []
+    for (const finalizer of Array.from(finalizers).reverse()) {
+      if (finalizerStrategy === "sequential") {
+        exits.push(yield* exit(finalizer(microExit)))
+      } else {
+        fibers.push(unsafeFork(getCurrentFiberOrUndefined() as any, finalizer(microExit), true, true))
       }
-      return void_
-    })
-  }
+    }
+    if (fibers.length > 0) {
+      exits = yield* fiberAwaitAll(fibers)
+    }
+    return yield* exitAsVoidAll(exits)
+  }),
   get fork() {
     return sync(() => {
-      const newScope = new ScopeImpl()
+      const newScope = scopeUnsafeMake()
       if (this.state._tag === "Closed") {
         newScope.state = this.state
         return newScope
@@ -2320,40 +2369,35 @@ class ScopeImpl implements Scope.Scope.Closeable {
 }
 
 /** @internal */
-export const scopeMake: Effect.Effect<Scope.Scope.Closeable> = sync(
-  () => new ScopeImpl()
-)
+export const scopeUnsafeMake = (finalizerStrategy: "sequential" | "parallel" = "sequential"): Scope.Scope.Closeable => {
+  const self = Object.create(ScopeProto)
+  self.state = { _tag: "Open", finalizers: new Set(), finalizerStrategy }
+  return self
+}
 
 /** @internal */
-export const scopeUnsafeMake = (): Scope.Scope.Closeable => new ScopeImpl()
+export const scopeMake = (finalizerStrategy?: "sequential" | "parallel"): Effect.Effect<Scope.Scope.Closeable> =>
+  sync(() => scopeUnsafeMake(finalizerStrategy))
 
 /** @internal */
-export const scope: Effect.Effect<Scope.Scope, never, Scope.Scope> = scopeTag.asEffect()
+export const scope: Effect.Effect<Scope.Scope> = scopeTag.asEffect()
 
 /** @internal */
 export const provideScope: {
-  (
-    scope: Scope.Scope
-  ): <A, E, R>(
-    self: Effect.Effect<A, E, R>
-  ) => Effect.Effect<A, E, Exclude<R, Scope.Scope>>
-  <A, E, R>(
-    self: Effect.Effect<A, E, R>,
-    scope: Scope.Scope
-  ): Effect.Effect<A, E, Exclude<R, Scope.Scope>>
+  (value: Scope.Scope): <A, E, R>(self: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
+  <A, E, R>(self: Effect.Effect<A, E, R>, value: Scope.Scope): Effect.Effect<A, E, R>
 } = makeProvideService(scopeTag)
 
 /** @internal */
-export const scoped = <A, E, R>(
-  self: Effect.Effect<A, E, R>
-): Effect.Effect<A, E, Exclude<R, Scope.Scope>> => scopedWith((scope) => provideScope(self, scope))
+export const scoped = <A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+  scopedWith((scope) => provideScope(self, scope))
 
 /** @internal */
 export const scopedWith = <A, E, R>(
   f: (scope: Scope.Scope) => Effect.Effect<A, E, R>
 ): Effect.Effect<A, E, R> =>
   suspend(() => {
-    const scope = new ScopeImpl()
+    const scope = scopeUnsafeMake()
     return onExit(f(scope), (exit) => scope.close(exit))
   })
 
@@ -2361,7 +2405,7 @@ export const scopedWith = <A, E, R>(
 export const acquireRelease = <A, E, R>(
   acquire: Effect.Effect<A, E, R>,
   release: (a: A, exit: Exit.Exit<unknown, unknown>) => Effect.Effect<unknown>
-): Effect.Effect<A, E, R | Scope.Scope> =>
+): Effect.Effect<A, E, R> =>
   uninterruptible(
     flatMap(scope, (scope) => tap(acquire, (a) => scope.addFinalizer((exit) => release(a, exit))))
   )
@@ -2369,7 +2413,7 @@ export const acquireRelease = <A, E, R>(
 /** @internal */
 export const addFinalizer = (
   finalizer: (exit: Exit.Exit<unknown, unknown>) => Effect.Effect<void>
-): Effect.Effect<void, never, Scope.Scope> => flatMap(scope, (scope) => scope.addFinalizer(finalizer))
+): Effect.Effect<void> => flatMap(scope, (scope) => scope.addFinalizer(finalizer))
 
 /** @internal */
 export const onExit: {
@@ -2722,6 +2766,10 @@ export const forEach: {
       ? Number.POSITIVE_INFINITY
       : Math.max(1, concurrencyOption)
 
+    if (concurrency === 1) {
+      return forEachSequential(iterable, f, options)
+    }
+
     const items = Arr.fromIterable(iterable)
     let length = items.length
     if (length === 0) {
@@ -2733,16 +2781,6 @@ export const forEach: {
       : new Array(length)
     let index = 0
 
-    if (concurrency === 1) {
-      return as(
-        whileLoop({
-          while: () => index < items.length,
-          body: () => f(items[index], index),
-          step: out ? (b) => (out[index++] = b) : (_) => index++
-        }),
-        out as any
-      )
-    }
     return async((resume) => {
       const fibers = new Set<Fiber.Fiber<unknown, unknown>>()
       let result: Exit.Exit<any, any> | undefined = undefined
@@ -2798,6 +2836,31 @@ export const forEach: {
       })
     })
   }))
+
+const forEachSequential = <A, B, E, R>(
+  iterable: Iterable<A>,
+  f: (a: A, index: number) => Effect.Effect<B, E, R>,
+  options?: {
+    readonly discard?: boolean | undefined
+  }
+) =>
+  suspend(() => {
+    const out: Array<B> | undefined = options?.discard ? undefined : []
+    const iterator = iterable[Symbol.iterator]()
+    let state = iterator.next()
+    let index = 0
+    return as(
+      whileLoop({
+        while: () => !state.done,
+        body: () => f(state.value!, index++),
+        step: (b) => {
+          if (out) out.push(b)
+          state = iterator.next()
+        }
+      }),
+      out
+    )
+  })
 
 /** @internal */
 export const filter = <A, E, R>(
@@ -3005,11 +3068,10 @@ export const forkIn: {
     withFiber((parent) => {
       const fiber = unsafeFork(parent, self, options?.startImmediately, true)
       if (!(fiber as FiberImpl<any, any>)._exit) {
-        const scopeImpl = scope as ScopeImpl
-        if (scopeImpl.state._tag === "Open") {
+        if (scope.state._tag === "Open") {
           const finalizer = () => withFiberId((interruptor) => interruptor === fiber.id ? void_ : fiberInterrupt(fiber))
-          scopeImpl.unsafeAddFinalizer(finalizer)
-          fiber.addObserver(() => scopeImpl.unsafeRemoveFinalizer(finalizer))
+          scope.unsafeAddFinalizer(finalizer)
+          fiber.addObserver(() => scope.unsafeRemoveFinalizer(finalizer))
         } else {
           fiber.unsafeInterrupt(parent.id)
         }
@@ -3033,15 +3095,14 @@ export const forkScoped: {
     ]
   >(
     ...args: Args
-  ): [Args[0]] extends [Effect.Effect<infer _A, infer _E, infer _R>] ?
-    Effect.Effect<Fiber.Fiber<_A, _E>, never, _R | Scope.Scope>
-    : <A, E, R>(self: Effect.Effect<A, E, R>) => Effect.Effect<Fiber.Fiber<A, E>, never, R | Scope.Scope>
+  ): [Args[0]] extends [Effect.Effect<infer _A, infer _E, infer _R>] ? Effect.Effect<Fiber.Fiber<_A, _E>, never, _R>
+    : <A, E, R>(self: Effect.Effect<A, E, R>) => Effect.Effect<Fiber.Fiber<A, E>, never, R>
 } = dual((args) => isEffect(args[0]), <A, E, R>(
   self: Effect.Effect<A, E, R>,
   options?: {
     readonly startImmediately?: boolean
   }
-): Effect.Effect<Fiber.Fiber<A, E>, never, R | Scope.Scope> => flatMap(scope, (scope) => forkIn(self, scope, options)))
+): Effect.Effect<Fiber.Fiber<A, E>, never, R> => flatMap(scope, (scope) => forkIn(self, scope, options)))
 
 // ----------------------------------------------------------------------------
 // execution
@@ -3057,12 +3118,16 @@ export const runFork = <A, E>(
     }
     | undefined
 ): FiberImpl<A, E> => {
+  const scope = scopeUnsafeMake()
   const fiber = makeFiber<A, E>(
-    CurrentScheduler.context(
-      options?.scheduler ?? new Scheduler.MixedScheduler()
+    InternalContext.makeContext(
+      new Map<any, any>([
+        [CurrentScheduler.key, options?.scheduler ?? new Scheduler.MixedScheduler()],
+        [scopeTag.key, scope]
+      ])
     )
   )
-  fiber.evaluate(effect as any)
+  fiber.evaluate(onExit(effect, (exit) => scope.close(exit)) as any)
   if (options?.signal) {
     if (options.signal.aborted) {
       fiber.unsafeInterrupt()
@@ -3289,7 +3354,7 @@ export const withTracer: {
 })
 
 /* @internal */
-export const withTracerScoped = (tracer: Tracer.Tracer): Effect.Effect<void, never, Scope.Scope> => {
+export const withTracerScoped = (tracer: Tracer.Tracer): Effect.Effect<void> => {
   fiberMiddleware.tracerContext = tracerContextMiddleware
   return provideServiceScoped(Tracer.CurrentTracer, tracer)
 }
@@ -3413,7 +3478,7 @@ export const makeSpan = (
 export const makeSpanScoped = (
   name: string,
   options?: Tracer.SpanOptions | undefined
-): Effect.Effect<Tracer.Span, never, Scope.Scope> => {
+): Effect.Effect<Tracer.Span> => {
   options = addSpanStackTrace(options)
   return uninterruptible(
     withFiber((fiber) => {
@@ -3433,12 +3498,12 @@ export const withSpanScoped: {
   (
     name: string,
     options?: Tracer.SpanOptions
-  ): <A, E, R>(self: Effect.Effect<A, E, R>) => Effect.Effect<A, E, Scope.Scope | Exclude<R, Tracer.ParentSpan>>
+  ): <A, E, R>(self: Effect.Effect<A, E, R>) => Effect.Effect<A, E, Exclude<R, Tracer.ParentSpan>>
   <A, E, R>(
     self: Effect.Effect<A, E, R>,
     name: string,
     options?: Tracer.SpanOptions
-  ): Effect.Effect<A, E, Scope.Scope | Exclude<R, Tracer.ParentSpan>>
+  ): Effect.Effect<A, E, Exclude<R, Tracer.ParentSpan>>
 } = function() {
   const dataFirst = typeof arguments[0] !== "string"
   const name = dataFirst ? arguments[1] : arguments[0]
