@@ -21,15 +21,24 @@ export type TypeId = typeof TypeId
 
 /**
  * @since 2.0.0
+ * @category type ids
+ */
+export const CloseableScopeTypeId: unique symbol = effect.CloseableScopeTypeId
+
+/**
+ * @since 2.0.0
+ * @category type ids
+ */
+export type CloseableScopeTypeId = typeof CloseableScopeTypeId
+
+/**
+ * @since 2.0.0
  * @category models
  */
 export interface Scope {
   readonly [TypeId]: TypeId
-  state: Scope.State.Open | Scope.State.Closed
-  addFinalizer(finalizer: (exit: Exit<unknown, unknown>) => Effect<void>): Effect<void>
-  unsafeAddFinalizer(finalizer: (exit: Exit<any, any>) => Effect<void>): void
-  unsafeRemoveFinalizer(finalizer: (exit: Exit<any, any>) => Effect<void>): void
-  get fork(): Effect<Scope.Closeable>
+  readonly strategy: "sequential" | "parallel"
+  state: Scope.State.Open | Scope.State.Closed | Scope.State.Empty
 }
 
 /**
@@ -48,8 +57,8 @@ export declare namespace Scope {
      */
     export type Open = {
       readonly _tag: "Open"
-      readonly finalizerStrategy: "sequential" | "parallel"
       readonly finalizers: Set<(exit: Exit<any, any>) => Effect<void>>
+      readonly close: (exit: Exit<any, any>) => Effect<void>
     }
     /**
      * @since 2.0.0
@@ -59,13 +68,20 @@ export declare namespace Scope {
       readonly _tag: "Closed"
       readonly exit: Exit<any, any>
     }
+    /**
+     * @since 2.0.0
+     * @category models
+     */
+    export type Empty = {
+      readonly _tag: "Empty"
+    }
   }
   /**
    * @since 2.0.0
    * @category models
    */
   export interface Closeable extends Scope {
-    close(exit: Exit<any, any>): Effect<void>
+    readonly [CloseableScopeTypeId]: CloseableScopeTypeId
   }
 }
 
@@ -95,3 +111,47 @@ export const provide: {
   (value: Scope): <A, E, R>(self: Effect<A, E, R>) => Effect<A, E, R>
   <A, E, R>(self: Effect<A, E, R>, value: Scope): Effect<A, E, R>
 } = effect.provideScope
+
+/**
+ * @since 4.0.0
+ * @category combinators
+ */
+export const addFinalizer: (scope: Scope, finalizer: (exit: Exit<any, any>) => Effect<void>) => Effect<void> =
+  effect.scopeAddFinalizer
+
+/**
+ * @since 4.0.0
+ * @category combinators
+ */
+export const unsafeAddFinalizer: (scope: Scope, finalizer: (exit: Exit<any, any>) => Effect<void>) => void =
+  effect.scopeUnsafeAddFinalizer
+
+/**
+ * @since 4.0.0
+ * @category combinators
+ */
+export const unsafeRemoveFinalizer: (scope: Scope, finalizer: (exit: Exit<any, any>) => Effect<void>) => void =
+  effect.scopeUnsafeRemoveFinalizer
+
+/**
+ * @since 4.0.0
+ * @category combinators
+ */
+export const fork: (
+  scope: Scope,
+  finalizerStrategy?: "sequential" | "parallel"
+) => Effect<Scope.Closeable, never, never> = effect.scopeFork
+
+/**
+ * @since 4.0.0
+ * @category combinators
+ */
+export const unsafeFork: (scope: Scope, finalizerStrategy?: "sequential" | "parallel") => Scope.Closeable =
+  effect.scopeUnsafeFork
+
+/**
+ * @since 4.0.0
+ * @category combinators
+ */
+export const close: (scope: Scope.Closeable, microExit: Exit<any, any>) => Effect<void, never, never> =
+  effect.scopeClose
