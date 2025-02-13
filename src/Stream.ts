@@ -14,7 +14,7 @@ import type * as PubSub from "./PubSub.js"
 import * as Pull from "./Pull.js"
 import type * as Queue from "./Queue.js"
 import type * as Scope from "./Scope.js"
-import * as Sink from "./Sink.js"
+import type * as Sink from "./Sink.js"
 import type { Covariant } from "./Types.js"
 import type * as Unify from "./Unify.js"
 
@@ -51,6 +51,7 @@ export type StreamTypeId = typeof StreamTypeId
  * @category models
  */
 export interface Stream<out A, out E = never, out R = never> extends Stream.Variance<A, E, R>, Pipeable {
+  readonly channel: Channel.Channel<ReadonlyArray<A>, E, void, unknown, unknown, unknown, R>
   [Unify.typeSymbol]?: unknown
   [Unify.unifySymbol]?: StreamUnify<this>
   [Unify.ignoreSymbol]?: StreamUnifyIgnore
@@ -177,7 +178,7 @@ export const transformPull = <A, E, R, B, E2, R2, EX, RX>(
 ): Stream<B, EX | Pull.ExcludeHalt<E2>, R | R2 | RX> =>
   fromChannel(
     Channel.fromTransform((_, scope) =>
-      Effect.flatMap(Channel.toPullScoped(toChannel(self), scope), (pull) => f(pull, scope))
+      Effect.flatMap(Channel.toPullScoped(self.channel, scope), (pull) => f(pull, scope))
     )
   )
 
@@ -189,7 +190,7 @@ export const transformPull = <A, E, R, B, E2, R2, EX, RX>(
  */
 export const toChannel = <A, E, R>(
   stream: Stream<A, E, R>
-): Channel.Channel<ReadonlyArray<A>, E, void, unknown, unknown, unknown, R> => (stream as any).channel
+): Channel.Channel<ReadonlyArray<A>, E, void, unknown, unknown, unknown, R> => stream.channel
 
 const async_ = <A, E = never, R = never>(
   f: (queue: Queue.Queue<A, E>) => void | Effect.Effect<unknown, E, R>,
@@ -275,7 +276,7 @@ export const sync = <A>(evaluate: LazyArg<A>): Stream<A> => fromChannel(Channel.
  * @category constructors
  */
 export const suspend = <A, E, R>(stream: LazyArg<Stream<A, E, R>>): Stream<A, E, R> =>
-  fromChannel(Channel.suspend(() => toChannel(stream())))
+  fromChannel(Channel.suspend(() => stream().channel))
 
 /**
  * Creates a stream from an iterator
@@ -488,7 +489,7 @@ export const map: {
   <A, E, R, B>(self: Stream<A, E, R>, f: (a: A) => B): Stream<B, E, R>
 } = dual(2, <A, E, R, B>(self: Stream<A, E, R>, f: (a: A) => B): Stream<B, E, R> =>
   fromChannel(Channel.map(
-    toChannel(self),
+    self.channel,
     Arr.map(f)
   )))
 
@@ -535,7 +536,7 @@ export const mapEffect: {
     readonly unordered?: boolean | undefined
   } | undefined
 ): Stream<A2, E | E2, R | R2> =>
-  toChannel(self).pipe(
+  self.channel.pipe(
     Channel.flattenArray,
     Channel.mapEffect(f, options),
     Channel.map(Arr.of),
@@ -589,7 +590,7 @@ export const tap: {
     readonly concurrency?: number | "unbounded" | undefined
   } | undefined
 ): Stream<A, E | E2, R | R2> =>
-  toChannel(self).pipe(
+  self.channel.pipe(
     Channel.tap(Effect.forEach(f, { discard: true }), options),
     fromChannel
   ))
@@ -625,9 +626,9 @@ export const flatMap: {
     readonly bufferSize?: number | undefined
   } | undefined
 ): Stream<A2, E | E2, R | R2> =>
-  toChannel(self).pipe(
+  self.channel.pipe(
     Channel.flattenArray,
-    Channel.flatMap((a) => toChannel(f(a)), options),
+    Channel.flatMap((a) => f(a).channel, options),
     fromChannel
   ))
 
@@ -889,7 +890,7 @@ export const drop: {
  * @category utils
  */
 export const chunks = <A, E, R>(self: Stream<A, E, R>): Stream<ReadonlyArray<A>, E, R> =>
-  toChannel(self).pipe(
+  self.channel.pipe(
     Channel.map(Arr.of),
     fromChannel
   )
@@ -912,8 +913,8 @@ export const run: {
   self: Stream<A, E, R>,
   sink: Sink.Sink<A2, A, L, E2, R2>
 ): Effect.Effect<A2, E | E2, R | R2> =>
-  toChannel(self).pipe(
-    Channel.pipeToOrFail(Sink.toChannel(sink)),
+  self.channel.pipe(
+    Channel.pipeToOrFail(sink.channel),
     Channel.runDrain
   ))
 
@@ -925,7 +926,7 @@ export const run: {
  */
 export const runCollect = <A, E, R>(self: Stream<A, E, R>): Effect.Effect<Array<A>, E, R> =>
   Channel.runFold(
-    toChannel(self),
+    self.channel,
     () => [] as Array<A>,
     (acc, chunk) => {
       for (let i = 0; i < chunk.length; i++) {
@@ -942,7 +943,7 @@ export const runCollect = <A, E, R>(self: Stream<A, E, R>): Effect.Effect<Array<
  * @category destructors
  */
 export const runCount = <A, E, R>(self: Stream<A, E, R>): Effect.Effect<number, E, R> =>
-  Channel.runFold(toChannel(self), () => 0, (acc, chunk) => acc + chunk.length)
+  Channel.runFold(self.channel, () => 0, (acc, chunk) => acc + chunk.length)
 
 /**
  * Consumes all elements of the stream, passing them to the specified
@@ -962,7 +963,7 @@ export const runForEach: {
 } = dual(2, <A, E, R, X, E2, R2>(
   self: Stream<A, E, R>,
   f: (a: A) => Effect.Effect<X, E2, R2>
-): Effect.Effect<void, E | E2, R | R2> => Channel.runForEach(toChannel(self), Effect.forEach(f, { discard: true })))
+): Effect.Effect<void, E | E2, R | R2> => Channel.runForEach(self.channel, Effect.forEach(f, { discard: true })))
 
 /**
  * Runs the stream only for its effects. The emitted elements are discarded.
@@ -970,7 +971,7 @@ export const runForEach: {
  * @since 2.0.0
  * @category destructors
  */
-export const runDrain = <A, E, R>(self: Stream<A, E, R>): Effect.Effect<void, E, R> => Channel.runDrain(toChannel(self))
+export const runDrain = <A, E, R>(self: Stream<A, E, R>): Effect.Effect<void, E, R> => Channel.runDrain(self.channel)
 
 /**
  * Returns in a scope an effect that can be used to repeatedly pull chunks
@@ -1011,4 +1012,4 @@ export const runDrain = <A, E, R>(self: Stream<A, E, R>): Effect.Effect<void, E,
  */
 export const toPull = <A, E, R>(
   self: Stream<A, E, R>
-): Effect.Effect<Pull.Pull<ReadonlyArray<A>, E>, never, R> => Channel.toPull(toChannel(self))
+): Effect.Effect<Pull.Pull<ReadonlyArray<A>, E>, never, R> => Channel.toPull(self.channel)

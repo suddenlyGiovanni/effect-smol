@@ -4635,12 +4635,12 @@ export const request: {
 export const fork: <
   Args extends
     | [
-      self: Effect<any, any, any>,
-      options?: {
-        readonly startImmediately?: boolean | undefined
-      } | undefined
+      options: {
+        readonly startImmediately: boolean
+      }
     ]
     | [
+      self: Effect<any, any, any>,
       options?: {
         readonly startImmediately?: boolean | undefined
       } | undefined

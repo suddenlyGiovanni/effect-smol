@@ -32,7 +32,9 @@ export type SinkTypeId = typeof SinkTypeId
  */
 export interface Sink<out A, in In = unknown, out L = never, out E = never, out R = never>
   extends Sink.Variance<A, In, L, E, R>, Pipeable
-{}
+{
+  readonly channel: Channel.Channel<ReadonlyArray<L>, E, A, ReadonlyArray<In>, never, void, R>
+}
 
 /**
  * @since 2.0.0
@@ -120,7 +122,7 @@ export const fromChannel = <L, In, E, A, R>(
  */
 export const toChannel = <A, In, L, E, R>(
   self: Sink<A, In, L, E, R>
-): Channel.Channel<ReadonlyArray<L>, E, A, ReadonlyArray<In>, never, void, R> => (self as any).channel
+): Channel.Channel<ReadonlyArray<L>, E, A, ReadonlyArray<In>, never, void, R> => self.channel
 
 /**
  * A sink that executes the provided effectful function for every item fed
