@@ -1,7 +1,9 @@
 import * as Array from "effect/Array"
 import * as Effect from "effect/Effect"
+import * as References from "effect/References"
 import * as Request from "effect/Request"
 import * as Resolver from "effect/RequestResolver"
+import { bench } from "./bench.js"
 
 class GetNameById extends Request.TaggedClass("GetNameById")<{
   readonly id: number
@@ -21,10 +23,8 @@ const effect = Effect.forEach(
   { concurrency: "unbounded" }
 )
 
-Effect.gen(function*() {
-  while (true) {
-    console.time("batching")
-    yield* effect
-    console.timeEnd("batching")
-  }
-}).pipe(Effect.runSync)
+effect.pipe(
+  bench("batching", 100),
+  Effect.provideService(References.MinimumLogLevel, "Debug"),
+  Effect.runFork
+)
