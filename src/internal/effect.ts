@@ -244,6 +244,8 @@ export interface FiberImpl<in out A = any, in out E = any> extends Fiber.Fiber<A
   currentOpCount: number
   readonly context: Context.Context<never>
   readonly currentScheduler: Scheduler.Scheduler
+  readonly currentTracer: Tracer.Tracer
+  readonly currentSpan?: Tracer.AnySpan | undefined
   readonly maxOpsBeforeYield: number
   interruptible: boolean
   readonly _stack: Array<Primitive>
@@ -343,8 +345,8 @@ const FiberProto = {
           const prev = current
           current = flatMap(yieldNow, () => prev as any) as any
         }
-        current = fiberMiddleware.tracerContext
-          ? fiberMiddleware.tracerContext(this, current as Primitive)
+        current = this.currentTracer.context
+          ? this.currentTracer.context(() => (current as any)[evaluate](this), this)
           : (current as any)[evaluate](this)
         if (current === Yield) {
           const yielded = this._yielded!
@@ -389,6 +391,8 @@ const FiberProto = {
   setContext(this: any, context: Context.Context<never>): void {
     this.context = context
     this.currentScheduler = this.getRef(CurrentScheduler)
+    this.currentTracer = this.getRef(Tracer.CurrentTracer)
+    this.currentSpan = context.unsafeMap.get(Tracer.ParentSpan.key)
     this.maxOpsBeforeYield = this.getRef(Scheduler.MaxOpsBeforeYield)
   }
 }
@@ -412,9 +416,6 @@ export const makeFiber = <A, E>(context: Context.Context<never>, interruptible: 
 const fiberMiddleware = {
   interruptChildren: undefined as
     | ((fiber: FiberImpl) => Effect.Effect<void> | undefined)
-    | undefined,
-  tracerContext: undefined as
-    | ((fiber: FiberImpl, primitive: Primitive) => Primitive | Yield)
     | undefined
 }
 
@@ -3323,18 +3324,11 @@ export const makeLatch = (open?: boolean | undefined) => sync(() => unsafeMakeLa
 /** @internal */
 export const tracer: Effect.Effect<Tracer.Tracer> = withFiber((fiber) => succeed(fiber.getRef(Tracer.CurrentTracer)))
 
-const tracerContextMiddleware = (fiber: FiberImpl, primitive: Primitive): Primitive | Yield => {
-  const tracer = fiber.getRef(Tracer.CurrentTracer)
-  if (!tracer.context) return primitive[evaluate](fiber)
-  return tracer.context(() => primitive[evaluate](fiber), fiber)
-}
-
 /** @internal */
 export const withTracer: {
   (tracer: Tracer.Tracer): <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
   <A, E, R>(effect: Effect.Effect<A, E, R>, tracer: Tracer.Tracer): Effect.Effect<A, E, R>
 } = dual(2, <A, E, R>(effect: Effect.Effect<A, E, R>, tracer: Tracer.Tracer): Effect.Effect<A, E, R> => {
-  fiberMiddleware.tracerContext = tracerContextMiddleware
   return provideService(effect, Tracer.CurrentTracer, tracer)
 })
 
@@ -3394,7 +3388,7 @@ export const unsafeMakeSpan = <XA, XE>(
     ? Option.some(options.parent)
     : options.root
     ? Option.none()
-    : filterDisablePropagation(InternalContext.getOption(fiber.context, Tracer.ParentSpan))
+    : filterDisablePropagation(Option.fromNullable(fiber.currentSpan))
 
   let span: Tracer.Span
 
@@ -3616,7 +3610,7 @@ export const annotateCurrentSpan: {
   (values: Record<string, unknown>): Effect.Effect<void>
 } = (...args: [Record<string, unknown>] | [key: string, value: unknown]) =>
   withFiber((fiber) => {
-    const span = InternalContext.getOption(fiber.context, Tracer.ParentSpan)
+    const span = Option.fromNullable(fiber.currentSpan)
     if (span._tag === "Some" && span.value._tag === "Span") {
       if (args.length === 1) {
         for (const [key, value] of Object.entries(args[0])) {
@@ -3631,7 +3625,7 @@ export const annotateCurrentSpan: {
 
 /** @internal */
 export const currentSpan: Effect.Effect<Tracer.Span, Cause.NoSuchElementError> = withFiber((fiber) => {
-  const span = InternalContext.getOption(fiber.context, Tracer.ParentSpan)
+  const span = Option.fromNullable(fiber.currentSpan)
   return span._tag === "Some" && span.value._tag === "Span" ? succeed(span.value) : fail(new NoSuchElementError())
 })
 
