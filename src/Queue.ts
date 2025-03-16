@@ -570,9 +570,12 @@ export const unsafeTake = <A, E>(self: Dequeue<A, E>): Exit<A, Option.Option<E>>
     self.capacity = 1
     releaseCapacity(self)
     self.capacity = 0
-    return self.messages.length > 0
-      ? core.exitSucceed(MutableList.take(self.messages)!)
-      : undefined
+    if (self.messages.length > 0) {
+      const message = MutableList.take(self.messages)!
+      releaseCapacity(self)
+      return core.exitSucceed(message)
+    }
+    return undefined
   }
   return undefined
 }
@@ -762,7 +765,7 @@ const releaseCapacity = <A, E>(self: Dequeue<A, E>): boolean => {
   }
   let n = self.capacity - self.messages.length
   for (const entry of self.state.offers) {
-    if (n === 0) return false
+    if (n === 0) break
     else if (entry._tag === "Single") {
       MutableList.append(self.messages, entry.message)
       n--
@@ -798,7 +801,9 @@ const awaitTakeOption = <A, E>(self: Dequeue<A, E>) => internalEffect.mapError(a
 
 const unsafeTakeAll = <A, E>(self: Dequeue<A, E>) => {
   if (self.messages.length > 0) {
-    return MutableList.takeAll(self.messages)
+    const messages = MutableList.takeAll(self.messages)
+    releaseCapacity(self)
+    return messages
   } else if (self.state._tag !== "Done" && self.state.offers.size > 0) {
     self.capacity = 1
     releaseCapacity(self)
