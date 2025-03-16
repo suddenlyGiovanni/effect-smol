@@ -570,12 +570,9 @@ export const unsafeTake = <A, E>(self: Dequeue<A, E>): Exit<A, Option.Option<E>>
     self.capacity = 1
     releaseCapacity(self)
     self.capacity = 0
-    if (self.messages.length > 0) {
-      const message = MutableList.take(self.messages)!
-      releaseCapacity(self)
-      return core.exitSucceed(message)
-    }
-    return undefined
+    const message = MutableList.take(self.messages)!
+    releaseCapacity(self)
+    return core.exitSucceed(message)
   }
   return undefined
 }
@@ -703,11 +700,11 @@ const unsafeTakeBetween = <A, E>(
     return core.exitSucceed([empty, false])
   } else if (self.capacity <= 0 && self.state.offers.size > 0) {
     self.capacity = 1
-    const released = releaseCapacity(self)
+    releaseCapacity(self)
     self.capacity = 0
-    return self.messages.length > 0
-      ? core.exitSucceed([[MutableList.take(self.messages)!], released])
-      : undefined
+    const messages = [MutableList.take(self.messages)!]
+    const released = releaseCapacity(self)
+    return core.exitSucceed([messages, released])
   }
   min = Math.min(min, self.capacity)
   if (min <= self.messages.length) {
@@ -808,7 +805,9 @@ const unsafeTakeAll = <A, E>(self: Dequeue<A, E>) => {
     self.capacity = 1
     releaseCapacity(self)
     self.capacity = 0
-    return [MutableList.take(self.messages)!]
+    const messages = [MutableList.take(self.messages)!]
+    releaseCapacity(self)
+    return messages
   }
   return empty
 }
