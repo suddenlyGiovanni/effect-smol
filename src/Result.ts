@@ -9,6 +9,7 @@ import { constNull, constUndefined, dual, identity } from "./Function.js"
 import type { TypeLambda } from "./HKT.js"
 import type { Inspectable } from "./Inspectable.js"
 import * as doNotation from "./internal/doNotation.js"
+import * as option_ from "./internal/option.js"
 import * as result from "./internal/result.js"
 import type { Option } from "./Option.js"
 import type { Pipeable } from "./Pipeable.js"
@@ -143,6 +144,7 @@ export {
  *
  * @example
  * ```ts
+ * import * as assert from "node:assert"
  * import { Result } from "effect"
  *
  * assert.deepStrictEqual(Result.fromNullable(1, () => 'fallback'), Result.ok(1))
@@ -158,12 +160,13 @@ export const fromNullable: {
 } = dual(
   2,
   <A, E>(self: A, onNullable: (ok: A) => E): Result<NonNullable<A>, E> =>
-    self == null ? err(onNullable(self)) : ok(self as NonNullable<A>)
+    self == null ? err(onNullable(self)) : ok(self)
 )
 
 /**
  * @example
  * ```ts
+ * import * as assert from "node:assert"
  * import { Result, Option } from "effect"
  *
  * assert.deepStrictEqual(Result.fromOption(Option.some(1), () => 'error'), Result.ok(1))
@@ -223,6 +226,7 @@ export {
  *
  * @example
  * ```ts
+ * import * as assert from "node:assert"
  * import { Result } from "effect"
  *
  * assert.deepStrictEqual(Result.isResult(Result.ok(1)), true)
@@ -240,6 +244,7 @@ export const isResult: (input: unknown) => input is Result<unknown, unknown> = r
  *
  * @example
  * ```ts
+ * import * as assert from "node:assert"
  * import { Result } from "effect"
  *
  * assert.deepStrictEqual(Result.isErr(Result.ok(1)), false)
@@ -256,6 +261,7 @@ export const isErr: <A, E>(self: Result<A, E>) => self is Err<A, E> = result.isE
  *
  * @example
  * ```ts
+ * import * as assert from "node:assert"
  * import { Result } from "effect"
  *
  * assert.deepStrictEqual(Result.isOk(Result.ok(1)), true)
@@ -272,6 +278,7 @@ export const isOk: <A, E>(self: Result<A, E>) => self is Ok<A, E> = result.isOk
  *
  * @example
  * ```ts
+ * import * as assert from "node:assert"
  * import { Result, Option } from "effect"
  *
  * assert.deepStrictEqual(Result.getOk(Result.ok('ok')), Option.some('ok'))
@@ -288,6 +295,7 @@ export const getOk: <R, L>(self: Result<R, L>) => Option<R> = result.getOk
  *
  * @example
  * ```ts
+ * import * as assert from "node:assert"
  * import { Result, Option } from "effect"
  *
  * assert.deepStrictEqual(Result.getErr(Result.ok('ok')), Option.none())
@@ -369,6 +377,7 @@ export const map: {
  *
  * @example
  * ```ts
+ * import * as assert from "node:assert"
  * import { pipe, Result } from "effect"
  *
  * const onErr  = (strings: ReadonlyArray<string>): string => `strings: ${strings.join(', ')}`
@@ -408,6 +417,7 @@ export const match: {
  *
  * @example
  * ```ts
+ * import * as assert from "node:assert"
  * import { pipe, Result } from "effect"
  *
  * const isPositive = (n: number): boolean => n > 0
@@ -461,23 +471,24 @@ export const liftPredicate: {
  *
  * @example
  * ```ts
+ * import * as assert from "node:assert"
  * import { pipe, Result } from "effect"
  *
  * const isPositive = (n: number): boolean => n > 0
  *
  * assert.deepStrictEqual(
  *   pipe(
- *     Result.right(1),
- *     Result.filterOrLeft(isPositive, n => `${n} is not positive`)
+ *     Result.ok(1),
+ *     Result.filterOrErr(isPositive, n => `${n} is not positive`)
  *   ),
- *   Result.right(1)
+ *   Result.ok(1)
  * )
  * assert.deepStrictEqual(
  *   pipe(
- *     Result.right(0),
- *     Result.filterOrLeft(isPositive, n => `${n} is not positive`)
+ *     Result.ok(0),
+ *     Result.filterOrErr(isPositive, n => `${n} is not positive`)
  *   ),
- *   Result.left("0 is not positive")
+ *   Result.err("0 is not positive")
  * )
  * ```
  *
@@ -516,6 +527,7 @@ export const merge: <A, E>(self: Result<A, E>) => E | A = match({ onErr: identit
  *
  * @example
  * ```ts
+ * import * as assert from "node:assert"
  * import { Result } from "effect"
  *
  * assert.deepStrictEqual(Result.getOrElse(Result.ok(1), (error) => error + "!"), 1)
@@ -536,6 +548,7 @@ export const getOrElse: {
 /**
  * @example
  * ```ts
+ * import * as assert from "node:assert"
  * import { Result } from "effect"
  *
  * assert.deepStrictEqual(Result.getOrNull(Result.ok(1)), 1)
@@ -550,6 +563,7 @@ export const getOrNull: <A, E>(self: Result<A, E>) => A | null = getOrElse(const
 /**
  * @example
  * ```ts
+ * import * as assert from "node:assert"
  * import { Result } from "effect"
  *
  * assert.deepStrictEqual(Result.getOrUndefined(Result.ok(1)), 1)
@@ -568,6 +582,7 @@ export const getOrUndefined: <A, E>(self: Result<A, E>) => A | undefined = getOr
  *
  * @example
  * ```ts
+ * import * as assert from "node:assert"
  * import { Result } from "effect"
  *
  * assert.deepStrictEqual(
@@ -595,6 +610,7 @@ export const getOrThrowWith: {
  *
  * @example
  * ```ts
+ * import * as assert from "node:assert"
  * import { Result } from "effect"
  *
  * assert.deepStrictEqual(Result.getOrThrow(Result.ok(1)), 1)
@@ -672,11 +688,12 @@ export const andThen: {
  *
  * @example
  * ```ts
+ * import * as assert from "node:assert"
  * import { Result } from "effect"
  *
- * assert.deepStrictEqual(Result.all([Result.right(1), Result.right(2)]), Result.right([1, 2]))
- * assert.deepStrictEqual(Result.all({ right: Result.right(1), b: Result.right("hello") }), Result.right({ right: 1, b: "hello" }))
- * assert.deepStrictEqual(Result.all({ right: Result.right(1), b: Result.left("error") }), Result.left("error"))
+ * assert.deepStrictEqual(Result.all([Result.ok(1), Result.ok(2)]), Result.ok([1, 2]))
+ * assert.deepStrictEqual(Result.all({ right: Result.ok(1), b: Result.ok("hello") }), Result.ok({ right: 1, b: "hello" }))
+ * assert.deepStrictEqual(Result.all({ right: Result.ok(1), b: Result.err("error") }), Result.err("error"))
  * ```
  *
  * @category Sequencing
@@ -698,7 +715,7 @@ export const all: <const I extends Iterable<Result<any, any>> | Record<string, R
   ): Result<any, any> => {
     if (Symbol.iterator in input) {
       const out: Array<Result<any, any>> = []
-      for (const e of (input as Iterable<Result<any, any>>)) {
+      for (const e of input) {
         if (isErr(e)) {
           return e
         }
@@ -733,39 +750,19 @@ const adapter = Gen.adapter<ResultTypeLambda>()
  * @since 4.0.0
  */
 export const gen: Gen.Gen<ResultTypeLambda, Gen.Adapter<ResultTypeLambda>> = (...args) => {
-  const f = (args.length === 1)
-    ? args[0]
-    : args[1].bind(args[0])
+  const f = args.length === 1 ? args[0] : args[1].bind(args[0])
   const iterator = f(adapter)
-  let state: IteratorYieldResult<any> | IteratorReturnResult<any> = iterator.next()
-  if (state.done) {
-    return ok(state.value) as any
-  } else {
-    let current = state.value
-    if (Gen.isGenKind(current)) {
-      current = current.value
-    } else {
-      current = Gen.yieldWrapGet(current)
-    }
+  let state: IteratorResult<any> = iterator.next()
+  while (!state.done) {
+    const current = Gen.isGenKind(state.value)
+      ? state.value.value
+      : Gen.yieldWrapGet(state.value)
     if (isErr(current)) {
       return current
     }
-    while (!state.done) {
-      state = iterator.next(current.ok as never)
-      if (!state.done) {
-        current = state.value
-        if (Gen.isGenKind(current)) {
-          current = current.value
-        } else {
-          current = Gen.yieldWrapGet(current)
-        }
-        if (isErr(current)) {
-          return current
-        }
-      }
-    }
-    return ok(state.value)
+    state = iterator.next(current.ok as never)
   }
+  return ok(state.value) as any
 }
 
 // -------------------------------------------------------------------------------------
@@ -788,6 +785,7 @@ export const gen: Gen.Gen<ResultTypeLambda, Gen.Adapter<ResultTypeLambda>> = (..
  *
  * @example
  * ```ts
+ * import * as assert from "node:assert"
  * import { Result, pipe } from "effect"
  *
  * const result = pipe(
@@ -820,6 +818,7 @@ export const Do: Result<{}> = ok({})
  *
  * @example
  * ```ts
+ * import * as assert from "node:assert"
  * import { Result, pipe } from "effect"
  *
  * const result = pipe(
@@ -862,6 +861,7 @@ export const bind: {
  *
  * @example
  * ```ts
+ * import * as assert from "node:assert"
  * import { Result, pipe } from "effect"
  *
  * const result = pipe(
@@ -910,6 +910,7 @@ export {
    *
    * @example
    * ```ts
+   * import * as assert from "node:assert"
    * import { Result, pipe } from "effect"
    *
    * const result = pipe(
@@ -925,4 +926,36 @@ export {
    * @since 4.0.0
    */
   let_ as let
+}
+
+/**
+ * Converts an `Option` of an `Result` into an `Result` of an `Option`.
+ *
+ * **Details**
+ *
+ * This function transforms an `Option<Result<A, E>>` into an
+ * `Result<Option<A>, E>`. If the `Option` is `None`, the resulting `Result`
+ * will be a `Right` with a `None` value. If the `Option` is `Some`, the
+ * inner `Result` will be executed, and its result wrapped in a `Some`.
+ *
+ * @example
+ * ```ts
+ * import { Effect, Result, Option } from "effect"
+ *
+ * //      ┌─── Option<Result<number, never>>
+ * //      ▼
+ * const maybe = Option.some(Result.ok(42))
+ *
+ * //      ┌─── Result<Option<number>, never, never>
+ * //      ▼
+ * const result = Result.transposeOption(maybe)
+ * ```
+ *
+ * @since 3.14.0
+ * @category Transposing
+ */
+export const transposeOption = <A = never, E = never>(
+  self: Option<Result<A, E>>
+): Result<Option<A>, E> => {
+  return option_.isNone(self) ? ok(option_.none) : map(self.value, option_.some)
 }
