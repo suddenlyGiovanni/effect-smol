@@ -213,7 +213,7 @@ export * as FastCheck from "./FastCheck.js"
 export * as Fiber from "./Fiber.js"
 
 /**
- * @since 1.0.0
+ * @since 4.0.0
  */
 export * as FileSystem from "./FileSystem.js"
 
@@ -356,6 +356,11 @@ export * as Order from "./Order.js"
 export * as Ordering from "./Ordering.js"
 
 /**
+ * @since 4.0.0
+ */
+export * as Path from "./Path.js"
+
+/**
  * @since 2.0.0
  */
 export * as Pipeable from "./Pipeable.js"
@@ -453,6 +458,11 @@ export * as RequestResolver from "./RequestResolver.js"
  * @since 4.0.0
  */
 export * as Result from "./Result.js"
+
+/**
+ * @since 4.0.0
+ */
+export * as Runtime from "./Runtime.js"
 
 /**
  * @since 2.0.0
