@@ -171,7 +171,7 @@ export const fromPull = <A, E, R, EX, RX>(
  */
 export const transformPull = <A, E, R, B, E2, R2, EX, RX>(
   self: Stream<A, E, R>,
-  f: (pull: Pull.Pull<Arr.NonEmptyReadonlyArray<A>, E>, scope: Scope.Scope) => Effect.Effect<
+  f: (pull: Pull.Pull<Arr.NonEmptyReadonlyArray<A>, E, void, R>, scope: Scope.Scope) => Effect.Effect<
     Pull.Pull<Arr.NonEmptyReadonlyArray<B>, E2, void, R2>,
     EX,
     RX
@@ -240,6 +240,25 @@ export const empty: Stream<never> = fromChannel(Channel.empty)
  * @category constructors
  */
 export const succeed = <A>(value: A): Stream<A> => fromChannel(Channel.succeed(Arr.of(value)))
+
+/**
+ * Creates a stream from an sequence of values.
+ *
+ * @example
+ * ```ts
+ * import { Effect, Stream } from "effect"
+ *
+ * const stream = Stream.make(1, 2, 3)
+ *
+ * Effect.runPromise(Stream.runCollect(stream)).then(console.log)
+ * // { _id: 'Chunk', values: [ 1, 2, 3 ] }
+ * ```
+ *
+ * @since 2.0.0
+ * @category constructors
+ */
+export const make = <const As extends ReadonlyArray<any>>(...values: As): Stream<As[number]> =>
+  Arr.isNonEmptyReadonlyArray(values) ? fromArray(values) : empty
 
 /**
  * Creates a single-valued pure stream.
@@ -786,7 +805,7 @@ export const takeUntil: {
       Effect.sync(() => {
         let i = 0
         let done = false
-        const pump: Pull.Pull<Arr.NonEmptyReadonlyArray<A>, E> = Effect.flatMap(
+        const pump: Pull.Pull<Arr.NonEmptyReadonlyArray<A>, E, void, R> = Effect.flatMap(
           Effect.suspend(() => done ? Pull.haltVoid : pull),
           (chunk) => {
             const index = chunk.findIndex((a) => predicate(a, i++))
@@ -906,7 +925,7 @@ export const drop: {
     transformPull(self, (pull, _scope) =>
       Effect.sync(() => {
         let dropped = 0
-        const pump: Pull.Pull<Arr.NonEmptyReadonlyArray<A>, E> = pull.pipe(
+        const pump: Pull.Pull<Arr.NonEmptyReadonlyArray<A>, E, void, R> = pull.pipe(
           Effect.flatMap((chunk) => {
             if (dropped >= n) return Effect.succeed(chunk)
             dropped += chunk.length
@@ -930,6 +949,75 @@ export const chunks = <A, E, R>(self: Stream<A, E, R>): Stream<ReadonlyArray<A>,
     Channel.map(Arr.of),
     fromChannel
   )
+
+/**
+ * Pipes all the values from this stream through the provided channel.
+ *
+ * @since 2.0.0
+ * @category Pipe
+ */
+export const pipeThroughChannel: {
+  <R2, E, E2, A, A2>(
+    channel: Channel.Channel<Arr.NonEmptyReadonlyArray<A2>, E2, unknown, Arr.NonEmptyReadonlyArray<A>, E, unknown, R2>
+  ): <R>(self: Stream<A, E, R>) => Stream<A2, E2, R2 | R>
+  <R, R2, E, E2, A, A2>(
+    self: Stream<A, E, R>,
+    channel: Channel.Channel<Arr.NonEmptyReadonlyArray<A2>, E2, unknown, Arr.NonEmptyReadonlyArray<A>, E, unknown, R2>
+  ): Stream<A2, E2, R | R2>
+} = dual(2, <R, R2, E, E2, A, A2>(
+  self: Stream<A, E, R>,
+  channel: Channel.Channel<Arr.NonEmptyReadonlyArray<A2>, E2, unknown, Arr.NonEmptyReadonlyArray<A>, E, unknown, R2>
+): Stream<A2, E2, R | R2> => fromChannel(Channel.pipeTo(self.channel, channel)))
+
+/**
+ * Pipes all values from this stream through the provided channel, passing
+ * through any error emitted by this stream unchanged.
+ *
+ * @since 2.0.0
+ * @category Pipe
+ */
+export const pipeThroughChannelOrFail: {
+  <R2, E, E2, A, A2>(
+    channel: Channel.Channel<Arr.NonEmptyReadonlyArray<A2>, E2, unknown, Arr.NonEmptyReadonlyArray<A>, E, unknown, R2>
+  ): <R>(self: Stream<A, E, R>) => Stream<A2, E | E2, R2 | R>
+  <R, R2, E, E2, A, A2>(
+    self: Stream<A, E, R>,
+    channel: Channel.Channel<Arr.NonEmptyReadonlyArray<A2>, E2, unknown, Arr.NonEmptyReadonlyArray<A>, E, unknown, R2>
+  ): Stream<A2, E | E2, R | R2>
+} = dual(2, <R, R2, E, E2, A, A2>(
+  self: Stream<A, E, R>,
+  channel: Channel.Channel<Arr.NonEmptyReadonlyArray<A2>, E2, unknown, Arr.NonEmptyReadonlyArray<A>, E, unknown, R2>
+): Stream<A2, E | E2, R | R2> => fromChannel(Channel.pipeToOrFail(self.channel, channel)))
+
+/**
+ * Decode Uint8Array chunks into a stream of strings using the specified encoding.
+ *
+ * @since 2.0.0
+ * @category encoding
+ */
+export const decodeText: {
+  (encoding?: string | undefined): <E, R>(self: Stream<Uint8Array, E, R>) => Stream<string, E, R>
+  <E, R>(self: Stream<Uint8Array, E, R>, encoding?: string | undefined): Stream<string, E, R>
+} = dual(
+  (args) => isStream(args[0]),
+  <E, R>(self: Stream<Uint8Array, E, R>, encoding?: string | undefined): Stream<string, E, R> =>
+    suspend(() => {
+      const decoder = new TextDecoder(encoding)
+      return map(self, (chunk) => decoder.decode(chunk))
+    })
+)
+
+/**
+ * Encode a stream of strings into a stream of Uint8Array chunks using the specified encoding.
+ *
+ * @since 2.0.0
+ * @category encoding
+ */
+export const encodeText = <E, R>(self: Stream<string, E, R>): Stream<Uint8Array, E, R> =>
+  suspend(() => {
+    const encoder = new TextEncoder()
+    return map(self, (chunk) => encoder.encode(chunk))
+  })
 
 /**
  * Runs the sink on the stream to produce either the sink's result or an error.
@@ -1002,6 +1090,26 @@ export const runForEach: {
 ): Effect.Effect<void, E | E2, R | R2> => Channel.runForEach(self.channel, Effect.forEach(f, { discard: true })))
 
 /**
+ * Consumes all elements of the stream, passing them to the specified
+ * callback.
+ *
+ * @since 2.0.0
+ * @category destructors
+ */
+export const runForEachChunk: {
+  <A, X, E2, R2>(
+    f: (a: Arr.NonEmptyReadonlyArray<A>) => Effect.Effect<X, E2, R2>
+  ): <E, R>(self: Stream<A, E, R>) => Effect.Effect<void, E2 | E, R2 | R>
+  <A, E, R, X, E2, R2>(
+    self: Stream<A, E, R>,
+    f: (a: Arr.NonEmptyReadonlyArray<A>) => Effect.Effect<X, E2, R2>
+  ): Effect.Effect<void, E | E2, R | R2>
+} = dual(2, <A, E, R, X, E2, R2>(
+  self: Stream<A, E, R>,
+  f: (a: Arr.NonEmptyReadonlyArray<A>) => Effect.Effect<X, E2, R2>
+): Effect.Effect<void, E | E2, R | R2> => Channel.runForEach(self.channel, f))
+
+/**
  * Runs the stream only for its effects. The emitted elements are discarded.
  *
  * @since 2.0.0
@@ -1021,3 +1129,17 @@ export const runDrain = <A, E, R>(self: Stream<A, E, R>): Effect.Effect<void, E,
 export const toPull = <A, E, R>(
   self: Stream<A, E, R>
 ): Effect.Effect<Pull.Pull<ReadonlyArray<A>, E>, never, R | Scope.Scope> => Channel.toPull(self.channel)
+
+/**
+ * Returns a combined string resulting from concatenating each of the values
+ * from the stream.
+ *
+ * @since 2.0.0
+ * @category destructors
+ */
+export const mkString = <E, R>(self: Stream<string, E, R>): Effect.Effect<string, E, R> =>
+  Channel.runFold(
+    self.channel,
+    () => "",
+    (acc, chunk) => acc + chunk.join("")
+  )
