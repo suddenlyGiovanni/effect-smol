@@ -6,7 +6,8 @@ import * as Effect from "./Effect.js"
 import * as Option from "./Option.js"
 import * as Order from "./Order.js"
 import * as Predicate from "./Predicate.js"
-import type * as SchemaAST from "./SchemaAST.js"
+import type * as Schema from "./Schema.js"
+import * as SchemaAST from "./SchemaAST.js"
 import * as SchemaIssue from "./SchemaIssue.js"
 
 /**
@@ -19,24 +20,23 @@ export type Annotations = SchemaAST.Annotations.Filter
  * @category model
  * @since 4.0.0
  */
-export type FilterOut<R> = SchemaIssue.Issue | undefined | Effect.Effect<SchemaIssue.Issue | undefined, never, R>
+export type FilterOut = SchemaIssue.Issue | undefined | Effect.Effect<SchemaIssue.Issue | undefined>
 
 /**
  * @category model
  * @since 4.0.0
  */
-export class Filter<T, R = never> {
-  declare readonly "Context": R
+export class Filter<T> {
   readonly _tag = "Filter"
   constructor(
-    readonly run: (input: T, self: SchemaAST.AST, options: SchemaAST.ParseOptions) => FilterOut<R>,
+    readonly run: (input: T, self: SchemaAST.AST, options: SchemaAST.ParseOptions) => FilterOut,
     readonly bail: boolean,
     readonly annotations: Annotations | undefined
   ) {}
-  annotate(annotations: Annotations): Filter<T, R> {
+  annotate(annotations: Annotations): Filter<T> {
     return new Filter(this.run, this.bail, { ...this.annotations, ...annotations })
   }
-  abort(): Filter<T, R> {
+  abort(): Filter<T> {
     return new Filter(this.run, true, this.annotations)
   }
 }
@@ -45,14 +45,13 @@ export class Filter<T, R = never> {
  * @category model
  * @since 4.0.0
  */
-export class FilterGroup<T, R = never> {
-  declare readonly "Context": R
+export class FilterGroup<T> {
   readonly _tag = "FilterGroup"
   constructor(
-    readonly filters: readonly [Filter<T, R>, ...ReadonlyArray<Filter<T, R>>],
+    readonly filters: readonly [Filter<T>, ...ReadonlyArray<Filter<T>>],
     readonly annotations: SchemaAST.Annotations.Documentation | undefined
   ) {}
-  annotate(annotations: SchemaAST.Annotations.Documentation): FilterGroup<T, R> {
+  annotate(annotations: SchemaAST.Annotations.Documentation): FilterGroup<T> {
     return new FilterGroup(this.filters, { ...this.annotations, ...annotations })
   }
 }
@@ -61,7 +60,7 @@ export class FilterGroup<T, R = never> {
  * @category model
  * @since 4.0.0
  */
-export type Filters<T, R = never> = Filter<T, R> | FilterGroup<T, R>
+export type Filters<T> = Filter<T> | FilterGroup<T>
 
 type MakeOut = undefined | boolean | string | SchemaIssue.Issue
 
@@ -70,28 +69,18 @@ type MakeOut = undefined | boolean | string | SchemaIssue.Issue
  * @since 4.0.0
  */
 export function make<T>(
-  filter: (input: T, ast: SchemaAST.AST, options: SchemaAST.ParseOptions) => MakeOut,
+  filter: (input: T, ast: SchemaAST.AST, options: SchemaAST.ParseOptions) => MakeOut | Effect.Effect<MakeOut>,
   annotations?: Annotations | undefined,
   bail: boolean = false
 ): Filter<T> {
   return new Filter<T>(
-    (input, ast, options) => fromMakeOut(filter(input, ast, options), input),
-    bail,
-    annotations
-  )
-}
-
-/**
- * @category Constructors
- * @since 4.0.0
- */
-export function makeEffect<T, R>(
-  filter: (input: T, ast: SchemaAST.AST, options: SchemaAST.ParseOptions) => Effect.Effect<MakeOut, never, R>,
-  annotations?: Annotations | undefined,
-  bail: boolean = false
-): Filter<T, R> {
-  return new Filter<T, R>(
-    (input, ast, options) => Effect.map(filter(input, ast, options), (out) => fromMakeOut(out, input)),
+    (input, ast, options) => {
+      const out = filter(input, ast, options)
+      if (Effect.isEffect(out)) {
+        return Effect.map(out, (out) => fromMakeOut(out, input))
+      }
+      return fromMakeOut(out, input)
+    },
     bail,
     annotations
   )
@@ -360,9 +349,7 @@ export const int32 = new FilterGroup([
  * @category Length filters
  * @since 4.0.0
  */
-export const minLength = (
-  minLength: number
-) => {
+export const minLength = (minLength: number) => {
   minLength = Math.max(0, Math.floor(minLength))
   return make<{ readonly length: number }>((input) => input.length >= minLength, {
     title: `minLength(${minLength})`,
@@ -397,9 +384,7 @@ export const nonEmpty = minLength(1)
  * @category Length filters
  * @since 4.0.0
  */
-export const maxLength = (
-  maxLength: number
-) => {
+export const maxLength = (maxLength: number) => {
   maxLength = Math.max(0, Math.floor(maxLength))
   return make<{ readonly length: number }>((input) => input.length <= maxLength, {
     title: `maxLength(${maxLength})`,
@@ -428,9 +413,7 @@ export const maxLength = (
  * @category Length filters
  * @since 4.0.0
  */
-export const length = (
-  length: number
-) => {
+export const length = (length: number) => {
   length = Math.max(0, Math.floor(length))
   return make<{ readonly length: number }>((input) => input.length === length, {
     title: `length(${length})`,
@@ -446,6 +429,26 @@ export const length = (
       length
     }
   })
+}
+
+/**
+ * @since 4.0.0
+ */
+export const asCheck = <T>(
+  ...filters: readonly [Filters<T>, ...ReadonlyArray<Filters<T>>]
+) =>
+<S extends Schema.Schema<T>>(self: S): S["~rebuild.out"] => {
+  return self.rebuild(SchemaAST.appendModifiers(self.ast, filters))
+}
+
+/**
+ * @since 4.0.0
+ */
+export const asCheckEncoded = <E>(
+  ...filters: readonly [Filters<E>, ...ReadonlyArray<Filters<E>>]
+) =>
+<S extends Schema.Top & { readonly "Encoded": E }>(self: S): S["~rebuild.out"] => {
+  return self.rebuild(SchemaAST.appendEncodedModifiers(self.ast, filters))
 }
 
 function fromMakeOut(out: MakeOut, input: unknown): SchemaIssue.Issue | undefined {

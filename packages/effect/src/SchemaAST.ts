@@ -5,6 +5,7 @@
 import * as Arr from "./Array.js"
 import { formatPropertyKey, formatUnknown, memoizeThunk } from "./internal/schema/util.js"
 import * as Predicate from "./Predicate.js"
+import type * as Schema from "./Schema.js"
 import type * as SchemaFilter from "./SchemaFilter.js"
 import type * as SchemaMiddleware from "./SchemaMiddleware.js"
 import type * as SchemaResult from "./SchemaResult.js"
@@ -49,8 +50,8 @@ export type Transformation = SchemaTransformation.Transformation<any, any, any, 
  */
 export class Link {
   constructor(
-    readonly transformation: Transformation,
-    readonly to: AST
+    readonly to: AST,
+    readonly transformation: Transformation
   ) {}
 }
 
@@ -58,11 +59,7 @@ export class Link {
  * @category model
  * @since 4.0.0
  */
-export class Encoding {
-  constructor(
-    readonly links: Arr.NonEmptyReadonlyArray<Link>
-  ) {}
-}
+export type Encoding = readonly [Link, ...ReadonlyArray<Link>]
 
 /**
  * @since 4.0.0
@@ -82,19 +79,23 @@ export declare namespace Annotations {
    * @category Model
    * @since 4.0.0
    */
-  export interface Bottom<T = unknown> extends Documentation {
+  export interface Bottom<T> extends Documentation {
     readonly default?: T
     readonly examples?: ReadonlyArray<T>
-    readonly serializer?: (typeParameters: ReadonlyArray<AST>) => Encoding
   }
 
   /**
    * @category Model
    * @since 4.0.0
    */
-  export interface Declaration<T> extends Bottom<T> {
+  export interface Declaration<T, TypeParameters extends ReadonlyArray<Schema.Top>> extends Bottom<T> {
     readonly declaration?: {
       readonly title?: string
+    }
+    readonly serialization?: {
+      readonly json?: (
+        typeParameters: { readonly [K in keyof TypeParameters]: Schema.Schema<TypeParameters[K]["Encoded"]> }
+      ) => Link
     }
   }
 
@@ -164,13 +165,13 @@ export interface ParseOptions {
  * @category model
  * @since 4.0.0
  */
-export class Middleware<E, R1, T, R2> {
+export class Middleware {
   readonly _tag = "Middleware"
   constructor(
-    readonly decode: SchemaMiddleware.Middleware<E, R1, T, R2>,
-    readonly encode: SchemaMiddleware.Middleware<T, R2, E, R1>
+    readonly decode: SchemaMiddleware.Middleware<any, any, any, any>,
+    readonly encode: SchemaMiddleware.Middleware<any, any, any, any>
   ) {}
-  flip(): Middleware<T, R2, E, R1> {
+  flip(): Middleware {
     return new Middleware(this.encode, this.decode)
   }
 }
@@ -179,7 +180,7 @@ export class Middleware<E, R1, T, R2> {
  * @category model
  * @since 4.0.0
  */
-export type Modifier = SchemaFilter.Filters<any, any> | Middleware<any, any, any, any>
+export type Modifier = SchemaFilter.Filters<any> | Middleware
 
 /**
  * @category model
@@ -609,15 +610,13 @@ export function appendModifiers<A extends AST>(ast: A, modifiers: Modifiers): A 
 /** @internal */
 export function appendEncodedModifiers<A extends AST>(ast: A, modifiers: Modifiers): A {
   if (ast.encoding) {
-    const links = ast.encoding.links
+    const links = ast.encoding
     const last = links[links.length - 1]
     return replaceEncoding(
       ast,
-      new Encoding(
-        Arr.append(
-          links.slice(0, links.length - 1),
-          new Link(last.transformation, appendEncodedModifiers(last.to, modifiers))
-        )
+      Arr.append(
+        links.slice(0, links.length - 1),
+        new Link(appendEncodedModifiers(last.to, modifiers), last.transformation)
       )
     )
   } else {
@@ -630,11 +629,11 @@ function appendTransformation<A extends AST>(
   transformation: Transformation,
   to: A
 ): A {
-  const link = new Link(transformation, from)
+  const link = new Link(from, transformation)
   if (to.encoding) {
-    return replaceEncoding(to, new Encoding([...to.encoding.links, link]))
+    return replaceEncoding(to, [...to.encoding, link])
   } else {
-    return replaceEncoding(to, new Encoding([link]))
+    return replaceEncoding(to, [link])
   }
 }
 
@@ -839,20 +838,20 @@ function flipModifiers(ast: AST): Modifiers | undefined {
  */
 export const flip = memoize((ast: AST): AST => {
   if (ast.encoding) {
-    const links = ast.encoding.links
+    const links = ast.encoding
     const len = links.length
     const last = links[len - 1]
     const ls: Arr.NonEmptyArray<Link> = [
-      new Link(links[0].transformation.flip(), flip(replaceEncoding(ast, undefined)))
+      new Link(flip(replaceEncoding(ast, undefined)), links[0].transformation.flip())
     ]
     for (let i = 1; i < len; i++) {
-      ls.unshift(new Link(links[i].transformation.flip(), flip(links[i - 1].to)))
+      ls.unshift(new Link(flip(links[i - 1].to), links[i].transformation.flip()))
     }
     const to = flip(last.to)
     if (to.encoding) {
-      return replaceEncoding(to, new Encoding([...to.encoding.links, ...ls]))
+      return replaceEncoding(to, [...to.encoding, ...ls])
     } else {
-      return replaceEncoding(to, new Encoding(ls))
+      return replaceEncoding(to, ls)
     }
   }
 
@@ -974,6 +973,10 @@ function formatTail(tail: ReadonlyArray<AST>): string {
 }
 
 function formatAST(ast: AST): string {
+  const title = ast.annotations?.title
+  if (Predicate.isString(title)) {
+    return title
+  }
   switch (ast._tag) {
     case "Declaration": {
       const title = ast.annotations?.title
@@ -1068,7 +1071,7 @@ function formatAST(ast: AST): string {
 }
 
 /** @internal */
-export function formatFilter(filter: SchemaFilter.Filters<any, any>): string {
+export function formatFilter(filter: SchemaFilter.Filters<any>): string {
   const title = filter.annotations?.title
   if (Predicate.isString(title)) {
     return title
@@ -1095,7 +1098,7 @@ export function formatParser(parser: Transformation["decode"]): string {
 }
 
 function formatEncoding(encoding: Encoding): string {
-  const links = encoding.links
+  const links = encoding
   const last = links[links.length - 1]
   const to = encodedAST(last.to)
   if (to.context) {

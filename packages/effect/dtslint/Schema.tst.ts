@@ -1,20 +1,6 @@
 import type { Brand, Context, SchemaAST, SchemaResult } from "effect"
-import {
-  Effect,
-  hole,
-  Option,
-  Result,
-  Schema,
-  SchemaFilter,
-  SchemaParser,
-  SchemaTransformation,
-  SchemaValidator
-} from "effect"
+import { Effect, hole, Option, Result, Schema, SchemaFilter, SchemaParser, SchemaTransformation } from "effect"
 import { describe, expect, it } from "tstyche"
-
-const revealClass = <Self, S extends Schema.Struct<Schema.Struct.Fields>, Inherited>(
-  klass: Schema.Class<Self, S, Inherited>
-): Schema.Class<Self, S, Inherited> => klass
 
 const FiniteFromString = Schema.String.pipe(Schema.decodeTo(
   Schema.Finite,
@@ -269,10 +255,10 @@ describe("Schema", () => {
         Schema.Codec<{ readonly a: number }, { readonly a: string }>
       >()
       expect(schema).type.toBe<
-        Schema.Struct<{ readonly a: Schema.encodeTo<Schema.Number, Schema.String, never, never> }>
+        Schema.Struct<{ readonly a: Schema.decodeTo<Schema.Number, Schema.String, never, never> }>
       >()
       expect(schema.annotate({})).type.toBe<
-        Schema.Struct<{ readonly a: Schema.encodeTo<Schema.Number, Schema.String, never, never> }>
+        Schema.Struct<{ readonly a: Schema.decodeTo<Schema.Number, Schema.String, never, never> }>
       >()
     })
 
@@ -350,130 +336,6 @@ describe("Schema", () => {
     })
   })
 
-  describe("Class", () => {
-    it("extend Fields", () => {
-      class A extends Schema.Class<A>("A")({
-        a: Schema.String
-      }) {}
-
-      expect(new A({ a: "a" })).type.toBe<A>()
-      expect(A.makeUnsafe({ a: "a" })).type.toBe<A>()
-      expect(Schema.revealCodec(A)).type.toBe<Schema.Codec<A, { readonly a: string }>>()
-      expect(revealClass(A)).type.toBe<
-        Schema.Class<A, Schema.Struct<{ readonly a: Schema.String }>, A>
-      >()
-      expect(A.fields).type.toBe<{ readonly a: Schema.String }>()
-    })
-
-    it("extend Struct", () => {
-      class A extends Schema.Class<A>("A")(Schema.Struct({
-        a: Schema.String
-      })) {}
-
-      expect(new A({ a: "a" })).type.toBe<A>()
-      expect(A.makeUnsafe({ a: "a" })).type.toBe<A>()
-      expect(Schema.revealCodec(A)).type.toBe<Schema.Codec<A, { readonly a: string }>>()
-      expect(revealClass(A)).type.toBe<
-        Schema.Class<A, Schema.Struct<{ readonly a: Schema.String }>, A>
-      >()
-      expect(A.fields).type.toBe<{ readonly a: Schema.String }>()
-    })
-
-    it("should reject non existing props", () => {
-      class A extends Schema.Class<A>("A")({
-        a: Schema.String
-      }) {}
-
-      new A({
-        a: "a",
-        // @ts-expect-error: Object literal may only specify known properties, and 'b' does not exist in type '{ readonly a: string; }'.ts(2353)
-        b: "b"
-      })
-      A.make({
-        a: "a",
-        // @ts-expect-error: Object literal may only specify known properties, and 'b' does not exist in type '{ readonly a: string; }'.ts(2353)
-        b: "b"
-      })
-    })
-
-    it("mutable field", () => {
-      class A extends Schema.Class<A>("A")({
-        a: Schema.String.pipe(Schema.mutableKey)
-      }) {}
-
-      expect(Schema.revealCodec(A)).type.toBe<Schema.Codec<A, { a: string }>>()
-    })
-  })
-
-  describe("Error", () => {
-    it("extend Fields", () => {
-      class E extends Schema.ErrorClass<E>("E")({
-        a: Schema.String
-      }) {}
-
-      expect(new E({ a: "a" })).type.toBe<E>()
-      expect(E.makeUnsafe({ a: "a" })).type.toBe<E>()
-      expect(Schema.revealCodec(E)).type.toBe<Schema.Codec<E, { readonly a: string }>>()
-
-      expect(Effect.gen(function*() {
-        return yield* new E({ a: "a" })
-      })).type.toBe<Effect.Effect<never, E>>()
-    })
-
-    it("extend Struct", () => {
-      class E extends Schema.ErrorClass<E>("E")(Schema.Struct({
-        a: Schema.String
-      })) {}
-
-      expect(new E({ a: "a" })).type.toBe<E>()
-      expect(E.makeUnsafe({ a: "a" })).type.toBe<E>()
-      expect(Schema.revealCodec(E)).type.toBe<Schema.Codec<E, { readonly a: string }>>()
-
-      expect(Effect.gen(function*() {
-        return yield* new E({ a: "a" })
-      })).type.toBe<Effect.Effect<never, E>>()
-    })
-
-    it("should reject non existing props", () => {
-      class E extends Schema.ErrorClass<E>("E")({
-        a: Schema.String
-      }) {}
-
-      new E({
-        a: "a",
-        // @ts-expect-error: Object literal may only specify known properties, and 'b' does not exist in type '{ readonly a: string; }'.ts(2353)
-        b: "b"
-      })
-      E.make({
-        a: "a",
-        // @ts-expect-error: Object literal may only specify known properties, and 'b' does not exist in type '{ readonly a: string; }'.ts(2353)
-        b: "b"
-      })
-    })
-
-    it("mutable field", () => {
-      class E extends Schema.ErrorClass<E>("E")({
-        a: Schema.String.pipe(Schema.mutableKey)
-      }) {}
-
-      expect(Schema.revealCodec(E)).type.toBe<Schema.Codec<E, { a: string }>>()
-    })
-  })
-
-  it("optional", () => {
-    const schema = Schema.String.pipe(Schema.optionalKey)
-    expect(Schema.revealCodec(schema)).type.toBe<Schema.Codec<string, string, never>>()
-    expect(schema).type.toBe<Schema.optionalKey<Schema.String>>()
-    expect(schema.annotate({})).type.toBe<Schema.optionalKey<Schema.String>>()
-  })
-
-  it("mutable", () => {
-    const schema = Schema.String.pipe(Schema.mutableKey)
-    expect(Schema.revealCodec(schema)).type.toBe<Schema.Codec<string, string, never>>()
-    expect(schema).type.toBe<Schema.mutableKey<Schema.String>>()
-    expect(schema.annotate({})).type.toBe<Schema.mutableKey<Schema.String>>()
-  })
-
   describe("flip", () => {
     it("Struct & setConstructorDefault", () => {
       const schema = Schema.Struct({
@@ -493,39 +355,6 @@ describe("Schema", () => {
     })
   })
 
-  describe("declareParserResult", () => {
-    it("R !== never", () => {
-      const service = hole<Context.Tag<"Tag", "-">>()
-      const schema = Schema.declareConstructor([])<string>()(() => () => {
-        return Effect.gen(function*() {
-          yield* service
-          return "some-result" as const
-        })
-      })
-      expect(schema).type.toBe<Schema.declareConstructor<"some-result", string, readonly [], "Tag">>()
-    })
-
-    it("item & R = never", () => {
-      const item = hole<Schema.Codec<"Type", "Encoded", "RD", "RE", "RI">>()
-      const schema = Schema.declareConstructor([item])()(([item]) => (input) => {
-        return SchemaValidator.decodeUnknownSchemaResult(item)(input)
-      })
-      expect(schema).type.toBe<Schema.declareConstructor<"Type", unknown, readonly [typeof item], "RI">>()
-    })
-
-    it("item & R !== never", () => {
-      const service = hole<Context.Tag<"Tag", "-">>()
-      const item = hole<Schema.Codec<"Type", "Encoded", "RD", "RE", "RI">>()
-      const schema = Schema.declareConstructor([item])()(([item]) => (input) => {
-        return Effect.gen(function*() {
-          yield* service
-          return yield* SchemaValidator.decodeUnknownSchemaResult(item)(input)
-        })
-      })
-      expect(schema).type.toBe<Schema.declareConstructor<"Type", unknown, readonly [typeof item], "Tag" | "RI">>()
-    })
-  })
-
   describe("Array", () => {
     it("Encoded type", () => {
       const schema = Schema.ReadonlyArray(FiniteFromString)
@@ -535,32 +364,10 @@ describe("Schema", () => {
     })
   })
 
-  describe("checkEffect", () => {
-    it("single filter", () => {
-      const from = hole<Schema.Codec<"Type", "Encoded", "RD", "RE", "RI">>()
-      const schema = from.pipe(
-        Schema.checkEffect(SchemaFilter.makeEffect(() => hole<Effect.Effect<boolean, never, "service">>()))
-      )
-      expect(Schema.revealCodec(schema)).type.toBe<Schema.Codec<"Type", "Encoded", "RD", "RE", "RI" | "service">>()
-    })
-
-    it("multiple filters", () => {
-      const from = hole<Schema.Codec<"Type", "Encoded", "RD", "RE", "RI">>()
-      const f1 = SchemaFilter.makeEffect(() => hole<Effect.Effect<boolean, never, "service1">>())
-      const f2 = SchemaFilter.makeEffect(() => hole<Effect.Effect<boolean, never, "service2">>())
-      const schema = from.pipe(
-        Schema.checkEffect(f1, f2)
-      )
-      expect(Schema.revealCodec(schema)).type.toBe<
-        Schema.Codec<"Type", "Encoded", "RD", "RE", "RI" | "service1" | "service2">
-      >()
-    })
-  })
-
   it("refine", () => {
     const schema = Schema.Option(Schema.String).pipe(Schema.refine(Option.isSome))
     expect(Schema.revealCodec(schema)).type.toBe<
-      Schema.Codec<Option.Some<string>, Option.Option<string>, never, never, never>
+      Schema.Codec<Option.Some<string>, Option.Option<string>, never, never>
     >()
     expect(schema).type.toBe<Schema.refine<Option.Some<string>, Schema.Option<Schema.String>>>()
     expect(schema.annotate({})).type.toBe<Schema.refine<Option.Some<string>, Schema.Option<Schema.String>>>()
@@ -654,6 +461,19 @@ describe("Schema", () => {
   })
 
   describe("Opaque", () => {
+    it("Struct drop in", () => {
+      const f = <Fields extends Schema.Struct.Fields>(struct: Schema.Struct<Fields>) => struct
+
+      class Person extends Schema.Opaque<Person>()(
+        Schema.Struct({
+          name: Schema.String
+        })
+      ) {}
+
+      const y = f(Person)
+      expect(y).type.toBe<Schema.Struct<{ readonly name: Schema.String }>>()
+    })
+
     it("Struct", () => {
       class A extends Schema.Opaque<A>()(Schema.Struct({ a: FiniteFromString })) {}
       const schema = A
@@ -666,13 +486,13 @@ describe("Schema", () => {
       expect(Schema.revealCodec(schema)).type.toBe<Schema.Codec<A, { readonly a: string }>>()
       expect(schema).type.toBe<typeof A>()
       expect(schema.annotate({})).type.toBe<
-        Schema.Struct<{ readonly a: Schema.encodeTo<Schema.Number, Schema.String, never, never> }>
+        Schema.Struct<{ readonly a: Schema.decodeTo<Schema.Number, Schema.String, never, never> }>
       >()
       expect(schema.ast).type.toBe<SchemaAST.TypeLiteral>()
       expect(schema.makeUnsafe).type.toBe<
         (input: { readonly a: number }, options?: Schema.MakeOptions | undefined) => A
       >()
-      expect(schema.fields).type.toBe<{ readonly a: Schema.encodeTo<Schema.Number, Schema.String, never, never> }>()
+      expect(schema.fields).type.toBe<{ readonly a: Schema.decodeTo<Schema.Number, Schema.String, never, never> }>()
 
       // @ts-expect-error: Property 'a' does not exist on type 'typeof A'.
       const _test1 = A.a
@@ -691,6 +511,97 @@ describe("Schema", () => {
       >()
       expect(schema).type.toBe<Schema.Struct<{ readonly a: typeof A }>>()
       expect(schema.annotate({})).type.toBe<Schema.Struct<{ readonly a: typeof A }>>()
+    })
+  })
+
+  it("instanceOf", () => {
+    class MyError extends Error {
+      constructor(message?: string) {
+        super(message)
+        this.name = "MyError"
+        Object.setPrototypeOf(this, MyError.prototype)
+      }
+    }
+
+    const schema = Schema.instanceOf({
+      constructor: MyError,
+      serialization: {
+        json: {
+          to: Schema.String,
+          encode: (e) => e.message,
+          decode: (message) => new MyError(message)
+        }
+      },
+      annotations: { title: "MyError" }
+    })
+
+    expect(Schema.revealCodec(schema)).type.toBe<Schema.Codec<MyError, MyError, never, never>>()
+    expect(schema).type.toBe<Schema.instanceOf<MyError>>()
+    expect(schema.annotate({})).type.toBe<Schema.instanceOf<MyError>>()
+    expect(schema.ast).type.toBe<SchemaAST.Declaration>()
+    expect(schema.makeUnsafe).type.toBe<
+      (input: MyError, options?: Schema.MakeOptions | undefined) => MyError
+    >()
+  })
+
+  describe("extend", () => {
+    it("Struct", () => {
+      const schema = Schema.Struct({ a: Schema.String }).pipe(Schema.extend({ b: Schema.String }))
+      expect(schema).type.toBe<Schema.Struct<{ readonly a: Schema.String; readonly b: Schema.String }>>()
+    })
+
+    it("overlapping fields", () => {
+      const schema = Schema.Struct({ a: Schema.String, b: Schema.String }).pipe(
+        Schema.extend({ b: Schema.Number, c: Schema.Number })
+      )
+      expect(schema).type.toBe<
+        Schema.Struct<{ readonly a: Schema.String; readonly b: Schema.Number; readonly c: Schema.Number }>
+      >()
+    })
+  })
+
+  describe("compose", () => {
+    it("E = T", () => {
+      Schema.String.pipe(
+        Schema.decodeTo(
+          Schema.String.pipe(Schema.check(SchemaFilter.nonEmpty)),
+          SchemaTransformation.compose()
+        )
+      )
+    })
+
+    it("E != T", () => {
+      Schema.String.pipe(
+        Schema.decodeTo(
+          Schema.Number,
+          // @ts-expect-error
+          SchemaTransformation.compose()
+        )
+      )
+      Schema.String.pipe(
+        Schema.decodeTo(
+          Schema.Number,
+          SchemaTransformation.compose({ strict: false })
+        )
+      )
+    })
+
+    it("E extends T", () => {
+      Schema.String.pipe(
+        Schema.decodeTo(
+          Schema.UndefinedOr(Schema.String),
+          SchemaTransformation.composeSupertype()
+        )
+      )
+    })
+
+    it("T extends E", () => {
+      Schema.UndefinedOr(Schema.String).pipe(
+        Schema.decodeTo(
+          Schema.String,
+          SchemaTransformation.composeSubtype()
+        )
+      )
     })
   })
 })

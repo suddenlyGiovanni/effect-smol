@@ -4,9 +4,8 @@
 
 import * as Arr from "./Array.js"
 import type { Brand } from "./Brand.js"
-import type * as Cause from "./Cause.js"
 import * as Data from "./Data.js"
-import * as core from "./internal/core.js"
+import * as Effect from "./Effect.js"
 import { formatUnknown, ownKeys } from "./internal/schema/util.js"
 import * as O from "./Option.js"
 import type { Pipeable } from "./Pipeable.js"
@@ -21,6 +20,7 @@ import * as SchemaParser from "./SchemaParser.js"
 import * as SchemaResult from "./SchemaResult.js"
 import * as SchemaTransformation from "./SchemaTransformation.js"
 import * as SchemaValidator from "./SchemaValidator.js"
+import * as Struct_ from "./Struct.js"
 
 /**
  * @since 4.0.0
@@ -53,7 +53,6 @@ export interface Bottom<
   E,
   RD,
   RE,
-  RI,
   Ast extends SchemaAST.AST,
   RebuildOut extends Top,
   AnnotateIn extends SchemaAST.Annotations,
@@ -72,7 +71,6 @@ export interface Bottom<
   readonly "Encoded": E
   readonly "DecodingContext": RD
   readonly "EncodingContext": RE
-  readonly "IntrinsicContext": RI
 
   readonly "~rebuild.out": RebuildOut
   readonly "~annotate.in": AnnotateIn
@@ -103,7 +101,6 @@ export abstract class Bottom$<
   E,
   RD,
   RE,
-  RI,
   Ast extends SchemaAST.AST,
   RebuildOut extends Top,
   AnnotateIn extends SchemaAST.Annotations,
@@ -119,7 +116,6 @@ export abstract class Bottom$<
     E,
     RD,
     RE,
-    RI,
     Ast,
     RebuildOut,
     AnnotateIn,
@@ -137,7 +133,6 @@ export abstract class Bottom$<
   declare readonly "Encoded": E
   declare readonly "DecodingContext": RD
   declare readonly "EncodingContext": RE
-  declare readonly "IntrinsicContext": RI
 
   declare readonly "~rebuild.out": RebuildOut
   declare readonly "~annotate.in": AnnotateIn
@@ -190,7 +185,6 @@ export interface Top extends
     unknown,
     unknown,
     unknown,
-    unknown,
     SchemaAST.AST,
     Top,
     SchemaAST.Annotations,
@@ -216,13 +210,54 @@ export interface Schema<out T> extends Top {
  * @category Model
  * @since 4.0.0
  */
-export interface Codec<out T, out E = T, out RD = never, out RE = never, out RI = never> extends Schema<T> {
+export interface Codec<out T, out E = T, out RD = never, out RE = never> extends Schema<T> {
   readonly "Encoded": E
   readonly "DecodingContext": RD
   readonly "EncodingContext": RE
-  readonly "IntrinsicContext": RI
-  readonly "~rebuild.out": Codec<T, E, RD, RE, RI>
+  readonly "~rebuild.out": Codec<T, E, RD, RE>
 }
+
+/**
+ * @since 4.0.0
+ * @category error
+ */
+export class CodecError extends Data.TaggedError("CodecError")<{
+  readonly issue: SchemaIssue.Issue
+}> {}
+
+/**
+ * @category Decoding
+ * @since 4.0.0
+ */
+export const decodeUnknown = <T, E, RD, RE>(codec: Codec<T, E, RD, RE>) => {
+  const parser = SchemaValidator.decodeUnknown(codec)
+  return (u: unknown, options?: SchemaAST.ParseOptions): Effect.Effect<T, CodecError, RD> => {
+    return Effect.mapError(parser(u, options), (issue) => new CodecError({ issue }))
+  }
+}
+
+/**
+ * @category Decoding
+ * @since 4.0.0
+ */
+export const decodeUnknownSync = SchemaValidator.decodeUnknownSync
+
+/**
+ * @category Encoding
+ * @since 4.0.0
+ */
+export const encodeUnknown = <T, E, RD, RE>(codec: Codec<T, E, RD, RE>) => {
+  const parser = SchemaValidator.encodeUnknown(codec)
+  return (u: unknown, options?: SchemaAST.ParseOptions): Effect.Effect<E, CodecError, RE> => {
+    return Effect.mapError(parser(u, options), (issue) => new CodecError({ issue }))
+  }
+}
+
+/**
+ * @category Encoding
+ * @since 4.0.0
+ */
+export const encodeUnknownSync = SchemaValidator.encodeUnknownSync
 
 /**
  * @category Api interface
@@ -234,7 +269,6 @@ export interface make<S extends Top> extends
     S["Encoded"],
     S["DecodingContext"],
     S["EncodingContext"],
-    S["IntrinsicContext"],
     S["ast"],
     S["~rebuild.out"],
     S["~annotate.in"],
@@ -252,7 +286,6 @@ class make$<S extends Top> extends Bottom$<
   S["Encoded"],
   S["DecodingContext"],
   S["EncodingContext"],
-  S["IntrinsicContext"],
   S["ast"],
   S["~rebuild.out"],
   S["~annotate.in"],
@@ -353,7 +386,6 @@ export interface typeCodec<S extends Top> extends
     S["Type"],
     never,
     never,
-    S["IntrinsicContext"],
     S["ast"],
     typeCodec<S>,
     S["~annotate.in"],
@@ -378,7 +410,6 @@ export interface encodedCodec<S extends Top> extends
     S["Encoded"],
     never,
     never,
-    S["IntrinsicContext"],
     SchemaAST.AST,
     encodedCodec<S>,
     SchemaAST.Annotations,
@@ -403,7 +434,6 @@ export interface flip<S extends Top> extends
     S["Type"],
     S["EncodingContext"],
     S["DecodingContext"],
-    S["IntrinsicContext"],
     SchemaAST.AST,
     flip<S>,
     SchemaAST.Annotations,
@@ -445,94 +475,47 @@ export function flip<S extends Top>(schema: S): S extends flip<infer F> ? F["~re
  * @category Api interface
  * @since 4.0.0
  */
-export interface declare<T>
-  extends Bottom<T, T, never, never, never, SchemaAST.Declaration, declare<T>, SchemaAST.Annotations, T>
-{
-  readonly "~encoded.make.in": T
-}
-
-/**
- * @since 4.0.0
- */
-export const declare = <T>(
-  is: (u: unknown) => u is T,
-  annotations?: SchemaAST.Annotations.Declaration<T> | undefined
-): declare<T> => {
-  return make<declare<T>>(
-    new SchemaAST.Declaration(
-      [],
-      () => (input, ast) =>
-        is(input) ?
-          Result.ok(input) :
-          Result.err(new SchemaIssue.MismatchIssue(ast, O.some(input))),
-      annotations,
-      undefined,
-      undefined,
-      undefined
-    )
-  )
-}
-
-/**
- * @category Api interface
- * @since 4.0.0
- */
-export interface declareConstructor<T, E, TypeParameters extends ReadonlyArray<Top>, RI> extends
+export interface declare<T, E, TypeParameters extends ReadonlyArray<Top>> extends
   Bottom<
     T,
     E,
     TypeParameters[number]["DecodingContext"],
     TypeParameters[number]["EncodingContext"],
-    RI,
     SchemaAST.Declaration,
-    declareConstructor<T, E, TypeParameters, RI>,
-    SchemaAST.Annotations.Declaration<T>,
+    declare<T, E, TypeParameters>,
+    SchemaAST.Annotations.Declaration<T, TypeParameters>,
     T
   >
 {
   readonly "~encoded.make.in": E
 }
 
-type MergeTypeParametersParsingContexts<TypeParameters extends ReadonlyArray<Top>> = {
-  readonly [K in keyof TypeParameters]: Codec<
-    TypeParameters[K]["Type"],
-    TypeParameters[K]["Encoded"],
-    TypeParameters[K]["DecodingContext"] | TypeParameters[K]["EncodingContext"],
-    TypeParameters[K]["DecodingContext"] | TypeParameters[K]["EncodingContext"],
-    TypeParameters[K]["IntrinsicContext"]
-  >
-}
-
 /**
  * @since 4.0.0
  */
-export const declareConstructor =
+export const declare =
   <const TypeParameters extends ReadonlyArray<Top>>(typeParameters: TypeParameters) =>
   <E>() =>
-  <T, R>(
-    decode: (typeParameters: MergeTypeParametersParsingContexts<TypeParameters>) => (
+  <T>(
+    is: (
+      typeParameters: {
+        readonly [K in keyof TypeParameters]: Codec<TypeParameters[K]["Type"], TypeParameters[K]["Encoded"]>
+      }
+    ) => (
       u: unknown,
       self: SchemaAST.Declaration,
       options: SchemaAST.ParseOptions
-    ) => SchemaResult.SchemaResult<T, R>,
-    annotations?: SchemaAST.Annotations.Declaration<T>
-  ): declareConstructor<
+    ) => SchemaResult.SchemaResult<T>,
+    annotations?: SchemaAST.Annotations.Declaration<T, TypeParameters>
+  ): declare<
     T,
     E,
-    TypeParameters,
-    Exclude<R, TypeParameters[number]["DecodingContext"] | TypeParameters[number]["EncodingContext"]>
+    TypeParameters
   > => {
-    return make<
-      declareConstructor<
-        T,
-        E,
-        TypeParameters,
-        Exclude<R, TypeParameters[number]["DecodingContext"] | TypeParameters[number]["EncodingContext"]>
-      >
-    >(
+    return make<declare<T, E, TypeParameters>>(
       new SchemaAST.Declaration(
         typeParameters.map((tp) => tp.ast),
-        (typeParameters) => decode(typeParameters.map(make) as any),
+        (typeParameters) => is(typeParameters.map(make) as any),
         annotations,
         undefined,
         undefined,
@@ -542,11 +525,58 @@ export const declareConstructor =
   }
 
 /**
- * Returns the underlying `Codec<T, E, RD, RE, RI>`.
+ * @category Api interface
+ * @since 4.0.0
+ */
+export interface declareRefinement<T> extends declare<T, T, readonly []> {}
+
+/**
+ * @since 4.0.0
+ */
+export const declareRefinement = <T, To extends Top>(
+  options: {
+    readonly is: (u: unknown) => u is T
+    readonly serialization?: {
+      readonly json?: {
+        readonly to: To
+        readonly encode: (instance: T) => To["Type"]
+        readonly decode: (to: To["Type"]) => T
+      } | undefined
+    } | undefined
+    annotations?: SchemaAST.Annotations.Declaration<T, readonly []> | undefined
+  }
+): declareRefinement<T> => {
+  const json = options.serialization?.json
+  const annotations = json ?
+    {
+      serialization: {
+        json: () =>
+          new SchemaAST.Link(
+            json.to.ast,
+            new SchemaTransformation.Transformation<T, To["Type"], never, never>(
+              SchemaParser.mapSome(json.decode),
+              SchemaParser.mapSome(json.encode)
+            )
+          )
+      },
+      ...options.annotations
+    } :
+    options.annotations
+  return declare([])<T>()(
+    () => (input, ast) =>
+      options.is(input) ?
+        Result.ok(input) :
+        Result.err(new SchemaIssue.MismatchIssue(ast, O.some(input))),
+    annotations
+  )
+}
+
+/**
+ * Returns the underlying `Codec<T, E, RD, RE>`.
  *
  * @since 4.0.0
  */
-export function revealCodec<T, E, RD, RE, RI>(codec: Codec<T, E, RD, RE, RI>): Codec<T, E, RD, RE, RI> {
+export function revealCodec<T, E, RD, RE>(codec: Codec<T, E, RD, RE>): Codec<T, E, RD, RE> {
   return codec
 }
 
@@ -555,7 +585,7 @@ export function revealCodec<T, E, RD, RE, RI>(codec: Codec<T, E, RD, RE, RI>): C
  * @since 4.0.0
  */
 export interface Literal<L extends SchemaAST.LiteralValue>
-  extends Bottom<L, L, never, never, never, SchemaAST.LiteralType, Literal<L>, SchemaAST.Annotations, L>
+  extends Bottom<L, L, never, never, SchemaAST.LiteralType, Literal<L>, SchemaAST.Annotations, L>
 {
   readonly literal: L
 }
@@ -577,8 +607,23 @@ export function Literal<L extends SchemaAST.LiteralValue>(literal: L): Literal<L
  * @category Api interface
  * @since 4.0.0
  */
+export interface tag<Tag extends SchemaAST.LiteralValue> extends setConstructorDefault<Literal<Tag>> {}
+
+/**
+ * @since 4.0.0
+ */
+export function tag<Tag extends SchemaAST.LiteralValue>(literal: Tag): tag<Tag> {
+  return Literal(literal).pipe(
+    setConstructorDefault(() => Result.succeedSome(literal))
+  )
+}
+
+/**
+ * @category Api interface
+ * @since 4.0.0
+ */
 export interface Never
-  extends Bottom<never, never, never, never, never, SchemaAST.NeverKeyword, Never, SchemaAST.Annotations, never>
+  extends Bottom<never, never, never, never, SchemaAST.NeverKeyword, Never, SchemaAST.Annotations, never>
 {}
 
 /**
@@ -591,7 +636,7 @@ export const Never: Never = make<Never>(SchemaAST.neverKeyword)
  * @since 4.0.0
  */
 export interface Any
-  extends Bottom<unknown, unknown, never, never, never, SchemaAST.AnyKeyword, Any, SchemaAST.Annotations, unknown>
+  extends Bottom<unknown, unknown, never, never, SchemaAST.AnyKeyword, Any, SchemaAST.Annotations, unknown>
 {}
 
 /**
@@ -604,8 +649,7 @@ export const Any: Any = make<Any>(SchemaAST.anyKeyword)
  * @since 4.0.0
  */
 export interface Unknown
-  extends
-    Bottom<unknown, unknown, never, never, never, SchemaAST.UnknownKeyword, Unknown, SchemaAST.Annotations, unknown>
+  extends Bottom<unknown, unknown, never, never, SchemaAST.UnknownKeyword, Unknown, SchemaAST.Annotations, unknown>
 {}
 
 /**
@@ -618,7 +662,7 @@ export const Unknown: Unknown = make<Unknown>(SchemaAST.unknownKeyword)
  * @since 4.0.0
  */
 export interface Null
-  extends Bottom<null, null, never, never, never, SchemaAST.NullKeyword, Null, SchemaAST.Annotations, null>
+  extends Bottom<null, null, never, never, SchemaAST.NullKeyword, Null, SchemaAST.Annotations, null>
 {}
 
 /**
@@ -630,18 +674,9 @@ export const Null: Null = make<Null>(SchemaAST.nullKeyword)
  * @category Api interface
  * @since 4.0.0
  */
-export interface Undefined extends
-  Bottom<
-    undefined,
-    undefined,
-    never,
-    never,
-    never,
-    SchemaAST.UndefinedKeyword,
-    Undefined,
-    SchemaAST.Annotations,
-    undefined
-  >
+export interface Undefined
+  extends
+    Bottom<undefined, undefined, never, never, SchemaAST.UndefinedKeyword, Undefined, SchemaAST.Annotations, undefined>
 {}
 
 /**
@@ -654,7 +689,7 @@ export const Undefined: Undefined = make<Undefined>(SchemaAST.undefinedKeyword)
  * @since 4.0.0
  */
 export interface String
-  extends Bottom<string, string, never, never, never, SchemaAST.StringKeyword, String, SchemaAST.Annotations, string>
+  extends Bottom<string, string, never, never, SchemaAST.StringKeyword, String, SchemaAST.Annotations, string>
 {}
 
 /**
@@ -667,7 +702,7 @@ export const String: String = make<String>(SchemaAST.stringKeyword)
  * @since 4.0.0
  */
 export interface Number
-  extends Bottom<number, number, never, never, never, SchemaAST.NumberKeyword, Number, SchemaAST.Annotations, number>
+  extends Bottom<number, number, never, never, SchemaAST.NumberKeyword, Number, SchemaAST.Annotations, number>
 {}
 
 /**
@@ -680,8 +715,7 @@ export const Number: Number = make<Number>(SchemaAST.numberKeyword)
  * @since 4.0.0
  */
 export interface Boolean
-  extends
-    Bottom<boolean, boolean, never, never, never, SchemaAST.BooleanKeyword, Boolean, SchemaAST.Annotations, boolean>
+  extends Bottom<boolean, boolean, never, never, SchemaAST.BooleanKeyword, Boolean, SchemaAST.Annotations, boolean>
 {}
 
 /**
@@ -694,7 +728,7 @@ export const Boolean: Boolean = make<Boolean>(SchemaAST.booleanKeyword)
  * @since 4.0.0
  */
 export interface Symbol
-  extends Bottom<symbol, symbol, never, never, never, SchemaAST.SymbolKeyword, Symbol, SchemaAST.Annotations, symbol>
+  extends Bottom<symbol, symbol, never, never, SchemaAST.SymbolKeyword, Symbol, SchemaAST.Annotations, symbol>
 {}
 
 /**
@@ -706,7 +740,7 @@ export const Symbol: Symbol = make<Symbol>(SchemaAST.symbolKeyword)
  * @since 4.0.0
  */
 export interface BigInt
-  extends Bottom<bigint, bigint, never, never, never, SchemaAST.BigIntKeyword, BigInt, SchemaAST.Annotations, bigint>
+  extends Bottom<bigint, bigint, never, never, SchemaAST.BigIntKeyword, BigInt, SchemaAST.Annotations, bigint>
 {}
 
 /**
@@ -718,7 +752,7 @@ export const BigInt: BigInt = make<BigInt>(SchemaAST.bigIntKeyword)
  * @since 4.0.0
  */
 export interface Void
-  extends Bottom<void, void, never, never, never, SchemaAST.VoidKeyword, Void, SchemaAST.Annotations, void>
+  extends Bottom<void, void, never, never, SchemaAST.VoidKeyword, Void, SchemaAST.Annotations, void>
 {}
 
 /**
@@ -730,7 +764,7 @@ export const Void: Void = make<Void>(SchemaAST.voidKeyword)
  * @since 4.0.0
  */
 export interface Object$
-  extends Bottom<object, object, never, never, never, SchemaAST.ObjectKeyword, Object$, SchemaAST.Annotations, object>
+  extends Bottom<object, object, never, never, SchemaAST.ObjectKeyword, Object$, SchemaAST.Annotations, object>
 {}
 
 const Object_: Object$ = make<Object$>(SchemaAST.objectKeyword)
@@ -747,7 +781,7 @@ export {
  * @since 4.0.0
  */
 export interface UniqueSymbol<sym extends symbol>
-  extends Bottom<sym, sym, never, never, never, SchemaAST.UniqueSymbol, UniqueSymbol<sym>, SchemaAST.Annotations, sym>
+  extends Bottom<sym, sym, never, never, SchemaAST.UniqueSymbol, UniqueSymbol<sym>, SchemaAST.Annotations, sym>
 {}
 
 /**
@@ -836,11 +870,6 @@ export declare namespace Struct {
    */
   export type EncodingContext<F extends Fields> = { readonly [K in keyof F]: F[K]["EncodingContext"] }[keyof F]
 
-  /**
-   * @since 4.0.0
-   */
-  export type IntrinsicContext<F extends Fields> = { readonly [K in keyof F]: F[K]["IntrinsicContext"] }[keyof F]
-
   type TypeDefaultedKeys<Fields extends Struct.Fields> = {
     [K in keyof Fields]: Fields[K] extends { readonly "~type.default": "has-constructor-default" } ? K
       : never
@@ -869,14 +898,61 @@ export interface Struct<Fields extends Struct.Fields> extends
     Simplify<Struct.Encoded<Fields>>,
     Struct.DecodingContext<Fields>,
     Struct.EncodingContext<Fields>,
-    Struct.IntrinsicContext<Fields>,
     SchemaAST.TypeLiteral,
     Struct<Fields>,
-    SchemaAST.Annotations.Bottom,
+    SchemaAST.Annotations.Bottom<Simplify<Struct.Type<Fields>>>,
     Simplify<Struct.MakeIn<Fields>>
   >
 {
   readonly fields: Fields
+}
+
+/**
+ * @since 4.0.0
+ */
+export const extend = <const NewFields extends Struct.Fields>(
+  newFields: NewFields
+) =>
+<const Fields extends Struct.Fields>(schema: Struct<Fields>): Struct<Simplify<Merge<Fields, NewFields>>> => {
+  const fields = { ...schema.fields, ...newFields }
+  let ast = getTypeLiteralFromFields(fields)
+  if (schema.ast.modifiers) {
+    ast = SchemaAST.replaceModifiers(ast, schema.ast.modifiers)
+  }
+  return new Struct$<Simplify<Merge<Fields, NewFields>>>(ast, fields)
+}
+
+/**
+ * @since 4.0.0
+ */
+export const pick = <const Fields extends Struct.Fields, const Keys extends keyof Fields>(
+  keys: ReadonlyArray<Keys>
+) =>
+(schema: Struct<Fields>): Struct<Simplify<Pick<Fields, Keys>>> => {
+  return Struct(Struct_.pick(schema.fields, ...keys))
+}
+
+/**
+ * @since 4.0.0
+ */
+export const omit = <const Fields extends Struct.Fields, const Keys extends keyof Fields>(
+  keys: ReadonlyArray<Keys>
+) =>
+(schema: Struct<Fields>): Struct<Simplify<Omit<Fields, Keys>>> => {
+  return Struct(Struct_.omit(schema.fields, ...keys))
+}
+
+function getTypeLiteralFromFields<Fields extends Struct.Fields>(fields: Fields): SchemaAST.TypeLiteral {
+  return new SchemaAST.TypeLiteral(
+    ownKeys(fields).map((key) => {
+      return new SchemaAST.PropertySignature(key, fields[key].ast)
+    }),
+    [],
+    undefined,
+    undefined,
+    undefined,
+    undefined
+  )
 }
 
 class Struct$<Fields extends Struct.Fields> extends make$<Struct<Fields>> implements Struct<Fields> {
@@ -891,17 +967,7 @@ class Struct$<Fields extends Struct.Fields> extends make$<Struct<Fields>> implem
  * @since 4.0.0
  */
 export function Struct<const Fields extends Struct.Fields>(fields: Fields): Struct<Fields> {
-  const ast = new SchemaAST.TypeLiteral(
-    ownKeys(fields).map((key) => {
-      return new SchemaAST.PropertySignature(key, fields[key].ast)
-    }),
-    [],
-    undefined,
-    undefined,
-    undefined,
-    undefined
-  )
-  return new Struct$(ast, fields)
+  return new Struct$(getTypeLiteralFromFields(fields), fields)
 }
 
 /**
@@ -911,7 +977,7 @@ export declare namespace IndexSignature {
   /**
    * @since 4.0.0
    */
-  export interface RecordKey extends Codec<PropertyKey, PropertyKey, unknown, unknown, unknown> {
+  export interface RecordKey extends Codec<PropertyKey, PropertyKey, unknown, unknown> {
     readonly "~type.make.in": PropertyKey
   }
 
@@ -955,13 +1021,6 @@ export declare namespace IndexSignature {
   /**
    * @since 4.0.0
    */
-  export type IntrinsicContext<Records extends IndexSignature.Records> = {
-    [K in keyof Records]: Records[K]["key"]["IntrinsicContext"] | Records[K]["value"]["IntrinsicContext"]
-  }[number]
-
-  /**
-   * @since 4.0.0
-   */
   export type MakeIn<Records extends IndexSignature.Records> = MergeTuple<
     {
       readonly [K in keyof Records]: {
@@ -981,10 +1040,9 @@ export interface ReadonlyRecord$<Key extends IndexSignature.RecordKey, Value ext
     { readonly [P in Key["Encoded"]]: Value["Encoded"] },
     Key["DecodingContext"] | Value["DecodingContext"],
     Key["EncodingContext"] | Value["EncodingContext"],
-    Key["IntrinsicContext"] | Value["IntrinsicContext"],
     SchemaAST.TypeLiteral,
     ReadonlyRecord$<Key, Value>,
-    SchemaAST.Annotations.Bottom,
+    SchemaAST.Annotations.Bottom<{ readonly [P in Key["Type"]]: Value["Type"] }>,
     { readonly [P in Key["~type.make.in"]]: Value["~type.make.in"] }
   >
 {
@@ -1070,13 +1128,6 @@ export declare namespace StructAndRest {
   /**
    * @since 4.0.0
    */
-  export type IntrinsicContext<Fields extends Struct.Fields, Records extends IndexSignature.Records> =
-    | Struct.IntrinsicContext<Fields>
-    | IndexSignature.IntrinsicContext<Records>
-
-  /**
-   * @since 4.0.0
-   */
   export type MakeIn<Fields extends Struct.Fields, Records extends IndexSignature.Records> =
     & Struct.MakeIn<Fields>
     & IndexSignature.MakeIn<Records>
@@ -1095,10 +1146,9 @@ export interface StructAndRest<
     Simplify<StructAndRest.Encoded<Fields, Records>>,
     StructAndRest.DecodingContext<Fields, Records>,
     StructAndRest.EncodingContext<Fields, Records>,
-    StructAndRest.IntrinsicContext<Fields, Records>,
     SchemaAST.TypeLiteral,
     StructAndRest<Fields, Records>,
-    SchemaAST.Annotations.Bottom,
+    SchemaAST.Annotations.Bottom<Simplify<StructAndRest.Type<Fields, Records>>>,
     Simplify<StructAndRest.MakeIn<Fields, Records>>
   >
 {
@@ -1193,11 +1243,6 @@ export declare namespace Tuple {
    */
   export type EncodingContext<E extends Elements> = E[number]["EncodingContext"]
 
-  /**
-   * @since 4.0.0
-   */
-  export type IntrinsicContext<E extends Elements> = E[number]["IntrinsicContext"]
-
   type MakeIn_<
     E,
     Out extends ReadonlyArray<any> = readonly []
@@ -1225,10 +1270,9 @@ export interface ReadonlyTuple<Elements extends Tuple.Elements> extends
     Tuple.Encoded<Elements>,
     Tuple.DecodingContext<Elements>,
     Tuple.EncodingContext<Elements>,
-    Tuple.IntrinsicContext<Elements>,
     SchemaAST.TupleType,
     ReadonlyTuple<Elements>,
-    SchemaAST.Annotations.Bottom,
+    SchemaAST.Annotations.Bottom<Tuple.Type<Elements>>,
     Tuple.MakeIn<Elements>
   >
 {
@@ -1273,10 +1317,9 @@ export interface ReadonlyArray$<S extends Top> extends
     ReadonlyArray<S["Encoded"]>,
     S["DecodingContext"],
     S["EncodingContext"],
-    S["IntrinsicContext"],
     SchemaAST.TupleType,
     ReadonlyArray$<S>,
-    SchemaAST.Annotations.Bottom,
+    SchemaAST.Annotations.Bottom<ReadonlyArray<S["Type"]>>,
     ReadonlyArray<S["~type.make.in"]>
   >
 {
@@ -1310,10 +1353,9 @@ export interface Union<Members extends ReadonlyArray<Top>> extends
     Members[number]["Encoded"],
     Members[number]["DecodingContext"],
     Members[number]["EncodingContext"],
-    Members[number]["IntrinsicContext"],
     SchemaAST.UnionType,
     Union<Members>,
-    SchemaAST.Annotations.Bottom,
+    SchemaAST.Annotations.Bottom<Members[number]["Type"]>,
     Members[number]["~type.make.in"]
   >
 {
@@ -1344,10 +1386,9 @@ export interface Literals<L extends ReadonlyArray<SchemaAST.LiteralValue>> exten
     L[number],
     never,
     never,
-    never,
     SchemaAST.UnionType,
     Literals<L>,
-    SchemaAST.Annotations.Bottom,
+    SchemaAST.Annotations.Bottom<L[number]>,
     L[number]
   >
 {
@@ -1400,7 +1441,6 @@ export interface suspend<S extends Top> extends
     S["Encoded"],
     S["DecodingContext"],
     S["EncodingContext"],
-    S["IntrinsicContext"],
     SchemaAST.Suspend,
     suspend<S>,
     S["~annotate.in"],
@@ -1423,7 +1463,7 @@ export const check = <S extends Top>(
   ...filters: readonly [SchemaFilter.Filters<S["Type"]>, ...ReadonlyArray<SchemaFilter.Filters<S["Type"]>>]
 ) =>
 (self: S): S["~rebuild.out"] => {
-  return self.rebuild(SchemaAST.appendModifiers(self.ast, filters))
+  return SchemaFilter.asCheck(...filters)(self)
 }
 
 /**
@@ -1434,33 +1474,7 @@ export const checkEncoded = <S extends Top>(
   ...filters: readonly [SchemaFilter.Filters<S["Encoded"]>, ...ReadonlyArray<SchemaFilter.Filters<S["Encoded"]>>]
 ) =>
 (self: S): S["~rebuild.out"] => {
-  return self.rebuild(SchemaAST.appendEncodedModifiers(self.ast, filters))
-}
-
-/**
- * @category Api interface
- * @since 4.0.0
- */
-export interface checkEffect<S extends Top, R> extends make<S> {
-  readonly "~rebuild.out": checkEffect<S, R>
-  readonly "IntrinsicContext": S["IntrinsicContext"] | R
-}
-
-/**
- * @category Filtering
- * @since 4.0.0
- */
-export const checkEffect = <
-  S extends Top,
-  Filters extends readonly [
-    SchemaFilter.Filters<S["Type"], any>,
-    ...ReadonlyArray<SchemaFilter.Filters<S["Type"], any>>
-  ]
->(
-  ...filters: Filters
-) =>
-(self: S): checkEffect<S, Filters[number]["Context"]> => {
-  return make<checkEffect<S, Filters[number]["Context"]>>(SchemaAST.appendModifiers(self.ast, filters))
+  return SchemaFilter.asCheckEncoded(...filters)(self)
 }
 
 /**
@@ -1496,7 +1510,7 @@ export const refine = <T, S extends Top>(
 }
 
 const catch_ =
-  <S extends Top>(f: (issue: SchemaIssue.Issue) => SchemaResult.SchemaResult<O.Option<S["Type"]>>) =>
+  <S extends Top, R = never>(f: (issue: SchemaIssue.Issue) => SchemaResult.SchemaResult<O.Option<S["Type"]>, R>) =>
   (self: S): S["~rebuild.out"] => {
     return self.rebuild(
       SchemaAST.appendModifiers(
@@ -1523,15 +1537,12 @@ export {
  * @category Api interface
  * @since 4.0.0
  */
-export interface decodeMiddleware<S extends Top, RD, RI> extends make<S> {
-  readonly "~rebuild.out": decodeMiddleware<S, RD, RI>
+export interface decodeMiddleware<S extends Top, RD> extends make<S> {
+  readonly "~rebuild.out": decodeMiddleware<S, RD>
   readonly "DecodingContext": RD
-  readonly "IntrinsicContext": RI
 }
 
-class decodeMiddleware$<S extends Top, RD, RI> extends make$<decodeMiddleware<S, RD, RI>>
-  implements decodeMiddleware<S, RD, RI>
-{
+class decodeMiddleware$<S extends Top, RD> extends make$<decodeMiddleware<S, RD>> implements decodeMiddleware<S, RD> {
   constructor(ast: SchemaAST.AST, readonly schema: S) {
     super(ast, (ast) => new decodeMiddleware$(ast, this.schema))
   }
@@ -1540,11 +1551,17 @@ class decodeMiddleware$<S extends Top, RD, RI> extends make$<decodeMiddleware<S,
 /**
  * @since 4.0.0
  */
-export const decodeMiddleware = <S extends Top, R>(
-  middleware: SchemaAST.Middleware<S["Encoded"], S["DecodingContext"], S["Type"], R>
+export const decodeMiddleware = <S extends Top, RD>(
+  middleware: SchemaMiddleware.Middleware<S["Encoded"], S["DecodingContext"], S["Type"], RD>
 ) =>
-(self: S): decodeMiddleware<S, R, Exclude<S["IntrinsicContext"], Exclude<S["DecodingContext"], R>>> => {
-  return new decodeMiddleware$(SchemaAST.appendModifiers(self.ast, [middleware]), self)
+(self: S): decodeMiddleware<S, RD> => {
+  const ast = SchemaAST.appendModifiers(self.ast, [
+    new SchemaAST.Middleware(
+      middleware,
+      SchemaMiddleware.identity()
+    )
+  ])
+  return new decodeMiddleware$(ast, self)
 }
 
 /**
@@ -1575,47 +1592,61 @@ export const brand = <B extends string | symbol>(brand: B) => <S extends Top>(se
 }
 
 /**
- * @since 4.0.0
- */
-export const decodeTo = <From extends Top, To extends Top, RD, RE>(
-  to: To,
-  transformation: SchemaTransformation.Transformation<From["Type"], To["Encoded"], RD, RE>
-) =>
-(from: From): encodeTo<To, From, RD, RE> => {
-  return make(SchemaAST.decodeTo(from.ast, to.ast, transformation))
-}
-
-/**
  * @category Api interface
  * @since 4.0.0
  */
-export interface encodeTo<From extends Top, To extends Top, RD, RE> extends
+export interface decodeTo<To extends Top, From extends Top, RD, RE> extends
   Bottom<
-    From["Type"],
-    To["Encoded"],
-    From["DecodingContext"] | To["DecodingContext"] | RD,
-    From["EncodingContext"] | To["EncodingContext"] | RE,
-    From["IntrinsicContext"] | To["IntrinsicContext"],
-    From["ast"],
-    encodeTo<From, To, RD, RE>,
-    From["~annotate.in"],
-    From["~type.make.in"],
-    From["~type.isReadonly"],
-    From["~type.isOptional"],
-    From["~type.default"],
-    To["~encoded.isReadonly"],
-    To["~encoded.isOptional"]
+    To["Type"],
+    From["Encoded"],
+    To["DecodingContext"] | From["DecodingContext"] | RD,
+    To["EncodingContext"] | From["EncodingContext"] | RE,
+    To["ast"],
+    decodeTo<To, From, RD, RE>,
+    To["~annotate.in"],
+    To["~type.make.in"],
+    To["~type.isReadonly"],
+    To["~type.isOptional"],
+    To["~type.default"],
+    From["~encoded.isReadonly"],
+    From["~encoded.isOptional"]
   >
-{}
+{
+  readonly from: From
+  readonly to: To
+}
+
+class decodeTo$<To extends Top, From extends Top, RD, RE> extends make$<decodeTo<To, From, RD, RE>>
+  implements decodeTo<To, From, RD, RE>
+{
+  constructor(
+    readonly ast: From["ast"],
+    readonly from: From,
+    readonly to: To
+  ) {
+    super(ast, (ast) => new decodeTo$<To, From, RD, RE>(ast, this.from, this.to))
+  }
+}
 
 /**
  * @since 4.0.0
  */
-export const encodeTo = <From extends Top, To extends Top, RD, RE>(
+export const decodeTo = <To extends Top, From extends Top, RD, RE>(
   to: To,
-  transformation: SchemaTransformation.Transformation<To["Type"], From["Encoded"], RD, RE>
+  transformation: SchemaTransformation.Transformation<To["Encoded"], From["Type"], RD, RE>
 ) =>
-(from: From): encodeTo<From, To, RD, RE> => {
+(from: From): decodeTo<To, From, RD, RE> => {
+  return new decodeTo$(SchemaAST.decodeTo(from.ast, to.ast, transformation), from, to)
+}
+
+/**
+ * @since 4.0.0
+ */
+export const encodeTo = <To extends Top, From extends Top, RD, RE>(
+  to: To,
+  transformation: SchemaTransformation.Transformation<From["Encoded"], To["Type"], RD, RE>
+) =>
+(from: From): decodeTo<From, To, RD, RE> => {
   return to.pipe(decodeTo(from, transformation))
 }
 
@@ -1662,238 +1693,11 @@ export const setConstructorDefault = <S extends Top & { readonly "~type.default"
  * @category Api interface
  * @since 4.0.0
  */
-export interface Class<Self, S extends Struct<Struct.Fields>, Inherited> extends
-  Bottom<
-    Self,
-    S["Encoded"],
-    S["DecodingContext"],
-    S["EncodingContext"],
-    S["IntrinsicContext"],
-    SchemaAST.Declaration,
-    Class<Self, S, Self>,
-    SchemaAST.Annotations.Declaration<Self>,
-    S["~type.make.in"],
-    S["~type.isReadonly"],
-    S["~type.isOptional"],
-    S["~type.default"],
-    S["~encoded.isReadonly"],
-    S["~encoded.isOptional"]
-  >
-{
-  new(props: S["~type.make.in"], options?: MakeOptions): S["Type"] & Inherited
-  readonly "~encoded.make.in": S["~encoded.make.in"]
-  readonly identifier: string
-  readonly fields: S["fields"]
-}
-
-function makeClass<
-  Self,
-  S extends Struct<Struct.Fields>,
-  Inherited extends new(...args: ReadonlyArray<any>) => any
->(
-  Inherited: Inherited,
-  identifier: string,
-  schema: S,
-  computeAST: (self: Class<Self, S, Inherited>) => SchemaAST.Declaration
-): any {
-  let astMemo: SchemaAST.Declaration | undefined = undefined
-
-  return class extends Inherited {
-    constructor(...[input, options]: ReadonlyArray<any>) {
-      const props = schema.makeUnsafe(input, options)
-      super(props, options)
-    }
-
-    static readonly "~effect/Schema" = "~effect/Schema"
-
-    declare static readonly "Type": Self
-    declare static readonly "Encoded": S["Encoded"]
-    declare static readonly "DecodingContext": S["DecodingContext"]
-    declare static readonly "EncodingContext": S["EncodingContext"]
-    declare static readonly "IntrinsicContext": S["IntrinsicContext"]
-
-    declare static readonly "~rebuild.out": Class<Self, S, Self>
-    declare static readonly "~annotate.in": SchemaAST.Annotations.Declaration<Self>
-    declare static readonly "~type.make.in": S["~type.make.in"]
-
-    declare static readonly "~type.isReadonly": S["~type.isReadonly"]
-    declare static readonly "~type.isOptional": S["~type.isOptional"]
-    declare static readonly "~type.default": S["~type.default"]
-
-    declare static readonly "~encoded.isReadonly": S["~encoded.isReadonly"]
-    declare static readonly "~encoded.isOptional": S["~encoded.isOptional"]
-
-    declare static readonly "~encoded.make.in": S["~encoded.make.in"]
-
-    static readonly identifier = identifier
-    static readonly fields = schema.fields
-
-    static get ast(): SchemaAST.Declaration {
-      if (astMemo === undefined) {
-        astMemo = computeAST(this)
-      }
-      return astMemo
-    }
-    static pipe() {
-      return pipeArguments(this, arguments)
-    }
-    static rebuild(ast: SchemaAST.Declaration): Class<Self, S, Self> {
-      const original = this.ast
-      return class extends this {
-        static get ast() {
-          const makeEncoding = makeDefaultClassEncoding(this)
-          const d = new SchemaAST.Declaration(
-            [original],
-            () => (input, ast) => {
-              if (input instanceof this) {
-                return Result.ok(input)
-              }
-              return Result.err(new SchemaIssue.MismatchIssue(ast, O.some(input)))
-            },
-            {
-              serializer: ([ast]: [SchemaAST.AST]) => makeEncoding(ast),
-              ...ast.annotations
-            },
-            ast.modifiers,
-            makeEncoding(original),
-            ast.context
-          )
-          return d
-        }
-      }
-    }
-    static annotate(annotations: SchemaAST.Annotations.Bottom): Class<Self, S, Self> {
-      return this.rebuild(SchemaAST.annotate(this.ast, annotations))
-    }
-    static make(input: S["~type.make.in"], options?: MakeOptions): SchemaResult.SchemaResult<Self> {
-      return SchemaResult.map(
-        schema.make(input, options),
-        (input) => new this(input, options)
-      )
-    }
-    static makeUnsafe(input: S["~type.make.in"], options?: MakeOptions): Self {
-      return new this(input, options)
-    }
-  }
-}
-
-const makeDefaultClassEncoding = (self: new(...args: ReadonlyArray<any>) => any) => (ast: SchemaAST.AST) =>
-  new SchemaAST.Encoding([
-    new SchemaAST.Link(
-      new SchemaTransformation.Transformation(
-        SchemaParser.onSome((input) => Result.succeedSome(new self(input))),
-        SchemaParser.onSome((input) => {
-          if (!(input instanceof self)) {
-            return Result.err(new SchemaIssue.MismatchIssue(ast, input))
-          }
-          return Result.succeedSome(input)
-        })
-      ),
-      ast
-    )
-  ])
-
-function getDefaultComputeAST(
-  from: SchemaAST.AST,
-  annotations?: SchemaAST.Annotations.Declaration<unknown>
-) {
-  return (self: any) => {
-    const makeEncoding = makeDefaultClassEncoding(self)
-    return new SchemaAST.Declaration(
-      [from],
-      () => (input, ast) => {
-        if (input instanceof self) {
-          return Result.ok(input)
-        }
-        return Result.err(new SchemaIssue.MismatchIssue(ast, O.some(input)))
-      },
-      {
-        serializer: ([ast]: [SchemaAST.AST]) => makeEncoding(ast),
-        ...annotations
-      },
-      undefined,
-      makeEncoding(from),
-      undefined
-    )
-  }
-}
-
-/**
- * @since 4.0.0
- */
-export const Class: {
-  <Self>(identifier: string): {
-    <const Fields extends Struct.Fields>(
-      fields: Fields,
-      annotations?: SchemaAST.Annotations.Bottom
-    ): Class<Self, Struct<Fields>, {}>
-    <S extends Struct<Struct.Fields>>(
-      schema: S,
-      annotations?: SchemaAST.Annotations.Bottom
-    ): Class<Self, S, {}>
-  }
-} = <Self>(identifier: string) =>
-(
-  schema: Struct.Fields | Struct<Struct.Fields>,
-  annotations?: SchemaAST.Annotations.Bottom
-): Class<Self, Struct<Struct.Fields>, {}> => {
-  const struct = isSchema(schema) ? schema : Struct(schema)
-
-  return makeClass(
-    Data.Class,
-    identifier,
-    struct,
-    getDefaultComputeAST(struct.ast, { title: identifier, ...annotations })
-  )
-}
-
-/**
- * @category Api interface
- * @since 4.0.0
- */
-export interface ErrorClass<Self, S extends Struct<Struct.Fields>, Inherited> extends Class<Self, S, Inherited> {
-  readonly "~rebuild.out": ErrorClass<Self, S, Self>
-}
-
-/**
- * @since 4.0.0
- */
-export const ErrorClass: {
-  <Self>(identifier: string): {
-    <const Fields extends Struct.Fields>(
-      fields: Fields,
-      annotations?: SchemaAST.Annotations.Bottom
-    ): ErrorClass<Self, Struct<Fields>, Cause.YieldableError>
-    <S extends Struct<Struct.Fields>>(
-      schema: S,
-      annotations?: SchemaAST.Annotations.Bottom
-    ): ErrorClass<Self, S, Cause.YieldableError>
-  }
-} = <Self>(identifier: string) =>
-(
-  schema: Struct.Fields | Struct<Struct.Fields>,
-  annotations?: SchemaAST.Annotations.Bottom
-): ErrorClass<Self, Struct<Struct.Fields>, Cause.YieldableError> => {
-  const struct = isSchema(schema) ? schema : Struct(schema)
-
-  return makeClass(
-    core.Error,
-    identifier,
-    struct,
-    getDefaultComputeAST(struct.ast, { title: identifier, ...annotations })
-  )
-}
-
-/**
- * @category Api interface
- * @since 4.0.0
- */
 export interface Option<S extends Top> extends
-  declareConstructor<
+  declare<
     O.Option<S["Type"]>,
     O.Option<S["Encoded"]>,
-    readonly [S],
-    S["IntrinsicContext"]
+    readonly [S]
   >
 {
   readonly "~rebuild.out": Option<S>
@@ -1903,7 +1707,7 @@ export interface Option<S extends Top> extends
  * @since 4.0.0
  */
 export const Option = <S extends Top>(value: S): Option<S> => {
-  return declareConstructor([value])<O.Option<S["Encoded"]>>()(
+  return declare([value])<O.Option<S["Encoded"]>>()(
     ([value]) => (oinput, ast, options) => {
       if (O.isOption(oinput)) {
         if (O.isNone(oinput)) {
@@ -1927,16 +1731,16 @@ export const Option = <S extends Top>(value: S): Option<S> => {
       declaration: {
         title: "Option"
       },
-      serializer: ([value]) =>
-        new SchemaAST.Encoding([
+      serialization: {
+        json: ([value]) =>
           new SchemaAST.Link(
+            Union([ReadonlyTuple([value]), ReadonlyTuple([])]).ast,
             new SchemaTransformation.Transformation(
-              SchemaParser.lift(Arr.head),
-              SchemaParser.lift(O.toArray)
-            ),
-            Union([ReadonlyTuple([make(value)]), ReadonlyTuple([])]).ast
+              SchemaParser.mapSome(Arr.head),
+              SchemaParser.mapSome(O.toArray)
+            )
           )
-        ])
+      }
     }
   )
 }
@@ -1956,11 +1760,10 @@ export const Finite = Number.pipe(check(SchemaFilter.finite))
  * @since 4.0.0
  */
 export interface Map$<Key extends Top, Value extends Top> extends
-  declareConstructor<
+  declare<
     globalThis.Map<Key["Type"], Value["Type"]>,
     globalThis.Map<Key["Encoded"], Value["Encoded"]>,
-    readonly [Key, Value],
-    Key["IntrinsicContext"] | Value["IntrinsicContext"]
+    readonly [Key, Value]
   >
 {
   readonly "~rebuild.out": Map$<Key, Value>
@@ -1970,12 +1773,12 @@ export interface Map$<Key extends Top, Value extends Top> extends
  * @since 4.0.0
  */
 export const Map = <Key extends Top, Value extends Top>(key: Key, value: Value): Map$<Key, Value> => {
-  return declareConstructor([key, value])<globalThis.Map<Key["Encoded"], Value["Encoded"]>>()(
+  return declare([key, value])<globalThis.Map<Key["Encoded"], Value["Encoded"]>>()(
     ([key, value]) => (input, ast, options) => {
       if (input instanceof globalThis.Map) {
         const array = ReadonlyArray(ReadonlyTuple([key, value]))
         return SchemaResult.mapBoth(
-          SchemaValidator.decodeUnknownSchemaResult(array)([...input.entries()], options),
+          SchemaValidator.decodeUnknownSchemaResult(array)([...input], options),
           {
             onSuccess: (array: ReadonlyArray<readonly [Key["Type"], Value["Type"]]>) => new globalThis.Map(array),
             onFailure: (issue) => new SchemaIssue.CompositeIssue(ast, O.some(input), [issue])
@@ -1988,16 +1791,16 @@ export const Map = <Key extends Top, Value extends Top>(key: Key, value: Value):
       declaration: {
         title: "Map"
       },
-      serializer: ([key, value]) =>
-        new SchemaAST.Encoding([
+      serialization: {
+        json: ([key, value]) =>
           new SchemaAST.Link(
+            ReadonlyArray(ReadonlyTuple([key, value])).ast,
             new SchemaTransformation.Transformation(
-              SchemaParser.lift((entries) => new globalThis.Map(entries)),
-              SchemaParser.lift((map) => [...map.entries()])
-            ),
-            ReadonlyArray(ReadonlyTuple([make(key), make(value)])).ast
+              SchemaParser.mapSome((entries) => new globalThis.Map(entries)),
+              SchemaParser.mapSome((map) => [...map.entries()])
+            )
           )
-        ])
+      }
     }
   )
 }
@@ -2011,7 +1814,6 @@ export interface Opaque<Self, S extends Top> extends
     S["Encoded"],
     S["DecodingContext"],
     S["EncodingContext"],
-    S["IntrinsicContext"],
     S["ast"],
     S["~rebuild.out"],
     S["~annotate.in"],
@@ -2030,76 +1832,95 @@ export interface Opaque<Self, S extends Top> extends
 /**
  * @since 4.0.0
  */
-export const Opaque = <Self>() => <S extends Top>(schema: S): Opaque<Self, S> & Omit<S, "Type" | "Encoded"> => {
-  // eslint-disable-next-line @typescript-eslint/no-extraneous-class
-  class Opaque {}
-  Object.setPrototypeOf(Opaque, schema)
-  return Opaque as any
-}
+export const Opaque =
+  <Self>() => <S extends Struct<Struct.Fields>>(schema: S): Opaque<Self, S> & Omit<S, "Type" | "Encoded"> => {
+    // eslint-disable-next-line @typescript-eslint/no-extraneous-class
+    class Opaque {}
+    Object.setPrototypeOf(Opaque, schema)
+    return Opaque as any
+  }
 
 /**
  * @since 4.0.0
  */
-export interface instanceOf<C, Arg extends Top> extends declareConstructor<C, Arg["Encoded"], readonly [Arg], never> {}
+export interface instanceOf<C> extends declare<C, C, readonly []> {}
 
 /**
  * @since 4.0.0
  */
-export const instanceOf = <const C extends new(...args: Array<any>) => any, const Arg extends Top>(
-  constructor: C,
-  constructorArgument: Arg,
-  encode: (instance: InstanceType<C>) => Arg["Type"],
-  annotations?: SchemaAST.Annotations.Declaration<InstanceType<C>> | undefined
-): instanceOf<InstanceType<C>, Arg> => {
-  return declareConstructor([constructorArgument])<Arg["Encoded"]>()(
-    () => (input, ast) => {
-      if (input instanceof constructor) {
-        return SchemaResult.succeed(input)
-      }
-      return Result.err(new SchemaIssue.MismatchIssue(ast, O.some(input)))
-    },
-    {
-      serializer: ([constructorArgument]) =>
-        new SchemaAST.Encoding([
-          new SchemaAST.Link(
-            new SchemaTransformation.Transformation(
-              SchemaParser.lift((args) => new constructor(args)),
-              SchemaParser.lift(encode)
-            ),
-            constructorArgument
-          )
-        ]),
-      ...annotations
+export const instanceOf = <const C extends new(...args: Array<any>) => any, const To extends Top>(
+  options: {
+    readonly constructor: C
+    readonly serialization?: {
+      readonly json?: {
+        readonly to: To
+        readonly encode: (instance: InstanceType<C>) => To["Type"]
+        readonly decode: (to: To["Type"]) => InstanceType<C>
+      } | undefined
     }
-  )
+    readonly annotations?: SchemaAST.Annotations.Declaration<InstanceType<C>, readonly []> | undefined
+  }
+): instanceOf<InstanceType<C>> => {
+  return declareRefinement({
+    is: (u): u is InstanceType<C> => u instanceof options.constructor,
+    serialization: options.serialization,
+    annotations: options.annotations
+  })
 }
 
 /**
  * @since 4.0.0
  */
-export const URL = instanceOf(
-  globalThis.URL,
-  String,
-  (url) => url.toString(),
-  { title: "URL" }
+export const URL = instanceOf({
+  constructor: globalThis.URL,
+  serialization: {
+    json: {
+      to: String,
+      encode: (url) => url.toString(),
+      decode: (s) => new globalThis.URL(s)
+    }
+  },
+  annotations: { title: "URL" }
+})
+
+/**
+ * @since 4.0.0
+ */
+export const Date = instanceOf({
+  constructor: globalThis.Date,
+  serialization: {
+    json: {
+      to: String,
+      encode: (date) => date.toISOString(),
+      decode: (s) => new globalThis.Date(s)
+    }
+  },
+  annotations: { title: "Date" }
+})
+
+/**
+ * @since 4.0.0
+ */
+export const UnknownFromJsonString = String.pipe(
+  decodeTo(
+    Unknown,
+    SchemaTransformation.json()
+  )
 )
 
 /**
  * @since 4.0.0
  */
-export const Date = instanceOf(
-  globalThis.Date,
-  String,
-  (date) => date.toISOString(),
-  { title: "Date" }
-)
-
-/**
- * @since 4.0.0
- */
-export const Error = instanceOf(
-  globalThis.Error,
-  String,
-  (error) => error.message,
-  { title: "Error" }
-)
+export const decodeToClass = <C extends new(...args: Array<any>) => any, S extends Struct<Struct.Fields>>(
+  props: S,
+  constructor: C,
+  annotations?: SchemaAST.Annotations.Declaration<InstanceType<C>, readonly []>
+): decodeTo<instanceOf<C>, S, never, never> => {
+  return instanceOf({ constructor, annotations }).pipe(encodeTo(
+    props,
+    new SchemaTransformation.Transformation<InstanceType<C>, S["Type"]>(
+      SchemaParser.mapSome((props) => new constructor(props)),
+      SchemaParser.identity()
+    )
+  ))
+}

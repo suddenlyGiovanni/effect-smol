@@ -7,18 +7,17 @@ import type * as Option from "./Option.js"
 import type * as SchemaAST from "./SchemaAST.js"
 import * as SchemaIssue from "./SchemaIssue.js"
 import * as SchemaParser from "./SchemaParser.js"
-import * as SchemaParserResult from "./SchemaResult.js"
 
 /**
  * @category model
  * @since 4.0.0
  */
-export class Transformation<E, T, RD = never, RE = never> {
+export class Transformation<T, E, RD = never, RE = never> {
   constructor(
-    readonly decode: SchemaParser.Parser<E, T, RD>,
-    readonly encode: SchemaParser.Parser<T, E, RE>
+    readonly decode: SchemaParser.Parser<T, E, RD>,
+    readonly encode: SchemaParser.Parser<E, T, RE>
   ) {}
-  flip(): Transformation<T, E, RE, RD> {
+  flip(): Transformation<E, T, RE, RD> {
     return new Transformation(this.encode, this.decode)
   }
 }
@@ -26,7 +25,7 @@ export class Transformation<E, T, RD = never, RE = never> {
 /**
  * @since 4.0.0
  */
-export const identity = <T>(): Transformation<T, T> => {
+export function identity<T>(): Transformation<T, T> {
   const identity = SchemaParser.identity<T>()
   return new Transformation(identity, identity)
 }
@@ -34,7 +33,33 @@ export const identity = <T>(): Transformation<T, T> => {
 /**
  * @since 4.0.0
  */
-export const fail = <T>(message: string, annotations?: SchemaAST.Annotations.Documentation): Transformation<T, T> => {
+export function transform<T, E>(
+  decode: (input: E) => T,
+  encode: (input: T) => E
+): Transformation<T, E> {
+  return new Transformation(
+    SchemaParser.mapSome(decode, { title: "transform" }),
+    SchemaParser.mapSome(encode, { title: "transform" })
+  )
+}
+
+/**
+ * @since 4.0.0
+ */
+export function transformOrFail<T, E, RD, RE>(
+  decode: SchemaParser.Parse<Option.Option<T>, E, RD>,
+  encode: SchemaParser.Parse<Option.Option<E>, T, RE>
+): Transformation<T, E, RD, RE> {
+  return new Transformation(
+    SchemaParser.parseSome(decode, { title: "transformOrFail" }),
+    SchemaParser.parseSome(encode, { title: "transformOrFail" })
+  )
+}
+
+/**
+ * @since 4.0.0
+ */
+export function fail<T>(message: string, annotations?: SchemaAST.Annotations.Documentation): Transformation<T, T> {
   const fail = SchemaParser.fail<T>((o) => new SchemaIssue.ForbiddenIssue(o, message), annotations)
   return new Transformation(fail, fail)
 }
@@ -42,14 +67,14 @@ export const fail = <T>(message: string, annotations?: SchemaAST.Annotations.Doc
 /**
  * @since 4.0.0
  */
-export const tap = <E, T, RD, RE>(
-  transformation: Transformation<E, T, RD, RE>,
+export function tap<T, E, RD, RE>(
+  transformation: Transformation<T, E, RD, RE>,
   options: {
     onDecode?: (input: Option.Option<E>) => void
     onEncode?: (input: Option.Option<T>) => void
   }
-): Transformation<E, T, RD, RE> => {
-  return new Transformation<E, T, RD, RE>(
+): Transformation<T, E, RD, RE> {
+  return new Transformation<T, E, RD, RE>(
     SchemaParser.tapInput(options.onDecode ?? Function.constVoid)(transformation.decode),
     SchemaParser.tapInput(options.onEncode ?? Function.constVoid)(transformation.encode)
   )
@@ -58,22 +83,28 @@ export const tap = <E, T, RD, RE>(
 /**
  * @since 4.0.0
  */
-export const setDecodingDefault = <A>(f: () => A) =>
-  new Transformation(
-    SchemaParser.onNone(() => SchemaParserResult.succeedSome(f()), { title: "setDecodingDefault" }),
-    SchemaParser.required({ title: "required input" })
+export function withDecodingDefault<T>(f: () => T): Transformation<T, T> {
+  return new Transformation(
+    SchemaParser.withDefault(f, { title: "withDecodingDefault" }),
+    SchemaParser.required()
   )
+}
 
 /**
  * @since 4.0.0
  */
-export const setEncodingDefault = <A>(f: () => A) => setDecodingDefault(f).flip()
+export function withEncodingDefault<E>(f: () => E): Transformation<E, E> {
+  return new Transformation(
+    SchemaParser.required(),
+    SchemaParser.withDefault(f, { title: "withEncodingDefault" })
+  )
+}
 
 /**
  * @category Coercions
  * @since 4.0.0
  */
-export const String: Transformation<unknown, string> = new Transformation(
+export const String: Transformation<string, unknown> = new Transformation(
   SchemaParser.String,
   SchemaParser.identity<unknown>()
 )
@@ -82,7 +113,7 @@ export const String: Transformation<unknown, string> = new Transformation(
  * @category Coercions
  * @since 4.0.0
  */
-export const Number: Transformation<unknown, number> = new Transformation(
+export const Number: Transformation<number, unknown> = new Transformation(
   SchemaParser.Number,
   SchemaParser.identity<unknown>()
 )
@@ -91,7 +122,7 @@ export const Number: Transformation<unknown, number> = new Transformation(
  * @category Coercions
  * @since 4.0.0
  */
-export const Boolean: Transformation<unknown, boolean> = new Transformation(
+export const Boolean: Transformation<boolean, unknown> = new Transformation(
   SchemaParser.Boolean,
   SchemaParser.identity<unknown>()
 )
@@ -100,7 +131,7 @@ export const Boolean: Transformation<unknown, boolean> = new Transformation(
  * @category Coercions
  * @since 4.0.0
  */
-export const BigInt: Transformation<string | number | bigint | boolean, bigint> = new Transformation(
+export const BigInt: Transformation<bigint, string | number | bigint | boolean> = new Transformation(
   SchemaParser.BigInt,
   SchemaParser.identity<string | number | bigint | boolean>()
 )
@@ -109,7 +140,7 @@ export const BigInt: Transformation<string | number | bigint | boolean, bigint> 
  * @category Coercions
  * @since 4.0.0
  */
-export const Date: Transformation<string | number | Date, Date> = new Transformation(
+export const Date: Transformation<Date, string | number | Date> = new Transformation(
   SchemaParser.Date,
   SchemaParser.identity<string | number | Date>()
 )
@@ -149,3 +180,42 @@ export const toUpperCase: Transformation<string, string> = new Transformation(
   SchemaParser.toUpperCase(),
   SchemaParser.identity()
 )
+
+/**
+ * @since 4.0.0
+ */
+export interface JsonOptions extends SchemaParser.ParseJsonOptions, SchemaParser.StringifyJsonOptions {}
+
+/**
+ * @category String transformations
+ * @since 4.0.0
+ */
+export function json(options?: JsonOptions): Transformation<unknown, string> {
+  return new Transformation(
+    SchemaParser.parseJson({ options }),
+    SchemaParser.stringifyJson({ options })
+  )
+}
+
+/**
+ * @since 4.0.0
+ */
+export function compose<T, E>(options: { readonly strict: false }): Transformation<T, E>
+export function compose<T>(): Transformation<T, T>
+export function compose<T, E>(): Transformation<T, E> {
+  return identity() as any
+}
+
+/**
+ * @since 4.0.0
+ */
+export function composeSubtype<T extends E, E>(): Transformation<T, E> {
+  return identity() as any
+}
+
+/**
+ * @since 4.0.0
+ */
+export function composeSupertype<T, E extends T>(): Transformation<T, E> {
+  return identity() as any
+}

@@ -1,7 +1,6 @@
 import {
   Context,
   Effect,
-  Equal,
   Option,
   pipe,
   Result,
@@ -16,7 +15,7 @@ import {
 } from "effect"
 import { describe, it } from "vitest"
 import * as Util from "./SchemaTest.js"
-import { assertFalse, assertInclude, assertTrue, deepStrictEqual, fail, strictEqual, throws } from "./utils/assert.js"
+import { assertFalse, assertTrue, deepStrictEqual, fail, strictEqual, throws } from "./utils/assert.js"
 
 const assertions = Util.assertions({
   deepStrictEqual,
@@ -52,12 +51,12 @@ const NumberFromString = Schema.String.pipe(
   )
 )
 
-const mapOutput = <A, B>(
-  f: (out: SchemaFilter.FilterOut<A>) => SchemaFilter.FilterOut<B>,
+const mapOutput = (
+  f: (out: SchemaFilter.FilterOut) => SchemaFilter.FilterOut,
   annotations?: SchemaFilter.Annotations
 ) =>
-<T>(filter: SchemaFilter.Filter<T, A>): SchemaFilter.Filter<T, B> => {
-  return new SchemaFilter.Filter<T, B>(
+<T>(filter: SchemaFilter.Filter<T>): SchemaFilter.Filter<T> => {
+  return new SchemaFilter.Filter<T>(
     (input, ast, options) => f(filter.run(input, ast, options)),
     filter.bail,
     { ...filter.annotations, ...annotations }
@@ -66,9 +65,7 @@ const mapOutput = <A, B>(
 
 describe("Schema", () => {
   it("isSchema", () => {
-    class A extends Schema.Class<A>("A")(Schema.Struct({
-      a: Schema.String
-    })) {}
+    class A extends Schema.Opaque<A>()(Schema.Struct({ a: Schema.String })) {}
     assertTrue(Schema.isSchema(Schema.String))
     assertTrue(Schema.isSchema(A))
     assertFalse(Schema.isSchema({}))
@@ -404,6 +401,91 @@ describe("Schema", () => {
         )
       })
     })
+
+    describe("extend", () => {
+      it("Struct", async () => {
+        const from = Schema.Struct({
+          a: Schema.String
+        })
+        const schema = from.pipe(Schema.extend({ b: Schema.String }))
+
+        await assertions.decoding.succeed(schema, { a: "a", b: "b" })
+        await assertions.decoding.fail(
+          schema,
+          { b: "b" },
+          `{ readonly "a": string; readonly "b": string }
+└─ ["a"]
+   └─ Missing value`
+        )
+        await assertions.decoding.fail(
+          schema,
+          { a: "a" },
+          `{ readonly "a": string; readonly "b": string }
+└─ ["b"]
+   └─ Missing value`
+        )
+      })
+
+      it("overlapping fields", async () => {
+        const from = Schema.Struct({
+          a: Schema.String,
+          b: Schema.String
+        })
+        const schema = from.pipe(Schema.extend({ b: Schema.Number, c: Schema.Number }))
+
+        await assertions.decoding.succeed(schema, { a: "a", b: 1, c: 2 })
+        await assertions.decoding.fail(
+          schema,
+          { a: "a", b: "b" },
+          `{ readonly "a": string; readonly "b": number; readonly "c": number }
+└─ ["b"]
+   └─ Expected number, actual "b"`
+        )
+      })
+
+      it("Struct & filter", async () => {
+        const from = Schema.Struct({
+          a: Schema.String
+        })
+        const schema = from.pipe(
+          Schema.check(SchemaFilter.make(({ a }: { a: string }) => a.length > 0)),
+          Schema.extend({
+            b: Schema.String
+          })
+        )
+
+        await assertions.decoding.succeed(schema, { a: "a", b: "b" })
+        await assertions.decoding.fail(
+          schema,
+          { a: "", b: "b" },
+          `{ readonly "a": string; readonly "b": string } & <filter>
+└─ <filter>
+   └─ Invalid value {"a":"","b":"b"}`
+        )
+      })
+    })
+
+    describe("pick", () => {
+      it("Struct", async () => {
+        const schema = Schema.Struct({
+          a: Schema.String,
+          b: Schema.String
+        }).pipe(Schema.pick(["a"]))
+
+        await assertions.decoding.succeed(schema, { a: "a" })
+      })
+    })
+
+    describe("omit", () => {
+      it("Struct", async () => {
+        const schema = Schema.Struct({
+          a: Schema.String,
+          b: Schema.String
+        }).pipe(Schema.omit(["b"]))
+
+        await assertions.decoding.succeed(schema, { a: "a" })
+      })
+    })
   })
 
   describe("ReadonlyTuple", () => {
@@ -512,7 +594,7 @@ describe("Schema", () => {
 
   describe("Filters", () => {
     describe("check", () => {
-      const delay = <T, R>(filter: SchemaFilter.Filter<T, R>, delay: number): SchemaFilter.Filter<T, R> =>
+      const delay = <T>(filter: SchemaFilter.Filter<T>, delay: number): SchemaFilter.Filter<T> =>
         pipe(
           filter,
           mapOutput((out) => {
@@ -653,78 +735,6 @@ describe("Schema", () => {
           `string & minLength(3) & includes("1") <-> number & finite
 └─ includes("1")
    └─ Invalid value "234"`
-        )
-      })
-    })
-
-    describe("checkEffect", () => {
-      const addService = <T, R, Self, Shape>(
-        filter: SchemaFilter.Filter<T, R>,
-        service: Context.Tag<Self, Shape>
-      ): SchemaFilter.Filter<T, R | Self> =>
-        pipe(
-          filter,
-          mapOutput((out) => {
-            const eff = Effect.isEffect(out) ? out : Effect.succeed(out)
-            return Effect.gen(function*() {
-              yield* service
-              return yield* eff
-            })
-          }, { title: `addService(${filter.annotations?.title}, ${service.key})` })
-        )
-
-      it("single filter", async () => {
-        class Service extends Context.Tag<Service, { value: Effect.Effect<string> }>()("Service") {}
-
-        const schema = Schema.String.pipe(
-          Schema.checkEffect(addService(SchemaFilter.minLength(3), Service))
-        )
-
-        strictEqual(SchemaAST.format(schema.ast), `string & addService(minLength(3), Service)`)
-
-        await assertions.decoding.succeed(schema, "abc", {
-          provide: [[Service, { value: Effect.succeed("value") }]]
-        })
-        await assertions.decoding.fail(
-          schema,
-          "ab",
-          `string & addService(minLength(3), Service)
-└─ addService(minLength(3), Service)
-   └─ Invalid value "ab"`,
-          {
-            provide: [[Service, { value: Effect.succeed("value") }]]
-          }
-        )
-      })
-
-      it("multiple filters", async () => {
-        class Service1 extends Context.Tag<Service1, { value: Effect.Effect<string> }>()("Service1") {}
-        class Service2 extends Context.Tag<Service2, { value: Effect.Effect<string> }>()("Service2") {}
-
-        const f1 = addService(SchemaFilter.minLength(3), Service1)
-        const f2 = addService(SchemaFilter.includes("a"), Service2)
-
-        const schema = Schema.String.pipe(
-          Schema.checkEffect(f1, f2)
-        )
-
-        strictEqual(
-          SchemaAST.format(schema.ast),
-          `string & addService(minLength(3), Service1) & addService(includes("a"), Service2)`
-        )
-
-        await assertions.decoding.succeed(schema, "abc", {
-          provide: [[Service1, { value: Effect.succeed("value1") }], [Service2, { value: Effect.succeed("value2") }]]
-        })
-        await assertions.decoding.fail(
-          schema,
-          "ab",
-          `string & addService(minLength(3), Service1) & addService(includes("a"), Service2)
-└─ addService(minLength(3), Service1)
-   └─ Invalid value "ab"`,
-          {
-            provide: [[Service1, { value: Effect.succeed("value1") }], [Service2, { value: Effect.succeed("value2") }]]
-          }
         )
       })
     })
@@ -1136,6 +1146,13 @@ describe("Schema", () => {
   })
 
   describe("decodeTo", () => {
+    it("should expose the source and the target schemas", () => {
+      const schema = FiniteFromString
+
+      strictEqual(schema.from, Schema.String)
+      strictEqual(schema.to, Schema.Finite)
+    })
+
     it("transformation with filters", async () => {
       const schema = Schema.String.pipe(
         Schema.decodeTo(
@@ -1183,7 +1200,7 @@ describe("Schema", () => {
         a: Schema.String.pipe(
           Schema.decodeTo(
             Schema.optionalKey(Schema.String),
-            SchemaTransformation.setEncodingDefault(() => "default")
+            SchemaTransformation.withEncodingDefault(() => "default")
           )
         )
       })
@@ -1197,7 +1214,7 @@ describe("Schema", () => {
         `{ readonly "a"?: string <-> string }
 └─ ["a"]
    └─ string <-> string
-      └─ required input
+      └─ required
          └─ Missing value`
       )
 
@@ -1210,7 +1227,7 @@ describe("Schema", () => {
         a: Schema.optionalKey(Schema.String).pipe(
           Schema.decodeTo(
             Schema.String,
-            SchemaTransformation.setDecodingDefault(() => "default")
+            SchemaTransformation.withDecodingDefault(() => "default")
           )
         )
       })
@@ -1227,7 +1244,7 @@ describe("Schema", () => {
         `{ readonly "a"?: string <-> string }
 └─ ["a"]
    └─ string <-> string
-      └─ required input
+      └─ required
          └─ Missing value`
       )
     })
@@ -1295,10 +1312,10 @@ describe("Schema", () => {
         })).pipe(Schema.decodeTo(
           Schema.Struct({
             b: Schema.optionalKey(Schema.String).pipe(
-              Schema.decodeTo(Schema.String, SchemaTransformation.setDecodingDefault(() => "default-b"))
+              Schema.decodeTo(Schema.String, SchemaTransformation.withDecodingDefault(() => "default-b"))
             )
           }),
-          SchemaTransformation.setDecodingDefault(() => ({}))
+          SchemaTransformation.withDecodingDefault(() => ({}))
         ))
       })
 
@@ -1343,7 +1360,7 @@ describe("Schema", () => {
         a: Schema.String.pipe(
           Schema.encodeTo(
             Schema.optionalKey(Schema.String),
-            SchemaTransformation.setDecodingDefault(() => "default")
+            SchemaTransformation.withDecodingDefault(() => "default")
           )
         )
       })
@@ -1360,7 +1377,7 @@ describe("Schema", () => {
         `{ readonly "a"?: string <-> string }
 └─ ["a"]
    └─ string <-> string
-      └─ required input
+      └─ required
          └─ Missing value`
       )
     })
@@ -1370,7 +1387,7 @@ describe("Schema", () => {
         a: Schema.optionalKey(Schema.String).pipe(
           Schema.encodeTo(
             Schema.String,
-            SchemaTransformation.setEncodingDefault(() => "default")
+            SchemaTransformation.withEncodingDefault(() => "default")
           )
         )
       })
@@ -1382,7 +1399,7 @@ describe("Schema", () => {
         `{ readonly "a"?: string <-> string }
 └─ ["a"]
    └─ string <-> string
-      └─ required input
+      └─ required
          └─ Missing value`
       )
 
@@ -1446,241 +1463,6 @@ describe("Schema", () => {
     })
   })
 
-  describe("Class", () => {
-    it("suspend before initialization", async () => {
-      const schema = Schema.suspend(() => string)
-      class A extends Schema.Class<A>("A")(Schema.Struct({ a: schema })) {}
-      const string = Schema.String
-      await assertions.decoding.succeed(A, new A({ a: "a" }))
-    })
-
-    it("Fields argument", async () => {
-      class A extends Schema.Class<A>("A")({
-        a: Schema.String
-      }) {
-        readonly _a = 1
-      }
-
-      // should be a schema
-      assertTrue(Schema.isSchema(A))
-      // should expose the fields
-      deepStrictEqual(A.fields, { a: Schema.String })
-      // should expose the identifier
-      strictEqual(A.identifier, "A")
-
-      strictEqual(A.name, "A")
-
-      strictEqual(SchemaAST.format(A.ast), `A <-> { readonly "a": string }`)
-
-      assertTrue(new A({ a: "a" }) instanceof A)
-      assertTrue(A.makeUnsafe({ a: "a" }) instanceof A)
-
-      // test additional fields
-      strictEqual(new A({ a: "a" })._a, 1)
-      strictEqual(A.makeUnsafe({ a: "a" })._a, 1)
-
-      // test Equal.equals
-      assertTrue(Equal.equals(new A({ a: "a" }), new A({ a: "a" })))
-      assertFalse(Equal.equals(new A({ a: "a" }), new A({ a: "b" })))
-
-      await assertions.decoding.succeed(A, { a: "a" }, { expected: new A({ a: "a" }) })
-      await assertions.decoding.fail(
-        A,
-        { a: 1 },
-        `A <-> { readonly "a": string }
-└─ { readonly "a": string }
-   └─ ["a"]
-      └─ Expected string, actual 1`
-      )
-      await assertions.encoding.succeed(A, new A({ a: "a" }), { expected: { a: "a" } })
-      await assertions.encoding.fail(
-        A,
-        null,
-        `{ readonly "a": string } <-> A
-└─ Expected A, actual null`
-      )
-      await assertions.encoding.fail(
-        A,
-        { a: "a" } as any,
-        `{ readonly "a": string } <-> A
-└─ Expected A, actual {"a":"a"}`
-      )
-    })
-
-    it("Struct argument", async () => {
-      class A extends Schema.Class<A>("A")(Schema.Struct({
-        a: Schema.String
-      })) {
-        readonly _a = 1
-      }
-
-      // should be a schema
-      assertTrue(Schema.isSchema(A))
-      // should expose the fields
-      deepStrictEqual(A.fields, { a: Schema.String })
-      // should expose the identifier
-      strictEqual(A.identifier, "A")
-
-      strictEqual(A.name, "A")
-
-      strictEqual(SchemaAST.format(A.ast), `A <-> { readonly "a": string }`)
-
-      assertTrue(new A({ a: "a" }) instanceof A)
-      assertTrue(A.makeUnsafe({ a: "a" }) instanceof A)
-
-      // test additional fields
-      strictEqual(new A({ a: "a" })._a, 1)
-      strictEqual(A.makeUnsafe({ a: "a" })._a, 1)
-
-      // test Equal.equals
-      assertTrue(Equal.equals(new A({ a: "a" }), new A({ a: "a" })))
-      assertFalse(Equal.equals(new A({ a: "a" }), new A({ a: "b" })))
-
-      await assertions.decoding.succeed(A, { a: "a" }, { expected: new A({ a: "a" }) })
-      await assertions.decoding.fail(
-        A,
-        { a: 1 },
-        `A <-> { readonly "a": string }
-└─ { readonly "a": string }
-   └─ ["a"]
-      └─ Expected string, actual 1`
-      )
-      await assertions.encoding.succeed(A, new A({ a: "a" }), { expected: { a: "a" } })
-      await assertions.encoding.fail(
-        A,
-        null,
-        `{ readonly "a": string } <-> A
-└─ Expected A, actual null`
-      )
-      await assertions.encoding.fail(
-        A,
-        { a: "a" } as any,
-        `{ readonly "a": string } <-> A
-└─ Expected A, actual {"a":"a"}`
-      )
-    })
-
-    it("annotate", async () => {
-      class A_ extends Schema.Class<A_>("A")({
-        a: Schema.String
-      }) {
-        readonly _a = 1
-      }
-      const A = A_.annotate({ title: "B" })
-
-      // should be a schema
-      assertTrue(Schema.isSchema(A))
-      // should expose the fields
-      deepStrictEqual(A.fields, { a: Schema.String })
-      // should expose the identifier
-      strictEqual(A.identifier, "A")
-
-      strictEqual(SchemaAST.format(A.ast), `B <-> { readonly "a": string }`)
-
-      assertTrue(new A({ a: "a" }) instanceof A)
-      assertTrue(A.makeUnsafe({ a: "a" }) instanceof A)
-
-      // test additional fields
-      strictEqual(new A({ a: "a" })._a, 1)
-      strictEqual(A.makeUnsafe({ a: "a" })._a, 1)
-
-      // test Equal.equals
-      assertTrue(Equal.equals(new A({ a: "a" }), new A({ a: "a" })))
-      assertFalse(Equal.equals(new A({ a: "a" }), new A({ a: "b" })))
-
-      await assertions.decoding.succeed(A, { a: "a" }, { expected: new A({ a: "a" }) })
-      await assertions.decoding.fail(
-        A,
-        { a: 1 },
-        `B <-> { readonly "a": string }
-└─ A <-> { readonly "a": string }
-   └─ { readonly "a": string }
-      └─ ["a"]
-         └─ Expected string, actual 1`
-      )
-      await assertions.encoding.succeed(A, new A({ a: "a" }), { expected: { a: "a" } })
-      await assertions.encoding.fail(
-        A,
-        null,
-        `{ readonly "a": string } <-> B
-└─ Expected B, actual null`
-      )
-      await assertions.encoding.fail(
-        A,
-        { a: "a" } as any,
-        `{ readonly "a": string } <-> B
-└─ Expected B, actual {"a":"a"}`
-      )
-    })
-
-    it("check", async () => {
-      class A_ extends Schema.Class<A_>("A")({
-        a: Schema.String
-      }) {
-        readonly _a = 1
-      }
-      const A = A_.pipe(Schema.check(SchemaFilter.make(() => true)))
-
-      // should be a schema
-      assertTrue(Schema.isSchema(A))
-      // should expose the fields
-      deepStrictEqual(A.fields, { a: Schema.String })
-      // should expose the identifier
-      strictEqual(A.identifier, "A")
-
-      strictEqual(SchemaAST.format(A.ast), `A & <filter> <-> { readonly "a": string }`)
-
-      assertTrue(new A({ a: "a" }) instanceof A)
-      assertTrue(A.makeUnsafe({ a: "a" }) instanceof A)
-
-      // test additional fields
-      strictEqual(new A({ a: "a" })._a, 1)
-      strictEqual(A.makeUnsafe({ a: "a" })._a, 1)
-
-      // test Equal.equals
-      assertTrue(Equal.equals(new A({ a: "a" }), new A({ a: "a" })))
-      assertFalse(Equal.equals(new A({ a: "a" }), new A({ a: "b" })))
-
-      await assertions.decoding.succeed(A, { a: "a" }, { expected: new A({ a: "a" }) })
-      await assertions.decoding.fail(
-        A,
-        { a: 1 },
-        `A & <filter> <-> { readonly "a": string }
-└─ A <-> { readonly "a": string }
-   └─ { readonly "a": string }
-      └─ ["a"]
-         └─ Expected string, actual 1`
-      )
-      await assertions.encoding.succeed(A, new A({ a: "a" }), { expected: { a: "a" } })
-      await assertions.encoding.fail(
-        A,
-        null,
-        `{ readonly "a": string } <-> A & <filter>
-└─ Expected A & <filter>, actual null`
-      )
-      await assertions.encoding.fail(
-        A,
-        { a: "a" } as any,
-        `{ readonly "a": string } <-> A & <filter>
-└─ Expected A & <filter>, actual {"a":"a"}`
-      )
-    })
-  })
-
-  describe("ErrorClass", () => {
-    it("baseline", () => {
-      class E extends Schema.ErrorClass<E>("E")({
-        id: Schema.Number
-      }) {}
-
-      const err = new E({ id: 1 })
-
-      strictEqual(String(err), `Error`)
-      assertInclude(err.stack, "Schema.test.ts:")
-      strictEqual(err.id, 1)
-    })
-  })
-
   describe("flip", () => {
     it("string & minLength(3) <-> number & greaterThan(2)", async () => {
       const schema = FiniteFromString.pipe(
@@ -1727,15 +1509,16 @@ describe("Schema", () => {
     })
   })
 
-  describe("declare", () => {
-    it("refinement", async () => {
-      const schema = Schema.declare((u) => u instanceof File, {
+  it("declareRefinement", async () => {
+    const schema = Schema.declareRefinement({
+      is: (u) => u instanceof File,
+      annotations: {
         title: "File"
-      })
-
-      await assertions.decoding.succeed(schema, new File([], "a.txt"))
-      await assertions.decoding.fail(schema, "a", `Expected File, actual "a"`)
+      }
     })
+
+    await assertions.decoding.succeed(schema, new File([], "a.txt"))
+    await assertions.decoding.fail(schema, "a", `Expected File, actual "a"`)
   })
 
   describe("Option", () => {
@@ -1876,7 +1659,7 @@ describe("Schema", () => {
     })
 
     it("Struct & Effect async & service", async () => {
-      class Service extends Context.Tag<Service, { defaultValue: Effect.Effect<number> }>()("Service") {}
+      class Service extends Context.Tag<Service, { value: Effect.Effect<number> }>()("Service") {}
 
       const schema = Schema.Struct({
         a: FiniteFromString.pipe(Schema.setConstructorDefault(() =>
@@ -1886,7 +1669,7 @@ describe("Schema", () => {
             if (Option.isNone(oservice)) {
               return Option.none()
             }
-            return Option.some(yield* oservice.value.defaultValue)
+            return Option.some(yield* oservice.value.value)
           })
         ))
       })
@@ -1897,7 +1680,7 @@ describe("Schema", () => {
       const provided = Effect.provideService(
         eff,
         Service,
-        Service.of({ defaultValue: Effect.succeed(-1) })
+        Service.of({ value: Effect.succeed(-1) })
       )
       await assertions.effect.succeed(provided, { a: -1 })
     })
@@ -2123,7 +1906,7 @@ describe("Schema", () => {
         Schema.decodeTo(
           Schema.String,
           new SchemaTransformation.Transformation(
-            SchemaParser.onSome((s) =>
+            SchemaParser.parseSome((s) =>
               Effect.gen(function*() {
                 const service = yield* Service
                 return Option.some(s + (yield* service.value))
@@ -2133,12 +1916,9 @@ describe("Schema", () => {
           )
         ),
         Schema.decodeMiddleware(
-          new SchemaAST.Middleware(
-            new SchemaMiddleware.Middleware((sr) =>
-              SchemaResult.asEffect(sr).pipe(
-                Effect.provideService(Service, { value: Effect.succeed("b") })
-              ), { title: "Service provider" }),
-            SchemaMiddleware.identity()
+          SchemaMiddleware.onEffect(
+            Effect.provideService(Service, { value: Effect.succeed("b") }),
+            { title: "Service provider" }
           )
         )
       )
@@ -2151,13 +1931,7 @@ describe("Schema", () => {
     it("forced failure", async () => {
       const schema = Schema.String.pipe(
         Schema.decodeMiddleware(
-          new SchemaAST.Middleware(
-            new SchemaMiddleware.Middleware(
-              () => SchemaResult.fail(new SchemaIssue.InvalidIssue(Option.none(), "my message")),
-              { title: "my middleware" }
-            ),
-            SchemaMiddleware.identity()
-          )
+          SchemaMiddleware.fail("my message", { title: "my middleware" })
         )
       )
 
@@ -2239,14 +2013,25 @@ describe("Schema", () => {
 
   describe("instanceOf", () => {
     it("arg: message: string", async () => {
-      class MyError extends Error {}
+      class MyError extends Error {
+        constructor(message?: string) {
+          super(message)
+          this.name = "MyError"
+          Object.setPrototypeOf(this, MyError.prototype)
+        }
+      }
 
-      const schema = Schema.instanceOf(
-        MyError,
-        Schema.String,
-        (e) => e.message,
-        { title: "MyError" }
-      )
+      const schema = Schema.instanceOf({
+        constructor: MyError,
+        serialization: {
+          json: {
+            to: Schema.String,
+            encode: (e) => e.message,
+            decode: (message) => new MyError(message)
+          }
+        },
+        annotations: { title: "MyError" }
+      })
 
       strictEqual(SchemaAST.format(schema.ast), `MyError`)
 
@@ -2256,5 +2041,146 @@ describe("Schema", () => {
       await assertions.encoding.succeed(schema, new MyError("a"))
       await assertions.encoding.fail(schema, null, `Expected MyError, actual null`)
     })
+  })
+
+  describe("tag", () => {
+    it("decoding: required & encoding: required & constructor: required", async () => {
+      const schema = Schema.Struct({
+        _tag: Schema.Literal("a"),
+        a: FiniteFromString
+      })
+
+      await assertions.decoding.succeed(schema, { _tag: "a", a: "1" }, { expected: { _tag: "a", a: 1 } })
+      await assertions.encoding.succeed(schema, { _tag: "a", a: 1 }, { expected: { _tag: "a", a: "1" } })
+      assertions.makeUnsafe.succeed(schema, { _tag: "a", a: 1 })
+    })
+
+    it("decoding: required & encoding: required & constructor: optional", async () => {
+      const schema = Schema.Struct({
+        _tag: Schema.tag("a"),
+        a: FiniteFromString
+      })
+
+      await assertions.decoding.succeed(schema, { _tag: "a", a: "1" }, { expected: { _tag: "a", a: 1 } })
+      await assertions.encoding.succeed(schema, { _tag: "a", a: 1 }, { expected: { _tag: "a", a: "1" } })
+      assertions.makeUnsafe.succeed(schema, { _tag: "a", a: 1 })
+      assertions.makeUnsafe.succeed(schema, { a: 1 }, { _tag: "a", a: 1 })
+    })
+
+    it("decoding: default & encoding: never & constructor: optional", async () => {
+      const schema = Schema.Struct({
+        _tag: Schema.tag("a").pipe(
+          Schema.encodeTo(
+            Schema.optionalKey(Schema.Literal("a")),
+            new SchemaTransformation.Transformation(
+              SchemaParser.withDefault(() => "a" as const),
+              SchemaParser.omit()
+            )
+          )
+        ),
+        a: FiniteFromString
+      })
+
+      await assertions.decoding.succeed(schema, { _tag: "a", a: "1" }, { expected: { _tag: "a", a: 1 } })
+      await assertions.decoding.succeed(schema, { a: "1" }, { expected: { _tag: "a", a: 1 } })
+      await assertions.encoding.succeed(schema, { _tag: "a", a: 1 }, { expected: { a: "1" } })
+      assertions.makeUnsafe.succeed(schema, { _tag: "a", a: 1 })
+      assertions.makeUnsafe.succeed(schema, { a: 1 }, { _tag: "a", a: 1 })
+    })
+  })
+
+  describe("UnknownFromJsonString", () => {
+    it("use case: Unknown <-> JSON string", async () => {
+      const schema = Schema.UnknownFromJsonString
+
+      await assertions.decoding.succeed(schema, `{"a":1}`, { expected: { a: 1 } })
+      await assertions.decoding.fail(
+        schema,
+        `{"a"`,
+        `unknown <-> string
+└─ parseJson
+   └─ Expected ':' after property name in JSON at position 4 (line 1 column 5)`
+      )
+
+      await assertions.encoding.succeed(schema, { a: 1 }, { expected: `{"a":1}` })
+    })
+
+    it("use case: create a JSON string serializer for an existing schema", async () => {
+      const schema = Schema.Struct({ b: Schema.Number })
+
+      const jsonSerializer = schema.pipe(
+        Schema.encodeTo(
+          Schema.UnknownFromJsonString,
+          SchemaTransformation.composeSubtype()
+        )
+      )
+
+      await assertions.decoding.succeed(jsonSerializer, `{"b":1}`, { expected: { b: 1 } })
+      await assertions.decoding.fail(
+        jsonSerializer,
+        `{"a":null}`,
+        `{ readonly "b": number } <-> string
+└─ ["b"]
+   └─ Missing value`
+      )
+    })
+
+    it("use case: parse / stringify a nested schema", async () => {
+      const schema = Schema.Struct({
+        a: Schema.UnknownFromJsonString.pipe(
+          Schema.decodeTo(
+            Schema.Struct({ b: Schema.Number }),
+            SchemaTransformation.composeSubtype()
+          )
+        )
+      })
+
+      await assertions.decoding.succeed(schema, { a: `{"b":2}` }, { expected: { a: { b: 2 } } })
+      await assertions.decoding.fail(
+        schema,
+        { a: `{"a":null}` },
+        `{ readonly "a": { readonly "b": number } <-> string }
+└─ ["a"]
+   └─ { readonly "b": number } <-> string
+      └─ ["b"]
+         └─ Missing value`
+      )
+    })
+  })
+
+  it("transformOrFail", async () => {
+    const schema = Schema.String.pipe(
+      Schema.decodeTo(
+        Schema.String,
+        SchemaTransformation.transformOrFail(
+          (s) =>
+            s === "a"
+              ? SchemaResult.fail(new SchemaIssue.ForbiddenIssue(Option.some(s), "not a"))
+              : SchemaResult.succeedSome(s),
+          (s) =>
+            s === "b"
+              ? SchemaResult.fail(new SchemaIssue.ForbiddenIssue(Option.some(s), "not b"))
+              : SchemaResult.succeedSome(s)
+        )
+      )
+    )
+
+    await assertions.decoding.succeed(schema, "b")
+    await assertions.decoding.fail(
+      schema,
+      "a",
+      `string <-> string
+└─ transformOrFail
+   └─ not a`
+    )
+
+    await assertions.encoding.succeed(schema, "a")
+    await assertions.encoding.fail(
+      schema,
+      "b",
+      `string <-> string
+└─ transformOrFail
+   └─ not b`
+    )
   })
 })

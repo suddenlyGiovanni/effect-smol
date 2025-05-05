@@ -1,4 +1,4 @@
-import { Option, Schema, SchemaParser, SchemaTransformation } from "effect"
+import { Option, Schema, SchemaTransformation } from "effect"
 import { describe, it } from "vitest"
 import * as Util from "./SchemaTest.js"
 import { deepStrictEqual, fail, strictEqual, throws } from "./utils/assert.js"
@@ -12,13 +12,13 @@ const assertions = Util.assertions({
 
 const FiniteFromDate = Schema.Date.pipe(Schema.decodeTo(
   Schema.Number,
-  new SchemaTransformation.Transformation(
-    SchemaParser.lift((date) => date.getTime()),
-    SchemaParser.lift((n) => new Date(n))
+  SchemaTransformation.transform(
+    (date) => date.getTime(),
+    (n) => new Date(n)
   )
 ))
 
-describe("SchemaToJson", () => {
+describe("SchemaSerializerJson", () => {
   describe("default serialization", () => {
     it("Undefined", async () => {
       const schema = Schema.Undefined
@@ -75,11 +75,11 @@ describe("SchemaToJson", () => {
       await assertions.deserialization.schema.succeed(schema, "https://example.com/", new URL("https://example.com"))
     })
 
-    it("Declaration without annotation", async () => {
+    it("declareRefinement without annotation", async () => {
       class A {
         readonly _tag = "A"
       }
-      const schema = Schema.declare((u): u is A => u instanceof A)
+      const schema = Schema.declareRefinement({ is: (u): u is A => u instanceof A })
       await assertions.serialization.schema.fail(
         schema,
         new A(),
@@ -169,24 +169,6 @@ describe("SchemaToJson", () => {
         new Map([[Option.some(new Date("2021-01-01")), 0]])
       )
     })
-
-    it("Class", async () => {
-      class A extends Schema.Class<A>("A")(Schema.Struct({
-        a: FiniteFromDate
-      })) {}
-
-      await assertions.serialization.schema.succeed(A, new A({ a: 0 }), { a: 0 })
-      await assertions.deserialization.schema.succeed(A, { a: 0 }, new A({ a: 0 }))
-    })
-
-    it("ErrorClass", async () => {
-      class E extends Schema.ErrorClass<E>("E")({
-        a: FiniteFromDate
-      }) {}
-
-      await assertions.serialization.schema.succeed(E, new E({ a: 0 }), { a: 0 })
-      await assertions.deserialization.schema.succeed(E, { a: 0 }, new E({ a: 0 }))
-    })
   })
 
   describe("custom serialization", () => {
@@ -244,34 +226,27 @@ describe("SchemaToJson", () => {
     })
   })
 
-  it("Class", async () => {
-    class A extends Schema.Class<A>("A")(Schema.Struct({
-      a: FiniteFromDate
-    })) {}
-
-    await assertions.serialization.codec.succeed(A, new A({ a: 0 }), { a: "1970-01-01T00:00:00.000Z" })
-    await assertions.deserialization.codec.succeed(A, { a: "1970-01-01T00:00:00.000Z" }, new A({ a: 0 }))
-  })
-
-  it("Error", async () => {
-    class E extends Schema.ErrorClass<E>("E")({
-      a: FiniteFromDate
-    }) {}
-
-    await assertions.serialization.codec.succeed(E, new E({ a: 0 }), { a: "1970-01-01T00:00:00.000Z" })
-    await assertions.deserialization.codec.succeed(E, { a: "1970-01-01T00:00:00.000Z" }, new E({ a: 0 }))
-  })
-
   describe("instanceOf", () => {
     it("arg: message: string", async () => {
-      class MyError extends Error {}
+      class MyError extends Error {
+        constructor(message?: string) {
+          super(message)
+          this.name = "MyError"
+          Object.setPrototypeOf(this, MyError.prototype)
+        }
+      }
 
-      const schema = Schema.instanceOf(
-        MyError,
-        Schema.String,
-        (e) => e.message,
-        { title: "MyError" }
-      )
+      const schema = Schema.instanceOf({
+        constructor: MyError,
+        serialization: {
+          json: {
+            to: Schema.String,
+            encode: (e) => e.message,
+            decode: (message) => new MyError(message)
+          }
+        },
+        annotations: { title: "MyError" }
+      })
 
       await assertions.serialization.schema.succeed(schema, new MyError("a"), "a")
       await assertions.deserialization.schema.succeed(schema, "a", new MyError("a"))
@@ -281,38 +256,41 @@ describe("SchemaToJson", () => {
       class MyError extends Error {
         static Props = Schema.Struct({
           message: Schema.String,
-          cause: Schema.Error
+          cause: Schema.String
         })
 
         constructor(props: typeof MyError.Props["Type"]) {
           super(props.message, { cause: props.cause })
+          this.name = "MyError"
+          Object.setPrototypeOf(this, MyError.prototype)
         }
 
-        static schema = Schema.instanceOf(
-          MyError,
-          this.Props,
-          (e) => ({
-            message: e.message,
-            cause: e.cause instanceof Error ? e.cause : new Error(String(e.cause))
-          }),
-          { title: "MyError" }
-        )
+        static schema = Schema.instanceOf({
+          constructor: MyError,
+          serialization: {
+            json: {
+              to: this.Props,
+              encode: (e) => ({
+                message: e.message,
+                cause: typeof e.cause === "string" ? e.cause : String(e.cause)
+              }),
+              decode: (props) => new MyError(props)
+            }
+          },
+          annotations: { title: "MyError" }
+        })
       }
 
       const schema = MyError.schema
 
-      await assertions.serialization.schema.succeed(schema, new MyError({ message: "a", cause: new Error("b") }), {
-        message: "a",
-        cause: "b"
-      })
-      await assertions.serialization.schema.succeed(schema, new MyError({ message: "a", cause: "b" } as any), {
+      await assertions.serialization.schema.succeed(schema, new MyError({ message: "a", cause: "b" }), {
         message: "a",
         cause: "b"
       })
       await assertions.deserialization.schema.succeed(
         schema,
         { message: "a", cause: "b" },
-        new MyError({ message: "a", cause: new Error("b") })
+        new MyError({ message: "a", cause: "b" })
       )
     })
   })
