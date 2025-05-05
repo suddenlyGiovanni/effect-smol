@@ -5,7 +5,6 @@
 import * as Arr from "./Array.js"
 import * as Effect from "./Effect.js"
 import * as Exit from "./Exit.js"
-import { ownKeys } from "./internal/schema/util.js"
 import * as Option from "./Option.js"
 import * as Predicate from "./Predicate.js"
 import * as Result from "./Result.js"
@@ -140,18 +139,24 @@ export const validateUnknownParserResult = <T, E, RD, RE>(codec: Schema.Codec<T,
 export const validateUnknownSync = <T, E, RD, RE>(codec: Schema.Codec<T, E, RD, RE>) =>
   fromASTSync<T>(SchemaAST.typeAST(codec.ast))
 
-interface Parser<A, R = any> {
+/** @internal */
+export interface Parser<A> {
+  (i: Option.Option<unknown>, options: SchemaAST.ParseOptions): Result.Result<Option.Option<A>, SchemaIssue.Issue>
+}
+
+/** @internal */
+export interface ParserEffect<A, R = any> {
   (i: Option.Option<unknown>, options: SchemaAST.ParseOptions): Effect.Effect<Option.Option<A>, SchemaIssue.Issue, R>
 }
 
-const memoMap = new WeakMap<SchemaAST.AST, Parser<any>>()
+const memoMap = new WeakMap<SchemaAST.AST, ParserEffect<any>>()
 
-function goMemo<A, R>(ast: SchemaAST.AST): Parser<A, R> {
+function goMemo<A, R>(ast: SchemaAST.AST): ParserEffect<A, R> {
   const memo = memoMap.get(ast)
   if (memo) {
     return memo
   }
-  const parser: Parser<A, R> = Effect.fnUntraced(function*(ou, options) {
+  const parser: ParserEffect<A, R> = Effect.fnUntraced(function*(ou, options) {
     const encoding = options["~variant"] === "make" && ast.context && ast.context.constructorDefault
       ? [new SchemaAST.Link(SchemaAST.unknownKeyword, ast.context.constructorDefault)]
       : ast.encoding
@@ -232,355 +237,42 @@ function goMemo<A, R>(ast: SchemaAST.AST): Parser<A, R> {
   return parser
 }
 
-function go<A>(ast: SchemaAST.AST): Parser<A, any> {
+function go<A>(ast: SchemaAST.AST): ParserEffect<A, any> {
   switch (ast._tag) {
-    case "Declaration": {
-      return Effect.fnUntraced(function*(oinput, options) {
-        if (Option.isNone(oinput)) {
-          return Option.none()
-        }
-        const parser = ast.run(ast.typeParameters)
-        const sr = parser(oinput.value, ast, options)
-        if (Result.isResult(sr)) {
-          if (Result.isErr(sr)) {
-            return yield* Effect.fail(sr.err)
-          }
-          return Option.some(sr.ok)
-        } else {
-          return Option.some(yield* sr)
-        }
-      })
-    }
     case "LiteralType":
-      return fromPredicate(ast, (u) => u === ast.literal)
+      return SchemaAST.fromPredicate(ast, (u) => u === ast.literal)
     case "NeverKeyword":
-      return fromPredicate(ast, Predicate.isNever)
+      return SchemaAST.fromPredicate(ast, Predicate.isNever)
     case "AnyKeyword":
     case "UnknownKeyword":
     case "VoidKeyword":
-      return fromPredicate(ast, Predicate.isUnknown)
+      return SchemaAST.fromPredicate(ast, Predicate.isUnknown)
     case "NullKeyword":
-      return fromPredicate(ast, Predicate.isNull)
+      return SchemaAST.fromPredicate(ast, Predicate.isNull)
     case "UndefinedKeyword":
-      return fromPredicate(ast, Predicate.isUndefined)
+      return SchemaAST.fromPredicate(ast, Predicate.isUndefined)
     case "StringKeyword":
-      return fromPredicate(ast, Predicate.isString)
+      return SchemaAST.fromPredicate(ast, Predicate.isString)
     case "NumberKeyword":
-      return fromPredicate(ast, Predicate.isNumber)
+      return SchemaAST.fromPredicate(ast, Predicate.isNumber)
     case "BooleanKeyword":
-      return fromPredicate(ast, Predicate.isBoolean)
+      return SchemaAST.fromPredicate(ast, Predicate.isBoolean)
     case "SymbolKeyword":
-      return fromPredicate(ast, Predicate.isSymbol)
+      return SchemaAST.fromPredicate(ast, Predicate.isSymbol)
     case "BigIntKeyword":
-      return fromPredicate(ast, Predicate.isBigInt)
+      return SchemaAST.fromPredicate(ast, Predicate.isBigInt)
     case "UniqueSymbol":
-      return fromPredicate(ast, (u) => u === ast.symbol)
+      return SchemaAST.fromPredicate(ast, (u) => u === ast.symbol)
     case "ObjectKeyword":
-      return fromPredicate(ast, Predicate.isObject)
-    case "TypeLiteral": {
-      // Handle empty Struct({}) case
-      if (ast.propertySignatures.length === 0 && ast.indexSignatures.length === 0) {
-        return fromPredicate(ast, Predicate.isNotNullable)
-      }
-      const getOwnKeys = ownKeys // TODO: can be optimized?
-      return Effect.fnUntraced(function*(oinput, options) {
-        if (Option.isNone(oinput)) {
-          return Option.none()
-        }
-        const input = oinput.value
-
-        // If the input is not a record, return early with an error
-        if (!Predicate.isRecord(input)) {
-          return yield* Effect.fail(new SchemaIssue.MismatchIssue(ast, oinput))
-        }
-
-        const output: Record<PropertyKey, unknown> = {}
-        const issues: Array<SchemaIssue.Issue> = []
-        const errorsAllOption = options?.errors === "all"
-        const keys = getOwnKeys(input)
-
-        for (const ps of ast.propertySignatures) {
-          const name = ps.name
-          const type = ps.type
-          let value: Option.Option<unknown> = Option.none()
-          if (Object.prototype.hasOwnProperty.call(input, name)) {
-            value = Option.some(input[name])
-          }
-          const parser = goMemo(type)
-          const r = yield* Effect.result(parser(value, options))
-          if (Result.isErr(r)) {
-            const issue = new SchemaIssue.PointerIssue([name], r.err)
-            if (errorsAllOption) {
-              issues.push(issue)
-              continue
-            } else {
-              return yield* Effect.fail(
-                new SchemaIssue.CompositeIssue(ast, oinput, [issue])
-              )
-            }
-          } else {
-            if (Option.isSome(r.ok)) {
-              output[name] = r.ok.value
-            } else {
-              if (!ps.type.context?.isOptional) {
-                const issue = new SchemaIssue.PointerIssue([name], SchemaIssue.MissingIssue.instance)
-                if (errorsAllOption) {
-                  issues.push(issue)
-                  continue
-                } else {
-                  return yield* Effect.fail(
-                    new SchemaIssue.CompositeIssue(ast, oinput, [issue])
-                  )
-                }
-              }
-            }
-          }
-        }
-
-        for (const is of ast.indexSignatures) {
-          for (const key of keys) {
-            const parserKey = goMemo(is.parameter)
-            const rKey = (yield* Effect.result(parserKey(Option.some(key), options))) as Result.Result<
-              Option.Option<PropertyKey>,
-              SchemaIssue.Issue
-            >
-            if (Result.isErr(rKey)) {
-              const issue = new SchemaIssue.PointerIssue([key], rKey.err)
-              if (errorsAllOption) {
-                issues.push(issue)
-                continue
-              } else {
-                return yield* Effect.fail(
-                  new SchemaIssue.CompositeIssue(ast, oinput, [issue])
-                )
-              }
-            }
-
-            const value: Option.Option<unknown> = Option.some(input[key])
-            const parserValue = goMemo(is.type)
-            const rValue = yield* Effect.result(parserValue(value, options))
-            if (Result.isErr(rValue)) {
-              const issue = new SchemaIssue.PointerIssue([key], rValue.err)
-              if (errorsAllOption) {
-                issues.push(issue)
-                continue
-              } else {
-                return yield* Effect.fail(
-                  new SchemaIssue.CompositeIssue(ast, oinput, [issue])
-                )
-              }
-            } else {
-              if (Option.isSome(rKey.ok) && Option.isSome(rValue.ok)) {
-                const k2 = rKey.ok.value
-                const v2 = rValue.ok.value
-                if (is.merge && is.merge.decode && Object.prototype.hasOwnProperty.call(output, k2)) {
-                  const [k, v] = is.merge.decode([k2, output[k2]], [k2, v2])
-                  output[k] = v
-                } else {
-                  output[k2] = v2
-                }
-              }
-            }
-          }
-        }
-
-        if (Arr.isNonEmptyArray(issues)) {
-          return yield* Effect.fail(new SchemaIssue.CompositeIssue(ast, oinput, issues))
-        }
-        return Option.some(output as A)
-      })
-    }
-    case "TupleType": {
-      return Effect.fnUntraced(function*(oinput, options) {
-        if (Option.isNone(oinput)) {
-          return Option.none()
-        }
-        const input = oinput.value
-
-        // If the input is not an array, return early with an error
-        if (!Arr.isArray(input)) {
-          return yield* Effect.fail(new SchemaIssue.MismatchIssue(ast, oinput))
-        }
-
-        const output: Array<unknown> = []
-        const issues: Array<SchemaIssue.Issue> = []
-        const errorsAllOption = options?.errors === "all"
-
-        let i = 0
-        for (; i < ast.elements.length; i++) {
-          const element = ast.elements[i]
-          const value = i < input.length ? Option.some(input[i]) : Option.none()
-          const parser = goMemo(element)
-          const r = yield* Effect.result(parser(value, options))
-          if (Result.isErr(r)) {
-            const issue = new SchemaIssue.PointerIssue([i], r.err)
-            if (errorsAllOption) {
-              issues.push(issue)
-              continue
-            } else {
-              return yield* Effect.fail(new SchemaIssue.CompositeIssue(ast, oinput, [issue]))
-            }
-          } else {
-            if (Option.isSome(r.ok)) {
-              output[i] = r.ok.value
-            } else {
-              if (!element.context?.isOptional) {
-                const issue = new SchemaIssue.PointerIssue([i], SchemaIssue.MissingIssue.instance)
-                if (errorsAllOption) {
-                  issues.push(issue)
-                  continue
-                } else {
-                  return yield* Effect.fail(new SchemaIssue.CompositeIssue(ast, oinput, [issue]))
-                }
-              }
-            }
-          }
-        }
-        const len = input.length
-        if (Arr.isNonEmptyReadonlyArray(ast.rest)) {
-          const [head, ...tail] = ast.rest
-          const parser = goMemo(head)
-          for (; i < len - tail.length; i++) {
-            const r = yield* Effect.result(parser(Option.some(input[i]), options))
-            if (Result.isErr(r)) {
-              const issue = new SchemaIssue.PointerIssue([i], r.err)
-              if (errorsAllOption) {
-                issues.push(issue)
-                continue
-              } else {
-                return yield* Effect.fail(new SchemaIssue.CompositeIssue(ast, oinput, [issue]))
-              }
-            } else {
-              if (Option.isSome(r.ok)) {
-                output[i] = r.ok.value
-              } else {
-                const issue = new SchemaIssue.PointerIssue([i], SchemaIssue.MissingIssue.instance)
-                if (errorsAllOption) {
-                  issues.push(issue)
-                  continue
-                } else {
-                  return yield* Effect.fail(new SchemaIssue.CompositeIssue(ast, oinput, [issue]))
-                }
-              }
-            }
-          }
-        }
-        if (Arr.isNonEmptyArray(issues)) {
-          return yield* Effect.fail(new SchemaIssue.CompositeIssue(ast, oinput, issues))
-        }
-        return Option.some(output as A)
-      })
-    }
-    case "UnionType": {
-      return Effect.fnUntraced(function*(oinput, options) {
-        if (Option.isNone(oinput)) {
-          return Option.none()
-        }
-        const input = oinput.value
-
-        const candidates = getCandidates(input, ast.types)
-        const issues: Array<SchemaIssue.Issue> = []
-
-        for (const candidate of candidates) {
-          const parser = goMemo<A, any>(candidate)
-          const r = yield* Effect.result(parser(Option.some(input), options))
-          if (Result.isErr(r)) {
-            issues.push(r.err)
-            continue
-          } else {
-            return r.ok
-          }
-        }
-
-        if (Arr.isNonEmptyArray(issues)) {
-          if (candidates.length === 1) {
-            return yield* Effect.fail(issues[0])
-          } else {
-            return yield* Effect.fail(new SchemaIssue.CompositeIssue(ast, oinput, issues))
-          }
-        } else {
-          return yield* Effect.fail(new SchemaIssue.MismatchIssue(ast, oinput))
-        }
-      })
-    }
+      return SchemaAST.fromPredicate(ast, Predicate.isObject)
+    case "Declaration":
+    case "TemplateLiteral":
+    case "TypeLiteral":
+    case "TupleType":
+    case "UnionType":
+      return ast.parser(goMemo)
     case "Suspend":
       return goMemo<A, any>(ast.thunk())
   }
   ast satisfies never // TODO: remove this
-}
-
-type Type =
-  | "null"
-  | "array"
-  | "object"
-  | "string"
-  | "number"
-  | "boolean"
-  | "symbol"
-  | "undefined"
-  | "bigint"
-  | "function"
-
-function getInputType(input: unknown): Type {
-  if (input === null) {
-    return "null"
-  }
-  if (Array.isArray(input)) {
-    return "array"
-  }
-  return typeof input
-}
-
-const getCandidateTypes = SchemaAST.memoize((ast: SchemaAST.AST): ReadonlyArray<Type> | Type | null => {
-  switch (ast._tag) {
-    case "NullKeyword":
-      return "null"
-    case "UndefinedKeyword":
-    case "VoidKeyword":
-      return "undefined"
-    case "StringKeyword":
-      return "string"
-    case "NumberKeyword":
-      return "number"
-    case "BooleanKeyword":
-      return "boolean"
-    case "SymbolKeyword":
-    case "UniqueSymbol":
-      return "symbol"
-    case "BigIntKeyword":
-      return "bigint"
-    case "TypeLiteral":
-    case "ObjectKeyword":
-      return ["object", "array"]
-    case "TupleType":
-      return "array"
-    case "Declaration":
-    case "LiteralType":
-    case "NeverKeyword":
-    case "AnyKeyword":
-    case "UnknownKeyword":
-    case "UnionType":
-    case "Suspend":
-      return null
-  }
-  ast satisfies never // TODO: remove this
-})
-
-function getCandidates(input: unknown, types: ReadonlyArray<SchemaAST.AST>): ReadonlyArray<SchemaAST.AST> {
-  const type = getInputType(input)
-  if (type) {
-    return types.filter((ast) => {
-      const types = getCandidateTypes(SchemaAST.encodedAST(ast))
-      return types === null || types === type || types.includes(type)
-    })
-  }
-  return types
-}
-
-const fromPredicate = <A>(ast: SchemaAST.AST, predicate: (u: unknown) => boolean): Parser<A> => (oinput) => {
-  if (Option.isNone(oinput)) {
-    return Effect.succeedNone
-  }
-  const u = oinput.value
-  return predicate(u) ? Effect.succeed(Option.some(u as A)) : Effect.fail(new SchemaIssue.MismatchIssue(ast, oinput))
 }

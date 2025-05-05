@@ -80,7 +80,7 @@ describe("Schema", () => {
       await assertions.make.succeed(schema, "a")
       await assertions.make.fail(schema, null as any, `Expected "a", actual null`)
       assertions.makeUnsafe.succeed(schema, "a")
-      assertions.makeUnsafe.fail(schema, null as any, `Expected "a", actual null`)
+      assertions.makeUnsafe.fail(schema, null as any, `makeUnsafe failure, actual null`)
 
       await assertions.decoding.succeed(schema, "a")
       await assertions.decoding.fail(schema, 1, `Expected "a", actual 1`)
@@ -140,7 +140,7 @@ describe("Schema", () => {
     const schema = Schema.Never
 
     await assertions.make.fail(schema, null as never, `Expected never, actual null`)
-    assertions.makeUnsafe.fail(schema, null as never, `Expected never, actual null`)
+    assertions.makeUnsafe.fail(schema, null as never, `makeUnsafe failure, actual null`)
 
     strictEqual(SchemaAST.format(schema.ast), `never`)
 
@@ -167,7 +167,7 @@ describe("Schema", () => {
     await assertions.make.succeed(schema, null)
     await assertions.make.fail(schema, undefined as any, `Expected null, actual undefined`)
     assertions.makeUnsafe.succeed(schema, null)
-    assertions.makeUnsafe.fail(schema, undefined as any, `Expected null, actual undefined`)
+    assertions.makeUnsafe.fail(schema, undefined as any, `makeUnsafe failure, actual undefined`)
   })
 
   it("Undefined", async () => {
@@ -178,7 +178,7 @@ describe("Schema", () => {
     await assertions.make.succeed(schema, undefined)
     await assertions.make.fail(schema, null as any, `Expected undefined, actual null`)
     assertions.makeUnsafe.succeed(schema, undefined)
-    assertions.makeUnsafe.fail(schema, null as any, `Expected undefined, actual null`)
+    assertions.makeUnsafe.fail(schema, null as any, `makeUnsafe failure, actual null`)
   })
 
   it("String", async () => {
@@ -189,7 +189,7 @@ describe("Schema", () => {
     await assertions.make.succeed(schema, "a")
     await assertions.make.fail(schema, null as any, `Expected string, actual null`)
     assertions.makeUnsafe.succeed(schema, "a")
-    assertions.makeUnsafe.fail(schema, null as any, `Expected string, actual null`)
+    assertions.makeUnsafe.fail(schema, null as any, `makeUnsafe failure, actual null`)
 
     await assertions.decoding.succeed(schema, "a")
     await assertions.decoding.fail(schema, 1, "Expected string, actual 1")
@@ -206,7 +206,7 @@ describe("Schema", () => {
     await assertions.make.succeed(schema, 1)
     await assertions.make.fail(schema, null as any, `Expected number, actual null`)
     assertions.makeUnsafe.succeed(schema, 1)
-    assertions.makeUnsafe.fail(schema, null as any, `Expected number, actual null`)
+    assertions.makeUnsafe.fail(schema, null as any, `makeUnsafe failure, actual null`)
 
     await assertions.decoding.succeed(schema, 1)
     await assertions.decoding.fail(schema, "a", `Expected number, actual "a"`)
@@ -224,7 +224,7 @@ describe("Schema", () => {
     await assertions.make.succeed(schema, a)
     await assertions.make.fail(schema, Symbol("b") as any, `Expected Symbol(a), actual Symbol(b)`)
     assertions.makeUnsafe.succeed(schema, a)
-    assertions.makeUnsafe.fail(schema, Symbol("b") as any, `Expected Symbol(a), actual Symbol(b)`)
+    assertions.makeUnsafe.fail(schema, Symbol("b") as any, `makeUnsafe failure, actual Symbol(b)`)
 
     await assertions.decoding.succeed(schema, a)
     await assertions.decoding.fail(schema, Symbol("b"), `Expected Symbol(a), actual Symbol(b)`)
@@ -238,7 +238,7 @@ describe("Schema", () => {
     await assertions.make.succeed(schema, 1n)
     await assertions.make.fail(schema, null as any, `Expected bigint, actual null`)
     assertions.makeUnsafe.succeed(schema, 1n)
-    assertions.makeUnsafe.fail(schema, null as any, `Expected bigint, actual null`)
+    assertions.makeUnsafe.fail(schema, null as any, `makeUnsafe failure, actual null`)
 
     await assertions.decoding.succeed(schema, 1n)
     await assertions.decoding.fail(schema, "1" as any, `Expected bigint, actual "1"`)
@@ -261,7 +261,7 @@ describe("Schema", () => {
       await assertions.make.succeed(schema, { a: "a" })
       await assertions.make.fail(schema, null as any, `Expected { readonly "a": string }, actual null`)
       assertions.makeUnsafe.succeed(schema, { a: "a" })
-      assertions.makeUnsafe.fail(schema, null as any, `Expected { readonly "a": string }, actual null`)
+      assertions.makeUnsafe.fail(schema, null as any, `makeUnsafe failure, actual null`)
 
       await assertions.decoding.succeed(schema, { a: "a" })
       await assertions.decoding.fail(
@@ -505,7 +505,7 @@ describe("Schema", () => {
          └─ Invalid value ""`
       )
       assertions.makeUnsafe.succeed(schema, ["a"])
-      assertions.makeUnsafe.fail(schema, [""], `Expected readonly [string & minLength(1)], actual [""]`)
+      assertions.makeUnsafe.fail(schema, [""], `makeUnsafe failure, actual [""]`)
 
       await assertions.decoding.succeed(schema, ["a"])
       await assertions.decoding.fail(
@@ -1573,11 +1573,11 @@ describe("Schema", () => {
           a: "1",
           categories: [{ a: "a", categories: [] }]
         },
-        `{ readonly "a": number & finite & greaterThan(0) <-> string; readonly "categories": ReadonlyArray<Suspend> }
+        `{ readonly "a": number & finite & greaterThan(0) <-> string; readonly "categories": ReadonlyArray<#> }
 └─ ["categories"]
-   └─ ReadonlyArray<Suspend>
+   └─ ReadonlyArray<#>
       └─ [0]
-         └─ { readonly "a": number & finite & greaterThan(0) <-> string; readonly "categories": ReadonlyArray<Suspend> }
+         └─ { readonly "a": number & finite & greaterThan(0) <-> string; readonly "categories": ReadonlyArray<#> }
             └─ ["a"]
                └─ number & finite & greaterThan(0) <-> string
                   └─ finite
@@ -1591,11 +1591,11 @@ describe("Schema", () => {
       await assertions.encoding.fail(
         schema,
         { a: 1, categories: [{ a: -1, categories: [] }] },
-        `{ readonly "a": string <-> number & finite & greaterThan(0); readonly "categories": ReadonlyArray<Suspend> }
+        `{ readonly "a": string <-> number & finite & greaterThan(0); readonly "categories": ReadonlyArray<#> }
 └─ ["categories"]
-   └─ ReadonlyArray<Suspend>
+   └─ ReadonlyArray<#>
       └─ [0]
-         └─ { readonly "a": string <-> number & finite & greaterThan(0); readonly "categories": ReadonlyArray<Suspend> }
+         └─ { readonly "a": string <-> number & finite & greaterThan(0); readonly "categories": ReadonlyArray<#> }
             └─ ["a"]
                └─ string <-> number & finite & greaterThan(0)
                   └─ number & finite & greaterThan(0)
@@ -1695,7 +1695,7 @@ describe("Schema", () => {
       await assertions.make.succeed(schema, { a: 1 })
       await assertions.make.fail(schema, null as any, `Expected { readonly [x: string]: number }, actual null`)
       assertions.makeUnsafe.succeed(schema, { a: 1 })
-      assertions.makeUnsafe.fail(schema, null as any, `Expected { readonly [x: string]: number }, actual null`)
+      assertions.makeUnsafe.fail(schema, null as any, `makeUnsafe failure, actual null`)
 
       await assertions.decoding.succeed(schema, { a: 1 })
       await assertions.decoding.fail(schema, null, "Expected { readonly [x: string]: number }, actual null")
@@ -2182,5 +2182,256 @@ describe("Schema", () => {
 └─ transformOrFail
    └─ not b`
     )
+  })
+
+  describe("TemplateLiteral", () => {
+    it(`"a"`, async () => {
+      const schema = Schema.TemplateLiteral("a")
+
+      strictEqual(SchemaAST.format(schema.ast), "`a`")
+
+      await assertions.decoding.succeed(schema, "a")
+
+      await assertions.decoding.fail(schema, "ab", `Expected \`a\`, actual "ab"`)
+      await assertions.decoding.fail(schema, "", `Expected \`a\`, actual ""`)
+      await assertions.decoding.fail(schema, null, `Expected \`a\`, actual null`)
+    })
+
+    it(`"a b"`, async () => {
+      const schema = Schema.TemplateLiteral("a", " ", "b")
+
+      await assertions.decoding.succeed(schema, "a b")
+
+      await assertions.decoding.fail(schema, "a  b", `Expected \`a b\`, actual "a  b"`)
+    })
+
+    it(`"[" + string + "]"`, async () => {
+      const schema = Schema.TemplateLiteral("[", Schema.String, "]")
+
+      await assertions.decoding.succeed(schema, "[a]")
+
+      await assertions.decoding.fail(schema, "a", "Expected `[${string}]`, actual \"a\"")
+    })
+
+    it(`"a" + string`, async () => {
+      const schema = Schema.TemplateLiteral("a", Schema.String)
+
+      await assertions.decoding.succeed(schema, "a")
+      await assertions.decoding.succeed(schema, "ab")
+
+      await assertions.decoding.fail(
+        schema,
+        null,
+        "Expected `a${string}`, actual null"
+      )
+      await assertions.decoding.fail(
+        schema,
+        "",
+        "Expected `a${string}`, actual \"\""
+      )
+    })
+
+    it(`"a" + number`, async () => {
+      const schema = Schema.TemplateLiteral("a", Schema.Number)
+
+      await assertions.decoding.succeed(schema, "a1")
+      await assertions.decoding.succeed(schema, "a1.2")
+
+      await assertions.decoding.succeed(schema, "a-1.401298464324817e-45")
+      await assertions.decoding.succeed(schema, "a1.401298464324817e-45")
+      await assertions.decoding.succeed(schema, "a+1.401298464324817e-45")
+      await assertions.decoding.succeed(schema, "a-1.401298464324817e+45")
+      await assertions.decoding.succeed(schema, "a1.401298464324817e+45")
+      await assertions.decoding.succeed(schema, "a+1.401298464324817e+45")
+
+      await assertions.decoding.succeed(schema, "a-1.401298464324817E-45")
+      await assertions.decoding.succeed(schema, "a1.401298464324817E-45")
+      await assertions.decoding.succeed(schema, "a+1.401298464324817E-45")
+      await assertions.decoding.succeed(schema, "a-1.401298464324817E+45")
+      await assertions.decoding.succeed(schema, "a1.401298464324817E+45")
+      await assertions.decoding.succeed(schema, "a+1.401298464324817E+45")
+
+      await assertions.decoding.fail(
+        schema,
+        null,
+        "Expected `a${number}`, actual null"
+      )
+      await assertions.decoding.fail(
+        schema,
+        "",
+        "Expected `a${number}`, actual \"\""
+      )
+      await assertions.decoding.fail(
+        schema,
+        "aa",
+        "Expected `a${number}`, actual \"aa\""
+      )
+    })
+
+    it(`string`, async () => {
+      const schema = Schema.TemplateLiteral(Schema.String)
+
+      await assertions.decoding.succeed(schema, "a")
+      await assertions.decoding.succeed(schema, "ab")
+      await assertions.decoding.succeed(schema, "")
+      await assertions.decoding.succeed(schema, "\n")
+      await assertions.decoding.succeed(schema, "\r")
+      await assertions.decoding.succeed(schema, "\r\n")
+      await assertions.decoding.succeed(schema, "\t")
+    })
+
+    it(`\\n + string`, async () => {
+      const schema = Schema.TemplateLiteral("\n", Schema.String)
+
+      await assertions.decoding.succeed(schema, "\n")
+      await assertions.decoding.succeed(schema, "\na")
+      await assertions.decoding.fail(
+        schema,
+        "a",
+        "Expected `\n${string}`, actual \"a\""
+      )
+    })
+
+    it(`a\\nb  + string`, async () => {
+      const schema = Schema.TemplateLiteral("a\nb ", Schema.String)
+
+      await assertions.decoding.succeed(schema, "a\nb ")
+      await assertions.decoding.succeed(schema, "a\nb c")
+    })
+
+    it(`"a" + string + "b"`, async () => {
+      const schema = Schema.TemplateLiteral("a", Schema.String, "b")
+
+      await assertions.decoding.succeed(schema, "ab")
+      await assertions.decoding.succeed(schema, "acb")
+      await assertions.decoding.succeed(schema, "abb")
+      await assertions.decoding.fail(
+        schema,
+        "",
+        "Expected `a${string}b`, actual \"\""
+      )
+      await assertions.decoding.fail(
+        schema,
+        "a",
+        "Expected `a${string}b`, actual \"a\""
+      )
+      await assertions.decoding.fail(
+        schema,
+        "b",
+        "Expected `a${string}b`, actual \"b\""
+      )
+      await assertions.encoding.succeed(schema, "acb")
+    })
+
+    it(`"a" + string + "b" + string`, async () => {
+      const schema = Schema.TemplateLiteral("a", Schema.String, "b", Schema.String)
+
+      await assertions.decoding.succeed(schema, "ab")
+      await assertions.decoding.succeed(schema, "acb")
+      await assertions.decoding.succeed(schema, "acbd")
+
+      await assertions.decoding.fail(
+        schema,
+        "a",
+        "Expected `a${string}b${string}`, actual \"a\""
+      )
+      await assertions.decoding.fail(
+        schema,
+        "b",
+        "Expected `a${string}b${string}`, actual \"b\""
+      )
+    })
+
+    it("https://www.typescriptlang.org/docs/handbook/2/template-literal-types.html", async () => {
+      const EmailLocaleIDs = Schema.Literals(["welcome_email", "email_heading"])
+      const FooterLocaleIDs = Schema.Literals(["footer_title", "footer_sendoff"])
+      const schema = Schema.TemplateLiteral(Schema.Union([EmailLocaleIDs, FooterLocaleIDs]), "_id")
+
+      await assertions.decoding.succeed(schema, "welcome_email_id")
+      await assertions.decoding.succeed(schema, "email_heading_id")
+      await assertions.decoding.succeed(schema, "footer_title_id")
+      await assertions.decoding.succeed(schema, "footer_sendoff_id")
+
+      await assertions.decoding.fail(
+        schema,
+        "_id",
+        `Expected \`\${"welcome_email" | "email_heading" | "footer_title" | "footer_sendoff"}_id\`, actual "_id"`
+      )
+    })
+
+    it(`string + 0`, async () => {
+      const schema = Schema.TemplateLiteral(Schema.String, 0)
+
+      await assertions.decoding.succeed(schema, "a0")
+      await assertions.decoding.fail(schema, "a", "Expected `${string}0`, actual \"a\"")
+    })
+
+    it(`string + true`, async () => {
+      const schema = Schema.TemplateLiteral(Schema.String, true)
+
+      await assertions.decoding.succeed(schema, "atrue")
+      await assertions.decoding.fail(schema, "a", "Expected `${string}true`, actual \"a\"")
+    })
+
+    it(`string + 1n`, async () => {
+      const schema = Schema.TemplateLiteral(Schema.String, 1n)
+
+      await assertions.decoding.succeed(schema, "a1")
+      await assertions.decoding.fail(schema, "a", "Expected `${string}1`, actual \"a\"")
+    })
+
+    it(`string + ("a" | 0)`, async () => {
+      const schema = Schema.TemplateLiteral(Schema.String, Schema.Literals(["a", 0]))
+
+      await assertions.decoding.succeed(schema, "a0")
+      await assertions.decoding.succeed(schema, "aa")
+      await assertions.decoding.fail(
+        schema,
+        "b",
+        `Expected \`\${string}\${"a" | "0"}\`, actual "b"`
+      )
+    })
+
+    it(`(string | 1) + (number | true)`, async () => {
+      const schema = Schema.TemplateLiteral(
+        Schema.Union([Schema.String, Schema.Literal(1)]),
+        Schema.Union([Schema.Number, Schema.Literal(true)])
+      )
+
+      await assertions.decoding.succeed(schema, "atrue")
+      await assertions.decoding.succeed(schema, "-2")
+      await assertions.decoding.succeed(schema, "10.1")
+      await assertions.decoding.fail(
+        schema,
+        "",
+        `Expected \`\${string | "1"}\${number | "true"}\`, actual ""`
+      )
+    })
+
+    it("`c${`a${string}b` | \"e\"}d`", async () => {
+      const schema = Schema.TemplateLiteral(
+        "c",
+        Schema.Union([Schema.TemplateLiteral("a", Schema.String, "b"), Schema.Literal("e")]),
+        "d"
+      )
+
+      await assertions.decoding.succeed(schema, "ced")
+      await assertions.decoding.succeed(schema, "cabd")
+      await assertions.decoding.succeed(schema, "casbd")
+      await assertions.decoding.succeed(schema, "ca  bd")
+      await assertions.decoding.fail(
+        schema,
+        "",
+        "Expected `c${`a${string}b` | \"e\"}d`, actual \"\""
+      )
+    })
+
+    it("< + h + (1|2) + >", async () => {
+      const schema = Schema.TemplateLiteral("<", Schema.TemplateLiteral("h", Schema.Literals([1, 2])), ">")
+
+      await assertions.decoding.succeed(schema, "<h1>")
+      await assertions.decoding.succeed(schema, "<h2>")
+      await assertions.decoding.fail(schema, "<h3>", "Expected `<${`h${\"1\" | \"2\"}`}>`, actual \"<h3>\"")
+    })
   })
 })
