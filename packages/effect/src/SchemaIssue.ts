@@ -4,18 +4,28 @@
 
 import type * as Arr from "./Array.js"
 import type * as Option from "./Option.js"
+import { hasProperty } from "./Predicate.js"
 import type * as SchemaAST from "./SchemaAST.js"
 import type * as SchemaFilter from "./SchemaFilter.js"
 import type * as SchemaMiddleware from "./SchemaMiddleware.js"
 
 /**
- * @category model
+ * @since 4.0.0
+ * @category Symbols
+ */
+export const TypeId: unique symbol = Symbol.for("effect/SchemaIssue")
+
+/**
+ * @since 4.0.0
+ * @category Symbols
+ */
+export type TypeId = typeof TypeId
+
+/**
  * @since 4.0.0
  */
 export function isIssue(u: unknown): u is Issue {
-  return u instanceof MismatchIssue || u instanceof InvalidIssue || u instanceof MissingIssue ||
-    u instanceof ForbiddenIssue || u instanceof FilterIssue || u instanceof MiddlewareIssue ||
-    u instanceof TransformationIssue || u instanceof PointerIssue || u instanceof CompositeIssue
+  return hasProperty(u, TypeId)
 }
 
 /**
@@ -35,18 +45,24 @@ export type Issue =
   | PointerIssue
   | CompositeIssue
 
+class Base {
+  readonly [TypeId] = TypeId
+}
+
 /**
  * Error that occurs when a transformation has an error.
  *
  * @category model
  * @since 4.0.0
  */
-export class TransformationIssue {
+export class TransformationIssue extends Base {
   readonly _tag = "TransformationIssue"
   constructor(
     readonly parser: SchemaAST.Transformation["decode"],
     readonly issue: Issue
-  ) {}
+  ) {
+    super()
+  }
 }
 
 /**
@@ -55,13 +71,15 @@ export class TransformationIssue {
  * @category model
  * @since 4.0.0
  */
-export class FilterIssue {
+export class FilterIssue extends Base {
   readonly _tag = "FilterIssue"
   constructor(
     readonly filter: SchemaFilter.Filters<unknown>,
     readonly issue: Issue,
     readonly bail: boolean
-  ) {}
+  ) {
+    super()
+  }
 }
 
 /**
@@ -70,12 +88,14 @@ export class FilterIssue {
  * @category model
  * @since 4.0.0
  */
-export class MiddlewareIssue {
+export class MiddlewareIssue extends Base {
   readonly _tag = "MiddlewareIssue"
   constructor(
     readonly middleware: SchemaMiddleware.Middleware<any, any, any, any>,
     readonly issue: Issue
-  ) {}
+  ) {
+    super()
+  }
 }
 
 /**
@@ -90,12 +110,14 @@ export type PropertyKeyPath = ReadonlyArray<PropertyKey>
  * @category model
  * @since 4.0.0
  */
-export class PointerIssue {
+export class PointerIssue extends Base {
   readonly _tag = "PointerIssue"
   constructor(
     readonly path: PropertyKeyPath,
     readonly issue: Issue
-  ) {}
+  ) {
+    super()
+  }
 }
 
 /**
@@ -104,10 +126,12 @@ export class PointerIssue {
  * @category model
  * @since 4.0.0
  */
-export class MissingIssue {
+export class MissingIssue extends Base {
   static readonly instance = new MissingIssue()
   readonly _tag = "MissingIssue"
-  private constructor() {}
+  private constructor() {
+    super()
+  }
 }
 
 /**
@@ -116,38 +140,44 @@ export class MissingIssue {
  * @category model
  * @since 4.0.0
  */
-export class CompositeIssue {
+export class CompositeIssue extends Base {
   readonly _tag = "CompositeIssue"
   constructor(
     readonly ast: SchemaAST.AST,
     readonly actual: Option.Option<unknown>,
     readonly issues: Arr.NonEmptyReadonlyArray<Issue>
-  ) {}
+  ) {
+    super()
+  }
 }
 
 /**
  * @category model
  * @since 4.0.0
  */
-export class MismatchIssue {
+export class MismatchIssue extends Base {
   readonly _tag = "MismatchIssue"
   constructor(
     readonly ast: SchemaAST.AST,
     readonly actual: Option.Option<unknown>,
     readonly message?: string
-  ) {}
+  ) {
+    super()
+  }
 }
 
 /**
  * @category model
  * @since 4.0.0
  */
-export class InvalidIssue {
+export class InvalidIssue extends Base {
   readonly _tag = "InvalidIssue"
   constructor(
     readonly actual: Option.Option<unknown>,
     readonly message?: string
-  ) {}
+  ) {
+    super()
+  }
 }
 
 /**
@@ -156,10 +186,12 @@ export class InvalidIssue {
  * @category model
  * @since 4.0.0
  */
-export class ForbiddenIssue {
+export class ForbiddenIssue extends Base {
   readonly _tag = "ForbiddenIssue"
   constructor(
     readonly actual: Option.Option<unknown>,
     readonly message?: string
-  ) {}
+  ) {
+    super()
+  }
 }

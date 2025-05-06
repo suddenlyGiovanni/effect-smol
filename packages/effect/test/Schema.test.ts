@@ -2026,14 +2026,20 @@ describe("Schema", () => {
 
       const schema = Schema.instanceOf({
         constructor: MyError,
-        serialization: {
-          json: {
-            to: Schema.String,
-            encode: (e) => e.message,
-            decode: (message) => new MyError(message)
+
+        annotations: {
+          title: "MyError",
+          serialization: {
+            json: () =>
+              Schema.link<MyError>()(
+                Schema.String,
+                SchemaTransformation.transform(
+                  (message) => new MyError(message),
+                  (e) => e.message
+                )
+              )
           }
-        },
-        annotations: { title: "MyError" }
+        }
       })
 
       strictEqual(SchemaAST.format(schema.ast), `MyError`)
