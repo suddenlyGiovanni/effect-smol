@@ -14,6 +14,7 @@ import * as O from "./Option.js"
 import type { Pipeable } from "./Pipeable.js"
 import { pipeArguments } from "./Pipeable.js"
 import * as Predicate from "./Predicate.js"
+import * as Request from "./Request.js"
 import * as Result from "./Result.js"
 import * as SchemaAST from "./SchemaAST.js"
 import * as SchemaFilter from "./SchemaFilter.js"
@@ -45,6 +46,7 @@ type DefaultConstructorToken = "no-constructor-default" | "has-constructor-defau
  */
 export interface MakeOptions {
   readonly parseOptions?: SchemaAST.ParseOptions | undefined
+  readonly skipValidation?: boolean | undefined
 }
 
 /**
@@ -2092,6 +2094,22 @@ export interface Class<Self, S extends Top & { readonly fields: Struct.Fields },
   readonly fields: S["fields"]
 }
 
+/**
+ * @category Api interface
+ * @since 4.0.0
+ */
+export interface ExtendableClass<Self, S extends Top & { readonly fields: Struct.Fields }, Inherited>
+  extends Class<Self, S, Inherited>
+{
+  readonly "~rebuild.out": ExtendableClass<Self, S, Self>
+  extend<Extended>(
+    identifier: string
+  ): <NewFields extends Struct.Fields>(
+    fields: NewFields,
+    annotations?: SchemaAST.Annotations.Bottom<Extended>
+  ) => ExtendableClass<Extended, Struct<Simplify<Merge<S["fields"], NewFields>>>, Self>
+}
+
 function makeClass<
   Self,
   S extends Struct<Struct.Fields>,
@@ -2106,8 +2124,10 @@ function makeClass<
 
   return class extends Inherited {
     constructor(...[input, options]: ReadonlyArray<any>) {
-      const props = schema.makeUnsafe(input, options)
-      super(props, options)
+      if (options?.skipValidation !== true) {
+        schema.makeUnsafe(input, options)
+      }
+      super(input, { ...options, skipValidation: true })
     }
 
     static readonly "~effect/Schema" = "~effect/Schema"
@@ -2181,6 +2201,22 @@ function makeClass<
     static makeUnsafe(input: S["~type.make.in"], options?: MakeOptions): Self {
       return new this(input, options)
     }
+    static extend<Extended>(
+      identifier: string
+    ): <NewFields extends Struct.Fields>(
+      fields: NewFields,
+      annotations?: SchemaAST.Annotations.Bottom<Extended>
+    ) => Class<Extended, Struct<Simplify<Merge<S["fields"], NewFields>>>, Self> {
+      return (fields, annotations) => {
+        const struct = schema.pipe(extend(fields))
+        return makeClass(
+          this,
+          identifier,
+          struct,
+          getDefaultComputeAST(struct.ast, { title: identifier, ...annotations })
+        )
+      }
+    }
   }
 }
 
@@ -2188,7 +2224,7 @@ const makeDefaultClassLink = (self: new(...args: ReadonlyArray<any>) => any) => 
   new SchemaAST.Link(
     ast,
     new SchemaTransformation.Transformation(
-      SchemaParser.parseSome((input) => Result.succeedSome(new self(input))),
+      SchemaParser.mapSome((input) => new self(input)),
       SchemaParser.parseSome((input) => {
         if (!(input instanceof self)) {
           return Result.err(new SchemaIssue.MismatchIssue(ast, input))
@@ -2233,17 +2269,17 @@ export const Class: {
     <const Fields extends Struct.Fields>(
       fields: Fields,
       annotations?: SchemaAST.Annotations.Bottom<Self>
-    ): Class<Self, Struct<Fields>, {}>
+    ): ExtendableClass<Self, Struct<Fields>, {}>
     <S extends Struct<Struct.Fields>>(
       schema: S,
       annotations?: SchemaAST.Annotations.Bottom<Self>
-    ): Class<Self, S, {}>
+    ): ExtendableClass<Self, S, {}>
   }
 } = <Self>(identifier: string) =>
 (
   schema: Struct.Fields | Struct<Struct.Fields>,
   annotations?: SchemaAST.Annotations.Bottom<Self>
-): Class<Self, Struct<Struct.Fields>, {}> => {
+): ExtendableClass<Self, Struct<Struct.Fields>, {}> => {
   const struct = isSchema(schema) ? schema : Struct(schema)
 
   return makeClass(
@@ -2259,7 +2295,7 @@ export const Class: {
  * @since 4.0.0
  */
 export interface ErrorClass<Self, S extends Top & { readonly fields: Struct.Fields }, Inherited>
-  extends Class<Self, S, Inherited>
+  extends ExtendableClass<Self, S, Inherited>
 {
   readonly "~rebuild.out": ErrorClass<Self, S, Self>
 }
@@ -2292,3 +2328,55 @@ export const ErrorClass: {
     getDefaultComputeAST(struct.ast, { title: identifier, ...annotations })
   )
 }
+
+/**
+ * @category Api interface
+ * @since 4.0.0
+ */
+export interface RequestClass<
+  Self,
+  Payload extends Struct<Struct.Fields>,
+  Success extends Top,
+  Error extends Top,
+  Inherited
+> extends Class<Self, Payload, Inherited> {
+  readonly "~rebuild.out": RequestClass<Self, Payload, Success, Error, Self>
+  readonly payload: Payload
+  readonly success: Success
+  readonly error: Error
+}
+
+/**
+ * @since 4.0.0
+ */
+export const RequestClass =
+  <Self>(identifier: string) =>
+  <Payload extends Struct<Struct.Fields>, Success extends Top, Error extends Top>(
+    options: {
+      readonly payload: Payload
+      readonly success: Success
+      readonly error: Error
+      readonly annotations?: SchemaAST.Annotations.Bottom<Self>
+    }
+  ): RequestClass<
+    Self,
+    Payload,
+    Success,
+    Error,
+    Request.Request<
+      Success["Type"],
+      Error["Type"],
+      Success["DecodingContext"] | Success["EncodingContext"] | Error["DecodingContext"] | Error["EncodingContext"]
+    >
+  > => {
+    return class RequestClass extends makeClass(
+      Request.Class,
+      identifier,
+      options.payload,
+      getDefaultComputeAST(options.payload.ast, { title: identifier, ...options.annotations })
+    ) {
+      static readonly payload = options.payload
+      static readonly success = options.success
+      static readonly error = options.error
+    } as any
+  }
