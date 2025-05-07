@@ -2,7 +2,6 @@
  * @since 1.0.0
  */
 import type { Effect } from "effect/Effect"
-import { constVoid } from "effect/Function"
 import type { Teardown } from "effect/Runtime"
 import { makeRunMain } from "effect/Runtime"
 
