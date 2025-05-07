@@ -222,6 +222,27 @@ export abstract class Extensions implements Annotated {
  * @category model
  * @since 4.0.0
  */
+export abstract class Concrete extends Extensions {
+  /** @internal */
+  typeAST(this: AST): AST {
+    return replaceEncoding(this, undefined)
+  }
+  /** @internal */
+  flip(this: AST): AST {
+    if (this.encoding) {
+      return flipEncoding(this, this.encoding)
+    }
+    const modifiers = flipModifiers(this)
+    return modifiers === this.modifiers ?
+      this :
+      replaceModifiers(this, modifiers)
+  }
+}
+
+/**
+ * @category model
+ * @since 4.0.0
+ */
 export class Declaration extends Extensions {
   readonly _tag = "Declaration"
 
@@ -237,20 +258,26 @@ export class Declaration extends Extensions {
   ) {
     super(annotations, modifiers, encoding, context)
   }
+  /** @internal */
   typeAST(): Declaration {
     const tps = mapOrSame(this.typeParameters, (tp) => typeAST(tp))
-    return tps === this.typeParameters ?
+    return !this.encoding && tps === this.typeParameters ?
       this :
       new Declaration(tps, this.run, this.annotations, this.modifiers, undefined, this.context)
   }
-  flip(): Declaration {
+  /** @internal */
+  flip(): AST {
+    if (this.encoding) {
+      return flipEncoding(this, this.encoding)
+    }
     const typeParameters = mapOrSame(this.typeParameters, flip)
     const modifiers = flipModifiers(this)
     return typeParameters === this.typeParameters && modifiers === this.modifiers ?
       this :
       new Declaration(typeParameters, this.run, this.annotations, modifiers, undefined, this.context)
   }
-  parser(): SchemaValidator.Parser<any, any> {
+  /** @internal */
+  parser() {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const ast = this
     return Effect.fnUntraced(function*(oinput, options) {
@@ -275,8 +302,12 @@ export class Declaration extends Extensions {
  * @category model
  * @since 4.0.0
  */
-export class NullKeyword extends Extensions {
+export class NullKeyword extends Concrete {
   readonly _tag = "NullKeyword"
+  /** @internal */
+  parser() {
+    return fromPredicate(this, Predicate.isNull)
+  }
 }
 
 /**
@@ -288,8 +319,12 @@ export const nullKeyword = new NullKeyword(undefined, undefined, undefined, unde
  * @category model
  * @since 4.0.0
  */
-export class UndefinedKeyword extends Extensions {
+export class UndefinedKeyword extends Concrete {
   readonly _tag = "UndefinedKeyword"
+  /** @internal */
+  parser() {
+    return fromPredicate(this, Predicate.isUndefined)
+  }
 }
 
 /**
@@ -301,8 +336,12 @@ export const undefinedKeyword = new UndefinedKeyword(undefined, undefined, undef
  * @category model
  * @since 4.0.0
  */
-export class VoidKeyword extends Extensions {
+export class VoidKeyword extends Concrete {
   readonly _tag = "VoidKeyword"
+  /** @internal */
+  parser() {
+    return fromPredicate(this, Predicate.isUnknown)
+  }
 }
 
 /**
@@ -314,8 +353,12 @@ export const voidKeyword = new VoidKeyword(undefined, undefined, undefined, unde
  * @category model
  * @since 4.0.0
  */
-export class NeverKeyword extends Extensions {
+export class NeverKeyword extends Concrete {
   readonly _tag = "NeverKeyword"
+  /** @internal */
+  parser() {
+    return fromPredicate(this, Predicate.isNever)
+  }
 }
 
 /**
@@ -327,8 +370,12 @@ export const neverKeyword = new NeverKeyword(undefined, undefined, undefined, un
  * @category model
  * @since 4.0.0
  */
-export class AnyKeyword extends Extensions {
+export class AnyKeyword extends Concrete {
   readonly _tag = "AnyKeyword"
+  /** @internal */
+  parser() {
+    return fromPredicate(this, Predicate.isUnknown)
+  }
 }
 
 /**
@@ -340,8 +387,12 @@ export const anyKeyword = new AnyKeyword(undefined, undefined, undefined, undefi
  * @category model
  * @since 4.0.0
  */
-export class UnknownKeyword extends Extensions {
+export class UnknownKeyword extends Concrete {
   readonly _tag = "UnknownKeyword"
+  /** @internal */
+  parser() {
+    return fromPredicate(this, Predicate.isUnknown)
+  }
 }
 
 /**
@@ -353,8 +404,12 @@ export const unknownKeyword = new UnknownKeyword(undefined, undefined, undefined
  * @category model
  * @since 4.0.0
  */
-export class ObjectKeyword extends Extensions {
+export class ObjectKeyword extends Concrete {
   readonly _tag = "ObjectKeyword"
+  /** @internal */
+  parser() {
+    return fromPredicate(this, Predicate.isObject)
+  }
 }
 
 /**
@@ -388,7 +443,7 @@ export class TemplateLiteralSpan {
  * @category model
  * @since 4.0.0
  */
-export class TemplateLiteral extends Extensions {
+export class TemplateLiteral extends Concrete {
   readonly _tag = "TemplateLiteral"
   constructor(
     readonly head: string,
@@ -400,7 +455,8 @@ export class TemplateLiteral extends Extensions {
   ) {
     super(annotations, modifiers, encoding, context)
   }
-  parser(): SchemaValidator.Parser<any, any> {
+  /** @internal */
+  parser() {
     const regex = getTemplateLiteralRegExp(this)
     return fromPredicate(this, (u) => Predicate.isString(u) && regex.test(u))
   }
@@ -416,7 +472,7 @@ export type LiteralValue = string | number | boolean | bigint
  * @category model
  * @since 4.0.0
  */
-export class UniqueSymbol extends Extensions {
+export class UniqueSymbol extends Concrete {
   readonly _tag = "UniqueSymbol"
   constructor(
     readonly symbol: symbol,
@@ -427,13 +483,17 @@ export class UniqueSymbol extends Extensions {
   ) {
     super(annotations, modifiers, encoding, context)
   }
+  /** @internal */
+  parser() {
+    return fromPredicate(this, (u) => u === this.symbol)
+  }
 }
 
 /**
  * @category model
  * @since 4.0.0
  */
-export class LiteralType extends Extensions {
+export class LiteralType extends Concrete {
   readonly _tag = "LiteralType"
   constructor(
     readonly literal: LiteralValue,
@@ -444,14 +504,22 @@ export class LiteralType extends Extensions {
   ) {
     super(annotations, modifiers, encoding, context)
   }
+  /** @internal */
+  parser() {
+    return fromPredicate(this, (u) => u === this.literal)
+  }
 }
 
 /**
  * @category model
  * @since 4.0.0
  */
-export class StringKeyword extends Extensions {
+export class StringKeyword extends Concrete {
   readonly _tag = "StringKeyword"
+  /** @internal */
+  parser() {
+    return fromPredicate(this, Predicate.isString)
+  }
 }
 
 /**
@@ -463,8 +531,12 @@ export const stringKeyword = new StringKeyword(undefined, undefined, undefined, 
  * @category model
  * @since 4.0.0
  */
-export class NumberKeyword extends Extensions {
+export class NumberKeyword extends Concrete {
   readonly _tag = "NumberKeyword"
+  /** @internal */
+  parser() {
+    return fromPredicate(this, Predicate.isNumber)
+  }
 }
 
 /**
@@ -476,8 +548,12 @@ export const numberKeyword = new NumberKeyword(undefined, undefined, undefined, 
  * @category model
  * @since 4.0.0
  */
-export class BooleanKeyword extends Extensions {
+export class BooleanKeyword extends Concrete {
   readonly _tag = "BooleanKeyword"
+  /** @internal */
+  parser() {
+    return fromPredicate(this, Predicate.isBoolean)
+  }
 }
 
 /**
@@ -489,8 +565,12 @@ export const booleanKeyword = new BooleanKeyword(undefined, undefined, undefined
  * @category model
  * @since 4.0.0
  */
-export class SymbolKeyword extends Extensions {
+export class SymbolKeyword extends Concrete {
   readonly _tag = "SymbolKeyword"
+  /** @internal */
+  parser() {
+    return fromPredicate(this, Predicate.isSymbol)
+  }
 }
 
 /**
@@ -502,8 +582,12 @@ export const symbolKeyword = new SymbolKeyword(undefined, undefined, undefined, 
  * @category model
  * @since 4.0.0
  */
-export class BigIntKeyword extends Extensions {
+export class BigIntKeyword extends Concrete {
   readonly _tag = "BigIntKeyword"
+  /** @internal */
+  parser() {
+    return fromPredicate(this, Predicate.isBigInt)
+  }
 }
 
 /**
@@ -582,23 +666,28 @@ export class TupleType extends Extensions {
   ) {
     super(annotations, modifiers, encoding, context)
   }
+  /** @internal */
   typeAST(): TupleType {
     const elements = mapOrSame(this.elements, typeAST)
     const rest = mapOrSame(this.rest, typeAST)
-    return elements === this.elements && rest === this.rest ?
+    return !this.encoding && elements === this.elements && rest === this.rest ?
       this :
       new TupleType(this.isReadonly, elements, rest, this.annotations, this.modifiers, undefined, this.context)
   }
-  flip(): TupleType {
+  /** @internal */
+  flip(): AST {
+    if (this.encoding) {
+      return flipEncoding(this, this.encoding)
+    }
     const elements = mapOrSame(this.elements, flip)
     const rest = mapOrSame(this.rest, flip)
     const modifiers = flipModifiers(this)
-    return elements === this.elements && rest === this.rest && modifiers === this.modifiers ?
+    return !this.encoding && elements === this.elements && rest === this.rest && modifiers === this.modifiers ?
       this :
       new TupleType(this.isReadonly, elements, rest, this.annotations, modifiers, undefined, this.context)
   }
-
-  parser(goMemo: (ast: AST) => SchemaValidator.Parser<any, any>): SchemaValidator.Parser<any, any> {
+  /** @internal */
+  parser(go: (ast: AST) => SchemaValidator.Parser<any, any>) {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const ast = this
     return Effect.fnUntraced(function*(oinput, options) {
@@ -620,7 +709,7 @@ export class TupleType extends Extensions {
       for (; i < ast.elements.length; i++) {
         const element = ast.elements[i]
         const value = i < input.length ? Option.some(input[i]) : Option.none()
-        const parser = goMemo(element)
+        const parser = go(element)
         const r = yield* Effect.result(parser(value, options))
         if (Result.isErr(r)) {
           const issue = new SchemaIssue.PointerIssue([i], r.err)
@@ -649,7 +738,7 @@ export class TupleType extends Extensions {
       const len = input.length
       if (Arr.isNonEmptyReadonlyArray(ast.rest)) {
         const [head, ...tail] = ast.rest
-        const parser = goMemo(head)
+        const parser = go(head)
         for (; i < len - tail.length; i++) {
           const r = yield* Effect.result(parser(Option.some(input[i]), options))
           if (Result.isErr(r)) {
@@ -701,6 +790,7 @@ export class TypeLiteral extends Extensions {
     // TODO: check for duplicate property signatures
     // TODO: check for duplicate index signatures
   }
+  /** @internal */
   typeAST(): TypeLiteral {
     const pss = mapOrSame(this.propertySignatures, (ps) => {
       const type = typeAST(ps.type)
@@ -715,11 +805,15 @@ export class TypeLiteral extends Extensions {
         is :
         new IndexSignature(parameter, type, undefined)
     })
-    return pss === this.propertySignatures && iss === this.indexSignatures ?
+    return !this.encoding && pss === this.propertySignatures && iss === this.indexSignatures ?
       this :
       new TypeLiteral(pss, iss, this.annotations, this.modifiers, undefined, this.context)
   }
-  flip(): TypeLiteral {
+  /** @internal */
+  flip(): AST {
+    if (this.encoding) {
+      return flipEncoding(this, this.encoding)
+    }
     const propertySignatures = mapOrSame(this.propertySignatures, (ps) => {
       const type = flip(ps.type)
       return type === ps.type ? ps : new PropertySignature(ps.name, type)
@@ -733,7 +827,8 @@ export class TypeLiteral extends Extensions {
         : new IndexSignature(parameter, type, merge)
     })
     const modifiers = flipModifiers(this)
-    return propertySignatures === this.propertySignatures && indexSignatures === this.indexSignatures &&
+    return !this.encoding && propertySignatures === this.propertySignatures &&
+        indexSignatures === this.indexSignatures &&
         modifiers === this.modifiers ?
       this :
       new TypeLiteral(
@@ -745,7 +840,8 @@ export class TypeLiteral extends Extensions {
         this.context
       )
   }
-  parser(goMemo: (ast: AST) => SchemaValidator.Parser<any, any>): SchemaValidator.Parser<any, any> {
+  /** @internal */
+  parser(go: (ast: AST) => SchemaValidator.Parser<any, any>) {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const ast = this
     // Handle empty Struct({}) case
@@ -776,7 +872,7 @@ export class TypeLiteral extends Extensions {
         if (Object.prototype.hasOwnProperty.call(input, name)) {
           value = Option.some(input[name])
         }
-        const parser = goMemo(type)
+        const parser = go(type)
         const r = yield* Effect.result(parser(value, options))
         if (Result.isErr(r)) {
           const issue = new SchemaIssue.PointerIssue([name], r.err)
@@ -809,7 +905,7 @@ export class TypeLiteral extends Extensions {
 
       for (const is of ast.indexSignatures) {
         for (const key of keys) {
-          const parserKey = goMemo(is.parameter)
+          const parserKey = go(is.parameter)
           const rKey = (yield* Effect.result(parserKey(Option.some(key), options))) as Result.Result<
             Option.Option<PropertyKey>,
             SchemaIssue.Issue
@@ -827,7 +923,7 @@ export class TypeLiteral extends Extensions {
           }
 
           const value: Option.Option<unknown> = Option.some(input[key])
-          const parserValue = goMemo(is.type)
+          const parserValue = go(is.type)
           const rValue = yield* Effect.result(parserValue(value, options))
           if (Result.isErr(rValue)) {
             const issue = new SchemaIssue.PointerIssue([key], rValue.err)
@@ -946,20 +1042,26 @@ export class UnionType<A extends AST = AST> extends Extensions {
   ) {
     super(annotations, modifiers, encoding, context)
   }
-  typeAST(): UnionType<AST> {
+  /** @internal */
+  typeAST(): UnionType<A> {
     const types = mapOrSame(this.types, typeAST)
     return types === this.types ?
       this :
       new UnionType(types, this.annotations, this.modifiers, undefined, this.context)
   }
-  flip(): UnionType<AST> {
+  /** @internal */
+  flip(): AST {
+    if (this.encoding) {
+      return flipEncoding(this, this.encoding)
+    }
     const types = mapOrSame(this.types, flip)
     const modifiers = flipModifiers(this)
     return types === this.types && modifiers === this.modifiers ?
       this :
       new UnionType(types, this.annotations, modifiers, undefined, this.context)
   }
-  parser(goMemo: (ast: AST) => SchemaValidator.Parser<any, any>): SchemaValidator.Parser<any, any> {
+  /** @internal */
+  parser(go: (ast: AST) => SchemaValidator.Parser<any, any>) {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const ast = this
     return Effect.fnUntraced(function*(oinput, options) {
@@ -972,7 +1074,7 @@ export class UnionType<A extends AST = AST> extends Extensions {
       const issues: Array<SchemaIssue.Issue> = []
 
       for (const candidate of candidates) {
-        const parser = goMemo(candidate)
+        const parser = go(candidate)
         const r = yield* Effect.result(parser(Option.some(input), options))
         if (Result.isErr(r)) {
           issues.push(r.err)
@@ -1011,11 +1113,20 @@ export class Suspend extends Extensions {
     super(annotations, modifiers, encoding, context)
     this.thunk = memoizeThunk(thunk)
   }
+  /** @internal */
   typeAST(): Suspend {
     return new Suspend(() => typeAST(this.thunk()), this.annotations, this.modifiers, undefined, this.context)
   }
-  flip(): Suspend {
+  /** @internal */
+  flip(): AST {
+    if (this.encoding) {
+      return flipEncoding(this, this.encoding)
+    }
     return new Suspend(() => flip(this.thunk()), this.annotations, flipModifiers(this), undefined, this.context)
+  }
+  /** @internal */
+  parser(go: (ast: AST) => SchemaValidator.Parser<any, any>) {
+    return go(this.thunk())
   }
 }
 
@@ -1118,7 +1229,7 @@ function mapOrSame<A>(as: ReadonlyArray<A>, f: (a: A) => A): ReadonlyArray<A> {
 }
 
 /** @internal */
-export function memoize<O>(f: (ast: AST) => O): (ast: AST) => O {
+export function memoize<A extends AST, O>(f: (ast: A) => O): (ast: A) => O {
   const cache = new WeakMap<AST, O>()
   return (ast) => {
     if (cache.has(ast)) {
@@ -1208,20 +1319,8 @@ export function decodeTo(from: AST, to: AST, transformation: Transformation): AS
 /**
  * @since 4.0.0
  */
-export const typeAST = memoize((ast: AST): AST => {
-  if (ast.encoding) {
-    return typeAST(replaceEncoding(ast, undefined))
-  }
-  switch (ast._tag) {
-    case "TypeLiteral":
-    case "UnionType":
-    case "Declaration":
-    case "TupleType":
-    case "Suspend":
-      return ast.typeAST()
-    default:
-      return ast
-  }
+export const typeAST = memoize(<A extends AST>(ast: A): A => {
+  return ast.typeAST() as A
 })
 
 /**
@@ -1247,42 +1346,29 @@ function flipModifiers(ast: AST): Modifiers | undefined {
     undefined
 }
 
+function flipEncoding(ast: AST, encoding: Encoding): AST {
+  const links = encoding
+  const len = links.length
+  const last = links[len - 1]
+  const ls: Arr.NonEmptyArray<Link> = [
+    new Link(flip(replaceEncoding(ast, undefined)), links[0].transformation.flip())
+  ]
+  for (let i = 1; i < len; i++) {
+    ls.unshift(new Link(flip(links[i - 1].to), links[i].transformation.flip()))
+  }
+  const to = flip(last.to)
+  if (to.encoding) {
+    return replaceEncoding(to, [...to.encoding, ...ls])
+  } else {
+    return replaceEncoding(to, ls)
+  }
+}
+
 /**
  * @since 4.0.0
  */
 export const flip = memoize((ast: AST): AST => {
-  if (ast.encoding) {
-    const links = ast.encoding
-    const len = links.length
-    const last = links[len - 1]
-    const ls: Arr.NonEmptyArray<Link> = [
-      new Link(flip(replaceEncoding(ast, undefined)), links[0].transformation.flip())
-    ]
-    for (let i = 1; i < len; i++) {
-      ls.unshift(new Link(flip(links[i - 1].to), links[i].transformation.flip()))
-    }
-    const to = flip(last.to)
-    if (to.encoding) {
-      return replaceEncoding(to, [...to.encoding, ...ls])
-    } else {
-      return replaceEncoding(to, ls)
-    }
-  }
-
-  switch (ast._tag) {
-    case "TypeLiteral":
-    case "TupleType":
-    case "UnionType":
-    case "Declaration":
-    case "Suspend":
-      return ast.flip()
-    default: {
-      const modifiers = flipModifiers(ast)
-      return modifiers === ast.modifiers ?
-        ast :
-        replaceModifiers(ast, modifiers)
-    }
-  }
+  return ast.flip()
 })
 
 function formatIsReadonly(isReadonly: boolean | undefined): string {
@@ -1600,10 +1686,10 @@ const handleTemplateLiteralSpanTypeParens = (
 
 /** @internal */
 export const fromPredicate =
-  <A>(ast: AST, predicate: (u: unknown) => boolean): SchemaValidator.Parser<A, any> => (oinput) => {
+  (ast: AST, predicate: (u: unknown) => boolean): SchemaValidator.Parser<any, any> => (oinput) => {
     if (Option.isNone(oinput)) {
       return Effect.succeedNone
     }
     const u = oinput.value
-    return predicate(u) ? Effect.succeed(Option.some(u as A)) : Effect.fail(new SchemaIssue.MismatchIssue(ast, oinput))
+    return predicate(u) ? Effect.succeed(Option.some(u)) : Effect.fail(new SchemaIssue.MismatchIssue(ast, oinput))
   }
