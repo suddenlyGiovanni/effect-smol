@@ -22,7 +22,6 @@ export const runMain: {
   fiber,
   teardown
 }) => {
-  const keepAlive = setInterval(constVoid, 2 ** 31 - 1)
   let receivedSignal = false
 
   fiber.addObserver((exit) => {
@@ -30,7 +29,6 @@ export const runMain: {
       process.removeListener("SIGINT", onSigint)
       process.removeListener("SIGTERM", onSigint)
     }
-    clearInterval(keepAlive)
     teardown(exit, (code) => {
       if (receivedSignal || code !== 0) {
         process.exit(code)
