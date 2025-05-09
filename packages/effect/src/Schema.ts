@@ -9,7 +9,7 @@ import * as Data from "./Data.js"
 import * as Effect from "./Effect.js"
 import { identity } from "./Function.js"
 import * as core from "./internal/core.js"
-import { formatUnknown, ownKeys } from "./internal/schema/util.js"
+import { ownKeys } from "./internal/schema/util.js"
 import * as O from "./Option.js"
 import type { Pipeable } from "./Pipeable.js"
 import { pipeArguments } from "./Pipeable.js"
@@ -169,7 +169,7 @@ export abstract class Bottom$<
     return Result.getOrThrowWith(
       SchemaValidator.runSyncSchemaResult(this.make(input, options)),
       (issue) =>
-        new globalThis.Error(`makeUnsafe failure, actual ${formatUnknown(input)}`, {
+        new globalThis.Error(`makeUnsafe failure, actual ${globalThis.String(input)}`, {
           cause: issue
         })
     )
@@ -355,6 +355,12 @@ class make$<S extends Top> extends Bottom$<
     readonly rebuild: (ast: S["ast"]) => S["~rebuild.out"]
   ) {
     super(ast)
+  }
+}
+
+class schema$<S extends Top, Result extends Top> extends make$<Result> {
+  constructor(ast: SchemaAST.AST, readonly schema: S) {
+    super(ast, (ast) => new schema$(ast, this.schema))
   }
 }
 
@@ -1680,6 +1686,138 @@ export const refine = <T, S extends Top>(
         annotations
       )
     ])
+  )
+}
+
+/**
+ * @category Api interface
+ * @since 4.0.0
+ */
+export interface decodingMiddleware<S extends Top, RD> extends make<S> {
+  readonly "~rebuild.out": decodingMiddleware<S, RD>
+  readonly "DecodingContext": RD
+}
+
+/**
+ * @since 4.0.0
+ */
+export const decodingMiddleware = <S extends Top, RD>(
+  decode: (
+    sr: SchemaResult.SchemaResult<O.Option<S["Type"]>, S["DecodingContext"]>,
+    ast: S["ast"],
+    options: SchemaAST.ParseOptions
+  ) => SchemaResult.SchemaResult<O.Option<S["Type"]>, RD>
+) =>
+(self: S): decodingMiddleware<S, RD> => {
+  const ast = SchemaAST.decodingMiddleware(self.ast, new SchemaTransformation.Middleware(decode, identity))
+  return new schema$<S, decodingMiddleware<S, RD>>(ast, self)
+}
+
+/**
+ * @category Api interface
+ * @since 4.0.0
+ */
+export interface encodingMiddleware<S extends Top, RE> extends make<S> {
+  readonly "~rebuild.out": encodingMiddleware<S, RE>
+  readonly "EncodingContext": RE
+}
+
+/**
+ * @since 4.0.0
+ */
+export const encodingMiddleware = <S extends Top, RE>(
+  encode: (
+    sr: SchemaResult.SchemaResult<O.Option<S["Type"]>, S["EncodingContext"]>,
+    ast: S["ast"],
+    options: SchemaAST.ParseOptions
+  ) => SchemaResult.SchemaResult<O.Option<S["Type"]>, RE>
+) =>
+(self: S): encodingMiddleware<S, RE> => {
+  const ast = SchemaAST.encodingMiddleware(self.ast, new SchemaTransformation.Middleware(identity, encode))
+  return new schema$<S, encodingMiddleware<S, RE>>(ast, self)
+}
+
+/**
+ * @category Middlewares
+ * @since 4.0.0
+ */
+export const catchDecoding = <S extends Top>(
+  f: (issue: SchemaIssue.Issue) => SchemaResult.SchemaResult<O.Option<S["Type"]>>
+): (self: S) => S["~rebuild.out"] => {
+  return catchDecodingWithContext(f)
+}
+
+/**
+ * @category Middlewares
+ * @since 4.0.0
+ */
+export const catchDecodingWithContext =
+  <S extends Top, R = never>(f: (issue: SchemaIssue.Issue) => SchemaResult.SchemaResult<O.Option<S["Type"]>, R>) =>
+  (self: S): decodingMiddleware<S, S["DecodingContext"] | R> => {
+    return self.pipe(decodingMiddleware((sr) => SchemaResult.catch(sr, f)))
+  }
+
+/**
+ * @category Middlewares
+ * @since 4.0.0
+ */
+export const catchEncoding = <S extends Top>(
+  f: (issue: SchemaIssue.Issue) => SchemaResult.SchemaResult<O.Option<S["Encoded"]>>
+): (self: S) => S["~rebuild.out"] => {
+  return catchEncodingWithContext(f)
+}
+
+/**
+ * @category Middlewares
+ * @since 4.0.0
+ */
+export const catchEncodingWithContext =
+  <S extends Top, R = never>(f: (issue: SchemaIssue.Issue) => SchemaResult.SchemaResult<O.Option<S["Encoded"]>, R>) =>
+  (self: S): encodingMiddleware<S, S["EncodingContext"] | R> => {
+    return self.pipe(encodingMiddleware((sr) => SchemaResult.catch(sr, f)))
+  }
+
+/**
+ * @category Middlewares
+ * @since 4.0.0
+ */
+export const checkEffect = <S extends Top>(
+  f: (
+    input: S["Type"],
+    self: SchemaAST.AST,
+    options: SchemaAST.ParseOptions
+  ) => Effect.Effect<undefined | SchemaIssue.Issue>
+): (self: S) => S["~rebuild.out"] => {
+  return checkEffectWithContext(f)
+}
+
+/**
+ * @category Middlewares
+ * @since 4.0.0
+ */
+export const checkEffectWithContext = <S extends Top, R = never>(
+  f: (
+    input: S["Type"],
+    self: SchemaAST.AST,
+    options: SchemaAST.ParseOptions
+  ) => Effect.Effect<undefined | SchemaIssue.Issue, never, R>
+) =>
+(self: S): decodingMiddleware<S, S["DecodingContext"] | R> => {
+  return self.pipe(
+    decodingMiddleware((sr, ast, options) =>
+      SchemaResult.flatMap(sr, (oa) => {
+        if (O.isNone(oa)) {
+          return Effect.succeed<O.Option<S["Type"]>>(oa)
+        }
+        return Effect.flatMap(f(oa.value, ast, options), (issue) => {
+          if (issue) {
+            return Effect.fail(issue)
+          } else {
+            return Effect.succeed(oa)
+          }
+        })
+      })
+    )
   )
 }
 

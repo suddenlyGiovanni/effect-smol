@@ -46,6 +46,12 @@ export type AST =
  * @category model
  * @since 4.0.0
  */
+export type Middleware = SchemaTransformation.Middleware<any, any, any, any, any, any>
+
+/**
+ * @category model
+ * @since 4.0.0
+ */
 export type Transformation = SchemaTransformation.Transformation<any, any, any, any>
 
 /**
@@ -55,7 +61,7 @@ export type Transformation = SchemaTransformation.Transformation<any, any, any, 
 export class Link {
   constructor(
     readonly to: AST,
-    readonly transformation: Transformation
+    readonly transformation: Transformation | Middleware
   ) {}
 }
 
@@ -619,6 +625,7 @@ export class Merge {
     readonly decode: Combine<PropertyKey, any> | undefined,
     readonly encode: Combine<PropertyKey, any> | undefined
   ) {}
+  /** @internal */
   flip(): Merge {
     return new Merge(this.encode, this.decode)
   }
@@ -1189,9 +1196,19 @@ export function appendEncodedChecks<A extends AST>(ast: A, checks: Checks): A {
   }
 }
 
+/** @internal */
+export function decodingMiddleware(ast: AST, middleware: Middleware): AST {
+  return appendTransformation(ast, middleware, typeAST(ast))
+}
+
+/** @internal */
+export function encodingMiddleware(ast: AST, middleware: Middleware): AST {
+  return appendTransformation(encodedAST(ast), middleware, ast)
+}
+
 function appendTransformation<A extends AST>(
   from: AST,
-  transformation: Transformation,
+  transformation: Transformation | Middleware,
   to: A
 ): A {
   const link = new Link(from, transformation)
