@@ -94,7 +94,10 @@ export interface Bottom<
     input: this["~type.make.in"],
     options?: MakeOptions
   ): SchemaResult.SchemaResult<this["Type"]>
-  makeUnsafe(input: this["~type.make.in"], options?: MakeOptions): this["Type"]
+  /**
+   * @throws {Error} The issue is contained in the error cause.
+   */
+  makeSync(input: this["~type.make.in"], options?: MakeOptions): this["Type"]
 }
 
 /**
@@ -152,7 +155,7 @@ export abstract class Bottom$<
 
   constructor(readonly ast: Ast) {
     this.make = this.make.bind(this)
-    this.makeUnsafe = this.makeUnsafe.bind(this)
+    this.makeSync = this.makeSync.bind(this)
   }
   abstract rebuild(ast: this["ast"]): this["~rebuild.out"]
   pipe() {
@@ -165,11 +168,11 @@ export abstract class Bottom$<
     const parseOptions: SchemaAST.ParseOptions = { "~variant": "make", ...options?.parseOptions }
     return SchemaValidator.validateUnknownParserResult(this)(input, parseOptions) as any
   }
-  makeUnsafe(input: this["~type.make.in"], options?: MakeOptions): this["Type"] {
+  makeSync(input: this["~type.make.in"], options?: MakeOptions): this["Type"] {
     return Result.getOrThrowWith(
       SchemaValidator.runSyncSchemaResult(this.make(input, options)),
       (issue) =>
-        new globalThis.Error(`makeUnsafe failure, actual ${globalThis.String(input)}`, {
+        new globalThis.Error(`makeSync failure, actual ${globalThis.String(input)}`, {
           cause: issue
         })
     )
@@ -253,7 +256,7 @@ export interface Codec<out T, out E = T, out RD = never, out RE = never> extends
  * @since 4.0.0
  * @category error
  */
-export class CodecError extends Data.TaggedError("CodecError")<{
+export class SchemaError extends Data.TaggedError("SchemaError")<{
   readonly issue: SchemaIssue.Issue
 }> {}
 
@@ -263,8 +266,8 @@ export class CodecError extends Data.TaggedError("CodecError")<{
  */
 export const decodeUnknown = <T, E, RD, RE>(codec: Codec<T, E, RD, RE>) => {
   const parser = SchemaValidator.decodeUnknown(codec)
-  return (u: unknown, options?: SchemaAST.ParseOptions): Effect.Effect<T, CodecError, RD> => {
-    return Effect.mapError(parser(u, options), (issue) => new CodecError({ issue }))
+  return (u: unknown, options?: SchemaAST.ParseOptions): Effect.Effect<T, SchemaError, RD> => {
+    return Effect.mapError(parser(u, options), (issue) => new SchemaError({ issue }))
   }
 }
 
@@ -274,8 +277,8 @@ export const decodeUnknown = <T, E, RD, RE>(codec: Codec<T, E, RD, RE>) => {
  */
 export const decode = <T, E, RD, RE>(codec: Codec<T, E, RD, RE>) => {
   const parser = SchemaValidator.decode(codec)
-  return (e: E, options?: SchemaAST.ParseOptions): Effect.Effect<T, CodecError, RD> => {
-    return Effect.mapError(parser(e, options), (issue) => new CodecError({ issue }))
+  return (e: E, options?: SchemaAST.ParseOptions): Effect.Effect<T, SchemaError, RD> => {
+    return Effect.mapError(parser(e, options), (issue) => new SchemaError({ issue }))
   }
 }
 
@@ -291,8 +294,8 @@ export const decodeUnknownSync = SchemaValidator.decodeUnknownSync
  */
 export const encodeUnknown = <T, E, RD, RE>(codec: Codec<T, E, RD, RE>) => {
   const parser = SchemaValidator.encodeUnknown(codec)
-  return (u: unknown, options?: SchemaAST.ParseOptions): Effect.Effect<E, CodecError, RE> => {
-    return Effect.mapError(parser(u, options), (issue) => new CodecError({ issue }))
+  return (u: unknown, options?: SchemaAST.ParseOptions): Effect.Effect<E, SchemaError, RE> => {
+    return Effect.mapError(parser(u, options), (issue) => new SchemaError({ issue }))
   }
 }
 
@@ -302,8 +305,8 @@ export const encodeUnknown = <T, E, RD, RE>(codec: Codec<T, E, RD, RE>) => {
  */
 export const encode = <T, E, RD, RE>(codec: Codec<T, E, RD, RE>) => {
   const parser = SchemaValidator.encode(codec)
-  return (t: T, options?: SchemaAST.ParseOptions): Effect.Effect<E, CodecError, RE> => {
-    return Effect.mapError(parser(t, options), (issue) => new CodecError({ issue }))
+  return (t: T, options?: SchemaAST.ParseOptions): Effect.Effect<E, SchemaError, RE> => {
+    return Effect.mapError(parser(t, options), (issue) => new SchemaError({ issue }))
   }
 }
 
@@ -603,7 +606,7 @@ export const declareRefinement = <T>(
     () => (input, ast) =>
       options.is(input) ?
         Result.ok(input) :
-        Result.err(new SchemaIssue.MismatchIssue(ast, O.some(input))),
+        Result.err(new SchemaIssue.InvalidType(ast, O.some(input))),
     options.annotations
   )
 }
@@ -1552,10 +1555,27 @@ class Union$<Members extends ReadonlyArray<Top>> extends make$<Union<Members>> i
 }
 
 /**
+ * Members are checked in order, and the first match is returned.
+ *
+ * Optionally, you can specify the `mode` to be `"anyOf"` or `"oneOf"`.
+ *
+ * - `"anyOf"` - The union matches if any member matches.
+ * - `"oneOf"` - The union matches if exactly one member matches.
+ *
  * @since 4.0.0
  */
-export function Union<const Members extends ReadonlyArray<Top>>(members: Members): Union<Members> {
-  const ast = new SchemaAST.UnionType(members.map((type) => type.ast), undefined, undefined, undefined, undefined)
+export function Union<const Members extends ReadonlyArray<Top>>(
+  members: Members,
+  options?: { mode?: "anyOf" | "oneOf" }
+): Union<Members> {
+  const ast = new SchemaAST.UnionType(
+    members.map((type) => type.ast),
+    options?.mode ?? "anyOf",
+    undefined,
+    undefined,
+    undefined,
+    undefined
+  )
   return new Union$(ast, members)
 }
 
@@ -1591,6 +1611,7 @@ export function Literals<const L extends ReadonlyArray<SchemaAST.LiteralValue>>(
   return new Literals$(
     new SchemaAST.UnionType(
       literals.map((literal) => Literal(literal).ast),
+      "anyOf",
       undefined,
       undefined,
       undefined,
@@ -1682,7 +1703,7 @@ export const refine = <T, S extends Top>(
         (input, ast) =>
           is(input) ?
             undefined :
-            [new SchemaIssue.MismatchIssue(ast, O.some(input)), true], // after a refinement, we always want to abort
+            [new SchemaIssue.InvalidType(ast, O.some(input)), true], // after a refinement, we always want to abort
         annotations
       )
     ])
@@ -1977,12 +1998,12 @@ export const Option = <S extends Top>(value: S): Option<S> => {
             onSuccess: O.some,
             onFailure: (issue) => {
               const actual = O.some(oinput)
-              return new SchemaIssue.CompositeIssue(ast, actual, [issue])
+              return new SchemaIssue.Composite(ast, actual, [issue])
             }
           }
         )
       }
-      return Result.err(new SchemaIssue.MismatchIssue(ast, O.some(oinput)))
+      return Result.err(new SchemaIssue.InvalidType(ast, O.some(oinput)))
     },
     {
       declaration: {
@@ -2038,11 +2059,11 @@ export const Map = <Key extends Top, Value extends Top>(key: Key, value: Value):
           SchemaValidator.decodeUnknownSchemaResult(array)([...input], options),
           {
             onSuccess: (array: ReadonlyArray<readonly [Key["Type"], Value["Type"]]>) => new globalThis.Map(array),
-            onFailure: (issue) => new SchemaIssue.CompositeIssue(ast, O.some(input), [issue])
+            onFailure: (issue) => new SchemaIssue.Composite(ast, O.some(input), [issue])
           }
         )
       }
-      return Result.err(new SchemaIssue.MismatchIssue(ast, O.some(input)))
+      return Result.err(new SchemaIssue.InvalidType(ast, O.some(input)))
     },
     {
       declaration: {
@@ -2265,7 +2286,7 @@ function makeClass<
   return class extends Inherited {
     constructor(...[input, options]: ReadonlyArray<any>) {
       if (options?.skipValidation !== true) {
-        schema.makeUnsafe(input, options)
+        schema.makeSync(input, options)
       }
       super(input, { ...options, skipValidation: true })
     }
@@ -2313,7 +2334,7 @@ function makeClass<
               if (input instanceof this) {
                 return Result.ok(input)
               }
-              return Result.err(new SchemaIssue.MismatchIssue(ast, O.some(input)))
+              return Result.err(new SchemaIssue.InvalidType(ast, O.some(input)))
             },
             {
               serialization: {
@@ -2338,7 +2359,7 @@ function makeClass<
         (input) => new this(input, options)
       )
     }
-    static makeUnsafe(input: S["~type.make.in"], options?: MakeOptions): Self {
+    static makeSync(input: S["~type.make.in"], options?: MakeOptions): Self {
       return new this(input, options)
     }
     static extend<Extended>(
@@ -2367,7 +2388,7 @@ const makeDefaultClassLink = (self: new(...args: ReadonlyArray<any>) => any) => 
       SchemaParser.mapSome((input) => new self(input)),
       SchemaParser.parseSome((input) => {
         if (!(input instanceof self)) {
-          return Result.err(new SchemaIssue.MismatchIssue(ast, input))
+          return Result.err(new SchemaIssue.InvalidType(ast, input))
         }
         return Result.succeedSome(input)
       })
@@ -2386,7 +2407,7 @@ function getDefaultComputeAST(
         if (input instanceof self) {
           return Result.ok(input)
         }
-        return Result.err(new SchemaIssue.MismatchIssue(ast, O.some(input)))
+        return Result.err(new SchemaIssue.InvalidType(ast, O.some(input)))
       },
       {
         serialization: {
