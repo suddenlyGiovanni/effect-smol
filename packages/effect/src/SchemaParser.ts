@@ -116,10 +116,12 @@ export function required<T>(annotations?: Annotations): Parser<T, T> {
 }
 
 /**
+ * Omit a key in the output.
+ *
  * @category constructors
  * @since 4.0.0
  */
-export function omit<T>(annotations?: Annotations): Parser<T, T> {
+export function omitKey<T>(annotations?: Annotations): Parser<T, T> {
   return parseSome(() => SchemaResult.succeedNone, { title: "omit", ...annotations })
 }
 
@@ -232,7 +234,9 @@ export function parseJson<E extends string>(options?: {
     Result.try({
       try: () => Option.some(JSON.parse(input, options?.options?.reviver)),
       catch: (e) =>
-        new SchemaIssue.InvalidData(Option.some(input), e instanceof Error ? e.message : globalThis.String(e))
+        new SchemaIssue.InvalidData(Option.some(input), {
+          message: e instanceof Error ? e.message : globalThis.String(e)
+        })
     }), { title: "parseJson", ...options?.annotations })
 }
 
@@ -256,6 +260,8 @@ export function stringifyJson(options?: {
     Result.try({
       try: () => Option.some(JSON.stringify(input, options?.options?.replacer, options?.options?.space)),
       catch: (e) =>
-        new SchemaIssue.InvalidData(Option.some(input), e instanceof Error ? e.message : globalThis.String(e))
+        new SchemaIssue.InvalidData(Option.some(input), {
+          message: e instanceof Error ? e.message : globalThis.String(e)
+        })
     }), { title: "stringifyJson", ...options?.annotations })
 }
