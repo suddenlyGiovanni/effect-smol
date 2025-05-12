@@ -7,6 +7,7 @@ import {
   Schema,
   SchemaAST,
   SchemaCheck,
+  SchemaGetter,
   SchemaIssue,
   SchemaParser,
   SchemaResult,
@@ -27,9 +28,9 @@ const Trim = Schema.String.pipe(Schema.decodeTo(Schema.String, SchemaTransformat
 
 const FiniteFromString = Schema.String.pipe(Schema.decodeTo(
   Schema.Finite,
-  new SchemaTransformation.Transformation(
-    SchemaParser.Number,
-    SchemaParser.String
+  new SchemaTransformation.SchemaTransformation(
+    SchemaGetter.Number,
+    SchemaGetter.String
   )
 ))
 
@@ -43,9 +44,9 @@ const SnakeToCamel = Schema.String.pipe(
 const NumberFromString = Schema.String.pipe(
   Schema.decodeTo(
     Schema.Number,
-    new SchemaTransformation.Transformation(
-      SchemaParser.Number,
-      SchemaParser.String
+    new SchemaTransformation.SchemaTransformation(
+      SchemaGetter.Number,
+      SchemaGetter.String
     )
   )
 )
@@ -1009,9 +1010,9 @@ describe("Schema", () => {
       const schema = Schema.String.pipe(
         Schema.decodeTo(
           Schema.String,
-          new SchemaTransformation.Transformation(
-            SchemaParser.fail((o) => new SchemaIssue.InvalidData(o, { message: "err decoding" })),
-            SchemaParser.fail((o) => new SchemaIssue.InvalidData(o, { message: "err encoding" }))
+          new SchemaTransformation.SchemaTransformation(
+            SchemaGetter.fail((o) => new SchemaIssue.InvalidData(o, { message: "err decoding" })),
+            SchemaGetter.fail((o) => new SchemaIssue.InvalidData(o, { message: "err encoding" }))
           )
         )
       )
@@ -1630,7 +1631,7 @@ describe("Schema", () => {
       })
 
       await assertions.make.succeed(schema, { a: 1 })
-      const spr = schema.make({})
+      const spr = SchemaParser.make(schema)({})
       const eff = SchemaResult.asEffect(spr)
       const provided = Effect.provideService(
         eff,
@@ -1930,16 +1931,14 @@ describe("Schema", () => {
 
         annotations: {
           title: "MyError",
-          serialization: {
-            json: () =>
-              Schema.link<MyError>()(
-                Schema.String,
-                SchemaTransformation.transform(
-                  (message) => new MyError(message),
-                  (e) => e.message
-                )
+          defaultJsonSerializer: () =>
+            Schema.link<MyError>()(
+              Schema.String,
+              SchemaTransformation.transform(
+                (message) => new MyError(message),
+                (e) => e.message
               )
-          }
+            )
         }
       })
 
@@ -1982,9 +1981,9 @@ describe("Schema", () => {
         _tag: Schema.tag("a").pipe(
           Schema.encodeTo(
             Schema.optionalKey(Schema.Literal("a")),
-            new SchemaTransformation.Transformation(
-              SchemaParser.withDefault(() => "a" as const),
-              SchemaParser.omitKey()
+            new SchemaTransformation.SchemaTransformation(
+              SchemaGetter.withDefault(() => "a" as const),
+              SchemaGetter.omitKey()
             )
           )
         ),
@@ -2465,7 +2464,7 @@ describe("Schema", () => {
       }) {
         readonly _a = 1
       }
-      const A = A_.annotate({ title: "B" })
+      const A = A_.pipe(Schema.annotate({ title: "B" }))
 
       // should be a schema
       assertTrue(Schema.isSchema(A))

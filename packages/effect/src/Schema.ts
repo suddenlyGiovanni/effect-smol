@@ -18,11 +18,11 @@ import * as Request from "./Request.js"
 import * as Result from "./Result.js"
 import * as SchemaAST from "./SchemaAST.js"
 import * as SchemaCheck from "./SchemaCheck.js"
+import * as SchemaGetter from "./SchemaGetter.js"
 import * as SchemaIssue from "./SchemaIssue.js"
 import * as SchemaParser from "./SchemaParser.js"
 import * as SchemaResult from "./SchemaResult.js"
 import * as SchemaTransformation from "./SchemaTransformation.js"
-import * as SchemaValidator from "./SchemaValidator.js"
 import * as Struct_ from "./Struct.js"
 
 /**
@@ -89,15 +89,17 @@ export interface Bottom<
   readonly "~encoded.isOptional": EncodedIsOptional
 
   rebuild(ast: this["ast"]): this["~rebuild.out"]
-  annotate(annotations: this["~annotate.in"]): this["~rebuild.out"]
-  make(
-    input: this["~type.make.in"],
-    options?: MakeOptions
-  ): SchemaResult.SchemaResult<this["Type"]>
   /**
    * @throws {Error} The issue is contained in the error cause.
    */
   makeSync(input: this["~type.make.in"], options?: MakeOptions): this["Type"]
+}
+
+/**
+ * @since 4.0.0
+ */
+export const annotate = <S extends Top>(annotations: S["~annotate.in"]) => (schema: S): S["~rebuild.out"] => {
+  return schema.rebuild(SchemaAST.annotate(schema.ast, annotations))
 }
 
 /**
@@ -154,31 +156,20 @@ export abstract class Bottom$<
   declare readonly "~encoded.make.in": E
 
   constructor(readonly ast: Ast) {
-    this.make = this.make.bind(this)
     this.makeSync = this.makeSync.bind(this)
   }
   abstract rebuild(ast: this["ast"]): this["~rebuild.out"]
   pipe() {
     return pipeArguments(this, arguments)
   }
-  make(
-    input: this["~type.make.in"],
-    options?: MakeOptions
-  ): SchemaResult.SchemaResult<this["Type"]> {
-    const parseOptions: SchemaAST.ParseOptions = { "~variant": "make", ...options?.parseOptions }
-    return SchemaValidator.validateUnknownParserResult(this)(input, parseOptions) as any
-  }
   makeSync(input: this["~type.make.in"], options?: MakeOptions): this["Type"] {
     return Result.getOrThrowWith(
-      SchemaValidator.runSyncSchemaResult(this.make(input, options)),
+      SchemaParser.runSyncSchemaResult(SchemaParser.make(this)(input, options)),
       (issue) =>
         new globalThis.Error(`makeSync failure, actual ${globalThis.String(input)}`, {
           cause: issue
         })
     )
-  }
-  annotate(annotations: this["~annotate.in"]): this["~rebuild.out"] {
-    return this.rebuild(SchemaAST.annotate(this.ast, annotations))
   }
 }
 
@@ -265,7 +256,7 @@ export class SchemaError extends Data.TaggedError("SchemaError")<{
  * @since 4.0.0
  */
 export const decodeUnknown = <T, E, RD, RE>(codec: Codec<T, E, RD, RE>) => {
-  const parser = SchemaValidator.decodeUnknown(codec)
+  const parser = SchemaParser.decodeUnknown(codec)
   return (u: unknown, options?: SchemaAST.ParseOptions): Effect.Effect<T, SchemaError, RD> => {
     return Effect.mapError(parser(u, options), (issue) => new SchemaError({ issue }))
   }
@@ -276,7 +267,7 @@ export const decodeUnknown = <T, E, RD, RE>(codec: Codec<T, E, RD, RE>) => {
  * @since 4.0.0
  */
 export const decode = <T, E, RD, RE>(codec: Codec<T, E, RD, RE>) => {
-  const parser = SchemaValidator.decode(codec)
+  const parser = SchemaParser.decode(codec)
   return (e: E, options?: SchemaAST.ParseOptions): Effect.Effect<T, SchemaError, RD> => {
     return Effect.mapError(parser(e, options), (issue) => new SchemaError({ issue }))
   }
@@ -286,14 +277,14 @@ export const decode = <T, E, RD, RE>(codec: Codec<T, E, RD, RE>) => {
  * @category Decoding
  * @since 4.0.0
  */
-export const decodeUnknownSync = SchemaValidator.decodeUnknownSync
+export const decodeUnknownSync = SchemaParser.decodeUnknownSync
 
 /**
  * @category Encoding
  * @since 4.0.0
  */
 export const encodeUnknown = <T, E, RD, RE>(codec: Codec<T, E, RD, RE>) => {
-  const parser = SchemaValidator.encodeUnknown(codec)
+  const parser = SchemaParser.encodeUnknown(codec)
   return (u: unknown, options?: SchemaAST.ParseOptions): Effect.Effect<E, SchemaError, RE> => {
     return Effect.mapError(parser(u, options), (issue) => new SchemaError({ issue }))
   }
@@ -304,7 +295,7 @@ export const encodeUnknown = <T, E, RD, RE>(codec: Codec<T, E, RD, RE>) => {
  * @since 4.0.0
  */
 export const encode = <T, E, RD, RE>(codec: Codec<T, E, RD, RE>) => {
-  const parser = SchemaValidator.encode(codec)
+  const parser = SchemaParser.encode(codec)
   return (t: T, options?: SchemaAST.ParseOptions): Effect.Effect<E, SchemaError, RE> => {
     return Effect.mapError(parser(t, options), (issue) => new SchemaError({ issue }))
   }
@@ -314,7 +305,7 @@ export const encode = <T, E, RD, RE>(codec: Codec<T, E, RD, RE>) => {
  * @category Encoding
  * @since 4.0.0
  */
-export const encodeUnknownSync = SchemaValidator.encodeUnknownSync
+export const encodeUnknownSync = SchemaParser.encodeUnknownSync
 
 /**
  * @category Api interface
@@ -1664,7 +1655,7 @@ export const suspend = <S extends Top>(f: () => S): suspend<S> =>
  * @since 4.0.0
  */
 export const check = <S extends Top>(
-  ...checks: readonly [SchemaCheck.Check<S["Type"]>, ...ReadonlyArray<SchemaCheck.Check<S["Type"]>>]
+  ...checks: readonly [SchemaCheck.SchemaCheck<S["Type"]>, ...ReadonlyArray<SchemaCheck.SchemaCheck<S["Type"]>>]
 ): (self: S) => S["~rebuild.out"] => {
   return SchemaCheck.asCheck(...checks)
 }
@@ -1674,7 +1665,7 @@ export const check = <S extends Top>(
  * @since 4.0.0
  */
 export const checkEncoded = <S extends Top>(
-  ...checks: readonly [SchemaCheck.Check<S["Encoded"]>, ...ReadonlyArray<SchemaCheck.Check<S["Encoded"]>>]
+  ...checks: readonly [SchemaCheck.SchemaCheck<S["Encoded"]>, ...ReadonlyArray<SchemaCheck.SchemaCheck<S["Encoded"]>>]
 ): (self: S) => S["~rebuild.out"] => {
   return SchemaCheck.asCheckEncoded(...checks)
 }
@@ -1730,7 +1721,7 @@ export const decodingMiddleware = <S extends Top, RD>(
   ) => SchemaResult.SchemaResult<O.Option<S["Type"]>, RD>
 ) =>
 (self: S): decodingMiddleware<S, RD> => {
-  const ast = SchemaAST.decodingMiddleware(self.ast, new SchemaTransformation.Middleware(decode, identity))
+  const ast = SchemaAST.decodingMiddleware(self.ast, new SchemaTransformation.SchemaMiddleware(decode, identity))
   return new schema$<S, decodingMiddleware<S, RD>>(ast, self)
 }
 
@@ -1754,7 +1745,7 @@ export const encodingMiddleware = <S extends Top, RE>(
   ) => SchemaResult.SchemaResult<O.Option<S["Type"]>, RE>
 ) =>
 (self: S): encodingMiddleware<S, RE> => {
-  const ast = SchemaAST.encodingMiddleware(self.ast, new SchemaTransformation.Middleware(identity, encode))
+  const ast = SchemaAST.encodingMiddleware(self.ast, new SchemaTransformation.SchemaMiddleware(identity, encode))
   return new schema$<S, encodingMiddleware<S, RE>>(ast, self)
 }
 
@@ -1911,7 +1902,7 @@ class decodeTo$<To extends Top, From extends Top, RD, RE> extends make$<decodeTo
  */
 export const decodeTo = <To extends Top, From extends Top, RD, RE>(
   to: To,
-  transformation: SchemaTransformation.Transformation<To["Encoded"], From["Type"], RD, RE>
+  transformation: SchemaTransformation.SchemaTransformation<To["Encoded"], From["Type"], RD, RE>
 ) =>
 (from: From): decodeTo<To, From, RD, RE> => {
   return new decodeTo$(SchemaAST.decodeTo(from.ast, to.ast, transformation), from, to)
@@ -1922,7 +1913,7 @@ export const decodeTo = <To extends Top, From extends Top, RD, RE>(
  */
 export const encodeTo = <To extends Top, From extends Top, RD, RE>(
   to: To,
-  transformation: SchemaTransformation.Transformation<From["Encoded"], To["Type"], RD, RE>
+  transformation: SchemaTransformation.SchemaTransformation<From["Encoded"], To["Type"], RD, RE>
 ) =>
 (from: From): decodeTo<From, To, RD, RE> => {
   return to.pipe(decodeTo(from, transformation))
@@ -1951,8 +1942,8 @@ export const setConstructorDefault = <S extends Top & { readonly "~type.default"
 (self: S): setConstructorDefault<S> => {
   return make<setConstructorDefault<S>>(SchemaAST.setConstructorDefault(
     self.ast,
-    new SchemaTransformation.Transformation(
-      new SchemaParser.Parser(
+    new SchemaTransformation.SchemaTransformation(
+      new SchemaGetter.SchemaGetter(
         (o, ast, options) => {
           if (O.isNone(o) || (O.isSome(o) && o.value === undefined)) {
             return parser(o, ast, options)
@@ -1962,7 +1953,7 @@ export const setConstructorDefault = <S extends Top & { readonly "~type.default"
         },
         annotations
       ),
-      SchemaParser.identity()
+      SchemaGetter.identity()
     )
   ))
 }
@@ -1993,7 +1984,7 @@ export const Option = <S extends Top>(value: S): Option<S> => {
         }
         const input = oinput.value
         return SchemaResult.mapBoth(
-          SchemaValidator.decodeUnknownSchemaResult(value)(input, options),
+          SchemaParser.decodeUnknownSchemaResult(value)(input, options),
           {
             onSuccess: O.some,
             onFailure: (issue) => {
@@ -2009,16 +2000,14 @@ export const Option = <S extends Top>(value: S): Option<S> => {
       declaration: {
         title: "Option"
       },
-      serialization: {
-        json: ([value]) =>
-          link<O.Option<S["Encoded"]>>()(
-            Union([ReadonlyTuple([value]), ReadonlyTuple([])]),
-            SchemaTransformation.transform(
-              Arr.head,
-              (o) => (o._tag === "Some" ? [o.value] as const : [] as const)
-            )
+      defaultJsonSerializer: ([value]) =>
+        link<O.Option<S["Encoded"]>>()(
+          Union([ReadonlyTuple([value]), ReadonlyTuple([])]),
+          SchemaTransformation.transform(
+            Arr.head,
+            (o) => (o._tag === "Some" ? [o.value] as const : [] as const)
           )
-      }
+        )
     }
   )
 }
@@ -2056,7 +2045,7 @@ export const Map = <Key extends Top, Value extends Top>(key: Key, value: Value):
       if (input instanceof globalThis.Map) {
         const array = ReadonlyArray(ReadonlyTuple([key, value]))
         return SchemaResult.mapBoth(
-          SchemaValidator.decodeUnknownSchemaResult(array)([...input], options),
+          SchemaParser.decodeUnknownSchemaResult(array)([...input], options),
           {
             onSuccess: (array: ReadonlyArray<readonly [Key["Type"], Value["Type"]]>) => new globalThis.Map(array),
             onFailure: (issue) => new SchemaIssue.Composite(ast, O.some(input), [issue])
@@ -2069,16 +2058,14 @@ export const Map = <Key extends Top, Value extends Top>(key: Key, value: Value):
       declaration: {
         title: "Map"
       },
-      serialization: {
-        json: ([key, value]) =>
-          link<globalThis.Map<Key["Encoded"], Value["Encoded"]>>()(
-            ReadonlyArray(ReadonlyTuple([key, value])),
-            SchemaTransformation.transform(
-              (entries) => new globalThis.Map(entries),
-              (map) => [...map.entries()]
-            )
+      defaultJsonSerializer: ([key, value]) =>
+        link<globalThis.Map<Key["Encoded"], Value["Encoded"]>>()(
+          ReadonlyArray(ReadonlyTuple([key, value])),
+          SchemaTransformation.transform(
+            (entries) => new globalThis.Map(entries),
+            (map) => [...map.entries()]
           )
-      }
+        )
     }
   )
 }
@@ -2144,7 +2131,7 @@ export const instanceOf = <const C extends new(...args: Array<any>) => any>(
 export const link = <T>() =>
 <To extends Top>(
   to: To,
-  transformation: SchemaTransformation.Transformation<T, To["Type"], never, never>
+  transformation: SchemaTransformation.SchemaTransformation<T, To["Type"], never, never>
 ): SchemaAST.Link => {
   return new SchemaAST.Link(to.ast, transformation)
 }
@@ -2156,16 +2143,14 @@ export const URL = instanceOf({
   constructor: globalThis.URL,
   annotations: {
     title: "URL",
-    serialization: {
-      json: () =>
-        link<URL>()(
-          String,
-          SchemaTransformation.transform(
-            (s) => new globalThis.URL(s),
-            (url) => url.toString()
-          )
+    defaultJsonSerializer: () =>
+      link<URL>()(
+        String,
+        SchemaTransformation.transform(
+          (s) => new globalThis.URL(s),
+          (url) => url.toString()
         )
-    }
+      )
   }
 })
 
@@ -2176,16 +2161,14 @@ export const Date = instanceOf({
   constructor: globalThis.Date,
   annotations: {
     title: "Date",
-    serialization: {
-      json: () =>
-        link<Date>()(
-          String,
-          SchemaTransformation.transform(
-            (s) => new globalThis.Date(s),
-            (date) => date.toISOString()
-          )
+    defaultJsonSerializer: () =>
+      link<Date>()(
+        String,
+        SchemaTransformation.transform(
+          (s) => new globalThis.Date(s),
+          (date) => date.toISOString()
         )
-    }
+      )
   }
 })
 
@@ -2216,9 +2199,7 @@ export const getClassSchema = <C extends new(...args: Array<any>) => any, S exte
   return instanceOf({
     constructor,
     annotations: {
-      serialization: {
-        json: () => link<InstanceType<C>>()(options.encoding, transformation)
-      },
+      defaultJsonSerializer: () => link<InstanceType<C>>()(options.encoding, transformation),
       ...options.annotations
     }
   }).pipe(encodeTo(options.encoding, transformation))
@@ -2279,9 +2260,9 @@ function makeClass<
   Inherited: Inherited,
   identifier: string,
   schema: S,
-  computeAST: (self: Class<Self, S, Inherited>) => SchemaAST.Declaration
+  annotations?: SchemaAST.Annotations.Declaration<unknown, ReadonlyArray<Top>>
 ): any {
-  let astMemo: SchemaAST.Declaration | undefined = undefined
+  const computeAST = getComputeAST(schema.ast, { title: identifier, ...annotations }, undefined, undefined)
 
   return class extends Inherited {
     constructor(...[input, options]: ReadonlyArray<any>) {
@@ -2315,49 +2296,18 @@ function makeClass<
     static readonly fields = schema.fields
 
     static get ast(): SchemaAST.Declaration {
-      if (astMemo === undefined) {
-        astMemo = computeAST(this)
-      }
-      return astMemo
+      return computeAST(this)
     }
     static pipe() {
       return pipeArguments(this, arguments)
     }
     static rebuild(ast: SchemaAST.Declaration): Class<Self, S, Self> {
-      const original = this.ast
+      const computeAST = getComputeAST(this.ast, ast.annotations, ast.checks, ast.context)
       return class extends this {
         static get ast() {
-          const makeLink = makeDefaultClassLink(this)
-          const d = new SchemaAST.Declaration(
-            [original],
-            () => (input, ast) => {
-              if (input instanceof this) {
-                return Result.ok(input)
-              }
-              return Result.err(new SchemaIssue.InvalidType(ast, O.some(input)))
-            },
-            {
-              serialization: {
-                json: ([schema]: [Schema<any>]) => makeLink(schema.ast)
-              },
-              ...ast.annotations
-            },
-            ast.checks,
-            [makeLink(original)],
-            ast.context
-          )
-          return d
+          return computeAST(this)
         }
       }
-    }
-    static annotate(annotations: SchemaAST.Annotations.Bottom<Self>): Class<Self, S, Self> {
-      return this.rebuild(SchemaAST.annotate(this.ast, annotations))
-    }
-    static make(input: S["~type.make.in"], options?: MakeOptions): SchemaResult.SchemaResult<Self> {
-      return SchemaResult.map(
-        schema.make(input, options),
-        (input) => new this(input, options)
-      )
     }
     static makeSync(input: S["~type.make.in"], options?: MakeOptions): Self {
       return new this(input, options)
@@ -2374,7 +2324,7 @@ function makeClass<
           this,
           identifier,
           struct,
-          getDefaultComputeAST(struct.ast, { title: identifier, ...annotations })
+          annotations
         )
       }
     }
@@ -2384,9 +2334,9 @@ function makeClass<
 const makeDefaultClassLink = (self: new(...args: ReadonlyArray<any>) => any) => (ast: SchemaAST.AST) =>
   new SchemaAST.Link(
     ast,
-    new SchemaTransformation.Transformation(
-      SchemaParser.mapSome((input) => new self(input)),
-      SchemaParser.parseSome((input) => {
+    new SchemaTransformation.SchemaTransformation(
+      SchemaGetter.mapSome((input) => new self(input)),
+      SchemaGetter.parseSome((input) => {
         if (!(input instanceof self)) {
           return Result.err(new SchemaIssue.InvalidType(ast, input))
         }
@@ -2395,30 +2345,34 @@ const makeDefaultClassLink = (self: new(...args: ReadonlyArray<any>) => any) => 
     )
   )
 
-function getDefaultComputeAST(
+function getComputeAST(
   from: SchemaAST.AST,
-  annotations?: SchemaAST.Annotations.Declaration<unknown, ReadonlyArray<Top>>
+  annotations: SchemaAST.Annotations.Declaration<unknown, ReadonlyArray<Top>> | undefined,
+  checks: SchemaAST.Checks | undefined,
+  context: SchemaAST.Context | undefined
 ) {
+  let memo: SchemaAST.Declaration | undefined
   return (self: any) => {
-    const makeLink = makeDefaultClassLink(self)
-    return new SchemaAST.Declaration(
-      [from],
-      () => (input, ast) => {
-        if (input instanceof self) {
-          return Result.ok(input)
-        }
-        return Result.err(new SchemaIssue.InvalidType(ast, O.some(input)))
-      },
-      {
-        serialization: {
-          json: ([schema]: [Schema<any>]) => makeLink(schema.ast)
+    if (memo === undefined) {
+      const makeLink = makeDefaultClassLink(self)
+      memo = new SchemaAST.Declaration(
+        [from],
+        () => (input, ast) => {
+          if (input instanceof self) {
+            return Result.ok(input)
+          }
+          return Result.err(new SchemaIssue.InvalidType(ast, O.some(input)))
         },
-        ...annotations
-      },
-      undefined,
-      [makeLink(from)],
-      undefined
-    )
+        {
+          defaultJsonSerializer: ([schema]: [Schema<any>]) => makeLink(schema.ast),
+          ...annotations
+        },
+        checks,
+        [makeLink(from)],
+        context
+      )
+    }
+    return memo
   }
 }
 
@@ -2447,7 +2401,7 @@ export const Class: {
     Data.Class,
     identifier,
     struct,
-    getDefaultComputeAST(struct.ast, { title: identifier, ...annotations })
+    annotations
   )
 }
 
@@ -2486,7 +2440,7 @@ export const ErrorClass: {
     core.Error,
     identifier,
     struct,
-    getDefaultComputeAST(struct.ast, { title: identifier, ...annotations })
+    annotations
   )
 }
 
@@ -2534,7 +2488,7 @@ export const RequestClass =
       Request.Class,
       identifier,
       options.payload,
-      getDefaultComputeAST(options.payload.ast, { title: identifier, ...options.annotations })
+      options.annotations
     ) {
       static readonly payload = options.payload
       static readonly success = options.success

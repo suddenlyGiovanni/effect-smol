@@ -12,9 +12,9 @@ import * as Result from "./Result.js"
 import type * as Schema from "./Schema.js"
 import type * as SchemaCheck from "./SchemaCheck.js"
 import * as SchemaIssue from "./SchemaIssue.js"
+import type * as SchemaParser from "./SchemaParser.js"
 import type * as SchemaResult from "./SchemaResult.js"
 import type * as SchemaTransformation from "./SchemaTransformation.js"
-import type * as SchemaValidator from "./SchemaValidator.js"
 /**
  * @category model
  * @since 4.0.0
@@ -46,13 +46,13 @@ export type AST =
  * @category model
  * @since 4.0.0
  */
-export type Middleware = SchemaTransformation.Middleware<any, any, any, any, any, any>
+export type Middleware = SchemaTransformation.SchemaMiddleware<any, any, any, any, any, any>
 
 /**
  * @category model
  * @since 4.0.0
  */
-export type Transformation = SchemaTransformation.Transformation<any, any, any, any>
+export type Transformation = SchemaTransformation.SchemaTransformation<any, any, any, any>
 
 /**
  * @category model
@@ -102,11 +102,9 @@ export declare namespace Annotations {
     readonly declaration?: {
       readonly title?: string
     }
-    readonly serialization?: {
-      readonly json?: (
-        typeParameters: { readonly [K in keyof TypeParameters]: Schema.Schema<TypeParameters[K]["Encoded"]> }
-      ) => Link
-    }
+    readonly defaultJsonSerializer?: (
+      typeParameters: { readonly [K in keyof TypeParameters]: Schema.Schema<TypeParameters[K]["Encoded"]> }
+    ) => Link
   }
 
   /**
@@ -187,7 +185,7 @@ export class Context {
  * @category model
  * @since 4.0.0
  */
-export type Checks = readonly [SchemaCheck.Check<any>, ...ReadonlyArray<SchemaCheck.Check<any>>]
+export type Checks = readonly [SchemaCheck.SchemaCheck<any>, ...ReadonlyArray<SchemaCheck.SchemaCheck<any>>]
 
 /**
  * @category model
@@ -688,7 +686,7 @@ export class TupleType extends Extensions {
       new TupleType(this.isReadonly, elements, rest, this.annotations, this.checks, undefined, this.context)
   }
   /** @internal */
-  parser(go: (ast: AST) => SchemaValidator.Parser<any, any>) {
+  parser(go: (ast: AST) => SchemaParser.Parser<any, any>) {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const ast = this
     return Effect.fnUntraced(function*(oinput, options) {
@@ -840,7 +838,7 @@ export class TypeLiteral extends Extensions {
       )
   }
   /** @internal */
-  parser(go: (ast: AST) => SchemaValidator.Parser<any, any>) {
+  parser(go: (ast: AST) => SchemaParser.Parser<any, any>) {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const ast = this
     // Handle empty Struct({}) case
@@ -1061,7 +1059,7 @@ export class UnionType<A extends AST = AST> extends Extensions {
       new UnionType(types, this.mode, this.annotations, this.checks, undefined, this.context)
   }
   /** @internal */
-  parser(go: (ast: AST) => SchemaValidator.Parser<any, any>) {
+  parser(go: (ast: AST) => SchemaParser.Parser<any, any>) {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const ast = this
     return Effect.fnUntraced(function*(oinput, options) {
@@ -1134,7 +1132,7 @@ export class Suspend extends Extensions {
     return new Suspend(() => flip(this.thunk()), this.annotations, this.checks, undefined, this.context)
   }
   /** @internal */
-  parser(go: (ast: AST) => SchemaValidator.Parser<any, any>) {
+  parser(go: (ast: AST) => SchemaParser.Parser<any, any>) {
     return go(this.thunk())
   }
 }
@@ -1547,7 +1545,7 @@ function formatAST(ast: AST): string {
 }
 
 /** @internal */
-export function formatCheck(filter: SchemaCheck.Check<any>): string {
+export function formatCheck(filter: SchemaCheck.SchemaCheck<any>): string {
   const title = filter.annotations?.title
   if (Predicate.isString(title)) {
     return title
@@ -1679,7 +1677,7 @@ const handleTemplateLiteralSpanTypeParens = (
 
 /** @internal */
 export const fromPredicate =
-  (ast: AST, predicate: (u: unknown) => boolean): SchemaValidator.Parser<any, any> => (oinput) => {
+  (ast: AST, predicate: (u: unknown) => boolean): SchemaParser.Parser<any, any> => (oinput) => {
     if (Option.isNone(oinput)) {
       return Effect.succeedNone
     }

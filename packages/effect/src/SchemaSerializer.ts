@@ -7,29 +7,19 @@ import * as Option from "./Option.js"
 import * as Predicate from "./Predicate.js"
 import * as Schema from "./Schema.js"
 import * as SchemaAST from "./SchemaAST.js"
+import * as SchemaParser from "./SchemaGetter.js"
 import * as SchemaIssue from "./SchemaIssue.js"
-import * as SchemaParser from "./SchemaParser.js"
 import * as SchemaResult from "./SchemaResult.js"
 import * as SchemaTransformation from "./SchemaTransformation.js"
 
 /**
  * @since 4.0.0
  */
-export function make<T, E, RD, RE>(
+export function json<T, E, RD, RE>(
   codec: Schema.Codec<T, E, RD, RE>
 ): Schema.Codec<T, unknown, RD, RE> {
   return Schema.make<Schema.Codec<T, unknown, RD, RE>>(go(codec.ast))
 }
-
-/**
- * @since 4.0.0
- */
-export const serialize = <T>(schema: Schema.Schema<T>) => Schema.encode(make(Schema.typeCodec(schema)))
-
-/**
- * @since 4.0.0
- */
-export const deserialize = <T>(schema: Schema.Schema<T>) => Schema.decode(make(Schema.typeCodec(schema)))
 
 const go = SchemaAST.memoize((ast: SchemaAST.AST): SchemaAST.AST => {
   if (ast.encoding) {
@@ -45,10 +35,9 @@ const go = SchemaAST.memoize((ast: SchemaAST.AST): SchemaAST.AST => {
   }
   switch (ast._tag) {
     case "Declaration": {
-      const serialization = ast.annotations?.serialization
-      const annotation: any = Predicate.hasProperty(serialization, "json") ? serialization.json : undefined
-      if (annotation !== undefined) {
-        const link = annotation(ast.typeParameters.map((tp) => Schema.make(go(SchemaAST.encodedAST(tp)))))
+      const defaultJsonSerializer = ast.annotations?.defaultJsonSerializer
+      if (Predicate.isFunction(defaultJsonSerializer)) {
+        const link = defaultJsonSerializer(ast.typeParameters.map((tp) => Schema.make(go(SchemaAST.encodedAST(tp)))))
         return SchemaAST.replaceEncoding(ast, [link])
       } else {
         return SchemaAST.replaceEncoding(ast, [forbiddenLink])
@@ -123,7 +112,7 @@ const forbiddenLink = new SchemaAST.Link(
 
 const symbolLink = new SchemaAST.Link(
   SchemaAST.stringKeyword,
-  new SchemaTransformation.Transformation(
+  new SchemaTransformation.SchemaTransformation(
     SchemaParser.mapSome(Symbol.for),
     SchemaParser.parseSome((sym: symbol) => {
       const description = sym.description
@@ -140,7 +129,7 @@ const symbolLink = new SchemaAST.Link(
 
 const bigIntLink = new SchemaAST.Link(
   SchemaAST.stringKeyword,
-  new SchemaTransformation.Transformation(
+  new SchemaTransformation.SchemaTransformation(
     SchemaParser.mapSome(BigInt),
     SchemaParser.String
   )
