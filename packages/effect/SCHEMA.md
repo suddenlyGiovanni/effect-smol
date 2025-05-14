@@ -234,13 +234,10 @@ Flipping is a transformation that creates a new codec from an existing one by sw
 import { Schema, SchemaGetter, SchemaTransformation } from "effect"
 
 const FiniteFromString = Schema.String.pipe(
-  Schema.decodeTo(
-    Schema.Finite,
-    new SchemaTransformation.SchemaTransformation(
-      SchemaGetter.Number,
-      SchemaGetter.String
-    )
-  )
+  Schema.decodeTo(Schema.Finite, {
+    decode: SchemaGetter.Number,
+    encode: SchemaGetter.String
+  })
 )
 
 // Flips a codec that decodes a string into a number,
@@ -383,7 +380,7 @@ const NonEmptyString = Schema.String.pipe(Schema.check(SchemaCheck.nonEmpty))
 
 //      ┌─── Schema.String
 //      ▼
-const schema = NonEmptyString.pipe(Schema.annotate({}))
+const schema = NonEmptyString.annotate({})
 ```
 
 This helps keep functionality such as `.makeSync` or `.fields` intact, even after filters are applied.
@@ -394,7 +391,7 @@ import { Schema, SchemaCheck } from "effect"
 const schema = Schema.Struct({
   name: Schema.String,
   age: Schema.Number
-}).pipe(Schema.check(SchemaCheck.make(() => true)))
+}).pipe(Schema.check(SchemaCheck.makeFilter(() => true)))
 
 // The fields of the original struct are still accessible
 //
@@ -817,12 +814,9 @@ import { Effect, Schema, SchemaCheck, SchemaFormatter } from "effect"
 class Person extends Schema.Opaque<Person>()(
   Schema.Struct({
     name: Schema.String
-  }).pipe(
-    Schema.check(SchemaCheck.make(({ name }) => name.length > 0)),
-    Schema.annotate({
-      title: "Person"
-    })
-  )
+  })
+    .pipe(Schema.check(SchemaCheck.makeFilter(({ name }) => name.length > 0)))
+    .annotate({ title: "Person" })
 ) {}
 
 Schema.decodeUnknown(Person)({ name: "" })
@@ -854,7 +848,7 @@ const S: Schema.Struct<{
     readonly name: Schema.String;
 }>
 */
-const S = Person.pipe(Schema.annotate({ title: "Person" })) // `annotate` returns the wrapped struct type
+const S = Person.annotate({ title: "Person" }) // `annotate` returns the wrapped struct type
 ```
 
 #### Recursive Opaque Structs
@@ -1382,13 +1376,10 @@ The `compose` transformation lets you convert from one schema to another when th
 import { Schema, SchemaGetter, SchemaTransformation } from "effect"
 
 const FiniteFromString = Schema.String.pipe(
-  Schema.decodeTo(
-    Schema.Finite,
-    new SchemaTransformation.SchemaTransformation(
-      SchemaGetter.Number,
-      SchemaGetter.String
-    )
-  )
+  Schema.decodeTo(Schema.Finite, {
+    decode: SchemaGetter.Number,
+    encode: SchemaGetter.String
+  })
 )
 
 const From = Schema.Struct({
@@ -1417,13 +1408,10 @@ Use `composeSupertype` when your source type extends the encoded output of your 
 import { Schema, SchemaGetter, SchemaTransformation } from "effect"
 
 const FiniteFromString = Schema.String.pipe(
-  Schema.decodeTo(
-    Schema.Finite,
-    new SchemaTransformation.SchemaTransformation(
-      SchemaGetter.Number,
-      SchemaGetter.String
-    )
-  )
+  Schema.decodeTo(Schema.Finite, {
+    decode: SchemaGetter.Number,
+    encode: SchemaGetter.String
+  })
 )
 
 const From = FiniteFromString
@@ -1446,13 +1434,10 @@ Use `composeSubtype` when the encoded output of your target schema extends the t
 import { Schema, SchemaGetter, SchemaTransformation } from "effect"
 
 const FiniteFromString = Schema.String.pipe(
-  Schema.decodeTo(
-    Schema.Finite,
-    new SchemaTransformation.SchemaTransformation(
-      SchemaGetter.Number,
-      SchemaGetter.String
-    )
-  )
+  Schema.decodeTo(Schema.Finite, {
+    decode: SchemaGetter.Number,
+    encode: SchemaGetter.String
+  })
 )
 
 const From = Schema.UndefinedOr(Schema.String)
@@ -1680,7 +1665,7 @@ Schema.Null
 To coerce input data to the appropriate type:
 
 ```ts
-import { Schema, SchemaTransformation, SchemaValidator } from "effect"
+import { Schema, SchemaParser, SchemaTransformation } from "effect"
 
 //      ┌─── Codec<string, unknown>
 //      ▼
@@ -1688,12 +1673,12 @@ const schema = Schema.Unknown.pipe(
   Schema.decodeTo(Schema.String, SchemaTransformation.String)
 )
 
-const parse = SchemaValidator.decodeUnknownSync(schema)
+const parse = SchemaParser.decodeUnknownSync(schema)
 
-console.dir(parse("tuna")) // => "tuna"
-console.dir(parse(42)) // => "42"
-console.dir(parse(true)) // => "true"
-console.dir(parse(null)) // => "null"
+console.log(parse("tuna")) // => "tuna"
+console.log(parse(42)) // => "42"
+console.log(parse(true)) // => "true"
+console.log(parse(null)) // => "null"
 ```
 
 ## Literals
@@ -1775,7 +1760,26 @@ Schema.String.pipe(
 )
 ```
 
+## String formats
+
+```ts
+import { Schema, SchemaCheck } from "effect"
+
+Schema.String.pipe(Schema.check(SchemaCheck.uuid()))
+Schema.String.pipe(Schema.check(SchemaCheck.base64))
+Schema.String.pipe(Schema.check(SchemaCheck.base64url))
+```
+
 ## Numbers
+
+```ts
+import { Schema } from "effect"
+
+Schema.Number // all numbers
+Schema.Finite // finite numbers (i.e. not +/-Infinity or NaN)
+```
+
+number-specific validations
 
 ```ts
 import { Schema, SchemaCheck } from "effect"
@@ -1833,6 +1837,21 @@ Schema.BigInt.pipe(Schema.check(positive))
 Schema.BigInt.pipe(Schema.check(nonNegative))
 Schema.BigInt.pipe(Schema.check(negative))
 Schema.BigInt.pipe(Schema.check(nonPositive))
+```
+
+## Dates
+
+```ts
+import { Schema, SchemaGetter } from "effect"
+
+Schema.Date
+
+const DateFromString = Schema.Date.pipe(
+  Schema.encodeTo(Schema.String, {
+    decode: SchemaGetter.Date,
+    encode: SchemaGetter.String
+  })
+)
 ```
 
 ## RWC References
