@@ -7,7 +7,7 @@ import * as Option from "./Option.js"
 import * as Predicate from "./Predicate.js"
 import * as Schema from "./Schema.js"
 import * as SchemaAST from "./SchemaAST.js"
-import * as SchemaParser from "./SchemaGetter.js"
+import * as SchemaGetter from "./SchemaGetter.js"
 import * as SchemaIssue from "./SchemaIssue.js"
 import * as SchemaResult from "./SchemaResult.js"
 import * as SchemaTransformation from "./SchemaTransformation.js"
@@ -105,32 +105,42 @@ const go = SchemaAST.memoize((ast: SchemaAST.AST): SchemaAST.AST => {
 
 const forbiddenLink = new SchemaAST.Link(
   SchemaAST.unknownKeyword,
-  SchemaTransformation.fail("cannot serialize to JSON, required `serializer` annotation", {
-    title: "required annotation"
-  })
+  new SchemaTransformation.SchemaTransformation(
+    SchemaGetter.passthrough(),
+    SchemaGetter.fail(
+      (o) =>
+        new SchemaIssue.Forbidden(o, {
+          description: "cannot serialize to JSON, required `defaultJsonSerializer` annotation"
+        })
+    )
+  )
 )
 
 const symbolLink = new SchemaAST.Link(
   SchemaAST.stringKeyword,
   new SchemaTransformation.SchemaTransformation(
-    SchemaParser.mapSome(Symbol.for),
-    SchemaParser.parseSome((sym: symbol) => {
+    SchemaGetter.transform(Symbol.for),
+    SchemaGetter.transformOrFail((sym: symbol) => {
       const description = sym.description
       if (description !== undefined) {
         if (Symbol.for(description) === sym) {
-          return SchemaResult.succeed(Option.some(description))
+          return SchemaResult.succeed(description)
         }
-        return SchemaResult.fail(new SchemaIssue.Forbidden(Option.some(sym), { message: "Symbol is not registered" }))
+        return SchemaResult.fail(
+          new SchemaIssue.Forbidden(Option.some(sym), { title: "Symbol is not registered" })
+        )
       }
-      return SchemaResult.fail(new SchemaIssue.Forbidden(Option.some(sym), { message: "Symbol has no description" }))
-    }, { title: "symbol encoding" })
+      return SchemaResult.fail(
+        new SchemaIssue.Forbidden(Option.some(sym), { title: "Symbol has no description" })
+      )
+    })
   )
 )
 
 const bigIntLink = new SchemaAST.Link(
   SchemaAST.stringKeyword,
   new SchemaTransformation.SchemaTransformation(
-    SchemaParser.mapSome(BigInt),
-    SchemaParser.String
+    SchemaGetter.transform(BigInt),
+    SchemaGetter.String
   )
 )

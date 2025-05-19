@@ -157,7 +157,10 @@ const User = Schema.Struct({
   name: Schema.Option(Schema.String).pipe(
     Schema.encodeTo(
       Schema.NullOr(Schema.String),
-      SchemaTransformation.transform(Option.fromNullable, Option.getOrNull)
+      SchemaTransformation.transform({
+        decode: Option.fromNullable,
+        encode: Option.getOrNull
+      })
     )
   )
 })
@@ -203,7 +206,10 @@ const User = Schema.Struct({
   name: Schema.Option(Schema.String).pipe(
     Schema.encodeTo(
       Schema.NullOr(Schema.String),
-      SchemaTransformation.transform(Option.fromNullable, Option.getOrNull)
+      SchemaTransformation.transform({
+        decode: Option.fromNullable,
+        encode: Option.getOrNull
+      })
     )
   )
 })
@@ -258,7 +264,7 @@ encode(schema) = decode(flip(schema))
 
 To retain constructors in composed schemas, `makeSync` and `make` will be added to the base `Bottom` type.
 
-### Default Values
+### Constructor Default Values
 
 **Example** (Adding a default value to a field)
 
@@ -266,9 +272,7 @@ To retain constructors in composed schemas, `makeSync` and `make` will be added 
 import { Result, Schema } from "effect"
 
 const schema = Schema.Struct({
-  a: Schema.Number.pipe(
-    Schema.withConstructorDefault(() => Result.succeedSome(-1))
-  )
+  a: Schema.Number.pipe(Schema.constructorDefault(() => Result.succeedSome(-1)))
 })
 
 console.log(schema.makeSync({}))
@@ -286,7 +290,7 @@ import { Effect, Option, Schema, SchemaResult } from "effect"
 
 const schema = Schema.Struct({
   a: Schema.Number.pipe(
-    Schema.withConstructorDefault(() =>
+    Schema.constructorDefault(() =>
       Effect.gen(function* () {
         yield* Effect.sleep(100)
         return Option.some(-1)
@@ -311,7 +315,7 @@ class ConstructorService extends Context.Tag<
 
 const schema = Schema.Struct({
   a: Schema.Number.pipe(
-    Schema.withConstructorDefault(() =>
+    Schema.constructorDefault(() =>
       Effect.gen(function* () {
         yield* Effect.sleep(100)
         const oservice = yield* Effect.serviceOption(ConstructorService)
@@ -336,7 +340,7 @@ SchemaResult.asEffect(schema.make({}))
 // { a: -1 }
 ```
 
-### Nested Default
+### Nested Constructor Default Values
 
 Default values can be nested, and will be evaluated in order.
 
@@ -348,9 +352,9 @@ import { Result, Schema } from "effect"
 const schema = Schema.Struct({
   a: Schema.Struct({
     b: Schema.Number.pipe(
-      Schema.withConstructorDefault(() => Result.succeedSome(-1))
+      Schema.constructorDefault(() => Result.succeedSome(-1))
     )
-  }).pipe(Schema.withConstructorDefault(() => Result.succeedSome({})))
+  }).pipe(Schema.constructorDefault(() => Result.succeedSome({})))
 })
 
 console.log(schema.makeSync({}))
@@ -594,7 +598,7 @@ export const deriveGreaterThan = <T>(options: {
 
 ## Structs
 
-### Optional and Mutable Fields
+### Optional and Mutable Keys
 
 You can mark struct properties as optional or mutable using `Schema.optionalKey` and `Schema.mutableKey`.
 
@@ -609,6 +613,8 @@ const schema = Schema.Struct({
 })
 
 /*
+with "exactOptionalPropertyTypes": true
+
 type Type = {
     readonly a: string;
     readonly b?: string;
@@ -617,6 +623,410 @@ type Type = {
 }
 */
 type Type = (typeof schema)["Type"]
+```
+
+### Optional Fields
+
+By combining `Schema.optionalKey` and `Schema.NullOr` you can represent any kind of optional property.
+
+```ts
+import { Schema } from "effect"
+
+export const schema = Schema.Struct({
+  // Exact Optional Property
+  a: Schema.optionalKey(Schema.NumberFromString),
+  // Optional Property
+  b: Schema.optional(Schema.NumberFromString),
+  // Exact Optional Property with Nullability
+  c: Schema.optionalKey(Schema.NullOr(Schema.NumberFromString)),
+  // Optional Property with Nullability
+  d: Schema.optional(Schema.NullOr(Schema.NumberFromString))
+})
+
+/*
+type Encoded = {
+    readonly a?: string;
+    readonly b?: string | undefined;
+    readonly c?: string | null;
+    readonly d?: string | null | undefined;
+}
+*/
+export type Encoded = typeof schema.Encoded
+
+/*
+type Type = {
+    readonly a?: number;
+    readonly b?: number | undefined;
+    readonly c?: number | null;
+    readonly d?: number | null | undefined;
+}
+*/
+export type Type = typeof schema.Type
+```
+
+#### Omitting Values When Transforming Optional Fields
+
+```ts
+import { Option, Predicate, Schema, SchemaGetter } from "effect"
+
+export const schema = Schema.Struct({
+  a: Schema.optional(Schema.NumberFromString).pipe(
+    Schema.decodeTo(Schema.optionalKey(Schema.Number), {
+      decode: SchemaGetter.transformOption(
+        Option.filter(Predicate.isNotUndefined) // omit undefined
+      ),
+      encode: SchemaGetter.passthrough()
+    })
+  )
+})
+
+/*
+type Encoded = {
+    readonly a?: string | undefined;
+}
+*/
+export type Encoded = typeof schema.Encoded
+
+/*
+type Type = {
+    readonly a?: number;
+}
+*/
+export type Type = typeof schema.Type
+```
+
+#### Representing Optional Fields with never Type
+
+```ts
+import { Schema } from "effect"
+
+export const schema = Schema.Struct({
+  a: Schema.optionalKey(Schema.Never)
+})
+
+/*
+type Encoded = {
+    readonly a?: never;
+}
+*/
+export type Encoded = typeof schema.Encoded
+
+/*
+type Type = {
+    readonly a?: never;
+}
+*/
+export type Type = typeof schema.Type
+```
+
+### Default Values
+
+#### Exact Optional Property
+
+```ts
+import { Schema, SchemaGetter } from "effect"
+
+const Product = Schema.Struct({
+  quantity: Schema.optionalKey(Schema.NumberFromString).pipe(
+    Schema.decodeTo(Schema.Number, {
+      decode: SchemaGetter.default(() => 1),
+      encode: SchemaGetter.passthrough()
+    })
+  )
+})
+
+//     ┌─── { readonly quantity?: string; }
+//     ▼
+type Encoded = typeof Product.Encoded
+
+//     ┌─── { readonly quantity: number; }
+//     ▼
+type Type = typeof Product.Type
+
+// Decoding examples with default applied
+
+console.log(Schema.decodeUnknownSync(Product)({}))
+// Output: { quantity: 1 }
+
+console.log(Schema.decodeUnknownSync(Product)({ quantity: "2" }))
+// Output: { quantity: 2 }
+```
+
+#### Optional Property
+
+```ts
+import { Schema, SchemaGetter } from "effect"
+
+const Product = Schema.Struct({
+  quantity: Schema.optional(Schema.NumberFromString).pipe(
+    Schema.decodeTo(Schema.Number, {
+      decode: SchemaGetter.default(() => 1),
+      encode: SchemaGetter.passthrough()
+    })
+  )
+})
+
+//     ┌─── { readonly quantity?: string | undefined; }
+//     ▼
+export type Encoded = typeof Product.Encoded
+
+//     ┌─── { readonly quantity: number; }
+//     ▼
+export type Type = typeof Product.Type
+
+// Decoding examples with default applied
+
+console.log(Schema.decodeUnknownSync(Product)({}))
+// Output: { quantity: 1 }
+
+console.log(Schema.decodeUnknownSync(Product)({ quantity: undefined }))
+// Output: { quantity: 1 }
+
+console.log(Schema.decodeUnknownSync(Product)({ quantity: "2" }))
+// Output: { quantity: 2 }
+```
+
+#### Exact Optional Property with Nullability
+
+```ts
+import { Option, Predicate, Schema, SchemaGetter } from "effect"
+
+const Product = Schema.Struct({
+  quantity: Schema.optionalKey(Schema.NullOr(Schema.NumberFromString)).pipe(
+    Schema.decodeTo(Schema.Number, {
+      decode: SchemaGetter.transformOption((oe) =>
+        oe.pipe(
+          Option.filter(Predicate.isNotNull),
+          Option.orElseSome(() => 1)
+        )
+      ),
+      encode: SchemaGetter.passthrough()
+    })
+  )
+})
+
+//     ┌─── { readonly quantity?: string | null | undefined; }
+//     ▼
+export type Encoded = typeof Product.Encoded
+
+//     ┌─── { readonly quantity: number; }
+//     ▼
+export type Type = typeof Product.Type
+
+console.log(Schema.decodeUnknownSync(Product)({}))
+// Output: { quantity: 1 }
+
+// console.log(Schema.decodeUnknownSync(Product)({ quantity: undefined }))
+// throws
+
+console.log(Schema.decodeUnknownSync(Product)({ quantity: null }))
+// Output: { quantity: 1 }
+
+console.log(Schema.decodeUnknownSync(Product)({ quantity: "2" }))
+// Output: { quantity: 2 }
+```
+
+#### Optional Property with Nullability
+
+```ts
+import { Option, Predicate, Schema, SchemaGetter } from "effect"
+
+const Product = Schema.Struct({
+  quantity: Schema.optional(Schema.NullOr(Schema.NumberFromString)).pipe(
+    Schema.decodeTo(Schema.Number, {
+      decode: SchemaGetter.transformOption((oe) =>
+        oe.pipe(
+          Option.filter(Predicate.isNotNullish),
+          Option.orElseSome(() => 1)
+        )
+      ),
+      encode: SchemaGetter.passthrough()
+    })
+  )
+})
+
+//     ┌─── { readonly quantity?: string | null | undefined; }
+//     ▼
+export type Encoded = typeof Product.Encoded
+
+//     ┌─── { readonly quantity: number; }
+//     ▼
+export type Type = typeof Product.Type
+
+console.log(Schema.decodeUnknownSync(Product)({}))
+// Output: { quantity: 1 }
+
+console.log(Schema.decodeUnknownSync(Product)({ quantity: undefined }))
+// Output: { quantity: 1 }
+
+console.log(Schema.decodeUnknownSync(Product)({ quantity: null }))
+// Output: { quantity: 1 }
+
+console.log(Schema.decodeUnknownSync(Product)({ quantity: "2" }))
+// Output: { quantity: 2 }
+```
+
+### Optional Fields as Options
+
+#### Exact Optional Property
+
+```ts
+import { Option, Schema, SchemaTransformation } from "effect"
+
+const Product = Schema.Struct({
+  quantity: Schema.optionalKey(Schema.NumberFromString).pipe(
+    Schema.decodeTo(
+      Schema.Option(Schema.Number),
+      SchemaTransformation.transformOption({
+        decode: Option.some,
+        encode: Option.flatten
+      })
+    )
+  )
+})
+
+//     ┌─── { readonly quantity?: string; }
+//     ▼
+export type Encoded = typeof Product.Encoded
+
+//     ┌─── { readonly quantity: Option<number>; }
+//     ▼
+export type Type = typeof Product.Type
+
+console.log(Schema.decodeUnknownSync(Product)({}))
+// Output: { quantity: { _id: 'Option', _tag: 'None' } }
+
+console.log(Schema.decodeUnknownSync(Product)({ quantity: "2" }))
+// Output: { quantity: { _id: 'Option', _tag: 'Some', value: 2 } }
+
+// console.log(Schema.decodeUnknownSync(Product)({ quantity: undefined }))
+// throws:
+
+console.log(Schema.encodeSync(Product)({ quantity: Option.some(2) }))
+// Output: { quantity: "2" }
+
+console.log(Schema.encodeSync(Product)({ quantity: Option.none() }))
+// Output: {}
+```
+
+#### Optional Property
+
+```ts
+import { Option, Predicate, Schema, SchemaTransformation } from "effect"
+
+const Product = Schema.Struct({
+  quantity: Schema.optional(Schema.NumberFromString).pipe(
+    Schema.decodeTo(
+      Schema.Option(Schema.Number),
+      SchemaTransformation.transformOption({
+        decode: (oe) =>
+          oe.pipe(Option.filter(Predicate.isNotUndefined), Option.some),
+        encode: Option.flatten
+      })
+    )
+  )
+})
+
+//     ┌─── { readonly quantity?: string; }
+//     ▼
+export type Encoded = typeof Product.Encoded
+
+//     ┌─── { readonly quantity: Option<number>; }
+//     ▼
+export type Type = typeof Product.Type
+
+console.log(Schema.decodeUnknownSync(Product)({}))
+// Output: { quantity: { _id: 'Option', _tag: 'None' } }
+
+console.log(Schema.decodeUnknownSync(Product)({ quantity: "2" }))
+// Output: { quantity: { _id: 'Option', _tag: 'Some', value: 2 } }
+
+// console.log(Schema.decodeUnknownSync(Product)({ quantity: undefined }))
+// throws:
+
+console.log(Schema.encodeSync(Product)({ quantity: Option.some(2) }))
+// Output: { quantity: "2" }
+
+console.log(Schema.encodeSync(Product)({ quantity: Option.none() }))
+// Output: {}
+```
+
+#### Exact Optional Property with Nullability
+
+```ts
+import { Option, Predicate, Schema, SchemaTransformation } from "effect"
+
+const Product = Schema.Struct({
+  quantity: Schema.optionalKey(Schema.NullOr(Schema.NumberFromString)).pipe(
+    Schema.decodeTo(
+      Schema.Option(Schema.Number),
+      SchemaTransformation.transformOption({
+        decode: (oe) =>
+          oe.pipe(Option.filter(Predicate.isNotNull), Option.some),
+        encode: Option.flatten
+      })
+    )
+  )
+})
+
+//     ┌─── { readonly quantity?: string | null; }
+//     ▼
+export type Encoded = typeof Product.Encoded
+
+//     ┌─── { readonly quantity: Option<number>; }
+//     ▼
+export type Type = typeof Product.Type
+
+console.log(Schema.decodeUnknownSync(Product)({}))
+// Output: { quantity: { _id: 'Option', _tag: 'None' } }
+
+console.log(Schema.decodeUnknownSync(Product)({ quantity: null }))
+// Output: { quantity: { _id: 'Option', _tag: 'None' } }
+
+console.log(Schema.decodeUnknownSync(Product)({ quantity: "2" }))
+// Output: { quantity: { _id: 'Option', _tag: 'Some', value: 2 } }
+
+// console.log(Schema.decodeUnknownSync(Product)({ quantity: undefined }))
+// throws:
+```
+
+#### Optional Property with Nullability
+
+```ts
+import { Option, Predicate, Schema, SchemaTransformation } from "effect"
+
+const Product = Schema.Struct({
+  quantity: Schema.optional(Schema.NullOr(Schema.NumberFromString)).pipe(
+    Schema.decodeTo(
+      Schema.Option(Schema.Number),
+      SchemaTransformation.transformOption({
+        decode: (oe) =>
+          oe.pipe(Option.filter(Predicate.isNotNullish), Option.some),
+        encode: Option.flatten
+      })
+    )
+  )
+})
+
+//     ┌─── { readonly quantity?: string | null | undefined; }
+//     ▼
+export type Encoded = typeof Product.Encoded
+
+//     ┌─── { readonly quantity: Option<number>; }
+//     ▼
+export type Type = typeof Product.Type
+
+console.log(Schema.decodeUnknownSync(Product)({}))
+// Output: { quantity: { _id: 'Option', _tag: 'None' } }
+
+console.log(Schema.decodeUnknownSync(Product)({ quantity: undefined }))
+// Output: { quantity: { _id: 'Option', _tag: 'None' } }
+
+console.log(Schema.decodeUnknownSync(Product)({ quantity: null }))
+// Output: { quantity: { _id: 'Option', _tag: 'None' } }
+
+console.log(Schema.decodeUnknownSync(Product)({ quantity: "2" }))
+// Output: { quantity: { _id: 'Option', _tag: 'Some', value: 2 }
 ```
 
 ### Key Transformations
@@ -967,16 +1377,14 @@ const PersonSchema = Schema.instanceOf({
   annotations: {
     title: "Person",
     // optional: default JSON serialization
-    serialization: {
-      json: () =>
-        Schema.link<Person>()(
-          Schema.ReadonlyTuple([Schema.String, Schema.Number]),
-          SchemaTransformation.transform(
-            (args) => new Person(...args),
-            (instance) => [instance.name, instance.age] as const
-          )
-        )
-    }
+    defaultJsonSerializer: () =>
+      Schema.link<Person>()(
+        Schema.ReadonlyTuple([Schema.String, Schema.Number]),
+        SchemaTransformation.transform({
+          decode: (args) => new Person(...args),
+          encode: (instance) => [instance.name, instance.age] as const
+        })
+      )
   }
 })
   // optional: explicit encoding
@@ -986,10 +1394,10 @@ const PersonSchema = Schema.instanceOf({
         name: Schema.String,
         age: Schema.Number
       }),
-      SchemaTransformation.transform(
-        (args) => new Person(args.name, args.age),
-        (instance) => instance
-      )
+      SchemaTransformation.transform({
+        decode: (args) => new Person(args.name, args.age),
+        encode: (instance) => instance
+      })
     )
   )
 ```
@@ -1011,16 +1419,14 @@ const PersonSchema = Schema.instanceOf({
   annotations: {
     title: "Person",
     // optional: default JSON serialization
-    serialization: {
-      json: () =>
-        Schema.link<Person>()(
-          Schema.ReadonlyTuple([Schema.String, Schema.Number]),
-          SchemaTransformation.transform(
-            (args) => new Person(...args),
-            (instance) => [instance.name, instance.age] as const
-          )
-        )
-    }
+    defaultJsonSerializer: () =>
+      Schema.link<Person>()(
+        Schema.ReadonlyTuple([Schema.String, Schema.Number]),
+        SchemaTransformation.transform({
+          decode: (args) => new Person(...args),
+          encode: (instance) => [instance.name, instance.age] as const
+        })
+      )
   }
 })
   // optional: explicit encoding
@@ -1030,10 +1436,10 @@ const PersonSchema = Schema.instanceOf({
         name: Schema.String,
         age: Schema.Number
       }),
-      SchemaTransformation.transform(
-        (args) => new Person(args.name, args.age),
-        (instance) => instance
-      )
+      SchemaTransformation.transform({
+        decode: (args) => new Person(args.name, args.age),
+        encode: (instance) => instance
+      })
     )
   )
 

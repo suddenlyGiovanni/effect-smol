@@ -12,10 +12,10 @@ const assertions = Util.assertions({
 
 const FiniteFromDate = Schema.Date.pipe(Schema.decodeTo(
   Schema.Number,
-  SchemaTransformation.transform(
-    (date) => date.getTime(),
-    (n) => new Date(n)
-  )
+  SchemaTransformation.transform({
+    decode: (date) => date.getTime(),
+    encode: (n) => new Date(n)
+  })
 ))
 
 describe("SchemaSerializerJson", () => {
@@ -27,8 +27,7 @@ describe("SchemaSerializerJson", () => {
         schema,
         undefined,
         `unknown <-> undefined
-└─ required annotation
-   └─ cannot serialize to JSON, required \`serializer\` annotation`
+└─ cannot serialize to JSON, required \`defaultJsonSerializer\` annotation`
       )
     })
 
@@ -46,15 +45,13 @@ describe("SchemaSerializerJson", () => {
         schema,
         Symbol("a"),
         `string <-> symbol
-└─ symbol encoding
-   └─ Symbol is not registered`
+└─ Symbol is not registered`
       )
       await assertions.serialization.schema.fail(
         schema,
         Symbol(),
         `string <-> symbol
-└─ symbol encoding
-   └─ Symbol has no description`
+└─ Symbol has no description`
       )
 
       await assertions.deserialization.schema.succeed(schema, "a", Symbol.for("a"))
@@ -84,8 +81,7 @@ describe("SchemaSerializerJson", () => {
         schema,
         new A(),
         `unknown <-> <Declaration>
-└─ required annotation
-   └─ cannot serialize to JSON, required \`serializer\` annotation`
+└─ cannot serialize to JSON, required \`defaultJsonSerializer\` annotation`
       )
     })
 
@@ -274,10 +270,10 @@ describe("SchemaSerializerJson", () => {
           defaultJsonSerializer: () =>
             Schema.link<MyError>()(
               Schema.String,
-              SchemaTransformation.transform(
-                (message) => new MyError(message),
-                (e) => e.message
-              )
+              SchemaTransformation.transform({
+                decode: (message) => new MyError(message),
+                encode: (e) => e.message
+              })
             )
         }
       })
@@ -306,13 +302,13 @@ describe("SchemaSerializerJson", () => {
             defaultJsonSerializer: () =>
               Schema.link<MyError>()(
                 MyError.Props,
-                SchemaTransformation.transform(
-                  (props) => new MyError(props),
-                  (e) => ({
+                SchemaTransformation.transform({
+                  decode: (props) => new MyError(props),
+                  encode: (e) => ({
                     message: e.message,
                     cause: typeof e.cause === "string" ? e.cause : String(e.cause)
                   })
-                )
+                })
               )
           }
         })

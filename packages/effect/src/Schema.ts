@@ -308,6 +308,12 @@ export const encode = <T, E, RD, RE>(codec: Codec<T, E, RD, RE>) => {
 export const encodeUnknownSync = SchemaParser.encodeUnknownSync
 
 /**
+ * @category Encoding
+ * @since 4.0.0
+ */
+export const encodeSync = SchemaParser.encodeSync
+
+/**
  * @category Api interface
  * @since 4.0.0
  */
@@ -393,6 +399,15 @@ export interface optionalKey<S extends Top> extends make<S> {
  */
 export function optionalKey<S extends Top>(schema: S): optionalKey<S> {
   return new WithSchema$<S, optionalKey<S>>(SchemaAST.optionalKey(schema.ast), schema)
+}
+
+/**
+ * Equivalent to `optionalKey(UndefinedOr(schema))`.
+ *
+ * @since 4.0.0
+ */
+export function optional<S extends Top>(schema: S): optionalKey<Union<readonly [S, Undefined]>> {
+  return optionalKey(UndefinedOr(schema))
 }
 
 /**
@@ -774,7 +789,7 @@ export interface tag<Tag extends SchemaAST.LiteralValue> extends setConstructorD
  */
 export function tag<Tag extends SchemaAST.LiteralValue>(literal: Tag): tag<Tag> {
   return Literal(literal).pipe(
-    withConstructorDefault(() => Result.succeedSome(literal))
+    constructorDefault(() => Result.succeedSome(literal))
   )
 }
 
@@ -1622,6 +1637,13 @@ export function UndefinedOr<S extends Top>(self: S) {
 }
 
 /**
+ * @since 4.0.0
+ */
+export function NullishOr<S extends Top>(self: S) {
+  return Union([self, Null, Undefined])
+}
+
+/**
  * @category Api interface
  * @since 4.0.0
  */
@@ -1891,21 +1913,26 @@ class decodeTo$<To extends Top, From extends Top, RD, RE> extends make$<decodeTo
 /**
  * @since 4.0.0
  */
-export const decodeTo = <To extends Top, From extends Top, RD, RE>(
+export const decodeTo = <To extends Top, From extends Top, RD = never, RE = never>(
   to: To,
   transformation: {
     readonly decode: SchemaGetter.SchemaGetter<To["Encoded"], From["Type"], RD>
     readonly encode: SchemaGetter.SchemaGetter<From["Type"], To["Encoded"], RE>
-  }
+  },
+  annotations?: To["~annotate.in"] | undefined
 ) =>
 (from: From): decodeTo<To, From, RD, RE> => {
-  return new decodeTo$(SchemaAST.decodeTo(from.ast, to.ast, SchemaTransformation.make(transformation)), from, to)
+  return new decodeTo$(
+    SchemaAST.decodeTo(from.ast, to.ast, SchemaTransformation.make(transformation), annotations),
+    from,
+    to
+  )
 }
 
 /**
  * @since 4.0.0
  */
-export const encodeTo = <To extends Top, From extends Top, RD, RE>(
+export const encodeTo = <To extends Top, From extends Top, RD = never, RE = never>(
   to: To,
   transformation: {
     readonly decode: SchemaGetter.SchemaGetter<From["Encoded"], To["Type"], RD>
@@ -1928,29 +1955,25 @@ export interface setConstructorDefault<S extends Top> extends make<S> {
 /**
  * @since 4.0.0
  */
-export const withConstructorDefault = <S extends Top & { readonly "~type.default": "no-constructor-default" }>(
+export const constructorDefault = <S extends Top & { readonly "~type.default": "no-constructor-default" }>(
   parser: (
     input: O.Option<unknown>,
     ast: SchemaAST.AST,
     options: SchemaAST.ParseOptions
-  ) => SchemaResult.SchemaResult<O.Option<S["~type.make.in"]>>,
-  annotations?: SchemaAnnotations.Documentation
+  ) => SchemaResult.SchemaResult<O.Option<S["~type.make.in"]>>
 ) =>
 (self: S): setConstructorDefault<S> => {
   return make<setConstructorDefault<S>>(SchemaAST.setConstructorDefault(
     self.ast,
     new SchemaTransformation.SchemaTransformation(
-      new SchemaGetter.SchemaGetter(
-        (o, ast, options) => {
-          if (O.isNone(o) || (O.isSome(o) && o.value === undefined)) {
-            return parser(o, ast, options)
-          } else {
-            return Result.ok(o)
-          }
-        },
-        annotations
-      ),
-      SchemaGetter.identity()
+      new SchemaGetter.SchemaGetter((o, ast, options) => {
+        if (O.isNone(o) || (O.isSome(o) && o.value === undefined)) {
+          return parser(o, ast, options)
+        } else {
+          return Result.ok(o)
+        }
+      }),
+      SchemaGetter.passthrough()
     )
   ))
 }
@@ -1992,10 +2015,10 @@ export const Option = <S extends Top>(value: S): Option<S> => {
       defaultJsonSerializer: ([value]) =>
         link<O.Option<S["Encoded"]>>()(
           Union([ReadonlyTuple([value]), ReadonlyTuple([])]),
-          SchemaTransformation.transform(
-            Arr.head,
-            (o) => (o._tag === "Some" ? [o.value] as const : [] as const)
-          )
+          SchemaTransformation.transform({
+            decode: Arr.head,
+            encode: (o) => (o._tag === "Some" ? [o.value] as const : [] as const)
+          })
         )
     }
   )
@@ -2051,10 +2074,10 @@ export const Map = <Key extends Top, Value extends Top>(key: Key, value: Value):
       defaultJsonSerializer: ([key, value]) =>
         link<globalThis.Map<Key["Encoded"], Value["Encoded"]>>()(
           ReadonlyArray(ReadonlyTuple([key, value])),
-          SchemaTransformation.transform(
-            (entries) => new globalThis.Map(entries),
-            (map) => [...map.entries()]
-          )
+          SchemaTransformation.transform({
+            decode: (entries) => new globalThis.Map(entries),
+            encode: (map) => [...map.entries()]
+          })
         )
     }
   )
@@ -2136,10 +2159,10 @@ export const URL = instanceOf({
     defaultJsonSerializer: () =>
       link<URL>()(
         String,
-        SchemaTransformation.transform(
-          (s) => new globalThis.URL(s),
-          (url) => url.toString()
-        )
+        SchemaTransformation.transform({
+          decode: (s) => new globalThis.URL(s),
+          encode: (url) => url.toString()
+        })
       )
   }
 })
@@ -2154,10 +2177,10 @@ export const Date = instanceOf({
     defaultJsonSerializer: () =>
       link<Date>()(
         String,
-        SchemaTransformation.transform(
-          (s) => new globalThis.Date(s),
-          (date) => date.toISOString()
-        )
+        SchemaTransformation.transform({
+          decode: (s) => new globalThis.Date(s),
+          encode: (date) => date.toISOString()
+        })
       )
   }
 })
@@ -2175,6 +2198,17 @@ export const UnknownFromJsonString = String.pipe(
 /**
  * @since 4.0.0
  */
+export const NumberFromString = String.pipe(decodeTo(
+  Number,
+  new SchemaTransformation.SchemaTransformation(
+    SchemaGetter.Number,
+    SchemaGetter.String
+  )
+))
+
+/**
+ * @since 4.0.0
+ */
 export const getClassSchema = <C extends new(...args: Array<any>) => any, S extends Struct<Struct.Fields>>(
   constructor: C,
   options: {
@@ -2182,10 +2216,10 @@ export const getClassSchema = <C extends new(...args: Array<any>) => any, S exte
     readonly annotations?: SchemaAnnotations.Declaration<InstanceType<C>, readonly []>
   }
 ): decodeTo<instanceOf<C>, S, never, never> => {
-  const transformation = SchemaTransformation.transform<InstanceType<C>, S["Type"]>(
-    (props) => new constructor(props),
-    identity
-  )
+  const transformation = SchemaTransformation.transform<InstanceType<C>, S["Type"]>({
+    decode: (props) => new constructor(props),
+    encode: identity
+  })
   return instanceOf({
     constructor,
     annotations: {
@@ -2325,12 +2359,12 @@ const makeDefaultClassLink = (self: new(...args: ReadonlyArray<any>) => any) => 
   new SchemaAST.Link(
     ast,
     new SchemaTransformation.SchemaTransformation(
-      SchemaGetter.mapSome((input) => new self(input)),
-      SchemaGetter.parseSome((input) => {
+      SchemaGetter.transform((input) => new self(input)),
+      SchemaGetter.transformOrFail((input) => {
         if (!(input instanceof self)) {
           return Result.err(new SchemaIssue.InvalidType(ast, input))
         }
-        return Result.succeedSome(input)
+        return Result.ok(input)
       })
     )
   )
