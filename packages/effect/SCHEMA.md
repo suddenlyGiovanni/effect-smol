@@ -262,35 +262,97 @@ encode(schema) = decode(flip(schema))
 
 ### Keeping Constructors in Composed Schemas
 
-To retain constructors in composed schemas, `makeSync` and `make` will be added to the base `Bottom` type.
+To support constructors in composed schemas, `makeSync` will be added to the base `Bottom` type.
 
 ### Constructor Default Values
 
-**Example** (Adding a default value to a field)
+A constructor default allows a schema to generate a value when one is not provided.
+
+**Example** (Providing a default number)
 
 ```ts
-import { Result, Schema } from "effect"
+import { Option, Schema } from "effect"
 
 const schema = Schema.Struct({
-  a: Schema.Number.pipe(Schema.constructorDefault(() => Result.succeedSome(-1)))
+  a: Schema.Number.pipe(Schema.withConstructorDefault(() => Option.some(-1)))
 })
+
+console.log(schema.makeSync({ a: 5 }))
+// { a: 5 }
 
 console.log(schema.makeSync({}))
 // { a: -1 }
 ```
 
-### Effectful Defaults
+The function passed to `withConstructorDefault` will be executed each time a default value is needed.
 
-Defaults can be effectful as long as the environment is `never`.
+**Example** (Re-executing the default function)
 
-**Example** (Async default)
+```ts
+import { Option, Schema } from "effect"
+
+const schema = Schema.Struct({
+  a: Schema.Date.pipe(
+    Schema.withConstructorDefault(() => Option.some(new Date()))
+  )
+})
+
+console.log(schema.makeSync({}))
+// { a: 2025-05-19T16:46:10.912Z }
+
+console.log(schema.makeSync({}))
+// { a: 2025-05-19T16:46:10.913Z }
+```
+
+If the function returns `Option.none()`, it means no default value was provided, and the field is considered missing.
+
+**Example** (Returning `None` to skip a default)
+
+```ts
+import { Option, Schema } from "effect"
+
+const schema = Schema.Struct({
+  a: Schema.Date.pipe(
+    Schema.withConstructorDefault(() => {
+      const d = new Date()
+      if (d.getTime() % 2 === 0) {
+        // Provide a default value
+        return Option.some(d)
+      }
+      // Skip the default
+      return Option.none()
+    })
+  )
+})
+
+try {
+  console.log(schema.makeSync({}))
+} catch (error) {
+  console.error(error)
+}
+// Error: makeSync failure
+
+try {
+  console.log(schema.makeSync({}))
+  // { a: 2025-05-19T16:46:10.913Z }
+} catch (error) {
+  console.error(error)
+}
+// { a: 2025-05-19T16:48:41.948Z }
+```
+
+#### Effectful Defaults
+
+Default values can also be computed using effects, as long as the environment is `never`.
+
+**Example** (Using an effect to provide a default)
 
 ```ts
 import { Effect, Option, Schema, SchemaResult } from "effect"
 
 const schema = Schema.Struct({
   a: Schema.Number.pipe(
-    Schema.constructorDefault(() =>
+    Schema.withConstructorDefault(() =>
       Effect.gen(function* () {
         yield* Effect.sleep(100)
         return Option.some(-1)
@@ -303,11 +365,12 @@ SchemaResult.asEffect(schema.make({})).pipe(Effect.runPromise).then(console.log)
 // { a: -1 }
 ```
 
-**Example** (Default from optional service)
+**Example** (Providing a default from an optional service)
 
 ```ts
 import { Context, Effect, Option, Schema, SchemaResult } from "effect"
 
+// Define a service that may provide a default value
 class ConstructorService extends Context.Tag<
   ConstructorService,
   { defaultValue: Effect.Effect<number> }
@@ -315,7 +378,7 @@ class ConstructorService extends Context.Tag<
 
 const schema = Schema.Struct({
   a: Schema.Number.pipe(
-    Schema.constructorDefault(() =>
+    Schema.withConstructorDefault(() =>
       Effect.gen(function* () {
         yield* Effect.sleep(100)
         const oservice = yield* Effect.serviceOption(ConstructorService)
@@ -342,9 +405,9 @@ SchemaResult.asEffect(schema.make({}))
 
 ### Nested Constructor Default Values
 
-Default values can be nested, and will be evaluated in order.
+Default values can be nested inside composed schemas. In this case, inner defaults are resolved first.
 
-**Example** (Nested schema with defaults)
+**Example** (Nested default values)
 
 ```ts
 import { Result, Schema } from "effect"
@@ -352,9 +415,9 @@ import { Result, Schema } from "effect"
 const schema = Schema.Struct({
   a: Schema.Struct({
     b: Schema.Number.pipe(
-      Schema.constructorDefault(() => Result.succeedSome(-1))
+      Schema.withConstructorDefault(() => Result.succeedSome(-1))
     )
-  }).pipe(Schema.constructorDefault(() => Result.succeedSome({})))
+  }).pipe(Schema.withConstructorDefault(() => Result.succeedSome({})))
 })
 
 console.log(schema.makeSync({}))
@@ -672,7 +735,7 @@ import { Option, Predicate, Schema, SchemaGetter } from "effect"
 export const schema = Schema.Struct({
   a: Schema.optional(Schema.NumberFromString).pipe(
     Schema.decodeTo(Schema.optionalKey(Schema.Number), {
-      decode: SchemaGetter.transformOption(
+      decode: SchemaGetter.transformOptional(
         Option.filter(Predicate.isNotUndefined) // omit undefined
       ),
       encode: SchemaGetter.passthrough()
@@ -719,71 +782,40 @@ type Type = {
 export type Type = typeof schema.Type
 ```
 
-### Default Values
+### Decoding / Encoding with Default Values
 
-#### Exact Optional Property
+**Example**
 
 ```ts
 import { Schema, SchemaGetter } from "effect"
 
-const Product = Schema.Struct({
-  quantity: Schema.optionalKey(Schema.NumberFromString).pipe(
+const schema = Schema.Struct({
+  a: Schema.optional(Schema.FiniteFromString).pipe(
     Schema.decodeTo(Schema.Number, {
-      decode: SchemaGetter.default(() => 1),
+      decode: SchemaGetter.withDefault(() => 1),
       encode: SchemaGetter.passthrough()
     })
   )
 })
 
-//     ┌─── { readonly quantity?: string; }
+//     ┌─── { readonly a?: string | undefined; }
 //     ▼
-type Encoded = typeof Product.Encoded
+export type Encoded = typeof schema.Encoded
 
-//     ┌─── { readonly quantity: number; }
+//     ┌─── { readonly a: number; }
 //     ▼
-type Type = typeof Product.Type
+export type Type = typeof schema.Type
 
 // Decoding examples with default applied
 
-console.log(Schema.decodeUnknownSync(Product)({}))
-// Output: { quantity: 1 }
+console.log(Schema.decodeUnknownSync(schema)({}))
+// Output: { a: 1 }
 
-console.log(Schema.decodeUnknownSync(Product)({ quantity: "2" }))
-// Output: { quantity: 2 }
-```
+console.log(Schema.decodeUnknownSync(schema)({ a: undefined }))
+// Output: { a: 1 }
 
-#### Optional Property
-
-```ts
-import { Schema, SchemaGetter } from "effect"
-
-const Product = Schema.Struct({
-  quantity: Schema.optional(Schema.NumberFromString).pipe(
-    Schema.decodeTo(Schema.Number, {
-      decode: SchemaGetter.default(() => 1),
-      encode: SchemaGetter.passthrough()
-    })
-  )
-})
-
-//     ┌─── { readonly quantity?: string | undefined; }
-//     ▼
-export type Encoded = typeof Product.Encoded
-
-//     ┌─── { readonly quantity: number; }
-//     ▼
-export type Type = typeof Product.Type
-
-// Decoding examples with default applied
-
-console.log(Schema.decodeUnknownSync(Product)({}))
-// Output: { quantity: 1 }
-
-console.log(Schema.decodeUnknownSync(Product)({ quantity: undefined }))
-// Output: { quantity: 1 }
-
-console.log(Schema.decodeUnknownSync(Product)({ quantity: "2" }))
-// Output: { quantity: 2 }
+console.log(Schema.decodeUnknownSync(schema)({ a: "2" }))
+// Output: { a: 2 }
 ```
 
 #### Exact Optional Property with Nullability
@@ -791,10 +823,10 @@ console.log(Schema.decodeUnknownSync(Product)({ quantity: "2" }))
 ```ts
 import { Option, Predicate, Schema, SchemaGetter } from "effect"
 
-const Product = Schema.Struct({
-  quantity: Schema.optionalKey(Schema.NullOr(Schema.NumberFromString)).pipe(
+const schema = Schema.Struct({
+  a: Schema.optionalKey(Schema.NullOr(Schema.FiniteFromString)).pipe(
     Schema.decodeTo(Schema.Number, {
-      decode: SchemaGetter.transformOption((oe) =>
+      decode: SchemaGetter.transformOptional((oe) =>
         oe.pipe(
           Option.filter(Predicate.isNotNull),
           Option.orElseSome(() => 1)
@@ -805,25 +837,25 @@ const Product = Schema.Struct({
   )
 })
 
-//     ┌─── { readonly quantity?: string | null | undefined; }
+//     ┌─── { readonly a?: string | null | undefined; }
 //     ▼
-export type Encoded = typeof Product.Encoded
+export type Encoded = typeof schema.Encoded
 
-//     ┌─── { readonly quantity: number; }
+//     ┌─── { readonly a: number; }
 //     ▼
-export type Type = typeof Product.Type
+export type Type = typeof schema.Type
 
-console.log(Schema.decodeUnknownSync(Product)({}))
-// Output: { quantity: 1 }
+console.log(Schema.decodeUnknownSync(schema)({}))
+// Output: { a: 1 }
 
 // console.log(Schema.decodeUnknownSync(Product)({ quantity: undefined }))
 // throws
 
-console.log(Schema.decodeUnknownSync(Product)({ quantity: null }))
-// Output: { quantity: 1 }
+console.log(Schema.decodeUnknownSync(schema)({ a: null }))
+// Output: { a: 1 }
 
-console.log(Schema.decodeUnknownSync(Product)({ quantity: "2" }))
-// Output: { quantity: 2 }
+console.log(Schema.decodeUnknownSync(schema)({ a: "2" }))
+// Output: { a: 2 }
 ```
 
 #### Optional Property with Nullability
@@ -831,10 +863,10 @@ console.log(Schema.decodeUnknownSync(Product)({ quantity: "2" }))
 ```ts
 import { Option, Predicate, Schema, SchemaGetter } from "effect"
 
-const Product = Schema.Struct({
-  quantity: Schema.optional(Schema.NullOr(Schema.NumberFromString)).pipe(
+const schema = Schema.Struct({
+  a: Schema.optional(Schema.NullOr(Schema.FiniteFromString)).pipe(
     Schema.decodeTo(Schema.Number, {
-      decode: SchemaGetter.transformOption((oe) =>
+      decode: SchemaGetter.transformOptional((oe) =>
         oe.pipe(
           Option.filter(Predicate.isNotNullish),
           Option.orElseSome(() => 1)
@@ -845,25 +877,25 @@ const Product = Schema.Struct({
   )
 })
 
-//     ┌─── { readonly quantity?: string | null | undefined; }
+//     ┌─── { readonly a?: string | null | undefined; }
 //     ▼
-export type Encoded = typeof Product.Encoded
+export type Encoded = typeof schema.Encoded
 
-//     ┌─── { readonly quantity: number; }
+//     ┌─── { readonly a: number; }
 //     ▼
-export type Type = typeof Product.Type
+export type Type = typeof schema.Type
 
-console.log(Schema.decodeUnknownSync(Product)({}))
-// Output: { quantity: 1 }
+console.log(Schema.decodeUnknownSync(schema)({}))
+// Output: { a: 1 }
 
-console.log(Schema.decodeUnknownSync(Product)({ quantity: undefined }))
-// Output: { quantity: 1 }
+console.log(Schema.decodeUnknownSync(schema)({ a: undefined }))
+// Output: { a: 1 }
 
-console.log(Schema.decodeUnknownSync(Product)({ quantity: null }))
-// Output: { quantity: 1 }
+console.log(Schema.decodeUnknownSync(schema)({ a: null }))
+// Output: { a: 1 }
 
-console.log(Schema.decodeUnknownSync(Product)({ quantity: "2" }))
-// Output: { quantity: 2 }
+console.log(Schema.decodeUnknownSync(schema)({ a: "2" }))
+// Output: { a: 2 }
 ```
 
 ### Optional Fields as Options
@@ -877,7 +909,7 @@ const Product = Schema.Struct({
   quantity: Schema.optionalKey(Schema.NumberFromString).pipe(
     Schema.decodeTo(
       Schema.Option(Schema.Number),
-      SchemaTransformation.transformOption({
+      SchemaTransformation.transformOptional({
         decode: Option.some,
         encode: Option.flatten
       })
@@ -918,7 +950,7 @@ const Product = Schema.Struct({
   quantity: Schema.optional(Schema.NumberFromString).pipe(
     Schema.decodeTo(
       Schema.Option(Schema.Number),
-      SchemaTransformation.transformOption({
+      SchemaTransformation.transformOptional({
         decode: (oe) =>
           oe.pipe(Option.filter(Predicate.isNotUndefined), Option.some),
         encode: Option.flatten
@@ -960,7 +992,7 @@ const Product = Schema.Struct({
   quantity: Schema.optionalKey(Schema.NullOr(Schema.NumberFromString)).pipe(
     Schema.decodeTo(
       Schema.Option(Schema.Number),
-      SchemaTransformation.transformOption({
+      SchemaTransformation.transformOptional({
         decode: (oe) =>
           oe.pipe(Option.filter(Predicate.isNotNull), Option.some),
         encode: Option.flatten
@@ -999,7 +1031,7 @@ const Product = Schema.Struct({
   quantity: Schema.optional(Schema.NullOr(Schema.NumberFromString)).pipe(
     Schema.decodeTo(
       Schema.Option(Schema.Number),
-      SchemaTransformation.transformOption({
+      SchemaTransformation.transformOptional({
         decode: (oe) =>
           oe.pipe(Option.filter(Predicate.isNotNullish), Option.some),
         encode: Option.flatten

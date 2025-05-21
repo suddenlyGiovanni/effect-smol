@@ -100,7 +100,8 @@ export class Context {
   constructor(
     readonly isOptional: boolean,
     readonly isReadonly: boolean,
-    readonly constructorDefault: Transformation | undefined
+    /** Used for constructor defaults */
+    readonly encoding: Encoding | undefined
   ) {}
 }
 
@@ -152,7 +153,7 @@ export class Declaration extends Extensions {
     readonly typeParameters: ReadonlyArray<AST>,
     readonly run: (
       typeParameters: ReadonlyArray<AST>
-    ) => (u: unknown, self: Declaration, options: ParseOptions) => SchemaResult.SchemaResult<any, any>,
+    ) => (input: unknown, self: Declaration, options: ParseOptions) => SchemaResult.SchemaResult<any, any>,
     annotations: Annotations | undefined,
     checks: Checks | undefined,
     encoding: Encoding | undefined,
@@ -241,7 +242,7 @@ export class VoidKeyword extends Concrete {
   readonly _tag = "VoidKeyword"
   /** @internal */
   parser() {
-    return fromPredicate(this, Predicate.isUnknown)
+    return fromPredicate(this, Predicate.isUndefined)
   }
 }
 
@@ -1136,27 +1137,21 @@ export function appendEncodedChecks<A extends AST>(ast: A, checks: Checks): A {
 
 /** @internal */
 export function decodingMiddleware(ast: AST, middleware: Middleware): AST {
-  return appendTransformation(ast, middleware, typeAST(ast), undefined)
+  return appendTransformation(ast, middleware, typeAST(ast))
 }
 
 /** @internal */
 export function encodingMiddleware(ast: AST, middleware: Middleware): AST {
-  return appendTransformation(encodedAST(ast), middleware, ast, undefined)
+  return appendTransformation(encodedAST(ast), middleware, ast)
 }
 
 function appendTransformation<A extends AST>(
   from: AST,
   transformation: Transformation | Middleware,
-  to: A,
-  annotations: Annotations | undefined
+  to: A
 ): A {
   const link = new Link(from, transformation)
-  const out = replaceEncoding(to, to.encoding ? [...to.encoding, link] : [link])
-  if (annotations) {
-    return annotate(out, annotations)
-  } else {
-    return out
-  }
+  return replaceEncoding(to, to.encoding ? [...to.encoding, link] : [link])
 }
 
 /**
@@ -1213,7 +1208,7 @@ export function optionalKey<A extends AST>(ast: A): A {
     new Context(
       true,
       ast.context.isReadonly ?? true,
-      ast.context.constructorDefault
+      ast.context.encoding
     ) :
     new Context(true, true, undefined)
   return applyEncoded(replaceContext(ast, context), (ast) => optionalKey(ast))
@@ -1225,38 +1220,37 @@ export function mutableKey<A extends AST>(ast: A): A {
     new Context(
       ast.context.isOptional ?? false,
       false,
-      ast.context.constructorDefault
+      ast.context.encoding
     ) :
     new Context(false, false, undefined)
   return applyEncoded(replaceContext(ast, context), (ast) => mutableKey(ast))
 }
 
 /** @internal */
-export function setConstructorDefault<A extends AST>(
+export function withConstructorDefault<A extends AST>(
   ast: A,
-  constructorDefault: Transformation
+  transformation: Transformation
 ): A {
-  if (ast.context) {
-    return replaceContext(ast, new Context(ast.context.isOptional, ast.context.isReadonly, constructorDefault))
-  } else {
-    return replaceContext(ast, new Context(false, true, constructorDefault))
-  }
+  const encoding: Encoding = [new Link(unknownKeyword, transformation)]
+  const context = ast.context ?
+    new Context(ast.context.isOptional, ast.context.isReadonly, encoding) :
+    new Context(false, true, encoding)
+  return replaceContext(ast, context)
 }
 
 /** @internal */
 export function decodeTo(
   from: AST,
   to: AST,
-  transformation: Transformation,
-  annotations: Annotations | undefined
+  transformation: Transformation
 ): AST {
-  return appendTransformation(from, transformation, to, annotations)
+  return appendTransformation(from, transformation, to)
 }
 
 /** @internal */
 export function brand<A extends AST>(from: A, brand: string | symbol): A {
-  const brands: any = from.annotations?.brands ?? []
-  return annotate(from, { brands: [...brands, brand] })
+  const brands: any = from.annotations?.brands ?? new Set()
+  return annotate(from, { brands: brands.add(brand) })
 }
 
 // -------------------------------------------------------------------------------------

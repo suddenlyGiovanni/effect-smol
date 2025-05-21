@@ -1,15 +1,5 @@
 import type { Brand, Context } from "effect"
-import {
-  Effect,
-  hole,
-  Option,
-  Result,
-  Schema,
-  SchemaAST,
-  SchemaCheck,
-  SchemaGetter,
-  SchemaTransformation
-} from "effect"
+import { Effect, hole, Option, Schema, SchemaAST, SchemaCheck, SchemaGetter, SchemaTransformation } from "effect"
 import { describe, expect, it, when } from "tstyche"
 
 const revealClass = <Self, S extends Schema.Struct<Schema.Struct.Fields>, Inherited>(
@@ -357,9 +347,9 @@ describe("Schema", () => {
   })
 
   describe("flip", () => {
-    it("Struct & setConstructorDefault", () => {
+    it("Struct & withConstructorDefault", () => {
       const schema = Schema.Struct({
-        a: Schema.String.pipe(Schema.constructorDefault(() => Result.succeedSome("c")))
+        a: Schema.String.pipe(Schema.withConstructorDefault(() => Option.some("c")))
       })
       expect(schema.makeSync).type.toBe<
         (input: { readonly a?: string }, options?: Schema.MakeOptions | undefined) => { readonly a: string }
@@ -398,7 +388,7 @@ describe("Schema", () => {
   it("withConstructorDefault", () => {
     const service = hole<Context.Tag<"Tag", "-">>()
 
-    const schema = Schema.String.pipe(Schema.constructorDefault(() =>
+    const schema = Schema.String.pipe(Schema.withConstructorDefault(() =>
       Effect.gen(function*() {
         yield* Effect.serviceOption(service)
         return Option.some("some-result")
@@ -855,5 +845,13 @@ describe("Schema", () => {
         Schema.brand<Schema.brand<Schema.Number, "MyBrand">, "MyBrand2">
       >()
     })
+  })
+
+  it("encodedCodec", () => {
+    const schema = Schema.encodedCodec(Schema.FiniteFromString)
+    expect(Schema.revealCodec(schema)).type.toBe<
+      Schema.Codec<string, string, never, never>
+    >()
+    expect(schema.makeSync).type.toBe<(input: string, options?: Schema.MakeOptions | undefined) => string>()
   })
 })
