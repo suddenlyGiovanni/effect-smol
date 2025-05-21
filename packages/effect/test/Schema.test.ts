@@ -677,6 +677,11 @@ describe("Schema", () => {
   })
 
   describe("ReadonlyArray", () => {
+    it("should expose the item schema", () => {
+      const schema = Schema.ReadonlyArray(Schema.String)
+      strictEqual(schema.schema, Schema.String)
+    })
+
     it("readonly string[]", async () => {
       const schema = Schema.ReadonlyArray(Schema.String)
 
@@ -699,6 +704,40 @@ describe("Schema", () => {
         schema,
         ["a", 1] as any,
         `ReadonlyArray<string>
+└─ [1]
+   └─ Expected string, actual 1`
+      )
+    })
+  })
+
+  describe("Array", () => {
+    it("should expose the item schema", () => {
+      const schema = Schema.Array(Schema.String)
+      strictEqual(schema.schema, Schema.String)
+    })
+
+    it("string[]", async () => {
+      const schema = Schema.Array(Schema.String)
+
+      strictEqual(SchemaAST.format(schema.ast), `Array<string>`)
+
+      await assertions.make.succeed(schema, ["a", "b"])
+      assertions.makeSync.succeed(schema, ["a", "b"])
+
+      await assertions.decoding.succeed(schema, ["a", "b"])
+      await assertions.decoding.fail(
+        schema,
+        ["a", 1],
+        `Array<string>
+└─ [1]
+   └─ Expected string, actual 1`
+      )
+
+      await assertions.encoding.succeed(schema, ["a", "b"])
+      await assertions.encoding.fail(
+        schema,
+        ["a", 1] as any,
+        `Array<string>
 └─ [1]
    └─ Expected string, actual 1`
       )
@@ -1864,6 +1903,24 @@ describe("Schema", () => {
 
       await assertions.decoding.succeed(schema, {})
       await assertions.encoding.succeed(schema, {}, {})
+    })
+
+    it("should pass the input to the default value", () => {
+      const schema = Schema.Struct({
+        a: Schema.String.pipe(
+          Schema.UndefinedOr,
+          Schema.withConstructorDefault((o) => {
+            if (Option.isSome(o)) {
+              return Option.some("undefined-default")
+            }
+            return Option.some("otherwise-default")
+          })
+        )
+      })
+
+      assertions.makeSync.succeed(schema, { a: "a" })
+      assertions.makeSync.succeed(schema, {}, { a: "otherwise-default" })
+      assertions.makeSync.succeed(schema, { a: undefined }, { a: "undefined-default" })
     })
 
     it("Struct & Some", () => {
@@ -3416,6 +3473,14 @@ describe("Schema", () => {
 
       await assertions.encoding.succeed(schema, { a: Option.some(1) }, { expected: { a: "1" } })
       await assertions.encoding.succeed(schema, { a: Option.none() }, { expected: {} })
+    })
+  })
+
+  describe("mutable", () => {
+    it("Tuple", () => {
+      const schema = Schema.mutable(Schema.ReadonlyTuple([Schema.String, Schema.FiniteFromString]))
+
+      strictEqual(SchemaAST.format(schema.ast), `[string, number & finite <-> string]`)
     })
   })
 })

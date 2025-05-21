@@ -33,6 +33,11 @@ import * as Struct_ from "./Struct.js"
 export type Simplify<T> = { [K in keyof T]: T[K] } & {}
 
 /**
+ * @since 4.0.0
+ */
+export type Mutable<T> = { -readonly [K in keyof T]: T[K] } & {}
+
+/**
  * Used in {@link extend}.
  *
  * @category Type-Level Programming
@@ -366,9 +371,9 @@ class make$<S extends Top> extends Bottom$<
   }
 }
 
-class WithSchema$<S extends Top, Result extends Top> extends make$<Result> {
+class SchemaMemento$<S extends Top, Result extends Top> extends make$<Result> {
   constructor(ast: SchemaAST.AST, readonly schema: S) {
-    super(ast, (ast) => new WithSchema$(ast, this.schema))
+    super(ast, (ast) => new SchemaMemento$(ast, this.schema))
   }
 }
 
@@ -406,7 +411,7 @@ export interface optionalKey<S extends Top> extends make<S> {
  * @since 4.0.0
  */
 export function optionalKey<S extends Top>(schema: S): optionalKey<S> {
-  return new WithSchema$<S, optionalKey<S>>(SchemaAST.optionalKey(schema.ast), schema)
+  return new SchemaMemento$<S, optionalKey<S>>(SchemaAST.optionalKey(schema.ast), schema)
 }
 
 /**
@@ -432,7 +437,7 @@ export interface mutableKey<S extends Top> extends make<S> {
  * @since 4.0.0
  */
 export function mutableKey<S extends Top>(schema: S): mutableKey<S> {
-  return new WithSchema$<S, mutableKey<S>>(SchemaAST.mutableKey(schema.ast), schema)
+  return new SchemaMemento$<S, mutableKey<S>>(SchemaAST.mutableKey(schema.ast), schema)
 }
 
 /**
@@ -1427,25 +1432,62 @@ export interface ReadonlyArray$<S extends Top> extends
     ReadonlyArray<S["~type.make.in"]>
   >
 {
-  readonly item: S
+  readonly schema: S
 }
 
-class ReadonlyArray$$<S extends Top> extends make$<ReadonlyArray$<S>> implements ReadonlyArray$<S> {
-  readonly item: S
-  constructor(ast: SchemaAST.TupleType, item: S) {
-    super(ast, (ast) => new ReadonlyArray$$(ast, item))
-    this.item = item
-  }
+function getArrayAST(item: SchemaAST.AST, isReadonly: boolean): SchemaAST.TupleType {
+  return new SchemaAST.TupleType(isReadonly, [], [item], undefined, undefined, undefined, undefined)
 }
 
 /**
  * @since 4.0.0
  */
 export function ReadonlyArray<S extends Top>(item: S): ReadonlyArray$<S> {
-  return new ReadonlyArray$$(
-    new SchemaAST.TupleType(true, [], [item.ast], undefined, undefined, undefined, undefined),
-    item
-  )
+  return new SchemaMemento$<S, ReadonlyArray$<S>>(getArrayAST(item.ast, true), item)
+}
+
+/**
+ * @category Api interface
+ * @since 4.0.0
+ */
+export interface Array$<S extends Top> extends
+  Bottom<
+    Array<S["Type"]>,
+    Array<S["Encoded"]>,
+    S["DecodingContext"],
+    S["EncodingContext"],
+    SchemaAST.TupleType,
+    Array$<S>,
+    SchemaAnnotations.Bottom<ReadonlyArray<S["Type"]>>,
+    ReadonlyArray<S["~type.make.in"]>
+  >
+{
+  readonly schema: S
+}
+
+/**
+ * @since 4.0.0
+ */
+export function Array<S extends Top>(item: S): Array$<S> {
+  return new SchemaMemento$<S, Array$<S>>(getArrayAST(item.ast, false), item)
+}
+
+/**
+ * @since 4.0.0
+ */
+export interface mutable<S extends Top> extends make<S> {
+  // we keep "~annotate.in" and "~type.make.in" as they are because they are contravariant
+  readonly "Type": Mutable<S["Type"]>
+  readonly "Encoded": Mutable<S["Encoded"]>
+  readonly "~rebuild.out": mutable<S>
+  readonly schema: S
+}
+
+/**
+ * @since 4.0.0
+ */
+export function mutable<S extends Top>(self: S): mutable<S> {
+  return new SchemaMemento$<S, mutable<S>>(SchemaAST.mutable(self.ast), self)
 }
 
 /**
@@ -1662,7 +1704,7 @@ export function decodingMiddleware<S extends Top, RD>(
   ) => SchemaResult.SchemaResult<O.Option<S["Type"]>, RD>
 ) {
   return (self: S): decodingMiddleware<S, RD> => {
-    return new WithSchema$<S, decodingMiddleware<S, RD>>(
+    return new SchemaMemento$<S, decodingMiddleware<S, RD>>(
       SchemaAST.decodingMiddleware(self.ast, new SchemaTransformation.SchemaMiddleware(decode, identity)),
       self
     )
@@ -1690,7 +1732,7 @@ export function encodingMiddleware<S extends Top, RE>(
   ) => SchemaResult.SchemaResult<O.Option<S["Type"]>, RE>
 ) {
   return (self: S): encodingMiddleware<S, RE> => {
-    return new WithSchema$<S, encodingMiddleware<S, RE>>(
+    return new SchemaMemento$<S, encodingMiddleware<S, RE>>(
       SchemaAST.encodingMiddleware(self.ast, new SchemaTransformation.SchemaMiddleware(identity, encode)),
       self
     )
@@ -1801,7 +1843,7 @@ export interface brand<S extends Top, B extends string | symbol> extends make<S>
  */
 export function brand<B extends string | symbol>(brand: B) {
   return <S extends Top>(self: S): brand<S, B> => {
-    return new WithSchema$<S, brand<S, B>>(SchemaAST.brand(self.ast, brand), self)
+    return new SchemaMemento$<S, brand<S, B>>(SchemaAST.brand(self.ast, brand), self)
   }
 }
 
@@ -1891,7 +1933,9 @@ export interface withConstructorDefault<S extends Top> extends make<S> {
  * @since 4.0.0
  */
 export function withConstructorDefault<S extends Top & { readonly "~type.default": "no-constructor-default" }>(
-  defaultValue: () => O.Option<S["~type.make.in"]> | Effect.Effect<O.Option<S["~type.make.in"]>>
+  defaultValue: (
+    input: O.Option<undefined>
+  ) => O.Option<S["~type.make.in"]> | Effect.Effect<O.Option<S["~type.make.in"]>>
 ) {
   return (self: S): withConstructorDefault<S> => {
     return make<withConstructorDefault<S>>(SchemaAST.withConstructorDefault(
@@ -1899,7 +1943,7 @@ export function withConstructorDefault<S extends Top & { readonly "~type.default
       new SchemaTransformation.SchemaTransformation(
         new SchemaGetter.SchemaGetter((o) => {
           if (O.isNone(O.filter(o, Predicate.isNotUndefined))) {
-            const dv = defaultValue()
+            const dv = defaultValue(o)
             return Effect.isEffect(dv) ? dv : Result.ok(dv)
           } else {
             return Result.ok(o)
@@ -2059,6 +2103,7 @@ export function Opaque<Self>() {
 }
 
 /**
+ * @category Api interface
  * @since 4.0.0
  */
 export interface instanceOf<C> extends declare<C, C, readonly []> {}
@@ -2109,14 +2154,22 @@ export const URL = instanceOf({
 })
 
 /**
+ * @category Api interface
  * @since 4.0.0
  */
-export const Date = instanceOf({
+export interface Date extends instanceOf<globalThis.Date> {
+  readonly "~rebuild.out": Date
+}
+
+/**
+ * @since 4.0.0
+ */
+export const Date: Date = instanceOf({
   constructor: globalThis.Date,
   annotations: {
     title: "Date",
     defaultJsonSerializer: () =>
-      link<Date>()(
+      link<globalThis.Date>()(
         String,
         SchemaTransformation.transform({
           decode: (s) => new globalThis.Date(s),
@@ -2127,14 +2180,30 @@ export const Date = instanceOf({
 })
 
 /**
+ * @category Api interface
  * @since 4.0.0
  */
-export const UnknownFromJsonString = String.pipe(
+export interface UnknownFromJsonString extends decodeTo<Unknown, String, never, never> {
+  readonly "~rebuild.out": UnknownFromJsonString
+}
+
+/**
+ * @since 4.0.0
+ */
+export const UnknownFromJsonString: UnknownFromJsonString = String.pipe(
   decodeTo(
     Unknown,
     SchemaTransformation.json()
   )
 )
+
+/**
+ * @category Api interface
+ * @since 4.0.0
+ */
+export interface Finite extends Number {
+  readonly "~rebuild.out": Finite
+}
 
 /**
  * All finite numbers, excluding `NaN`, `Infinity`, and `-Infinity`.
@@ -2144,9 +2213,17 @@ export const UnknownFromJsonString = String.pipe(
 export const Finite = Number.pipe(check(SchemaCheck.finite))
 
 /**
+ * @category Api interface
  * @since 4.0.0
  */
-export const FiniteFromString = String.pipe(decodeTo(
+export interface FiniteFromString extends decodeTo<Number, String, never, never> {
+  readonly "~rebuild.out": FiniteFromString
+}
+
+/**
+ * @since 4.0.0
+ */
+export const FiniteFromString: FiniteFromString = String.pipe(decodeTo(
   Finite,
   {
     decode: SchemaGetter.Number,
