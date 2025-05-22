@@ -9,8 +9,8 @@ const revealClass = <Self, S extends Schema.Struct<Schema.Struct.Fields>, Inheri
 const FiniteFromString = Schema.String.pipe(Schema.decodeTo(
   Schema.Finite,
   new SchemaTransformation.SchemaTransformation(
-    SchemaGetter.Number,
-    SchemaGetter.String
+    SchemaGetter.Number(),
+    SchemaGetter.String()
   )
 ))
 
@@ -18,8 +18,8 @@ const NumberFromString = Schema.String.pipe(
   Schema.decodeTo(
     Schema.Number,
     new SchemaTransformation.SchemaTransformation(
-      SchemaGetter.Number,
-      SchemaGetter.String
+      SchemaGetter.Number(),
+      SchemaGetter.String()
     )
   )
 )
@@ -634,12 +634,12 @@ describe("Schema", () => {
     })
   })
 
-  describe("compose", () => {
+  describe("passthrough", () => {
     it("E = T", () => {
       Schema.String.pipe(
         Schema.decodeTo(
           Schema.String.pipe(Schema.check(SchemaCheck.nonEmpty)),
-          SchemaTransformation.compose()
+          SchemaTransformation.passthrough()
         )
       )
     })
@@ -648,14 +648,14 @@ describe("Schema", () => {
       when(Schema.String.pipe).isCalledWith(
         expect(Schema.decodeTo).type.not.toBeCallableWith(
           Schema.Number,
-          SchemaTransformation.compose()
+          SchemaTransformation.passthrough()
         )
       )
 
       Schema.String.pipe(
         Schema.decodeTo(
           Schema.Number,
-          SchemaTransformation.compose({ strict: false })
+          SchemaTransformation.passthrough({ strict: false })
         )
       )
     })
@@ -664,7 +664,7 @@ describe("Schema", () => {
       Schema.String.pipe(
         Schema.decodeTo(
           Schema.UndefinedOr(Schema.String),
-          SchemaTransformation.composeSupertype()
+          SchemaTransformation.passthroughSubtype()
         )
       )
     })
@@ -673,7 +673,7 @@ describe("Schema", () => {
       Schema.UndefinedOr(Schema.String).pipe(
         Schema.decodeTo(
           Schema.String,
-          SchemaTransformation.composeSubtype()
+          SchemaTransformation.passthroughSupertype()
         )
       )
     })
@@ -965,5 +965,83 @@ describe("Schema", () => {
         (input: readonly [string, number], options?: Schema.MakeOptions | undefined) => [string, number]
       >()
     })
+  })
+
+  it("decodeTo as composition", () => {
+    const From = Schema.Struct({
+      a: Schema.String,
+      b: Schema.FiniteFromString
+    })
+
+    const To = Schema.Struct({
+      a: Schema.FiniteFromString,
+      b: Schema.UndefinedOr(Schema.Number)
+    })
+
+    const schema = From.pipe(Schema.decodeTo(To))
+
+    expect(Schema.revealCodec(schema)).type.toBe<
+      Schema.Codec<
+        { readonly a: number; readonly b: number | undefined },
+        { readonly a: string; readonly b: string },
+        never,
+        never
+      >
+    >()
+    expect(schema).type.toBe<
+      Schema.compose<
+        Schema.Struct<
+          { readonly a: Schema.FiniteFromString; readonly b: Schema.Union<readonly [Schema.Number, Schema.Undefined]> }
+        >,
+        Schema.Struct<{ readonly a: Schema.String; readonly b: Schema.FiniteFromString }>
+      >
+    >()
+    expect(schema.annotate({})).type.toBe<
+      Schema.compose<
+        Schema.Struct<
+          { readonly a: Schema.FiniteFromString; readonly b: Schema.Union<readonly [Schema.Number, Schema.Undefined]> }
+        >,
+        Schema.Struct<{ readonly a: Schema.String; readonly b: Schema.FiniteFromString }>
+      >
+    >()
+  })
+
+  it("encodeTo as composition", () => {
+    const From = Schema.Struct({
+      a: Schema.String,
+      b: Schema.FiniteFromString
+    })
+
+    const To = Schema.Struct({
+      a: Schema.FiniteFromString,
+      b: Schema.UndefinedOr(Schema.Number)
+    })
+
+    const schema = To.pipe(Schema.encodeTo(From))
+
+    expect(Schema.revealCodec(schema)).type.toBe<
+      Schema.Codec<
+        { readonly a: number; readonly b: number | undefined },
+        { readonly a: string; readonly b: string },
+        never,
+        never
+      >
+    >()
+    expect(schema).type.toBe<
+      Schema.compose<
+        Schema.Struct<
+          { readonly a: Schema.FiniteFromString; readonly b: Schema.Union<readonly [Schema.Number, Schema.Undefined]> }
+        >,
+        Schema.Struct<{ readonly a: Schema.String; readonly b: Schema.FiniteFromString }>
+      >
+    >()
+    expect(schema.annotate({})).type.toBe<
+      Schema.compose<
+        Schema.Struct<
+          { readonly a: Schema.FiniteFromString; readonly b: Schema.Union<readonly [Schema.Number, Schema.Undefined]> }
+        >,
+        Schema.Struct<{ readonly a: Schema.String; readonly b: Schema.FiniteFromString }>
+      >
+    >()
   })
 })

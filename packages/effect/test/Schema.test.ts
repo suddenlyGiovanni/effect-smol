@@ -12,8 +12,8 @@ import {
   SchemaCheck,
   SchemaGetter,
   SchemaIssue,
-  SchemaParser,
   SchemaResult,
+  SchemaToParser,
   SchemaTransformation
 } from "effect"
 import { describe, it } from "vitest"
@@ -27,12 +27,11 @@ const assertions = Util.assertions({
   fail
 })
 
-const Trim = Schema.String.pipe(Schema.decodeTo(Schema.String, SchemaTransformation.trim))
+const Trim = Schema.String.pipe(Schema.decode(SchemaTransformation.trim()))
 
 const SnakeToCamel = Schema.String.pipe(
-  Schema.decodeTo(
-    Schema.String,
-    SchemaTransformation.snakeToCamel
+  Schema.decode(
+    SchemaTransformation.snakeToCamel()
   )
 )
 
@@ -40,8 +39,8 @@ const NumberFromString = Schema.String.pipe(
   Schema.decodeTo(
     Schema.Number,
     {
-      decode: SchemaGetter.Number,
-      encode: SchemaGetter.String
+      decode: SchemaGetter.Number(),
+      encode: SchemaGetter.String()
     }
   )
 )
@@ -1371,7 +1370,7 @@ describe("Schema", () => {
 
     describe("String transformations", () => {
       it("trim", async () => {
-        const schema = Schema.String.pipe(Schema.decodeTo(Schema.String, SchemaTransformation.trim))
+        const schema = Schema.String.pipe(Schema.decodeTo(Schema.String, SchemaTransformation.trim()))
 
         strictEqual(SchemaAST.format(schema.ast), `string <-> string`)
 
@@ -1446,7 +1445,7 @@ describe("Schema", () => {
       const schema = Schema.String.pipe(
         Schema.decodeTo(
           Schema.FiniteFromString,
-          SchemaTransformation.trim
+          SchemaTransformation.trim()
         )
       )
 
@@ -1458,7 +1457,7 @@ describe("Schema", () => {
         a: Schema.String.pipe(
           Schema.decodeTo(
             Schema.String,
-            SchemaTransformation.compose()
+            SchemaTransformation.passthrough()
           )
         )
       })
@@ -1537,7 +1536,7 @@ describe("Schema", () => {
     it("double transformation", async () => {
       const schema = Trim.pipe(Schema.decodeTo(
         Schema.FiniteFromString,
-        SchemaTransformation.compose()
+        SchemaTransformation.passthrough()
       ))
       await assertions.decoding.succeed(schema, " 2 ", { expected: 2 })
       await assertions.decoding.fail(
@@ -1556,11 +1555,11 @@ describe("Schema", () => {
         a: Schema.String.pipe(Schema.check(SchemaCheck.minLength(2))).pipe(
           Schema.decodeTo(
             Schema.String.pipe(Schema.check(SchemaCheck.minLength(3))),
-            SchemaTransformation.compose()
+            SchemaTransformation.passthrough()
           ),
           Schema.decodeTo(
             Schema.String,
-            SchemaTransformation.compose()
+            SchemaTransformation.passthrough()
           )
         )
       })
@@ -1619,13 +1618,29 @@ describe("Schema", () => {
     })
   })
 
+  describe("decode", () => {
+    it("double transformation", async () => {
+      const schema = Schema.String.pipe(
+        Schema.decode(
+          SchemaTransformation.trim().compose(
+            SchemaTransformation.toLowerCase()
+          )
+        )
+      )
+
+      await assertions.decoding.succeed(schema, " A ", { expected: "a" })
+
+      await assertions.encoding.succeed(schema, " A ", { expected: " A " })
+    })
+  })
+
   describe("encodeTo", () => {
     it("required to required", async () => {
       const schema = Schema.Struct({
         a: Schema.String.pipe(
           Schema.encodeTo(
             Schema.String,
-            SchemaTransformation.compose()
+            SchemaTransformation.passthrough()
           )
         )
       })
@@ -1700,7 +1715,7 @@ describe("Schema", () => {
     it("double transformation", async () => {
       const schema = Schema.FiniteFromString.pipe(Schema.encodeTo(
         Trim,
-        SchemaTransformation.compose()
+        SchemaTransformation.passthrough()
       ))
       await assertions.decoding.succeed(schema, " 2 ", { expected: 2 })
       await assertions.decoding.fail(
@@ -1719,11 +1734,11 @@ describe("Schema", () => {
         a: Schema.String.pipe(
           Schema.encodeTo(
             Schema.String.pipe(Schema.check(SchemaCheck.minLength(3))),
-            SchemaTransformation.compose()
+            SchemaTransformation.passthrough()
           ),
           Schema.encodeTo(
             Schema.String.pipe(Schema.check(SchemaCheck.minLength(2))),
-            SchemaTransformation.compose()
+            SchemaTransformation.passthrough()
           )
         )
       })
@@ -1750,6 +1765,22 @@ describe("Schema", () => {
          └─ minLength(3)
             └─ Invalid data "aa"`
       )
+    })
+  })
+
+  describe("encode", () => {
+    it("double transformation", async () => {
+      const schema = Schema.String.pipe(
+        Schema.encode(
+          SchemaTransformation.trim().compose(
+            SchemaTransformation.toLowerCase()
+          ).flip()
+        )
+      )
+
+      await assertions.decoding.succeed(schema, " A ", { expected: " A " })
+
+      await assertions.encoding.succeed(schema, " A ", { expected: "a" })
     })
   })
 
@@ -2007,7 +2038,7 @@ describe("Schema", () => {
       })
 
       await assertions.make.succeed(schema, { a: 1 })
-      const spr = SchemaParser.make(schema)({})
+      const spr = SchemaToParser.makeSchemaResult(schema)({})
       const eff = SchemaResult.asEffect(spr)
       const provided = Effect.provideService(
         eff,
@@ -2279,7 +2310,7 @@ describe("Schema", () => {
       const schema = Schema.String.pipe(
         Schema.decodeTo(
           Schema.String,
-          SchemaTransformation.toLowerCase
+          SchemaTransformation.toLowerCase()
         )
       )
 
@@ -2289,7 +2320,7 @@ describe("Schema", () => {
 
     it("toUpperCase", async () => {
       const schema = Schema.String.pipe(
-        Schema.decodeTo(Schema.String, SchemaTransformation.toUpperCase)
+        Schema.decodeTo(Schema.String, SchemaTransformation.toUpperCase())
       )
 
       await assertions.decoding.succeed(schema, "a", { expected: "A" })
@@ -2414,7 +2445,7 @@ describe("Schema", () => {
       const jsonSerializer = schema.pipe(
         Schema.encodeTo(
           Schema.UnknownFromJsonString,
-          SchemaTransformation.composeSubtype()
+          SchemaTransformation.passthroughSupertype()
         )
       )
 
@@ -2433,7 +2464,7 @@ describe("Schema", () => {
         a: Schema.UnknownFromJsonString.pipe(
           Schema.decodeTo(
             Schema.Struct({ b: Schema.Number }),
-            SchemaTransformation.composeSubtype()
+            SchemaTransformation.passthroughSupertype()
           )
         )
       })
@@ -3482,5 +3513,77 @@ describe("Schema", () => {
 
       strictEqual(SchemaAST.format(schema.ast), `[string, number & finite <-> string]`)
     })
+  })
+
+  it("decodeTo as composition", async () => {
+    const From = Schema.Struct({
+      a: Schema.String,
+      b: Schema.FiniteFromString
+    })
+
+    const To = Schema.Struct({
+      a: Schema.FiniteFromString,
+      b: Schema.UndefinedOr(Schema.Number)
+    })
+
+    const schema = From.pipe(Schema.decodeTo(To))
+
+    await assertions.decoding.succeed(schema, { a: "1", b: "2" }, { expected: { a: 1, b: 2 } })
+
+    await assertions.encoding.succeed(schema, { a: 1, b: 2 }, { expected: { a: "1", b: "2" } })
+    await assertions.encoding.fail(
+      schema,
+      { a: 1, b: NaN },
+      `{ readonly "a": string; readonly "b": string <-> number & finite } <-> { readonly "a": number & finite; readonly "b": number | undefined }
+└─ ["b"]
+   └─ string <-> number & finite
+      └─ number & finite
+         └─ finite
+            └─ Invalid data NaN`
+    )
+    await assertions.encoding.fail(
+      schema,
+      { a: 1, b: undefined },
+      `{ readonly "a": string; readonly "b": string <-> number & finite } <-> { readonly "a": number & finite; readonly "b": number | undefined }
+└─ ["b"]
+   └─ string <-> number & finite
+      └─ Expected number & finite, actual undefined`
+    )
+  })
+
+  it("encodeTo as composition", async () => {
+    const From = Schema.Struct({
+      a: Schema.String,
+      b: Schema.FiniteFromString
+    })
+
+    const To = Schema.Struct({
+      a: Schema.FiniteFromString,
+      b: Schema.UndefinedOr(Schema.Number)
+    })
+
+    const schema = To.pipe(Schema.encodeTo(From))
+
+    await assertions.decoding.succeed(schema, { a: "1", b: "2" }, { expected: { a: 1, b: 2 } })
+
+    await assertions.encoding.succeed(schema, { a: 1, b: 2 }, { expected: { a: "1", b: "2" } })
+    await assertions.encoding.fail(
+      schema,
+      { a: 1, b: NaN },
+      `{ readonly "a": string; readonly "b": string <-> number & finite } <-> { readonly "a": number & finite; readonly "b": number | undefined }
+└─ ["b"]
+   └─ string <-> number & finite
+      └─ number & finite
+         └─ finite
+            └─ Invalid data NaN`
+    )
+    await assertions.encoding.fail(
+      schema,
+      { a: 1, b: undefined },
+      `{ readonly "a": string; readonly "b": string <-> number & finite } <-> { readonly "a": number & finite; readonly "b": number | undefined }
+└─ ["b"]
+   └─ string <-> number & finite
+      └─ Expected number & finite, actual undefined`
+    )
   })
 })

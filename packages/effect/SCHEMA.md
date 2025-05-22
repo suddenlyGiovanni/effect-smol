@@ -23,22 +23,13 @@ flowchart TD
   end
 ```
 
-## Current Pain Points
-
-These are known limitations and difficulties:
-
-- `partial` only allows toggling all fields at once, which limits flexibility.
-- Suspended schemas are awkward to use.
-- Performance and bundle size need improvement.
-- (optional) Custom error handling is limited ([example](https://discord.com/channels/795981131316985866/1347665724361019433/1347831833282347079)).
-
 ## Type Hierarchy
 
 ```mermaid
 flowchart TD
     T[Top] --> S["Schema[T]"]
     S --> C["Codec[T, E, RD, RE]"]
-    C --> B["Bottom[T,E, RD, RE, Ast, CloneOut, AnnotateIn, MakeIn, TypeReadonly, TypeIsOptional, TypeDefault, EncodedIsReadonly, EncodedIsOptional]"]
+    C --> B["Bottom[T, E, RD, RE, Ast, RebuildOut, AnnotateIn, TypeMakeIn, TypeReadonly, TypeIsOptional, TypeDefault, EncodedIsReadonly, EncodedIsOptional]"]
 ```
 
 ## More Requirement Type Parameters
@@ -73,11 +64,11 @@ const schema = Schema.Struct({
 
 //     ┌─── Effect.Effect<{ readonly a: string; }, Schema.CodecError, never>
 //     ▼
-const dec = Schema.decodeUnknown(schema)({ a: "a" })
+const dec = Schema.decodeUnknownEffect(schema)({ a: "a" })
 
 //     ┌─── Effect.Effect<{ readonly a: string; }, Schema.CodecError, EncodingService>
 //     ▼
-const enc = Schema.encodeUnknown(schema)({ a: "a" })
+const enc = Schema.encodeUnknownEffect(schema)({ a: "a" })
 ```
 
 ## Default JSON Serialization
@@ -217,13 +208,13 @@ const User = Schema.Struct({
 const data = { id: 1, name: Option.some("John") }
 
 const program = Effect.gen(function* () {
-  const json = yield* Schema.encode(
+  const json = yield* Schema.encodeEffect(
     SchemaSerializer.json(Schema.typeCodec(User))
   )(data)
   console.log(json)
-  const t = yield* Schema.decode(SchemaSerializer.json(Schema.typeCodec(User)))(
-    json
-  )
+  const t = yield* Schema.decodeEffect(
+    SchemaSerializer.json(Schema.typeCodec(User))
+  )(json)
   console.log(t)
 })
 
@@ -242,7 +233,7 @@ import { Schema } from "effect"
 // Flips a schema that decodes a string into a number,
 // turning it into one that decodes a number into a string
 //
-// const StringFromFinite: Schema.flip<Schema.decodeTo<Schema.Number, Schema.String, never, never>>
+// const StringFromFinite: flip<decodeTo<Number, String, never, never>>
 const StringFromFinite = Schema.flip(Schema.FiniteFromString)
 
 // Schema.Codec<string, number, never, never>
@@ -256,7 +247,7 @@ import { Schema } from "effect"
 
 const StringFromFinite = Schema.flip(Schema.FiniteFromString)
 
-// Schema.decodeTo<Schema.Number, Schema.String, never, never>
+// decodeTo<Number, String, never, never>
 StringFromFinite.schema
 ```
 
@@ -265,7 +256,7 @@ Applying `flip` twice will return a schema with the same shape as the original o
 ```ts
 import { Schema } from "effect"
 
-// const schema: Schema.decodeTo<Schema.Number, Schema.String, never, never>
+// const schema: decodeTo<Number, String, never, never>
 const schema = Schema.flip(Schema.flip(Schema.FiniteFromString))
 ```
 
@@ -496,7 +487,7 @@ const schema = Schema.Option(Schema.String).pipe(
   Schema.refine(Option.isSome, { title: "Some" })
 )
 
-Schema.decodeUnknown(schema)(Option.none())
+Schema.decodeUnknownEffect(schema)(Option.none())
   .pipe(
     Effect.mapError((err) => SchemaFormatter.TreeFormatter.format(err.issue)),
     Effect.runPromise
@@ -531,7 +522,7 @@ const schema = Schema.String.pipe(
   )
 )
 
-Schema.decodeUnknown(schema)(" a")
+Schema.decodeUnknownEffect(schema)(" a")
   .pipe(
     Effect.mapError((err) => SchemaFormatter.TreeFormatter.format(err.issue)),
     Effect.runPromise
@@ -556,7 +547,7 @@ const schema = Schema.Struct({ length: Schema.Number }).pipe(
   Schema.check(SchemaCheck.minLength(3))
 )
 
-Schema.decodeUnknown(schema)({ length: 2 })
+Schema.decodeUnknownEffect(schema)({ length: 2 })
   .pipe(
     Effect.mapError((err) => SchemaFormatter.TreeFormatter.format(err.issue)),
     Effect.runPromise
@@ -581,7 +572,7 @@ const schema = Schema.String.pipe(
   Schema.check(SchemaCheck.minLength(3), SchemaCheck.trimmed)
 )
 
-Schema.decodeUnknown(schema)(" a", { errors: "all" })
+Schema.decodeUnknownEffect(schema)(" a", { errors: "all" })
   .pipe(
     Effect.mapError((err) => SchemaFormatter.TreeFormatter.format(err.issue)),
     Effect.runPromise
@@ -611,7 +602,7 @@ const schema = Schema.String.pipe(
   )
 )
 
-Schema.decodeUnknown(schema)(" a", { errors: "all" })
+Schema.decodeUnknownEffect(schema)(" a", { errors: "all" })
   .pipe(
     Effect.mapError((err) => SchemaFormatter.TreeFormatter.format(err.issue)),
     Effect.runPromise
@@ -1089,7 +1080,7 @@ console.log(Schema.decodeUnknownSync(Product)({ quantity: "2" }))
 import { Schema, SchemaTransformation } from "effect"
 
 const SnakeToCamel = Schema.String.pipe(
-  Schema.decodeTo(Schema.String, SchemaTransformation.snakeToCamel)
+  Schema.decode(SchemaTransformation.snakeToCamel())
 )
 
 const schema = Schema.ReadonlyRecord(SnakeToCamel, Schema.Number)
@@ -1106,7 +1097,7 @@ By default duplicate keys are merged with the last value.
 import { Schema, SchemaTransformation } from "effect"
 
 const SnakeToCamel = Schema.String.pipe(
-  Schema.decodeTo(Schema.String, SchemaTransformation.snakeToCamel)
+  Schema.decode(SchemaTransformation.snakeToCamel())
 )
 
 const schema = Schema.ReadonlyRecord(SnakeToCamel, Schema.Number)
@@ -1123,7 +1114,7 @@ You can also customize how duplicate keys are merged.
 import { Schema, SchemaTransformation } from "effect"
 
 const SnakeToCamel = Schema.String.pipe(
-  Schema.decodeTo(Schema.String, SchemaTransformation.snakeToCamel)
+  Schema.decode(SchemaTransformation.snakeToCamel())
 )
 
 const schema = Schema.ReadonlyRecord(SnakeToCamel, Schema.Number, {
@@ -1279,7 +1270,7 @@ class Person extends Schema.Opaque<Person>()(
     .annotate({ title: "Person" })
 ) {}
 
-Schema.decodeUnknown(Person)({ name: "" })
+Schema.decodeUnknownEffect(Person)({ name: "" })
   .pipe(
     Effect.mapError((err) => SchemaFormatter.TreeFormatter.format(err.issue)),
     Effect.runPromise
@@ -1776,7 +1767,7 @@ const schema = Schema.Union(
   { mode: "oneOf" }
 )
 
-Schema.decodeUnknown(schema)({ a: "a", b: 1 })
+Schema.decodeUnknownEffect(schema)({ a: "a", b: 1 })
   .pipe(
     Effect.mapError((err) => SchemaFormatter.TreeFormatter.format(err.issue)),
     Effect.runPromise
@@ -1796,119 +1787,141 @@ Transformations are now treated as first-class values, rather than being tied to
 
 For example, `trim` is no longer just a codec combinator. It is now a standalone transformation that can be used with any codec that supports it—in this case, any codec working with strings.
 
-**Example** (Using a transformation with debug logging)
+**Example**
 
 ```ts
-import { Option, Schema, SchemaTransformation } from "effect"
+import { Schema, SchemaTransformation } from "effect"
 
-// Wrap the trim transformation with debug logging
-const trim = SchemaTransformation.tap(SchemaTransformation.trim, {
-  onDecode: (o) => {
-    if (Option.isSome(o)) {
-      console.log(`about to trim "${o.value}"`)
-    }
-  }
-})
-
-// Decode a string, trim it, then parse it into a number
-const schema = Schema.String.pipe(Schema.decodeTo(Schema.String, trim))
+const schema = Schema.String.pipe(Schema.decode(SchemaTransformation.trim()))
 
 console.log(Schema.decodeUnknownSync(schema)("  123"))
-/*
-about to trim "  123"
-123
-*/
+// 123
 ```
 
-### Composition
+### Transformation Composition
 
-#### compose
+Transformation composition is the process of combining multiple transformations into a single transformation.
 
-The `compose` transformation lets you convert from one schema to another when the encoded output of the target schema matches the type of the source schema.
+```ts
+import { SchemaTransformation } from "effect"
+
+/*
+decoding: trim + toLowerCase
+encoding: passthrough
+*/
+const trimToLowerCase = SchemaTransformation.trim().compose(
+  SchemaTransformation.toLowerCase()
+)
+```
+
+### Schema Composition
+
+#### decodeTo / encodeTo
+
+The `Schema.decodeTo` API allows you to compose two schemas without requiring the types to match. It skips type checking during the transformation and focuses on structure alone.
+
+```ts
+import { Schema } from "effect"
+
+const From = Schema.Struct({
+  a: Schema.String,
+  b: Schema.FiniteFromString
+})
+
+const To = Schema.Struct({
+  a: Schema.FiniteFromString,
+  b: Schema.UndefinedOr(Schema.Number)
+})
+
+const schema = From.pipe(Schema.decodeTo(To))
+```
+
+This approach is useful when you want to connect schemas without enforcing type compatibility between them.
+
+If you want more control over how the types align, such as ensuring one is a subtype or supertype of the other, you can use the `SchemaTransformation.passthrough*` helpers.
+
+The `Schema.encodeTo` API is the same as `Schema.decodeTo` but it applies the composition in the other direction.
+
+```ts
+import { Schema } from "effect"
+
+const From = Schema.Struct({
+  a: Schema.String,
+  b: Schema.FiniteFromString
+})
+
+const To = Schema.Struct({
+  a: Schema.FiniteFromString,
+  b: Schema.UndefinedOr(Schema.Number)
+})
+
+const schema = To.pipe(Schema.encodeTo(From)) // same as From.pipe(Schema.decodeTo(To))
+```
+
+#### passthrough
+
+The `passthrough` transformation lets you convert from one schema to another when the encoded output of the target schema matches the type of the source schema.
 
 **Example** (Composing schemas where `To.Encoded = From.Type`)
 
 ```ts
-import { Schema, SchemaGetter, SchemaTransformation } from "effect"
-
-const FiniteFromString = Schema.String.pipe(
-  Schema.decodeTo(Schema.Finite, {
-    decode: SchemaGetter.Number,
-    encode: SchemaGetter.String
-  })
-)
+import { Schema, SchemaTransformation } from "effect"
 
 const From = Schema.Struct({
-  a: Schema.String,
-  b: Schema.String
+  a: Schema.String
 })
 
 const To = Schema.Struct({
-  a: FiniteFromString,
-  b: FiniteFromString
+  a: Schema.FiniteFromString
 })
 
 // To.Encoded (string) = From.Type (string)
 const schema = From.pipe(
-  Schema.decodeTo(To, SchemaTransformation.compose({ strict: false }))
+  Schema.decodeTo(To, SchemaTransformation.passthrough())
 )
 ```
 
-#### composeSupertype
+#### passthroughSubtype
 
-Use `composeSupertype` when your source type extends the encoded output of your target schema.
+Use `passthroughSubtype` when your source type extends the encoded output of your target schema.
 
 **Example** (Composing schemas where `From.Type extends To.Encoded`)
 
 ```ts
-import { Schema, SchemaGetter, SchemaTransformation } from "effect"
+import { Schema, SchemaTransformation } from "effect"
 
-const FiniteFromString = Schema.String.pipe(
-  Schema.decodeTo(Schema.Finite, {
-    decode: SchemaGetter.Number,
-    encode: SchemaGetter.String
-  })
-)
-
-const From = FiniteFromString
+const From = Schema.FiniteFromString
 
 const To = Schema.UndefinedOr(Schema.Number)
 
 // From.Type (number) extends To.Encoded (number | undefined)
 const schema = From.pipe(
-  Schema.decodeTo(To, SchemaTransformation.composeSupertype())
+  Schema.decodeTo(To, SchemaTransformation.passthroughSubtype())
 )
 ```
 
-#### composeSubtype
+#### passthroughSupertype
 
-Use `composeSubtype` when the encoded output of your target schema extends the type of your source schema.
+Use `passthroughSupertype` when the encoded output of your target schema extends the type of your source schema.
 
 **Example** (Composing schemas where `From.Encoded extends To.Type`)
 
 ```ts
-import { Schema, SchemaGetter, SchemaTransformation } from "effect"
-
-const FiniteFromString = Schema.String.pipe(
-  Schema.decodeTo(Schema.Finite, {
-    decode: SchemaGetter.Number,
-    encode: SchemaGetter.String
-  })
-)
+import { Schema, SchemaTransformation } from "effect"
 
 const From = Schema.UndefinedOr(Schema.String)
 
-const To = FiniteFromString
+const To = Schema.FiniteFromString
 
 // To.Encoded (string) extends From.Type (string | undefined)
 const schema = From.pipe(
-  Schema.decodeTo(To, SchemaTransformation.composeSubtype())
+  Schema.decodeTo(To, SchemaTransformation.passthroughSupertype())
 )
 ```
 
 #### Turning off strict mode
 
-To turn off strict mode, pass `{ strict: false }` to `compose`
+To turn off strict mode, pass `{ strict: false }` to `passthrough`
 
 ```ts
 import { Schema, SchemaTransformation } from "effect"
@@ -1918,7 +1931,7 @@ const From = Schema.String
 const To = Schema.Number
 
 const schema = From.pipe(
-  Schema.decodeTo(To, SchemaTransformation.compose({ strict: false }))
+  Schema.decodeTo(To, SchemaTransformation.passthrough({ strict: false }))
 )
 ```
 
@@ -1966,7 +1979,7 @@ import { Effect, Option, Result, Schema, SchemaFormatter } from "effect"
 const fallback = Result.ok(Option.some("b"))
 const schema = Schema.String.pipe(Schema.catchDecoding(() => fallback))
 
-Schema.decodeUnknown(schema)(null)
+Schema.decodeUnknownEffect(schema)(null)
   .pipe(
     Effect.mapError((err) => SchemaFormatter.TreeFormatter.format(err.issue)),
     Effect.runPromise
@@ -2009,7 +2022,7 @@ const provided = schema.pipe(
   )
 )
 
-Schema.decodeUnknown(provided)(null)
+Schema.decodeUnknownEffect(provided)(null)
   .pipe(
     Effect.mapError((err) => SchemaFormatter.TreeFormatter.format(err.issue)),
     Effect.runPromise
@@ -2033,7 +2046,7 @@ const schema = Schema.Struct({
   b: Schema.Number
 })
 
-Schema.decodeUnknown(schema)({ a: "", b: null }, { errors: "all" })
+Schema.decodeUnknownEffect(schema)({ a: "", b: null }, { errors: "all" })
   .pipe(
     Effect.mapError((err) => SchemaFormatter.TreeFormatter.format(err.issue)),
     Effect.runPromise
@@ -2061,7 +2074,7 @@ const schema = Schema.Struct({
   b: Schema.Number
 })
 
-Schema.decodeUnknown(schema)({ a: "", b: null }, { errors: "all" })
+Schema.decodeUnknownEffect(schema)({ a: "", b: null }, { errors: "all" })
   .pipe(
     Effect.mapError((err) =>
       SchemaFormatter.StructuredFormatter.format(err.issue)
@@ -2103,7 +2116,9 @@ Output:
 */
 ```
 
-## Primitives
+## Usage
+
+### Primitives
 
 ```ts
 import { Schema } from "effect"
@@ -2121,23 +2136,26 @@ Schema.Null
 To coerce input data to the appropriate type:
 
 ```ts
-import { Schema, SchemaParser, SchemaTransformation } from "effect"
+import { Schema, SchemaGetter, SchemaToParser } from "effect"
 
 //      ┌─── Codec<string, unknown>
 //      ▼
 const schema = Schema.Unknown.pipe(
-  Schema.decodeTo(Schema.String, SchemaTransformation.String)
+  Schema.decodeTo(Schema.String, {
+    decode: SchemaGetter.String(),
+    encode: SchemaGetter.passthrough()
+  })
 )
 
-const parse = SchemaParser.decodeUnknownSync(schema)
+const parser = SchemaToParser.decodeUnknownSync(schema)
 
-console.log(parse("tuna")) // => "tuna"
-console.log(parse(42)) // => "42"
-console.log(parse(true)) // => "true"
-console.log(parse(null)) // => "null"
+console.log(parser("tuna")) // => "tuna"
+console.log(parser(42)) // => "42"
+console.log(parser(true)) // => "true"
+console.log(parser(null)) // => "null"
 ```
 
-## Literals
+### Literals
 
 Literal types:
 
@@ -2186,7 +2204,7 @@ const schema = Schema.Literals(["red", "green", "blue"])
 schema.literals
 ```
 
-## Strings
+### Strings
 
 ```ts
 import { Schema, SchemaCheck } from "effect"
@@ -2207,16 +2225,12 @@ To perform some simple string transforms:
 ```ts
 import { Schema, SchemaTransformation } from "effect"
 
-Schema.String.pipe(Schema.decodeTo(Schema.String, SchemaTransformation.trim))
-Schema.String.pipe(
-  Schema.decodeTo(Schema.String, SchemaTransformation.toLowerCase)
-)
-Schema.String.pipe(
-  Schema.decodeTo(Schema.String, SchemaTransformation.toUpperCase)
-)
+Schema.String.pipe(Schema.decode(SchemaTransformation.trim()))
+Schema.String.pipe(Schema.decode(SchemaTransformation.toLowerCase()))
+Schema.String.pipe(Schema.decode(SchemaTransformation.toUpperCase()))
 ```
 
-## String formats
+### String formats
 
 ```ts
 import { Schema, SchemaCheck } from "effect"
@@ -2226,7 +2240,7 @@ Schema.String.pipe(Schema.check(SchemaCheck.base64))
 Schema.String.pipe(Schema.check(SchemaCheck.base64url))
 ```
 
-## Numbers
+### Numbers
 
 ```ts
 import { Schema } from "effect"
@@ -2252,7 +2266,7 @@ Schema.Number.pipe(Schema.check(SchemaCheck.nonPositive))
 Schema.Number.pipe(Schema.check(SchemaCheck.multipleOf(5)))
 ```
 
-## Integers
+### Integers
 
 ```ts
 import { Schema, SchemaCheck } from "effect"
@@ -2261,7 +2275,7 @@ Schema.Number.pipe(Schema.check(SchemaCheck.int))
 Schema.Number.pipe(Schema.check(SchemaCheck.int32))
 ```
 
-## BigInts
+### BigInts
 
 ```ts
 import { BigInt, Order, Schema, SchemaCheck } from "effect"
@@ -2295,7 +2309,7 @@ Schema.BigInt.pipe(Schema.check(negative))
 Schema.BigInt.pipe(Schema.check(nonPositive))
 ```
 
-## Dates
+### Dates
 
 ```ts
 import { Schema, SchemaGetter } from "effect"
