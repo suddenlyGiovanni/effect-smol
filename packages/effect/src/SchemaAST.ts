@@ -1127,15 +1127,6 @@ function applyEncoded<A extends AST>(ast: A, f: (ast: AST) => AST): A {
 }
 
 /** @internal */
-export function appendEncodedChecks<A extends AST>(ast: A, checks: Checks): A {
-  if (ast.encoding) {
-    return applyEncoded(ast, (ast) => appendEncodedChecks(ast, checks))
-  } else {
-    return appendChecks(ast, checks)
-  }
-}
-
-/** @internal */
 export function decodingMiddleware(ast: AST, middleware: Middleware): AST {
   return appendTransformation(ast, middleware, typeAST(ast))
 }
@@ -1551,7 +1542,12 @@ export function formatCheck(filter: SchemaCheck.SchemaCheck<any>): string {
   if (Predicate.isString(title)) {
     return title
   }
-  return filter._tag === "Filter" ? "<filter>" : "<filterGroup>"
+  switch (filter._tag) {
+    case "Filter":
+      return "<filter>"
+    case "FilterGroup":
+      return filter.checks.map(formatCheck).join(" & ")
+  }
 }
 
 /** @internal */
