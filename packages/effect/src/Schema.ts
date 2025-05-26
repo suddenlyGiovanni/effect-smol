@@ -104,6 +104,29 @@ export interface Bottom<
 }
 
 /**
+ * @since 4.0.0
+ */
+export function revealBottom<S extends Top>(
+  bottom: S
+): Bottom<
+  S["Type"],
+  S["Encoded"],
+  S["DecodingContext"],
+  S["EncodingContext"],
+  S["ast"],
+  S["~rebuild.out"],
+  S["~annotate.in"],
+  S["~type.make.in"],
+  S["~type.isReadonly"],
+  S["~type.isOptional"],
+  S["~type.default"],
+  S["~encoded.isReadonly"],
+  S["~encoded.isOptional"]
+> {
+  return bottom
+}
+
+/**
  * Universal annotation function, works with any
  * {@link SchemaAnnotations.Annotable} (e.g. `Schema`, `SchemaCheck`, etc.).
  *
@@ -252,6 +275,15 @@ export interface Codec<out T, out E = T, out RD = never, out RE = never> extends
 }
 
 /**
+ * Returns the underlying `Codec<T, E, RD, RE>`.
+ *
+ * @since 4.0.0
+ */
+export function revealCodec<T, E, RD, RE>(codec: Codec<T, E, RD, RE>) {
+  return codec
+}
+
+/**
  * @since 4.0.0
  * @category error
  */
@@ -383,28 +415,6 @@ export const encodeUnknownSync = SchemaToParser.encodeUnknownSync
  */
 export const encodeSync = SchemaToParser.encodeSync
 
-/**
- * @category Api interface
- * @since 4.0.0
- */
-export interface make<S extends Top> extends
-  Bottom<
-    S["Type"],
-    S["Encoded"],
-    S["DecodingContext"],
-    S["EncodingContext"],
-    S["ast"],
-    S["~rebuild.out"],
-    S["~annotate.in"],
-    S["~type.make.in"],
-    S["~type.isReadonly"],
-    S["~type.isOptional"],
-    S["~type.default"],
-    S["~encoded.isReadonly"],
-    S["~encoded.isOptional"]
-  >
-{}
-
 class make$<S extends Top> extends Bottom$<
   S["Type"],
   S["Encoded"],
@@ -438,7 +448,21 @@ class makeWithSchema$<S extends Top, Result extends Top> extends make$<Result> {
  * @category Constructors
  * @since 4.0.0
  */
-export function make<S extends Top>(ast: S["ast"]): make<S> {
+export function make<S extends Top>(ast: S["ast"]): Bottom<
+  S["Type"],
+  S["Encoded"],
+  S["DecodingContext"],
+  S["EncodingContext"],
+  S["ast"],
+  S["~rebuild.out"],
+  S["~annotate.in"],
+  S["~type.make.in"],
+  S["~type.isReadonly"],
+  S["~type.isOptional"],
+  S["~type.default"],
+  S["~encoded.isReadonly"],
+  S["~encoded.isOptional"]
+> {
   const rebuild = (ast: SchemaAST.AST) => new make$<S>(ast, rebuild)
   return rebuild(ast)
 }
@@ -457,10 +481,23 @@ export function isSchema(u: unknown): u is Schema<unknown> {
  * @category Api interface
  * @since 4.0.0
  */
-export interface optionalKey<S extends Top> extends make<S> {
-  readonly "~rebuild.out": optionalKey<S>
-  readonly "~type.isOptional": "optional"
-  readonly "~encoded.isOptional": "optional"
+export interface optionalKey<S extends Top> extends
+  Bottom<
+    S["Type"],
+    S["Encoded"],
+    S["DecodingContext"],
+    S["EncodingContext"],
+    S["ast"],
+    optionalKey<S>,
+    S["~annotate.in"],
+    S["~type.make.in"],
+    S["~type.isReadonly"],
+    "optional",
+    S["~type.default"],
+    S["~encoded.isReadonly"],
+    "optional"
+  >
+{
   readonly schema: S
 }
 
@@ -483,10 +520,23 @@ export function optional<S extends Top>(schema: S): optionalKey<Union<readonly [
 /**
  * @since 4.0.0
  */
-export interface mutableKey<S extends Top> extends make<S> {
-  readonly "~rebuild.out": mutableKey<S>
-  readonly "~type.isReadonly": "mutable"
-  readonly "~encoded.isReadonly": "mutable"
+export interface mutableKey<S extends Top> extends
+  Bottom<
+    S["Type"],
+    S["Encoded"],
+    S["DecodingContext"],
+    S["EncodingContext"],
+    S["ast"],
+    mutableKey<S>,
+    S["~annotate.in"],
+    S["~type.make.in"],
+    "mutable",
+    S["~type.isOptional"],
+    S["~type.default"],
+    "mutable",
+    S["~encoded.isOptional"]
+  >
+{
   readonly schema: S
 }
 
@@ -510,7 +560,12 @@ export interface typeCodec<S extends Top> extends
     S["ast"],
     typeCodec<S>,
     S["~annotate.in"],
-    S["~type.make.in"]
+    S["~type.make.in"],
+    S["~type.isReadonly"],
+    S["~type.isOptional"],
+    S["~type.default"],
+    S["~encoded.isReadonly"],
+    S["~encoded.isOptional"]
   >
 {}
 
@@ -533,7 +588,13 @@ export interface encodedCodec<S extends Top> extends
     never,
     SchemaAST.AST,
     encodedCodec<S>,
-    SchemaAnnotations.Annotations
+    SchemaAnnotations.Annotations,
+    S["Encoded"],
+    S["~type.isReadonly"],
+    S["~type.isOptional"],
+    S["~type.default"],
+    S["~encoded.isReadonly"],
+    S["~encoded.isOptional"]
   >
 {}
 
@@ -604,15 +665,6 @@ export interface declare<T, E, TypeParameters extends ReadonlyArray<Top>> extend
     SchemaAnnotations.Declaration<T, TypeParameters>
   >
 {}
-
-/**
- * Returns the underlying `Codec<T, E, RD, RE>`.
- *
- * @since 4.0.0
- */
-export function revealCodec<T, E, RD, RE>(codec: Codec<T, E, RD, RE>): Codec<T, E, RD, RE> {
-  return codec
-}
 
 /**
  * @category Api interface
@@ -721,27 +773,23 @@ export function TemplateLiteral<Params extends TemplateLiteral.Params>(
     }
   }
 
-  if (Arr.isNonEmptyArray(spans)) {
-    return make<TemplateLiteral<TemplateLiteral.Type<Params>>>(
-      new SchemaAST.TemplateLiteral(h, spans, undefined, undefined, undefined, undefined)
+  const ast = Arr.isNonEmptyArray(spans) ?
+    new SchemaAST.TemplateLiteral(h, spans, undefined, undefined, undefined, undefined)
+    : new SchemaAST.TemplateLiteral(
+      "",
+      [
+        new SchemaAST.TemplateLiteralSpan(
+          new SchemaAST.LiteralType(h, undefined, undefined, undefined, undefined),
+          ""
+        )
+      ],
+      undefined,
+      undefined,
+      undefined,
+      undefined
     )
-  } else {
-    return make<TemplateLiteral<TemplateLiteral.Type<Params>>>(
-      new SchemaAST.TemplateLiteral(
-        "",
-        [
-          new SchemaAST.TemplateLiteralSpan(
-            new SchemaAST.LiteralType(h, undefined, undefined, undefined, undefined),
-            ""
-          )
-        ],
-        undefined,
-        undefined,
-        undefined,
-        undefined
-      )
-    )
-  }
+
+  return make<TemplateLiteral<TemplateLiteral.Type<Params>>>(ast)
 }
 
 /**
@@ -1526,11 +1574,24 @@ export function Array<S extends Top>(item: S): Array$<S> {
 /**
  * @since 4.0.0
  */
-export interface mutable<S extends Top> extends make<S> {
-  // we keep "~annotate.in" and "~type.make.in" as they are because they are contravariant
-  readonly "Type": Mutable<S["Type"]>
-  readonly "Encoded": Mutable<S["Encoded"]>
-  readonly "~rebuild.out": mutable<S>
+export interface mutable<S extends Top> extends
+  Bottom<
+    Mutable<S["Type"]>,
+    Mutable<S["Encoded"]>,
+    S["DecodingContext"],
+    S["EncodingContext"],
+    S["ast"],
+    mutable<S>,
+    // we keep "~annotate.in" and "~type.make.in" as they are because they are contravariant
+    S["~annotate.in"],
+    S["~type.make.in"],
+    S["~type.isReadonly"],
+    S["~type.isOptional"],
+    S["~type.default"],
+    S["~encoded.isReadonly"],
+    S["~encoded.isOptional"]
+  >
+{
   readonly schema: S
 }
 
@@ -1710,10 +1771,23 @@ export function asCheck<T>(
  * @category Api interface
  * @since 4.0.0
  */
-export interface refine<T, S extends Top> extends make<S> {
-  readonly "~rebuild.out": refine<T, S>
-  readonly "Type": T
-}
+export interface refine<T, S extends Top> extends
+  Bottom<
+    T,
+    S["Encoded"],
+    S["DecodingContext"],
+    S["EncodingContext"],
+    S["ast"],
+    refine<T, S>,
+    S["~annotate.in"],
+    S["~type.make.in"],
+    S["~type.isReadonly"],
+    S["~type.isOptional"],
+    S["~type.default"],
+    S["~encoded.isReadonly"],
+    S["~encoded.isOptional"]
+  >
+{}
 
 /**
  * @category Filtering
@@ -1740,10 +1814,23 @@ export function refine<T extends S["Type"], S extends Top>(
  * @category Api interface
  * @since 4.0.0
  */
-export interface brand<S extends Top, B extends string | symbol> extends make<S> {
-  readonly "~rebuild.out": brand<S, B>
-  readonly "Type": S["Type"] & Brand<B>
-}
+export interface brand<S extends Top, B extends string | symbol> extends
+  Bottom<
+    S["Type"] & Brand<B>,
+    S["Encoded"],
+    S["DecodingContext"],
+    S["EncodingContext"],
+    S["ast"],
+    brand<S, B>,
+    S["~annotate.in"],
+    S["~type.make.in"],
+    S["~type.isReadonly"],
+    S["~type.isOptional"],
+    S["~type.default"],
+    S["~encoded.isReadonly"],
+    S["~encoded.isOptional"]
+  >
+{}
 
 /**
  * @since 4.0.0
@@ -1759,9 +1846,23 @@ export function brand<B extends string | symbol>(brand: B) {
  * @category Api interface
  * @since 4.0.0
  */
-export interface decodingMiddleware<S extends Top, RD> extends make<S> {
-  readonly "~rebuild.out": decodingMiddleware<S, RD>
-  readonly "DecodingContext": RD
+export interface decodingMiddleware<S extends Top, RD> extends
+  Bottom<
+    S["Type"],
+    S["Encoded"],
+    RD,
+    S["EncodingContext"],
+    S["ast"],
+    decodingMiddleware<S, RD>,
+    S["~annotate.in"],
+    S["~type.make.in"],
+    S["~type.isReadonly"],
+    S["~type.isOptional"],
+    S["~type.default"],
+    S["~encoded.isReadonly"],
+    S["~encoded.isOptional"]
+  >
+{
   readonly schema: S
 }
 
@@ -1787,9 +1888,23 @@ export function decodingMiddleware<S extends Top, RD>(
  * @category Api interface
  * @since 4.0.0
  */
-export interface encodingMiddleware<S extends Top, RE> extends make<S> {
-  readonly "~rebuild.out": encodingMiddleware<S, RE>
-  readonly "EncodingContext": RE
+export interface encodingMiddleware<S extends Top, RE> extends
+  Bottom<
+    S["Type"],
+    S["Encoded"],
+    S["DecodingContext"],
+    RE,
+    S["ast"],
+    encodingMiddleware<S, RE>,
+    S["~annotate.in"],
+    S["~type.make.in"],
+    S["~type.isReadonly"],
+    S["~type.isOptional"],
+    S["~type.default"],
+    S["~encoded.isReadonly"],
+    S["~encoded.isOptional"]
+  >
+{
   readonly schema: S
 }
 
@@ -1856,51 +1971,6 @@ export function catchEncodingWithContext<S extends Top, R = never>(
 }
 
 /**
- * @category Middlewares
- * @since 4.0.0
- */
-export function checkEffect<S extends Top>(
-  f: (
-    input: S["Type"],
-    self: SchemaAST.AST,
-    options: SchemaAST.ParseOptions
-  ) => Effect.Effect<undefined | SchemaIssue.Issue>
-): (self: S) => S["~rebuild.out"] {
-  return checkEffectWithContext(f)
-}
-
-/**
- * @category Middlewares
- * @since 4.0.0
- */
-export function checkEffectWithContext<S extends Top, R = never>(
-  f: (
-    input: S["Type"],
-    self: SchemaAST.AST,
-    options: SchemaAST.ParseOptions
-  ) => Effect.Effect<undefined | SchemaIssue.Issue, never, R>
-) {
-  return (self: S): decodingMiddleware<S, S["DecodingContext"] | R> => {
-    return self.pipe(
-      decodingMiddleware((sr, ast, options) =>
-        sr.pipe(SchemaResult.flatMap((oa) => {
-          if (O.isNone(oa)) {
-            return Effect.succeed<O.Option<S["Type"]>>(oa)
-          }
-          return Effect.flatMap(f(oa.value, ast, options), (issue) => {
-            if (issue) {
-              return Effect.fail(issue)
-            } else {
-              return Effect.succeed(oa)
-            }
-          })
-        }))
-      )
-    )
-  }
-}
-
-/**
  * @category Api interface
  * @since 4.0.0
  */
@@ -1950,21 +2020,9 @@ export function decodeTo<To extends Top>(to: To): <From extends Top>(from: From)
 export function decodeTo<To extends Top, From extends Top, RD = never, RE = never>(
   to: To,
   transformation: {
-    readonly decode: SchemaGetter.SchemaGetter<To["Encoded"], From["Type"], RD>
-    readonly encode: SchemaGetter.SchemaGetter<From["Type"], To["Encoded"], RE>
+    readonly decode: SchemaGetter.SchemaGetter<NoInfer<To["Encoded"]>, NoInfer<From["Type"]>, RD>
+    readonly encode: SchemaGetter.SchemaGetter<NoInfer<From["Type"]>, NoInfer<To["Encoded"]>, RE>
   }
-): (from: From) => decodeTo<To, From, RD, RE>
-/**
- * Used by {@link encodeTo}
- *
- * @internal
- */
-export function decodeTo<To extends Top, From extends Top, RD = never, RE = never>(
-  to: To,
-  transformation?: {
-    readonly decode: SchemaGetter.SchemaGetter<To["Encoded"], From["Type"], RD>
-    readonly encode: SchemaGetter.SchemaGetter<From["Type"], To["Encoded"], RE>
-  } | undefined
 ): (from: From) => decodeTo<To, From, RD, RE>
 export function decodeTo<To extends Top, From extends Top, RD = never, RE = never>(
   to: To,
@@ -1997,9 +2055,7 @@ export function decode<S extends Top, RD = never, RE = never>(transformation: {
   readonly encode: SchemaGetter.SchemaGetter<S["Type"], S["Type"], RE>
 }) {
   return (self: S): decodeTo<typeCodec<S>, S, RD, RE> => {
-    return self.pipe(
-      decodeTo<typeCodec<S>, S, RD, RE>(typeCodec(self), SchemaTransformation.make(transformation))
-    )
+    return self.pipe(decodeTo(typeCodec(self), SchemaTransformation.make(transformation)))
   }
 }
 
@@ -2012,8 +2068,8 @@ export function encodeTo<To extends Top>(
 export function encodeTo<To extends Top, From extends Top, RD = never, RE = never>(
   to: To,
   transformation: {
-    readonly decode: SchemaGetter.SchemaGetter<From["Encoded"], To["Type"], RD>
-    readonly encode: SchemaGetter.SchemaGetter<To["Type"], From["Encoded"], RE>
+    readonly decode: SchemaGetter.SchemaGetter<NoInfer<From["Encoded"]>, NoInfer<To["Type"]>, RD>
+    readonly encode: SchemaGetter.SchemaGetter<NoInfer<To["Type"]>, NoInfer<From["Encoded"]>, RE>
   }
 ): (from: From) => decodeTo<From, To, RD, RE>
 export function encodeTo<To extends Top, From extends Top, RD = never, RE = never>(
@@ -2024,7 +2080,7 @@ export function encodeTo<To extends Top, From extends Top, RD = never, RE = neve
   }
 ): (from: From) => decodeTo<From, To, RD, RE> {
   return (from: From): decodeTo<From, To, RD, RE> => {
-    return to.pipe(decodeTo(from, transformation))
+    return transformation ? to.pipe(decodeTo(from, transformation)) : to.pipe(decodeTo(from))
   }
 }
 
@@ -2039,9 +2095,7 @@ export function encode<S extends Top, RD = never, RE = never>(transformation: {
   readonly encode: SchemaGetter.SchemaGetter<S["Encoded"], S["Encoded"], RE>
 }) {
   return (self: S): decodeTo<S, encodedCodec<S>, RD, RE> => {
-    return encodedCodec(self).pipe(
-      decodeTo<S, encodedCodec<S>, RD, RE>(self, SchemaTransformation.make(transformation))
-    )
+    return encodedCodec(self).pipe(decodeTo(self, SchemaTransformation.make(transformation)))
   }
 }
 
@@ -2049,10 +2103,23 @@ export function encode<S extends Top, RD = never, RE = never>(transformation: {
  * @category Api interface
  * @since 4.0.0
  */
-export interface withConstructorDefault<S extends Top> extends make<S> {
-  readonly "~rebuild.out": withConstructorDefault<S>
-  readonly "~type.default": "has-constructor-default"
-}
+export interface withConstructorDefault<S extends Top> extends
+  Bottom<
+    S["Type"],
+    S["Encoded"],
+    S["DecodingContext"],
+    S["EncodingContext"],
+    S["ast"],
+    withConstructorDefault<S>,
+    S["~annotate.in"],
+    S["~type.make.in"],
+    S["~type.isReadonly"],
+    S["~type.isOptional"],
+    "has-constructor-default",
+    S["~encoded.isReadonly"],
+    S["~encoded.isOptional"]
+  >
+{}
 
 /**
  * Provide a default value when the input is `Option<undefined>`.
@@ -2094,9 +2161,7 @@ export interface tag<Tag extends SchemaAST.LiteralValue> extends withConstructor
  * @since 4.0.0
  */
 export function tag<Tag extends SchemaAST.LiteralValue>(literal: Tag): tag<Tag> {
-  return Literal(literal).pipe(
-    withConstructorDefault(() => O.some(literal))
-  )
+  return Literal(literal).pipe(withConstructorDefault(() => O.some(literal)))
 }
 
 /**
@@ -2221,7 +2286,7 @@ export interface Opaque<Self, S extends Top> extends
  * @since 4.0.0
  */
 export function Opaque<Self>() {
-  return <S extends Struct<Struct.Fields>>(schema: S): Opaque<Self, S> & Omit<S, "Type" | "Encoded"> => {
+  return <S extends Top>(schema: S): Opaque<Self, S> & Omit<S, "Type" | "Encoded"> => {
     // eslint-disable-next-line @typescript-eslint/no-extraneous-class
     class Opaque {}
     Object.setPrototypeOf(Opaque, schema)
@@ -2233,7 +2298,9 @@ export function Opaque<Self>() {
  * @category Api interface
  * @since 4.0.0
  */
-export interface instanceOf<C> extends declare<C, C, readonly []> {}
+export interface instanceOf<C> extends declare<C, C, readonly []> {
+  readonly "~rebuild.out": instanceOf<C>
+}
 
 /**
  * @since 4.0.0
@@ -2361,7 +2428,7 @@ export const FiniteFromString: FiniteFromString = String.pipe(decodeTo(
 /**
  * @since 4.0.0
  */
-export function getClassSchema<C extends new(...args: Array<any>) => any, S extends Struct<Struct.Fields>>(
+export function getNativeClassSchema<C extends new(...args: Array<any>) => any, S extends Struct<Struct.Fields>>(
   constructor: C,
   options: {
     readonly encoding: S
@@ -2412,6 +2479,8 @@ export interface Class<Self, S extends Top & { readonly fields: Struct.Fields },
 }
 
 /**
+ * Not all classes are extendable (e.g. `RequestClass`).
+ *
  * @category Api interface
  * @since 4.0.0
  */
@@ -2673,7 +2742,9 @@ export const RequestClass =
  * @category Api interface
  * @since 4.0.0
  */
-export interface declareRefinement<T> extends declare<T, T, readonly []> {}
+export interface declareRefinement<T> extends declare<T, T, readonly []> {
+  readonly "~rebuild.out": declareRefinement<T>
+}
 
 /**
  * @since 4.0.0

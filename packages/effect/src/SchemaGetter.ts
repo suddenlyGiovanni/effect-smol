@@ -2,6 +2,7 @@
  * @since 4.0.0
  */
 
+import type * as Effect from "./Effect.js"
 import { PipeableClass } from "./internal/schema/util.js"
 import * as Option from "./Option.js"
 import * as Predicate from "./Predicate.js"
@@ -119,6 +120,26 @@ export function onSome<T, E, R = never>(
   return new SchemaGetter((oe, ast, options) =>
     Option.isNone(oe) ? SchemaResult.succeedNone : f(oe.value, ast, options)
   )
+}
+
+/**
+ * @category constructors
+ * @since 4.0.0
+ */
+export function checkEffect<T, R>(
+  f: (
+    input: T,
+    self: SchemaAST.AST,
+    options: SchemaAST.ParseOptions
+  ) => Effect.Effect<undefined | SchemaIssue.Issue, never, R>
+): SchemaGetter<T, T, R> {
+  return onSome((t, ast, options) => {
+    return f(t, ast, options).pipe(SchemaResult.flatMap((issue) => {
+      return issue ?
+        SchemaResult.fail(issue) :
+        SchemaResult.succeed(Option.some(t))
+    }))
+  })
 }
 
 /**
