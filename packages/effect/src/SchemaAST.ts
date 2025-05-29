@@ -11,10 +11,11 @@ import * as RegEx from "./RegExp.js"
 import * as Result from "./Result.js"
 import type { Annotated, Annotations } from "./SchemaAnnotations.js"
 import type * as SchemaCheck from "./SchemaCheck.js"
+import * as SchemaGetter from "./SchemaGetter.js"
 import * as SchemaIssue from "./SchemaIssue.js"
 import * as SchemaResult from "./SchemaResult.js"
 import type * as SchemaToParser from "./SchemaToParser.js"
-import type * as SchemaTransformation from "./SchemaTransformation.js"
+import * as SchemaTransformation from "./SchemaTransformation.js"
 
 /**
  * @category model
@@ -42,6 +43,53 @@ export type AST =
   | TypeLiteral
   | UnionType
   | Suspend
+
+function makeGuard<T extends AST["_tag"]>(tag: T) {
+  return (ast: AST): ast is Extract<AST, { _tag: T }> => ast._tag === tag
+}
+
+/** @internal */
+export const isDeclaration = makeGuard("Declaration")
+/** @internal */
+export const isNullKeyword = makeGuard("NullKeyword")
+/** @internal */
+export const isUndefinedKeyword = makeGuard("UndefinedKeyword")
+/** @internal */
+export const isVoidKeyword = makeGuard("VoidKeyword")
+/** @internal */
+export const isNeverKeyword = makeGuard("NeverKeyword")
+/** @internal */
+export const isUnknownKeyword = makeGuard("UnknownKeyword")
+/** @internal */
+export const isAnyKeyword = makeGuard("AnyKeyword")
+/** @internal */
+export const isStringKeyword = makeGuard("StringKeyword")
+/** @internal */
+export const isNumberKeyword = makeGuard("NumberKeyword")
+/** @internal */
+export const isBooleanKeyword = makeGuard("BooleanKeyword")
+/** @internal */
+export const isBigIntKeyword = makeGuard("BigIntKeyword")
+/** @internal */
+export const isSymbolKeyword = makeGuard("SymbolKeyword")
+/** @internal */
+export const isLiteralType = makeGuard("LiteralType")
+/** @internal */
+export const isUniqueSymbol = makeGuard("UniqueSymbol")
+/** @internal */
+export const isObjectKeyword = makeGuard("ObjectKeyword")
+/** @internal */
+export const isEnums = makeGuard("Enums")
+/** @internal */
+export const isTemplateLiteral = makeGuard("TemplateLiteral")
+/** @internal */
+export const isTupleType = makeGuard("TupleType")
+/** @internal */
+export const isTypeLiteral = makeGuard("TypeLiteral")
+/** @internal */
+export const isUnionType = makeGuard("UnionType")
+/** @internal */
+export const isSuspend = makeGuard("Suspend")
 
 /**
  * @category model
@@ -208,7 +256,7 @@ export class NullKeyword extends Concrete {
   readonly _tag = "NullKeyword"
   /** @internal */
   parser() {
-    return fromPredicate(this, Predicate.isNull)
+    return fromRefinement(this, Predicate.isNull)
   }
 }
 
@@ -225,7 +273,7 @@ export class UndefinedKeyword extends Concrete {
   readonly _tag = "UndefinedKeyword"
   /** @internal */
   parser() {
-    return fromPredicate(this, Predicate.isUndefined)
+    return fromRefinement(this, Predicate.isUndefined)
   }
 }
 
@@ -242,7 +290,7 @@ export class VoidKeyword extends Concrete {
   readonly _tag = "VoidKeyword"
   /** @internal */
   parser() {
-    return fromPredicate(this, Predicate.isUndefined)
+    return fromRefinement(this, Predicate.isUndefined)
   }
 }
 
@@ -259,7 +307,7 @@ export class NeverKeyword extends Concrete {
   readonly _tag = "NeverKeyword"
   /** @internal */
   parser() {
-    return fromPredicate(this, Predicate.isNever)
+    return fromRefinement(this, Predicate.isNever)
   }
 }
 
@@ -276,7 +324,7 @@ export class AnyKeyword extends Concrete {
   readonly _tag = "AnyKeyword"
   /** @internal */
   parser() {
-    return fromPredicate(this, Predicate.isUnknown)
+    return fromRefinement(this, Predicate.isUnknown)
   }
 }
 
@@ -293,7 +341,7 @@ export class UnknownKeyword extends Concrete {
   readonly _tag = "UnknownKeyword"
   /** @internal */
   parser() {
-    return fromPredicate(this, Predicate.isUnknown)
+    return fromRefinement(this, Predicate.isUnknown)
   }
 }
 
@@ -310,7 +358,7 @@ export class ObjectKeyword extends Concrete {
   readonly _tag = "ObjectKeyword"
   /** @internal */
   parser() {
-    return fromPredicate(this, Predicate.isObject)
+    return fromRefinement(this, Predicate.isObject)
   }
 }
 
@@ -331,7 +379,7 @@ export class Enums extends Concrete {
   }
   /** @internal */
   parser() {
-    return fromPredicate(
+    return fromRefinement(
       this,
       (input): input is typeof this.enums[number][1] => this.enums.some(([_, value]) => value === input)
     )
@@ -344,25 +392,47 @@ export class Enums extends Concrete {
 export const objectKeyword = new ObjectKeyword(undefined, undefined, undefined, undefined)
 
 /**
- * @category model
  * @since 4.0.0
  */
-export type TemplateLiteralSpanType =
-  | StringKeyword
-  | NumberKeyword
-  | LiteralType
-  | TemplateLiteral
-  | UnionType<TemplateLiteralSpanType>
+export declare namespace TemplateLiteral {
+  /**
+   * @category model
+   * @since 4.0.0
+   */
+  export type ASTPart =
+    | StringKeyword
+    | NumberKeyword
+    | BigIntKeyword
+    | LiteralType
+    | TemplateLiteral
+    | UnionType<ASTPart>
+  /**
+   * @since 4.0.0
+   */
+  export type LiteralPart = string | number | bigint
+  /**
+   * @since 4.0.0
+   */
+  export type Part = ASTPart | LiteralPart
+  /**
+   * @since 4.0.0
+   */
+  export type Parts = ReadonlyArray<Part>
+}
 
-/**
- * @category model
- * @since 4.0.0
- */
-export class TemplateLiteralSpan {
-  constructor(
-    readonly type: TemplateLiteralSpanType,
-    readonly literal: string
-  ) {}
+function isASTPart(ast: AST): ast is TemplateLiteral.ASTPart {
+  switch (ast._tag) {
+    case "StringKeyword":
+    case "NumberKeyword":
+    case "BigIntKeyword":
+    case "LiteralType":
+    case "TemplateLiteral":
+      return true
+    case "UnionType":
+      return ast.types.every(isASTPart)
+    default:
+      return false
+  }
 }
 
 /**
@@ -371,20 +441,98 @@ export class TemplateLiteralSpan {
  */
 export class TemplateLiteral extends Concrete {
   readonly _tag = "TemplateLiteral"
+  /** @internal */
+  readonly flippedParts: ReadonlyArray<TemplateLiteral.ASTPart>
   constructor(
-    readonly head: string,
-    readonly spans: Arr.NonEmptyReadonlyArray<TemplateLiteralSpan>,
+    readonly parts: ReadonlyArray<AST | TemplateLiteral.LiteralPart>,
     annotations: Annotations | undefined,
     checks: Checks | undefined,
     encoding: Encoding | undefined,
     context: Context | undefined
   ) {
     super(annotations, checks, encoding, context)
+    const flippedParts: Array<TemplateLiteral.ASTPart> = []
+    for (const part of parts) {
+      if (Predicate.isObject(part)) {
+        const flipped = flip(part)
+        if (isASTPart(flipped)) {
+          flippedParts.push(flipped)
+        } else {
+          throw new Error("Invalid TemplateLiteral part")
+        }
+      } else {
+        flippedParts.push(new LiteralType(part, undefined, undefined, undefined, undefined))
+      }
+    }
+    this.flippedParts = flippedParts
   }
   /** @internal */
-  parser() {
-    const regex = getTemplateLiteralRegExp(this)
-    return fromPredicate(this, (input): input is string => Predicate.isString(input) && regex.test(input))
+  parser(go: (ast: AST) => SchemaToParser.Parser<unknown, unknown>) {
+    const parser = go(this.asTemplateLiteralParser())
+    return (oinput: Option.Option<unknown>, options: ParseOptions) =>
+      parser(oinput, options).pipe(
+        SchemaResult.mapBoth({
+          onSuccess: () => oinput,
+          onFailure: () => new SchemaIssue.InvalidType(this, oinput)
+        })
+      )
+  }
+  /** @internal */
+  asTemplateLiteralParser() {
+    const elements = this.flippedParts.map((part) => flip(addPartCoercion(part)))
+    const tuple = new TupleType(true, elements, [], undefined, undefined, undefined, undefined)
+    const regex = getTemplateLiteralCapturingRegExp(this)
+    return decodeTo(
+      stringKeyword,
+      tuple,
+      new SchemaTransformation.SchemaTransformation(
+        SchemaGetter.transform((s: string) => {
+          const match = regex.exec(s)
+          if (match) {
+            return match.slice(1, elements.length + 1)
+          }
+          return []
+        }),
+        SchemaGetter.transform((parts) => parts.join(""))
+      )
+    )
+  }
+}
+
+function addPartNumberCoercion(part: NumberKeyword | LiteralType): AST {
+  return decodeTo(part, stringKeyword, SchemaTransformation.numberFromString.flip())
+}
+
+function addPartBigIntCoercion(part: BigIntKeyword | LiteralType): AST {
+  return decodeTo(part, stringKeyword, SchemaTransformation.bigintFromString.flip())
+}
+
+function addPartCoercion(part: TemplateLiteral.ASTPart): AST {
+  switch (part._tag) {
+    case "NumberKeyword":
+      return addPartNumberCoercion(part)
+    case "BigIntKeyword":
+      return addPartBigIntCoercion(part)
+    case "UnionType":
+      return new UnionType(
+        part.types.map(addPartCoercion),
+        part.mode,
+        undefined,
+        undefined,
+        undefined,
+        undefined
+      )
+    case "LiteralType": {
+      if (Predicate.isNumber(part.literal)) {
+        return addPartNumberCoercion(part)
+      } else if (Predicate.isBigInt(part.literal)) {
+        return addPartBigIntCoercion(part)
+      } else {
+        return part
+      }
+    }
+    default:
+      return part
   }
 }
 
@@ -411,7 +559,7 @@ export class UniqueSymbol extends Concrete {
   }
   /** @internal */
   parser() {
-    return fromPredicate(this, (input): input is typeof this.symbol => input === this.symbol)
+    return fromRefinement(this, (input): input is typeof this.symbol => input === this.symbol)
   }
 }
 
@@ -432,7 +580,7 @@ export class LiteralType extends Concrete {
   }
   /** @internal */
   parser() {
-    return fromPredicate(this, (input): input is typeof this.literal => input === this.literal)
+    return fromRefinement(this, (input): input is typeof this.literal => input === this.literal)
   }
 }
 
@@ -444,7 +592,7 @@ export class StringKeyword extends Concrete {
   readonly _tag = "StringKeyword"
   /** @internal */
   parser() {
-    return fromPredicate(this, Predicate.isString)
+    return fromRefinement(this, Predicate.isString)
   }
 }
 
@@ -461,7 +609,7 @@ export class NumberKeyword extends Concrete {
   readonly _tag = "NumberKeyword"
   /** @internal */
   parser() {
-    return fromPredicate(this, Predicate.isNumber)
+    return fromRefinement(this, Predicate.isNumber)
   }
 }
 
@@ -478,7 +626,7 @@ export class BooleanKeyword extends Concrete {
   readonly _tag = "BooleanKeyword"
   /** @internal */
   parser() {
-    return fromPredicate(this, Predicate.isBoolean)
+    return fromRefinement(this, Predicate.isBoolean)
   }
 }
 
@@ -495,7 +643,7 @@ export class SymbolKeyword extends Concrete {
   readonly _tag = "SymbolKeyword"
   /** @internal */
   parser() {
-    return fromPredicate(this, Predicate.isSymbol)
+    return fromRefinement(this, Predicate.isSymbol)
   }
 }
 
@@ -512,7 +660,7 @@ export class BigIntKeyword extends Concrete {
   readonly _tag = "BigIntKeyword"
   /** @internal */
   parser() {
-    return fromPredicate(this, Predicate.isBigInt)
+    return fromRefinement(this, Predicate.isBigInt)
   }
 }
 
@@ -613,7 +761,7 @@ export class TupleType extends Extensions {
       new TupleType(this.isReadonly, elements, rest, this.annotations, this.checks, undefined, this.context)
   }
   /** @internal */
-  parser(go: (ast: AST) => SchemaToParser.InternalParser<Option.Option<unknown>, Option.Option<unknown>, unknown>) {
+  parser(go: (ast: AST) => SchemaToParser.Parser<unknown, unknown>) {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const ast = this
     return Effect.fnUntraced(function*(oinput, options) {
@@ -765,12 +913,12 @@ export class TypeLiteral extends Extensions {
       )
   }
   /** @internal */
-  parser(go: (ast: AST) => SchemaToParser.InternalParser<Option.Option<unknown>, Option.Option<unknown>, unknown>) {
+  parser(go: (ast: AST) => SchemaToParser.Parser<unknown, unknown>) {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const ast = this
     // Handle empty Struct({}) case
     if (ast.propertySignatures.length === 0 && ast.indexSignatures.length === 0) {
-      return fromPredicate(ast, Predicate.isNotNullable)
+      return fromRefinement(ast, Predicate.isNotNullable)
     }
     const getOwnKeys = ownKeys // TODO: can be optimized?
     return Effect.fnUntraced(function*(oinput, options) {
@@ -987,7 +1135,7 @@ export class UnionType<A extends AST = AST> extends Extensions {
       new UnionType(types, this.mode, this.annotations, this.checks, undefined, this.context)
   }
   /** @internal */
-  parser(go: (ast: AST) => SchemaToParser.InternalParser<Option.Option<unknown>, Option.Option<unknown>, unknown>) {
+  parser(go: (ast: AST) => SchemaToParser.Parser<unknown, unknown>) {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const ast = this
     return Effect.fnUntraced(function*(oinput, options) {
@@ -1060,7 +1208,7 @@ export class Suspend extends Extensions {
     return new Suspend(() => flip(this.thunk()), this.annotations, this.checks, undefined, this.context)
   }
   /** @internal */
-  parser(go: (ast: AST) => SchemaToParser.InternalParser<Option.Option<unknown>, Option.Option<unknown>, unknown>) {
+  parser(go: (ast: AST) => SchemaToParser.Parser<unknown, unknown>) {
     return go(this.thunk())
   }
 }
@@ -1234,11 +1382,11 @@ export function withConstructorDefault<A extends AST>(
 }
 
 /** @internal */
-export function decodeTo(
+export function decodeTo<A extends AST>(
   from: AST,
-  to: AST,
+  to: A,
   transformation: Transformation
-): AST {
+): A {
   return appendTransformation(from, transformation, to)
 }
 
@@ -1405,38 +1553,28 @@ function formatTail(tail: ReadonlyArray<AST>): string {
 }
 
 const formatTemplateLiteral = (ast: TemplateLiteral): string =>
-  "`" + ast.head + ast.spans.map((span) => formatTemplateLiteralSpan(span)).join("") +
+  "`" + ast.flippedParts.map((ast) => formatTemplateLiteralASTPart(typeAST(ast))).join("") +
   "`"
 
-const formatTemplateLiteralSpan = (span: TemplateLiteralSpan): string => {
-  return formatTemplateLiteralSpanType(span.type) + span.literal
-}
-
-function formatTemplateLiteralSpanType(type: TemplateLiteralSpanType): string {
-  switch (type._tag) {
+function formatTemplateLiteralASTPart(part: TemplateLiteral.ASTPart): string {
+  switch (part._tag) {
     case "LiteralType":
-      return String(type.literal)
+      return String(part.literal)
     case "StringKeyword":
-      return "${string}"
     case "NumberKeyword":
-      return "${number}"
+    case "BigIntKeyword":
     case "TemplateLiteral":
-      return "${" + format(type) + "}"
+      return "${" + format(part) + "}"
     case "UnionType":
-      return "${" + type.types.map(formatTemplateLiteralSpanUnionType).join(" | ") + "}"
+      return "${" + part.types.map(formatTemplateLiteralASTWithinUnion).join(" | ") + "}"
   }
 }
 
-const formatTemplateLiteralSpanUnionType = (type: TemplateLiteralSpanType): string => {
-  switch (type._tag) {
-    case "LiteralType":
-    case "StringKeyword":
-    case "NumberKeyword":
-    case "TemplateLiteral":
-      return format(type)
-    case "UnionType":
-      return type.types.map(formatTemplateLiteralSpanUnionType).join(" | ")
+const formatTemplateLiteralASTWithinUnion = (part: TemplateLiteral.ASTPart): string => {
+  if (isUnionType(part)) {
+    return part.types.map(formatTemplateLiteralASTWithinUnion).join(" | ")
   }
+  return format(part)
 }
 
 function formatAST(ast: AST): string {
@@ -1458,7 +1596,7 @@ function formatAST(ast: AST): string {
       return "<Declaration>"
     }
     case "LiteralType":
-      return JSON.stringify(String(ast.literal))
+      return JSON.stringify(ast.literal)
     case "NeverKeyword":
       return "never"
     case "AnyKeyword":
@@ -1594,103 +1732,64 @@ export const format = memoize((ast: AST): string => {
   return out
 })
 
-const makeGuard = <T extends AST["_tag"]>(tag: T) => (ast: AST): ast is Extract<AST, { _tag: T }> => ast._tag === tag
-
-/** @internal */
-export const isNullKeyword = makeGuard("NullKeyword")
-/** @internal */
-export const isUndefinedKeyword = makeGuard("UndefinedKeyword")
-/** @internal */
-export const isStringKeyword = makeGuard("StringKeyword")
-/** @internal */
-export const isNumberKeyword = makeGuard("NumberKeyword")
-/** @internal */
-export const isBooleanKeyword = makeGuard("BooleanKeyword")
-/** @internal */
-export const isSymbolKeyword = makeGuard("SymbolKeyword")
-/** @internal */
-export const isTupleType = makeGuard("TupleType")
-/** @internal */
-export const isTypeLiteral = makeGuard("TypeLiteral")
-/** @internal */
-export const isUnionType = makeGuard("UnionType")
-/** @internal */
-export const isSuspend = makeGuard("Suspend")
-/** @internal */
-export const isLiteral = makeGuard("LiteralType")
-/** @internal */
-export const isTemplateLiteral = makeGuard("TemplateLiteral")
-/** @internal */
-export const isUnion = makeGuard("UnionType")
-
-/** @internal */
-export const getTemplateLiteralRegExp = (ast: TemplateLiteral): RegExp =>
-  new RegExp(`^${getTemplateLiteralPattern(ast, false, true)}$`)
-
-const getTemplateLiteralPattern = (ast: TemplateLiteral, capture: boolean, top: boolean): string => {
-  let pattern = ``
-  if (ast.head !== "") {
-    const head = RegEx.escape(ast.head)
-    pattern += capture && top ? `(${head})` : head
-  }
-
-  for (const span of ast.spans) {
-    const spanPattern = getTemplateLiteralSpanTypePattern(span.type, capture)
-    pattern += handleTemplateLiteralSpanTypeParens(span.type, spanPattern, capture, top)
-    if (span.literal !== "") {
-      const literal = RegEx.escape(span.literal)
-      pattern += capture && top ? `(${literal})` : literal
-    }
-  }
-
-  return pattern
+function getTemplateLiteralPattern(ast: TemplateLiteral, top: boolean): string {
+  return ast.flippedParts.map((part) =>
+    handleTemplateLiteralASTPartParens(part, getTemplateLiteralASTPartPattern(part), top)
+  ).join("")
 }
 
-const STRING_KEYWORD_PATTERN = "[\\s\\S]*" // any string, including newlines
-const NUMBER_KEYWORD_PATTERN = "[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?"
+/** @internal */
+export function getTemplateLiteralCapturingRegExp(ast: TemplateLiteral): RegExp {
+  return new RegExp(`^${getTemplateLiteralPattern(ast, true)}$`)
+}
 
-const getTemplateLiteralSpanTypePattern = (type: TemplateLiteralSpanType, capture: boolean): string => {
-  switch (type._tag) {
+// any string, including newlines
+const STRING_KEYWORD_PATTERN = "[\\s\\S]*"
+// floating point or integer, with optional exponent
+const NUMBER_KEYWORD_PATTERN = "[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?"
+// signed integer only (no leading “+”)
+const BIGINT_KEYWORD_PATTERN = "-?\\d+"
+
+function getTemplateLiteralASTPartPattern(part: TemplateLiteral.ASTPart): string {
+  switch (part._tag) {
     case "LiteralType":
-      return RegEx.escape(String(type.literal))
+      return RegEx.escape(String(part.literal))
     case "StringKeyword":
       return STRING_KEYWORD_PATTERN
     case "NumberKeyword":
       return NUMBER_KEYWORD_PATTERN
+    case "BigIntKeyword":
+      return BIGINT_KEYWORD_PATTERN
     case "TemplateLiteral":
-      return getTemplateLiteralPattern(type, capture, false)
+      return getTemplateLiteralPattern(part, false)
     case "UnionType":
-      return type.types.map((type) => getTemplateLiteralSpanTypePattern(type, capture)).join("|")
+      return part.types.map((type) => getTemplateLiteralASTPartPattern(type)).join("|")
   }
 }
 
-const handleTemplateLiteralSpanTypeParens = (
-  type: TemplateLiteralSpanType,
-  s: string,
-  capture: boolean,
-  top: boolean
-) => {
-  if (isUnion(type)) {
-    if (capture && !top) {
+function handleTemplateLiteralASTPartParens(part: TemplateLiteral.ASTPart, s: string, top: boolean): string {
+  if (isUnionType(part)) {
+    if (!top) {
       return `(?:${s})`
     }
-  } else if (!capture || !top) {
+  } else if (!top) {
     return s
   }
   return `(${s})`
 }
 
 /** @internal */
-export const fromPredicate = <T>(
+export function fromRefinement<T>(
   ast: AST,
-  predicate: (input: unknown) => input is T
-): SchemaToParser.InternalParser<Option.Option<T>, Option.Option<unknown>, never> =>
-(oinput) => {
-  if (Option.isNone(oinput)) {
-    return SchemaResult.succeedNone
+  refinement: (input: unknown) => input is T
+): SchemaToParser.Parser<T, never> {
+  return (oinput) => {
+    if (Option.isNone(oinput)) {
+      return SchemaResult.succeedNone
+    }
+    const u = oinput.value
+    return refinement(u)
+      ? SchemaResult.succeed(Option.some(u))
+      : SchemaResult.fail(new SchemaIssue.InvalidType(ast, oinput))
   }
-  const u = oinput.value
-  return predicate(u)
-    ? SchemaResult.succeed(Option.some(u))
-    : SchemaResult.fail(new SchemaIssue.InvalidType(ast, oinput))
 }

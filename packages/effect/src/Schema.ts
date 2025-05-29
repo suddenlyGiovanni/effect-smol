@@ -714,24 +714,30 @@ export declare namespace TemplateLiteral {
   /**
    * @since 4.0.0
    */
-  export type Param = (Top & { readonly ast: SchemaAST.TemplateLiteralSpanType }) | SchemaAST.LiteralValue
-
+  export interface SchemaPart extends Top {
+    readonly Encoded: string | number | bigint
+  }
   /**
    * @since 4.0.0
    */
-  export type Params = readonly [Param, ...ReadonlyArray<Param>]
+  export type Part = SchemaPart | SchemaAST.TemplateLiteral.LiteralPart
+  /**
+   * @since 4.0.0
+   */
+  export type Parts = ReadonlyArray<Part>
 
   type AppendType<
     Template extends string,
     Next
-  > = Next extends SchemaAST.LiteralValue ? `${Template}${Next}`
-    : Next extends Schema<infer A extends SchemaAST.LiteralValue> ? `${Template}${A}`
+  > = Next extends SchemaAST.TemplateLiteral.LiteralPart ? `${Template}${Next}`
+    : Next extends Codec<unknown, infer E extends SchemaAST.TemplateLiteral.LiteralPart, unknown, unknown> ?
+      `${Template}${E}`
     : never
 
   /**
    * @since 4.0.0
    */
-  export type Type<Params> = Params extends [...infer Init, infer Last] ? AppendType<Type<Init>, Last>
+  export type Encoded<Parts> = Parts extends readonly [...infer Init, infer Last] ? AppendType<Encoded<Init>, Last>
     : ``
 }
 
@@ -739,75 +745,100 @@ export declare namespace TemplateLiteral {
  * @category Api interface
  * @since 4.0.0
  */
-export interface TemplateLiteral<T>
-  extends Bottom<T, T, never, never, SchemaAST.TemplateLiteral, TemplateLiteral<T>, SchemaAnnotations.Annotations>
-{}
+export interface TemplateLiteral<Parts extends TemplateLiteral.Parts> extends
+  Bottom<
+    TemplateLiteral.Encoded<Parts>,
+    TemplateLiteral.Encoded<Parts>,
+    never,
+    never,
+    SchemaAST.TemplateLiteral,
+    TemplateLiteral<Parts>,
+    SchemaAnnotations.Annotations
+  >
+{
+  readonly parts: Parts
+}
+
+class TemplateLiteral$<Parts extends TemplateLiteral.Parts> extends make$<TemplateLiteral<Parts>>
+  implements TemplateLiteral<Parts>
+{
+  constructor(ast: SchemaAST.TemplateLiteral, readonly parts: Parts) {
+    super(ast, (ast) => new TemplateLiteral$(ast, parts))
+  }
+}
+
+function templateLiteralFromParts<Parts extends TemplateLiteral.Parts>(parts: Parts) {
+  return new SchemaAST.TemplateLiteral(
+    parts.map((part) => isSchema(part) ? part.ast : part),
+    undefined,
+    undefined,
+    undefined,
+    undefined
+  )
+}
 
 /**
  * @since 4.0.0
  */
-export function TemplateLiteral<Params extends TemplateLiteral.Params>(
-  ...[head, ...tail]: Params
-): TemplateLiteral<TemplateLiteral.Type<Params>> {
-  const spans: Array<SchemaAST.TemplateLiteralSpan> = []
-  let h = ""
-  let ts = tail
+export function TemplateLiteral<const Parts extends TemplateLiteral.Parts>(parts: Parts): TemplateLiteral<Parts> {
+  return new TemplateLiteral$(
+    templateLiteralFromParts(parts),
+    [...parts] as Parts
+  )
+}
 
-  if (isSchema(head)) {
-    if (SchemaAST.isLiteral(head.ast)) {
-      h = globalThis.String(head.ast.literal)
-    } else {
-      ts = [head, ...ts]
-    }
-  } else {
-    h = globalThis.String(head)
+/**
+ * @since 4.0.0
+ */
+export declare namespace TemplateLiteralParser {
+  /**
+   * @since 4.0.0
+   */
+  export type Type<Parts> = Parts extends readonly [infer Head, ...infer Tail] ? readonly [
+      Head extends SchemaAST.TemplateLiteral.LiteralPart ? Head :
+        Head extends Codec<infer T, unknown, unknown, unknown> ? T
+        : never,
+      ...Type<Tail>
+    ]
+    : []
+}
+
+/**
+ * @category Api interface
+ * @since 4.0.0
+ */
+export interface TemplateLiteralParser<Parts extends TemplateLiteral.Parts> extends
+  Bottom<
+    TemplateLiteralParser.Type<Parts>,
+    TemplateLiteral.Encoded<Parts>,
+    never,
+    never,
+    SchemaAST.TupleType,
+    TemplateLiteralParser<Parts>,
+    SchemaAnnotations.Annotations
+  >
+{
+  readonly parts: Parts
+}
+
+class TemplateLiteralParser$<Parts extends TemplateLiteral.Parts> extends make$<TemplateLiteralParser<Parts>>
+  implements TemplateLiteralParser<Parts>
+{
+  constructor(ast: SchemaAST.TupleType, readonly parts: Parts) {
+    super(ast, (ast) => new TemplateLiteralParser$(ast, parts))
   }
+}
 
-  for (let i = 0; i < ts.length; i++) {
-    const item = ts[i]
-    if (isSchema(item)) {
-      if (i < ts.length - 1) {
-        const next = ts[i + 1]
-        if (isSchema(next)) {
-          if (SchemaAST.isLiteral(next.ast)) {
-            spans.push(new SchemaAST.TemplateLiteralSpan(item.ast, globalThis.String(next.ast.literal)))
-            i++
-            continue
-          }
-        } else {
-          spans.push(new SchemaAST.TemplateLiteralSpan(item.ast, globalThis.String(next)))
-          i++
-          continue
-        }
-      }
-      spans.push(new SchemaAST.TemplateLiteralSpan(item.ast, ""))
-    } else {
-      spans.push(
-        new SchemaAST.TemplateLiteralSpan(
-          new SchemaAST.LiteralType(item, undefined, undefined, undefined, undefined),
-          ""
-        )
-      )
-    }
-  }
-
-  const ast = Arr.isNonEmptyArray(spans) ?
-    new SchemaAST.TemplateLiteral(h, spans, undefined, undefined, undefined, undefined)
-    : new SchemaAST.TemplateLiteral(
-      "",
-      [
-        new SchemaAST.TemplateLiteralSpan(
-          new SchemaAST.LiteralType(h, undefined, undefined, undefined, undefined),
-          ""
-        )
-      ],
-      undefined,
-      undefined,
-      undefined,
-      undefined
-    )
-
-  return make<TemplateLiteral<TemplateLiteral.Type<Params>>>(ast)
+/**
+ * @since 4.0.0
+ */
+export function TemplateLiteralParser<const Parts extends TemplateLiteral.Parts>(
+  parts: Parts
+): TemplateLiteralParser<Parts> {
+  return new TemplateLiteralParser$(
+    templateLiteralFromParts(parts).asTemplateLiteralParser(),
+    [...parts] as Parts
+  )
 }
 
 /**
@@ -1322,7 +1353,7 @@ export function ReadonlyRecord<Key extends IndexSignature.RecordKey, Value exten
 /**
  * @since 4.0.0
  */
-export declare namespace StructAndRest {
+export declare namespace StructWithRest {
   /**
    * @since 4.0.0
    */
@@ -1363,33 +1394,33 @@ export declare namespace StructAndRest {
  * @category Api interface
  * @since 4.0.0
  */
-export interface StructAndRest<
+export interface StructWithRest<
   Fields extends Struct.Fields,
   Records extends IndexSignature.Records
 > extends
   Bottom<
-    Simplify<StructAndRest.Type<Fields, Records>>,
-    Simplify<StructAndRest.Encoded<Fields, Records>>,
-    StructAndRest.DecodingContext<Fields, Records>,
-    StructAndRest.EncodingContext<Fields, Records>,
+    Simplify<StructWithRest.Type<Fields, Records>>,
+    Simplify<StructWithRest.Encoded<Fields, Records>>,
+    StructWithRest.DecodingContext<Fields, Records>,
+    StructWithRest.EncodingContext<Fields, Records>,
     SchemaAST.TypeLiteral,
-    StructAndRest<Fields, Records>,
-    SchemaAnnotations.Bottom<Simplify<StructAndRest.Type<Fields, Records>>>,
-    Simplify<StructAndRest.MakeIn<Fields, Records>>
+    StructWithRest<Fields, Records>,
+    SchemaAnnotations.Bottom<Simplify<StructWithRest.Type<Fields, Records>>>,
+    Simplify<StructWithRest.MakeIn<Fields, Records>>
   >
 {
   readonly fields: Fields
   readonly records: Records
 }
 
-class StructAndRest$$<const Fields extends Struct.Fields, const Records extends IndexSignature.Records>
-  extends make$<StructAndRest<Fields, Records>>
-  implements StructAndRest<Fields, Records>
+class StructWithRest$$<const Fields extends Struct.Fields, const Records extends IndexSignature.Records>
+  extends make$<StructWithRest<Fields, Records>>
+  implements StructWithRest<Fields, Records>
 {
   readonly fields: Fields
   readonly records: Records
   constructor(ast: SchemaAST.TypeLiteral, fields: Fields, records: Records) {
-    super(ast, (ast) => new StructAndRest$$(ast, fields, records))
+    super(ast, (ast) => new StructWithRest$$(ast, fields, records))
     this.fields = { ...fields }
     this.records = [...records] as any
   }
@@ -1398,10 +1429,10 @@ class StructAndRest$$<const Fields extends Struct.Fields, const Records extends 
 /**
  * @since 4.0.0
  */
-export function StructAndRest<const Fields extends Struct.Fields, const Records extends IndexSignature.Records>(
+export function StructWithRest<const Fields extends Struct.Fields, const Records extends IndexSignature.Records>(
   struct: Struct<Fields>,
   records: Records
-): StructAndRest<Fields, Records> {
+): StructWithRest<Fields, Records> {
   const ast = new SchemaAST.TypeLiteral(
     struct.ast.propertySignatures,
     records.map((record) => {
@@ -1412,7 +1443,7 @@ export function StructAndRest<const Fields extends Struct.Fields, const Records 
     undefined,
     undefined
   )
-  return new StructAndRest$$(ast, struct.fields, records)
+  return new StructWithRest$$(ast, struct.fields, records)
 }
 
 /**
@@ -1706,7 +1737,7 @@ export function Literals<const L extends ReadonlyArray<SchemaAST.LiteralValue>>(
       undefined,
       undefined
     ),
-    literals
+    [...literals] as L
   )
 }
 
@@ -2418,13 +2449,12 @@ export interface FiniteFromString extends decodeTo<Number, String, never, never>
 /**
  * @since 4.0.0
  */
-export const FiniteFromString: FiniteFromString = String.pipe(decodeTo(
-  Finite,
-  {
-    decode: SchemaGetter.Number(),
-    encode: SchemaGetter.String()
-  }
-))
+export const FiniteFromString: FiniteFromString = String.pipe(
+  decodeTo(
+    Finite,
+    SchemaTransformation.numberFromString
+  )
+)
 
 /**
  * @since 4.0.0
