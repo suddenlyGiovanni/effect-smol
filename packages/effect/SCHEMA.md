@@ -540,7 +540,7 @@ Output:
 ```ts
 import { Effect, Schema, SchemaCheck, SchemaFormatter } from "effect"
 
-const schema = Schema.ReadonlyArray(Schema.String).pipe(
+const schema = Schema.Array(Schema.String).pipe(
   Schema.check(SchemaCheck.minLength(3))
 )
 
@@ -1236,11 +1236,77 @@ console.log(Schema.decodeUnknownSync(Product)({ quantity: "2" }))
 // Output: { quantity: { _id: 'Option', _tag: 'Some', value: 2 }
 ```
 
+### Index Signatures
+
+You can extend a struct with an index signature using `Schema.StructWithRest`. This allows you to define both fixed and dynamic properties in a single schema.
+
+Filters applied to either the struct or the record are preserved when combined.
+
+**Example** (Combining fixed properties with an index signature)
+
+```ts
+import { Schema } from "effect"
+
+// Define a schema with one fixed key "a" and any number of string keys mapping to numbers
+export const schema = Schema.StructWithRest(
+  Schema.Struct({ a: Schema.Number }),
+  [Schema.Record(Schema.String, Schema.Number)]
+)
+
+/*
+type Type = {
+    readonly [x: string]: number;
+    readonly a: number;
+}
+*/
+export type Type = typeof schema.Type
+
+/*
+type Encoded = {
+    readonly [x: string]: number;
+    readonly a: number;
+}
+*/
+export type Encoded = typeof schema.Encoded
+```
+
+If you want the record part to be mutable, you can wrap it in `Schema.mutable`.
+
+**Example** (Allowing dynamic keys to be mutable)
+
+```ts
+import { Schema } from "effect"
+
+// Define a schema with one fixed key "a" and any number of string keys mapping to numbers
+export const schema = Schema.StructWithRest(
+  Schema.Struct({ a: Schema.Number }),
+  [Schema.mutable(Schema.Record(Schema.String, Schema.Number))]
+)
+
+/*
+type Type = {
+    [x: string]: number;
+    readonly a: number;
+}
+*/
+export type Type = typeof schema.Type
+
+/*
+type Encoded = {
+    [x: string]: number;
+    readonly a: number;
+}
+*/
+export type Encoded = typeof schema.Encoded
+```
+
+## Records
+
 ### Key Transformations
 
-`Schema.ReadonlyRecord` now supports key transformations.
+`Schema.Record` supports transforming keys during decoding and encoding. This can be useful when working with different naming conventions.
 
-**Example**
+**Example** (Transforming snake_case keys to camelCase)
 
 ```ts
 import { Schema, SchemaTransformation } from "effect"
@@ -1249,15 +1315,15 @@ const SnakeToCamel = Schema.String.pipe(
   Schema.decode(SchemaTransformation.snakeToCamel())
 )
 
-const schema = Schema.ReadonlyRecord(SnakeToCamel, Schema.Number)
+const schema = Schema.Record(SnakeToCamel, Schema.Number)
 
 console.log(Schema.decodeUnknownSync(schema)({ a_b: 1, c_d: 2 }))
 // { aB: 1, cD: 2 }
 ```
 
-By default duplicate keys are merged with the last value.
+By default, if a transformation results in duplicate keys, the last value wins.
 
-**Example** (Merging duplicate keys)
+**Example** (Merging transformed keys by keeping the last one)
 
 ```ts
 import { Schema, SchemaTransformation } from "effect"
@@ -1266,15 +1332,15 @@ const SnakeToCamel = Schema.String.pipe(
   Schema.decode(SchemaTransformation.snakeToCamel())
 )
 
-const schema = Schema.ReadonlyRecord(SnakeToCamel, Schema.Number)
+const schema = Schema.Record(SnakeToCamel, Schema.Number)
 
 console.log(Schema.decodeUnknownSync(schema)({ a_b: 1, aB: 2 }))
 // { aB: 2 }
 ```
 
-You can also customize how duplicate keys are merged.
+You can customize how key conflicts are resolved by providing a `combine` function.
 
-**Example** (Customizing key merging)
+**Example** (Combining values for conflicting keys)
 
 ```ts
 import { Schema, SchemaTransformation } from "effect"
@@ -1283,12 +1349,14 @@ const SnakeToCamel = Schema.String.pipe(
   Schema.decode(SchemaTransformation.snakeToCamel())
 )
 
-const schema = Schema.ReadonlyRecord(SnakeToCamel, Schema.Number, {
+const schema = Schema.Record(SnakeToCamel, Schema.Number, {
   key: {
     decode: {
+      // When decoding, combine values of conflicting keys by summing them
       combine: ([_, v1], [k2, v2]) => [k2, v1 + v2] // you can pass a Semigroup to combine keys
     },
     encode: {
+      // Same logic applied when encoding
       combine: ([_, v1], [k2, v2]) => [k2, v1 + v2]
     }
   }
@@ -1299,6 +1367,34 @@ console.log(Schema.decodeUnknownSync(schema)({ a_b: 1, aB: 2 }))
 
 console.log(Schema.encodeUnknownSync(schema)({ a_b: 1, aB: 2 }))
 // { a_b: 3 }
+```
+
+### Mutability
+
+By default, records are treated as immutable. You can mark a record as mutable using `Schema.mutable`.
+
+**Example** (Defining a mutable record)
+
+```ts
+import { Schema } from "effect"
+
+export const schema = Schema.mutable(
+  Schema.Record(Schema.String, Schema.Number)
+)
+
+/*
+type Type = {
+    [x: string]: number;
+}
+*/
+export type Type = typeof schema.Type
+
+/*
+type Encoded = {
+    [x: string]: number;
+}
+*/
+export type Encoded = typeof schema.Encoded
 ```
 
 ## Opaque Structs
@@ -1476,7 +1572,7 @@ import { Schema } from "effect"
 export class Category extends Schema.Opaque<Category>()(
   Schema.Struct({
     name: Schema.String,
-    children: Schema.ReadonlyArray(
+    children: Schema.Array(
       Schema.suspend((): Schema.Codec<Category> => Category)
     )
   })
@@ -1501,7 +1597,7 @@ interface CategoryEncoded extends Schema.Codec.Encoded<typeof Category> {}
 export class Category extends Schema.Opaque<Category>()(
   Schema.Struct({
     name: Schema.FiniteFromString,
-    children: Schema.ReadonlyArray(
+    children: Schema.Array(
       Schema.suspend((): Schema.Codec<Category, CategoryEncoded> => Category)
     )
   })
@@ -1557,6 +1653,33 @@ type Encoded = {
 export type Encoded = (typeof Operation)["Encoded"]
 ```
 
+## Tuples
+
+### Rest Elements
+
+You can add rest elements to a tuple using `Schema.TupleWithRest`.
+
+**Example** (Adding rest elements to a tuple)
+
+```ts
+import { Schema } from "effect"
+
+export const schema = Schema.TupleWithRest(
+  Schema.Tuple([Schema.FiniteFromString, Schema.String]),
+  [Schema.Boolean, Schema.String]
+)
+
+/*
+type Type = readonly [number, string, ...boolean[], string]
+*/
+export type Type = typeof schema.Type
+
+/*
+type Encoded = readonly [string, string, ...boolean[], string]
+*/
+export type Encoded = typeof schema.Encoded
+```
+
 ## Classes
 
 ### Existing Classes
@@ -1570,10 +1693,7 @@ export type Encoded = (typeof Operation)["Encoded"]
 ```ts
 import { Schema, SchemaFormatter, SchemaIssue } from "effect"
 
-const PersonConstructorArguments = Schema.ReadonlyTuple([
-  Schema.String,
-  Schema.Finite
-])
+const PersonConstructorArguments = Schema.Tuple([Schema.String, Schema.Finite])
 
 // Existing class
 class Person {
@@ -1610,10 +1730,7 @@ readonly [string, number & finite]
 ```ts
 import { Schema } from "effect"
 
-const PersonConstructorArguments = Schema.ReadonlyTuple([
-  Schema.String,
-  Schema.Finite
-])
+const PersonConstructorArguments = Schema.Tuple([Schema.String, Schema.Finite])
 
 class Person {
   constructor(
@@ -1624,9 +1741,7 @@ class Person {
   }
 }
 
-const PersonWithEmailConstructorArguments = Schema.ReadonlyTuple([
-  Schema.String
-])
+const PersonWithEmailConstructorArguments = Schema.Tuple([Schema.String])
 
 class PersonWithEmail extends Person {
   constructor(
@@ -1660,7 +1775,7 @@ const PersonSchema = Schema.instanceOf({
     // optional: default JSON serialization
     defaultJsonSerializer: () =>
       Schema.link<Person>()(
-        Schema.ReadonlyTuple([Schema.String, Schema.Number]),
+        Schema.Tuple([Schema.String, Schema.Number]),
         SchemaTransformation.transform({
           decode: (args) => new Person(...args),
           encode: (instance) => [instance.name, instance.age] as const
@@ -1702,7 +1817,7 @@ const PersonSchema = Schema.instanceOf({
     // optional: default JSON serialization
     defaultJsonSerializer: () =>
       Schema.link<Person>()(
-        Schema.ReadonlyTuple([Schema.String, Schema.Number]),
+        Schema.Tuple([Schema.String, Schema.Number]),
         SchemaTransformation.transform({
           decode: (args) => new Person(...args),
           encode: (instance) => [instance.name, instance.age] as const
@@ -1954,7 +2069,7 @@ import { Schema } from "effect"
 export class Category extends Schema.Class<Category>("Category")(
   Schema.Struct({
     name: Schema.String,
-    children: Schema.ReadonlyArray(
+    children: Schema.Array(
       Schema.suspend((): Schema.Codec<Category> => Category)
     )
   })
@@ -1979,7 +2094,7 @@ interface CategoryEncoded extends Schema.Codec.Encoded<typeof Category> {}
 export class Category extends Schema.Class<Category>("Category")(
   Schema.Struct({
     name: Schema.FiniteFromString,
-    children: Schema.ReadonlyArray(
+    children: Schema.Array(
       Schema.suspend((): Schema.Codec<Category, CategoryEncoded> => Category)
     )
   })

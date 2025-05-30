@@ -113,8 +113,8 @@ describe("SchemaSerializerJson", () => {
       )
     })
 
-    it("ReadonlyRecord(Schema.Symbol, Schema.Date)", async () => {
-      const schema = Schema.ReadonlyRecord(Schema.Symbol, Schema.Date)
+    it("Record(Schema.Symbol, Schema.Date)", async () => {
+      const schema = Schema.Record(Schema.Symbol, Schema.Date)
 
       await assertions.deserialization.schema.succeed(
         schema,
@@ -129,8 +129,8 @@ describe("SchemaSerializerJson", () => {
       )
     })
 
-    it("ReadonlyTuple(Schema.Date, Schema.Date)", async () => {
-      const schema = Schema.ReadonlyTuple([Schema.Date, Schema.Date])
+    it("Tuple(Schema.Date, Schema.Date)", async () => {
+      const schema = Schema.Tuple([Schema.Date, Schema.Date])
 
       await assertions.serialization.schema.succeed(
         schema,
@@ -218,8 +218,8 @@ describe("SchemaSerializerJson", () => {
       )
     })
 
-    it("ReadonlyTuple(Schema.Date, Schema.Date)", async () => {
-      const schema = Schema.ReadonlyTuple([FiniteFromDate, FiniteFromDate])
+    it("Tuple(Schema.Date, Schema.Date)", async () => {
+      const schema = Schema.Tuple([FiniteFromDate, FiniteFromDate])
 
       await assertions.serialization.codec.succeed(
         schema,
