@@ -1,5 +1,15 @@
-import type { Context, SchemaAST, SchemaIssue } from "effect"
-import { Effect, Result, Schema, SchemaFormatter, SchemaResult, SchemaSerializer, SchemaToParser } from "effect"
+import type { Context, SchemaAST } from "effect"
+import {
+  Effect,
+  Predicate,
+  Result,
+  Schema,
+  SchemaFormatter,
+  SchemaIssue,
+  SchemaResult,
+  SchemaSerializer,
+  SchemaToParser
+} from "effect"
 
 export const assertions = (asserts: {
   readonly deepStrictEqual: (actual: unknown, expected: unknown) => void
@@ -21,6 +31,25 @@ export const assertions = (asserts: {
   }
 
   const out = {
+    promise: {
+      async succeed<A>(promise: Promise<A>, expected: A) {
+        deepStrictEqual(await promise, expected)
+      },
+
+      async fail<A>(promise: Promise<A>, message: string) {
+        try {
+          const a = await promise
+          throw new Error(`Promise didn't reject, got: ${a}`)
+        } catch (e: unknown) {
+          if (SchemaIssue.isIssue(e)) {
+            strictEqual(SchemaFormatter.TreeFormatter.format(e), message)
+          } else {
+            throw new Error(`Unknown promise rejection: ${e}`)
+          }
+        }
+      }
+    },
+
     ast: {
       equals: <A, I, RD, RE>(a: Schema.Codec<A, I, RD, RE>, b: Schema.Codec<A, I, RD, RE>) => {
         deepStrictEqual(a.ast, b.ast)
@@ -299,7 +328,7 @@ export const assertions = (asserts: {
       /**
        * Verifies that the Result is an `Ok` with the expected value.
        */
-      ok<const R, L>(result: Result.Result<R, L>, right: R) {
+      ok<const A, E>(result: Result.Result<A, E>, right: A) {
         if (Result.isOk(result)) {
           deepStrictEqual(result.ok, right)
         } else {
@@ -312,9 +341,13 @@ export const assertions = (asserts: {
       /**
        * Verifies that the Result is an `Err` with the expected value.
        */
-      err<R, const L>(result: Result.Result<R, L>, left: L) {
+      err<A, const E>(result: Result.Result<A, E>, err: E | ((err: E) => void)) {
         if (Result.isErr(result)) {
-          deepStrictEqual(result.err, left)
+          if (Predicate.isFunction(err)) {
+            err(result.err)
+          } else {
+            deepStrictEqual(result.err, err)
+          }
         } else {
           // eslint-disable-next-line no-console
           console.log(result.ok)
@@ -325,7 +358,7 @@ export const assertions = (asserts: {
       /**
        * Verifies that the Result is an `Err` with the expected value.
        */
-      async fail<R>(encoded: Result.Result<R, SchemaIssue.Issue>, message: string) {
+      async fail<A>(encoded: Result.Result<A, SchemaIssue.Issue>, message: string | ((message: string) => void)) {
         const encodedWithMessage = Effect.gen(function*() {
           if (Result.isErr(encoded)) {
             const message = SchemaFormatter.TreeFormatter.format(encoded.err)
@@ -334,7 +367,7 @@ export const assertions = (asserts: {
           return encoded.ok
         })
         const result = await Effect.runPromise(Effect.result(encodedWithMessage))
-        return out.result.err(result, message)
+        out.result.err(result, message)
       }
     },
 
