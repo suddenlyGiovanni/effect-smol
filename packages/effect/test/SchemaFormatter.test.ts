@@ -74,7 +74,7 @@ describe("StructuredFormatter", () => {
       {
         _tag: "InvalidData",
         path: ["a"],
-        message: `Expected minLength(1), actual ""`,
+        message: `Expected a value with a length of at least 1, actual ""`,
         actual: Option.some(""),
         abort: false,
         annotations: schema.fields.a.ast.checks?.[0]?.annotations
@@ -170,11 +170,39 @@ describe("StructuredFormatter", () => {
       {
         _tag: "InvalidData",
         path: [],
-        message: "Expected uuid, actual \"\"",
+        message:
+          "Expected a string matching the pattern ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$, actual \"\"",
         actual: Option.some(""),
         abort: false,
         annotations: schema.ast.checks?.[0]?.annotations
       }
     ])
+  })
+
+  describe("Structural checks", () => {
+    it("Array + minLength", async () => {
+      const schema = Schema.Struct({
+        tags: Schema.Array(Schema.String.check(SchemaCheck.nonEmpty)).check(SchemaCheck.minLength(3))
+      })
+
+      await assertStructuredIssue(schema, { tags: ["a", ""] }, [
+        {
+          _tag: "InvalidData",
+          path: ["tags", 1],
+          message: `Expected a value with a length of at least 1, actual ""`,
+          actual: Option.some(""),
+          abort: false,
+          annotations: schema.fields.tags.ast.rest[0].checks?.[0]?.annotations
+        },
+        {
+          _tag: "InvalidData",
+          path: ["tags"],
+          message: `Expected a value with a length of at least 3, actual ["a",""]`,
+          actual: Option.some(["a", ""]),
+          abort: false,
+          annotations: schema.fields.tags.ast.checks?.[0]?.annotations
+        }
+      ])
+    })
   })
 })
