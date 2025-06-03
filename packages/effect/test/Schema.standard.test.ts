@@ -123,7 +123,7 @@ describe("standardSchemaV1", () => {
     ])
     expectSyncFailure(standardSchema, "", [
       {
-        message: `Expected minLength(1), actual ""`,
+        message: `Expected a value with a length of at least 1, actual ""`,
         path: []
       }
     ])
@@ -141,7 +141,7 @@ describe("standardSchemaV1", () => {
     ])
     await expectAsyncFailure(standardSchema, "", [
       {
-        message: `Expected minLength(1), actual ""`,
+        message: `Expected a value with a length of at least 1, actual ""`,
         path: []
       }
     ])
@@ -222,11 +222,11 @@ describe("standardSchemaV1", () => {
       b: ""
     }, [
       {
-        message: `Expected minLength(1), actual ""`,
+        message: `Expected a value with a length of at least 1, actual ""`,
         path: ["a"]
       },
       {
-        message: `Expected minLength(1), actual ""`,
+        message: `Expected a value with a length of at least 1, actual ""`,
         path: ["b"]
       }
     ])
@@ -235,7 +235,7 @@ describe("standardSchemaV1", () => {
       b: ""
     }, [
       {
-        message: `Expected minLength(1), actual ""`,
+        message: `Expected a value with a length of at least 1, actual ""`,
         path: ["b"]
       }
     ])
@@ -244,11 +244,12 @@ describe("standardSchemaV1", () => {
       b: "b"
     }, [
       {
-        message: `Expected minLength(1), actual ""`,
+        message: `Expected a value with a length of at least 1, actual ""`,
         path: ["a"]
       }
     ])
   })
+
   it("sync decoding + sync first issue formatting", () => {
     const schema = Schema.Struct({
       a: Schema.NonEmptyString,
@@ -279,7 +280,7 @@ describe("standardSchemaV1", () => {
       b: ""
     }, [
       {
-        message: `Expected minLength(1), actual ""`,
+        message: `Expected a value with a length of at least 1, actual ""`,
         path: ["a"]
       }
     ])
@@ -288,7 +289,7 @@ describe("standardSchemaV1", () => {
       b: ""
     }, [
       {
-        message: `Expected minLength(1), actual ""`,
+        message: `Expected a value with a length of at least 1, actual ""`,
         path: ["b"]
       }
     ])
@@ -297,9 +298,34 @@ describe("standardSchemaV1", () => {
       b: "b"
     }, [
       {
-        message: `Expected minLength(1), actual ""`,
+        message: `Expected a value with a length of at least 1, actual ""`,
         path: ["a"]
       }
     ])
+  })
+
+  describe("Structural checks", () => {
+    it("Array + minLength", () => {
+      const schema = Schema.Struct({
+        tags: Schema.Array(Schema.String.check(SchemaCheck.nonEmpty)).check(SchemaCheck.minLength(3))
+      })
+
+      const standardSchema = Schema.standardSchemaV1(schema, { errors: "all" })
+      expectSyncFailure(standardSchema, { tags: ["a", ""] }, [
+        {
+          "message": `Expected a value with a length of at least 1, actual ""`,
+          "path": [
+            "tags",
+            1
+          ]
+        },
+        {
+          "message": `Expected a value with a length of at least 3, actual ["a",""]`,
+          "path": [
+            "tags"
+          ]
+        }
+      ])
+    })
   })
 })
