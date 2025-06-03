@@ -75,6 +75,7 @@ export interface Bottom<
   RebuildOut extends Top,
   AnnotateIn extends SchemaAnnotations.Annotations,
   TypeMakeIn = T,
+  TypeMake = TypeMakeIn,
   TypeReadonly extends ReadonlyToken = "readonly",
   TypeIsOptional extends OptionalToken = "required",
   TypeDefault extends DefaultConstructorToken = "no-constructor-default",
@@ -93,6 +94,7 @@ export interface Bottom<
   readonly "EncodingContext": RE
 
   readonly "~type.make.in": TypeMakeIn
+  readonly "~type.make": TypeMake
   readonly "~type.isReadonly": TypeReadonly
   readonly "~type.isOptional": TypeIsOptional
   readonly "~type.default": TypeDefault
@@ -128,6 +130,7 @@ export function revealBottom<S extends Top>(
   S["~rebuild.out"],
   S["~annotate.in"],
   S["~type.make.in"],
+  S["~type.make"],
   S["~type.isReadonly"],
   S["~type.isOptional"],
   S["~type.default"],
@@ -167,6 +170,7 @@ export abstract class Bottom$<
   RebuildOut extends Top,
   AnnotateIn extends SchemaAnnotations.Annotations,
   TypeMakeIn = T,
+  TypeMake = TypeMakeIn,
   TypeReadonly extends ReadonlyToken = "readonly",
   TypeIsOptional extends OptionalToken = "required",
   TypeDefault extends DefaultConstructorToken = "no-constructor-default",
@@ -182,6 +186,7 @@ export abstract class Bottom$<
     RebuildOut,
     AnnotateIn,
     TypeMakeIn,
+    TypeMake,
     TypeReadonly,
     TypeIsOptional,
     TypeDefault,
@@ -200,6 +205,7 @@ export abstract class Bottom$<
   declare readonly "~annotate.in": AnnotateIn
 
   declare readonly "~type.make.in": TypeMakeIn
+  declare readonly "~type.make": TypeMake
   declare readonly "~type.isReadonly": TypeReadonly
   declare readonly "~type.isOptional": TypeIsOptional
   declare readonly "~type.default": TypeDefault
@@ -242,6 +248,7 @@ export interface Top extends
     SchemaAST.AST,
     Top,
     SchemaAnnotations.Annotations,
+    unknown,
     unknown,
     ReadonlyToken,
     OptionalToken,
@@ -560,6 +567,7 @@ class make$<S extends Top> extends Bottom$<
   S["~rebuild.out"],
   S["~annotate.in"],
   S["~type.make.in"],
+  S["~type.make"],
   S["~type.isReadonly"],
   S["~type.isOptional"],
   S["~type.default"],
@@ -593,6 +601,7 @@ export function make<S extends Top>(ast: S["ast"]): Bottom<
   S["~rebuild.out"],
   S["~annotate.in"],
   S["~type.make.in"],
+  S["~type.make"],
   S["~type.isReadonly"],
   S["~type.isOptional"],
   S["~type.default"],
@@ -627,6 +636,7 @@ export interface optionalKey<S extends Top> extends
     optionalKey<S>,
     S["~annotate.in"],
     S["~type.make.in"],
+    S["~type.make"],
     S["~type.isReadonly"],
     "optional",
     S["~type.default"],
@@ -666,6 +676,7 @@ export interface mutableKey<S extends Top> extends
     mutableKey<S>,
     S["~annotate.in"],
     S["~type.make.in"],
+    S["~type.make"],
     "mutable",
     S["~type.isOptional"],
     S["~type.default"],
@@ -697,6 +708,7 @@ export interface typeCodec<S extends Top> extends
     typeCodec<S>,
     S["~annotate.in"],
     S["~type.make.in"],
+    S["~type.make"],
     S["~type.isReadonly"],
     S["~type.isOptional"],
     S["~type.default"],
@@ -726,6 +738,7 @@ export interface encodedCodec<S extends Top> extends
     encodedCodec<S>,
     SchemaAnnotations.Annotations,
     S["Encoded"],
+    S["Encoded"],
     S["~type.isReadonly"],
     S["~type.isOptional"],
     S["~type.default"],
@@ -754,6 +767,7 @@ export interface flip<S extends Top> extends
     SchemaAST.AST,
     flip<S>,
     SchemaAnnotations.Annotations,
+    S["Encoded"],
     S["Encoded"],
     S["~encoded.isReadonly"],
     S["~encoded.isOptional"],
@@ -998,7 +1012,7 @@ export function Enums<A extends { [x: string]: string | number }>(enums: A): Enu
  * @since 4.0.0
  */
 export interface Never
-  extends Bottom<never, never, never, never, SchemaAST.NeverKeyword, Never, SchemaAnnotations.Annotations>
+  extends Bottom<never, never, never, never, SchemaAST.NeverKeyword, Never, SchemaAnnotations.Bottom<never>>
 {}
 
 /**
@@ -1010,9 +1024,7 @@ export const Never: Never = make<Never>(SchemaAST.neverKeyword)
  * @category Api interface
  * @since 4.0.0
  */
-export interface Any
-  extends Bottom<unknown, unknown, never, never, SchemaAST.AnyKeyword, Any, SchemaAnnotations.Annotations>
-{}
+export interface Any extends Bottom<any, any, never, never, SchemaAST.AnyKeyword, Any, SchemaAnnotations.Bottom<any>> {}
 
 /**
  * @since 4.0.0
@@ -1024,7 +1036,7 @@ export const Any: Any = make<Any>(SchemaAST.anyKeyword)
  * @since 4.0.0
  */
 export interface Unknown
-  extends Bottom<unknown, unknown, never, never, SchemaAST.UnknownKeyword, Unknown, SchemaAnnotations.Annotations>
+  extends Bottom<unknown, unknown, never, never, SchemaAST.UnknownKeyword, Unknown, SchemaAnnotations.Bottom<unknown>>
 {}
 
 /**
@@ -1037,7 +1049,7 @@ export const Unknown: Unknown = make<Unknown>(SchemaAST.unknownKeyword)
  * @since 4.0.0
  */
 export interface Null
-  extends Bottom<null, null, never, never, SchemaAST.NullKeyword, Null, SchemaAnnotations.Annotations>
+  extends Bottom<null, null, never, never, SchemaAST.NullKeyword, Null, SchemaAnnotations.Bottom<null>>
 {}
 
 /**
@@ -1049,9 +1061,16 @@ export const Null: Null = make<Null>(SchemaAST.nullKeyword)
  * @category Api interface
  * @since 4.0.0
  */
-export interface Undefined
-  extends
-    Bottom<undefined, undefined, never, never, SchemaAST.UndefinedKeyword, Undefined, SchemaAnnotations.Annotations>
+export interface Undefined extends
+  Bottom<
+    undefined,
+    undefined,
+    never,
+    never,
+    SchemaAST.UndefinedKeyword,
+    Undefined,
+    SchemaAnnotations.Bottom<undefined>
+  >
 {}
 
 /**
@@ -1064,7 +1083,7 @@ export const Undefined: Undefined = make<Undefined>(SchemaAST.undefinedKeyword)
  * @since 4.0.0
  */
 export interface String
-  extends Bottom<string, string, never, never, SchemaAST.StringKeyword, String, SchemaAnnotations.Annotations>
+  extends Bottom<string, string, never, never, SchemaAST.StringKeyword, String, SchemaAnnotations.Bottom<string>>
 {}
 
 /**
@@ -1079,7 +1098,7 @@ export const String: String = make<String>(SchemaAST.stringKeyword)
  * @since 4.0.0
  */
 export interface Number
-  extends Bottom<number, number, never, never, SchemaAST.NumberKeyword, Number, SchemaAnnotations.Annotations>
+  extends Bottom<number, number, never, never, SchemaAST.NumberKeyword, Number, SchemaAnnotations.Bottom<number>>
 {}
 
 /**
@@ -1092,7 +1111,7 @@ export const Number: Number = make<Number>(SchemaAST.numberKeyword)
  * @since 4.0.0
  */
 export interface Boolean
-  extends Bottom<boolean, boolean, never, never, SchemaAST.BooleanKeyword, Boolean, SchemaAnnotations.Annotations>
+  extends Bottom<boolean, boolean, never, never, SchemaAST.BooleanKeyword, Boolean, SchemaAnnotations.Bottom<boolean>>
 {}
 
 /**
@@ -1105,7 +1124,7 @@ export const Boolean: Boolean = make<Boolean>(SchemaAST.booleanKeyword)
  * @since 4.0.0
  */
 export interface Symbol
-  extends Bottom<symbol, symbol, never, never, SchemaAST.SymbolKeyword, Symbol, SchemaAnnotations.Annotations>
+  extends Bottom<symbol, symbol, never, never, SchemaAST.SymbolKeyword, Symbol, SchemaAnnotations.Bottom<symbol>>
 {}
 
 /**
@@ -1117,7 +1136,7 @@ export const Symbol: Symbol = make<Symbol>(SchemaAST.symbolKeyword)
  * @since 4.0.0
  */
 export interface BigInt
-  extends Bottom<bigint, bigint, never, never, SchemaAST.BigIntKeyword, BigInt, SchemaAnnotations.Annotations>
+  extends Bottom<bigint, bigint, never, never, SchemaAST.BigIntKeyword, BigInt, SchemaAnnotations.Bottom<bigint>>
 {}
 
 /**
@@ -1129,7 +1148,7 @@ export const BigInt: BigInt = make<BigInt>(SchemaAST.bigIntKeyword)
  * @since 4.0.0
  */
 export interface Void
-  extends Bottom<void, void, never, never, SchemaAST.VoidKeyword, Void, SchemaAnnotations.Annotations>
+  extends Bottom<void, void, never, never, SchemaAST.VoidKeyword, Void, SchemaAnnotations.Bottom<void>>
 {}
 
 /**
@@ -1141,7 +1160,7 @@ export const Void: Void = make<Void>(SchemaAST.voidKeyword)
  * @since 4.0.0
  */
 export interface Object$
-  extends Bottom<object, object, never, never, SchemaAST.ObjectKeyword, Object$, SchemaAnnotations.Annotations>
+  extends Bottom<object, object, never, never, SchemaAST.ObjectKeyword, Object$, SchemaAnnotations.Bottom<object>>
 {}
 
 const Object_: Object$ = make<Object$>(SchemaAST.objectKeyword)
@@ -1158,7 +1177,7 @@ export {
  * @since 4.0.0
  */
 export interface UniqueSymbol<sym extends symbol>
-  extends Bottom<sym, sym, never, never, SchemaAST.UniqueSymbol, UniqueSymbol<sym>, SchemaAnnotations.Annotations>
+  extends Bottom<sym, sym, never, never, SchemaAST.UniqueSymbol, UniqueSymbol<sym>, SchemaAnnotations.Bottom<sym>>
 {}
 
 /**
@@ -1251,8 +1270,8 @@ export declare namespace Struct {
     F extends Fields,
     O = TypeOptionalKeys<F> | TypeDefaultedKeys<F>
   > =
-    & { readonly [K in keyof F as K extends O ? never : K]: F[K]["~type.make.in"] }
-    & { readonly [K in keyof F as K extends O ? K : never]?: F[K]["~type.make.in"] }
+    & { readonly [K in keyof F as K extends O ? never : K]: F[K]["~type.make"] }
+    & { readonly [K in keyof F as K extends O ? K : never]?: F[K]["~type.make"] }
 
   /**
    * @since 4.0.0
@@ -1353,7 +1372,7 @@ export declare namespace Record {
    * @since 4.0.0
    */
   export interface Key extends Codec<PropertyKey, PropertyKey, unknown, unknown> {
-    readonly "~type.make.in": PropertyKey
+    readonly "~type.make": PropertyKey
   }
 
   /**
@@ -1393,7 +1412,7 @@ export declare namespace Record {
    * @since 4.0.0
    */
   export type MakeIn<Key extends Record.Key, Value extends Top> = {
-    readonly [P in Key["~type.make.in"]]: Value["~type.make.in"]
+    readonly [P in Key["~type.make"]]: Value["~type.make"]
   }
 }
 
@@ -1403,14 +1422,14 @@ export declare namespace Record {
  */
 export interface Record$<Key extends Record.Key, Value extends Top> extends
   Bottom<
-    Record.Type<Key, Value>,
-    Record.Encoded<Key, Value>,
+    Simplify<Record.Type<Key, Value>>,
+    Simplify<Record.Encoded<Key, Value>>,
     Record.DecodingContext<Key, Value>,
     Record.EncodingContext<Key, Value>,
     SchemaAST.TypeLiteral,
     Record$<Key, Value>,
     SchemaAnnotations.Bottom<Record.Type<Key, Value>>,
-    Record.MakeIn<Key, Value>
+    Simplify<Record.MakeIn<Key, Value>>
   >
 {
   readonly key: Key
@@ -1508,8 +1527,8 @@ export declare namespace StructWithRest {
    * @since 4.0.0
    */
   export type MakeIn<S extends TypeLiteral, Records extends StructWithRest.Records> =
-    & S["~type.make.in"]
-    & MergeTuple<{ readonly [K in keyof Records]: Records[K]["~type.make.in"] }>
+    & S["~type.make"]
+    & MergeTuple<{ readonly [K in keyof Records]: Records[K]["~type.make"] }>
 }
 
 /**
@@ -1574,11 +1593,12 @@ export declare namespace Tuple {
   export type Elements = ReadonlyArray<Element>
 
   type Type_<
-    E,
+    Elements,
     Out extends ReadonlyArray<any> = readonly []
-  > = E extends readonly [infer Head, ...infer Tail] ?
-    Head extends { readonly "~type.isOptional": "optional"; "Type": infer T } ? Type_<Tail, readonly [...Out, T?]>
-    : Head extends { readonly "~type.isOptional": OptionalToken; "Type": infer T } ? Type_<Tail, readonly [...Out, T]>
+  > = Elements extends readonly [infer Head, ...infer Tail] ?
+    Head extends { readonly "Type": infer T } ?
+      Head extends { readonly "~type.isOptional": "optional" } ? Type_<Tail, readonly [...Out, T?]>
+      : Type_<Tail, readonly [...Out, T]>
     : Out
     : Out
 
@@ -1588,13 +1608,12 @@ export declare namespace Tuple {
   export type Type<E extends Elements> = Type_<E>
 
   type Encoded_<
-    E,
+    Elements,
     Out extends ReadonlyArray<any> = readonly []
-  > = E extends readonly [infer Head, ...infer Tail] ?
-    Head extends { readonly "~encoded.isOptional": "optional"; "Encoded": infer T } ?
-      Encoded_<Tail, readonly [...Out, T?]>
-    : Head extends { readonly "~encoded.isOptional": OptionalToken; "Encoded": infer T } ?
-      Encoded_<Tail, readonly [...Out, T]>
+  > = Elements extends readonly [infer Head, ...infer Tail] ?
+    Head extends { readonly "Encoded": infer T } ?
+      Head extends { readonly "~encoded.isOptional": "optional" } ? Encoded_<Tail, readonly [...Out, T?]>
+      : Encoded_<Tail, readonly [...Out, T]>
     : Out
     : Out
 
@@ -1617,12 +1636,13 @@ export declare namespace Tuple {
     E,
     Out extends ReadonlyArray<any> = readonly []
   > = E extends readonly [infer Head, ...infer Tail] ?
-    Head extends { readonly "~type.isOptional": "optional"; "~type.make.in": infer T } ?
-      MakeIn_<Tail, readonly [...Out, T?]>
-    : Head extends { readonly "~type.isOptional": "required"; "~type.make.in": infer T } ?
+    Head extends { "~type.make": infer T } ?
+      Head extends
+        { readonly "~type.isOptional": "optional" } | { readonly "~type.default": "has-constructor-default" } ?
+        MakeIn_<Tail, readonly [...Out, T?]> :
       MakeIn_<Tail, readonly [...Out, T]>
-    : Out
-    : Out
+    : Out :
+    Out
 
   /**
    * @since 4.0.0
@@ -1686,7 +1706,7 @@ export declare namespace TupleWithRest {
     readonly Type: ReadonlyArray<unknown>
     readonly Encoded: ReadonlyArray<unknown>
     readonly ast: SchemaAST.TupleType
-    readonly "~type.make.in": ReadonlyArray<unknown>
+    readonly "~type.make": ReadonlyArray<unknown>
   }
 
   /**
@@ -1709,21 +1729,21 @@ export declare namespace TupleWithRest {
    * @since 4.0.0
    */
   export type Encoded<E extends ReadonlyArray<unknown>, Rest extends TupleWithRest.Rest> = Rest extends
-    readonly [infer Head extends Top, ...infer Tail extends ReadonlyArray<Top>] ? Readonly<[
+    readonly [infer Head extends Top, ...infer Tail extends ReadonlyArray<Top>] ? readonly [
       ...E,
-      ...ReadonlyArray<Head["Encoded"]>,
+      ...Array<Head["Encoded"]>,
       ...{ readonly [K in keyof Tail]: Tail[K]["Encoded"] }
-    ]> :
+    ] :
     E
 
   /**
    * @since 4.0.0
    */
   export type MakeIn<M extends ReadonlyArray<unknown>, Rest extends TupleWithRest.Rest> = Rest extends
-    readonly [infer Head extends Top, ...infer Tail extends ReadonlyArray<Top>] ? [
+    readonly [infer Head extends Top, ...infer Tail extends ReadonlyArray<Top>] ? readonly [
       ...M,
-      ...ReadonlyArray<Head["~type.make.in"]>,
-      ...{ readonly [K in keyof Tail]: Tail[K]["~type.make.in"] }
+      ...Array<Head["~type.make"]>,
+      ...{ readonly [K in keyof Tail]: Tail[K]["~type.make"] }
     ] :
     M
 }
@@ -1744,7 +1764,7 @@ export interface TupleWithRest<
     SchemaAST.TupleType,
     TupleWithRest<S, Rest>,
     SchemaAnnotations.Bottom<TupleWithRest.Type<S["Type"], Rest>>,
-    TupleWithRest.MakeIn<S["~type.make.in"], Rest>
+    TupleWithRest.MakeIn<S["~type.make"], Rest>
   >
 {
   readonly schema: S
@@ -1785,7 +1805,7 @@ export interface Array$<S extends Top> extends
     SchemaAST.TupleType,
     Array$<S>,
     SchemaAnnotations.Bottom<ReadonlyArray<S["Type"]>>,
-    ReadonlyArray<S["~type.make.in"]>
+    ReadonlyArray<S["~type.make"]>
   >
 {
   readonly schema: S
@@ -1812,9 +1832,10 @@ export interface mutable<S extends Top> extends
     S["EncodingContext"],
     S["ast"],
     mutable<S>,
-    // we keep "~annotate.in" and "~type.make.in" as they are because they are contravariant
+    // we keep "~annotate.in", "~type.make" and "~type.make.in" as they are because they are contravariant
     S["~annotate.in"],
     S["~type.make.in"],
+    S["~type.make"],
     S["~type.isReadonly"],
     S["~type.isOptional"],
     S["~type.default"],
@@ -1843,9 +1864,10 @@ export interface readonly$<S extends Top> extends
     S["EncodingContext"],
     S["ast"],
     readonly$<S>,
-    // we keep "~annotate.in" and "~type.make.in" as they are because they are contravariant
+    // we keep "~annotate.in", "~type.make" and "~type.make.in" as they are because they are contravariant
     S["~annotate.in"],
     S["~type.make.in"],
+    S["~type.make"],
     S["~type.isReadonly"],
     S["~type.isOptional"],
     S["~type.default"],
@@ -1875,7 +1897,7 @@ export interface Union<Members extends ReadonlyArray<Top>> extends
     SchemaAST.UnionType<Members[number]["ast"]>,
     Union<Members>,
     SchemaAnnotations.Bottom<Members[number]["Type"]>,
-    Members[number]["~type.make.in"]
+    Members[number]["~type.make"]
   >
 {
   readonly members: Members
@@ -1988,6 +2010,7 @@ export interface suspend<S extends Top> extends
     suspend<S>,
     S["~annotate.in"],
     S["~type.make.in"],
+    S["~type.make"],
     S["~type.isReadonly"],
     S["~type.isOptional"],
     S["~type.default"],
@@ -2042,6 +2065,7 @@ export interface refine<T extends S["Type"], S extends Top> extends
     refine<T, S["~rebuild.out"]>,
     S["~annotate.in"],
     S["~type.make.in"],
+    T,
     S["~type.isReadonly"],
     S["~type.isOptional"],
     S["~type.default"],
@@ -2100,6 +2124,7 @@ export interface decodingMiddleware<S extends Top, RD> extends
     decodingMiddleware<S, RD>,
     S["~annotate.in"],
     S["~type.make.in"],
+    S["~type.make"],
     S["~type.isReadonly"],
     S["~type.isOptional"],
     S["~type.default"],
@@ -2142,6 +2167,7 @@ export interface encodingMiddleware<S extends Top, RE> extends
     encodingMiddleware<S, RE>,
     S["~annotate.in"],
     S["~type.make.in"],
+    S["~type.make"],
     S["~type.isReadonly"],
     S["~type.isOptional"],
     S["~type.default"],
@@ -2228,6 +2254,7 @@ export interface decodeTo<To extends Top, From extends Top, RD, RE> extends
     decodeTo<To, From, RD, RE>,
     To["~annotate.in"],
     To["~type.make.in"],
+    To["~type.make"],
     To["~type.isReadonly"],
     To["~type.isOptional"],
     To["~type.default"],
@@ -2357,6 +2384,7 @@ export interface withConstructorDefault<S extends Top> extends
     withConstructorDefault<S>,
     S["~annotate.in"],
     S["~type.make.in"],
+    S["~type.make"],
     S["~type.isReadonly"],
     S["~type.isOptional"],
     "has-constructor-default",
@@ -2373,6 +2401,7 @@ export interface withConstructorDefault<S extends Top> extends
 export function withConstructorDefault<S extends Top & { readonly "~type.default": "no-constructor-default" }>(
   defaultValue: (
     input: O.Option<undefined>
+    // `"~type.make.in"` is intentional here because it makes easier to define the default value
   ) => O.Option<S["~type.make.in"]> | Effect.Effect<O.Option<S["~type.make.in"]>>
 ) {
   return (self: S): withConstructorDefault<S> => {
@@ -2503,6 +2532,7 @@ export interface Opaque<Self, S extends Top> extends
     S["~rebuild.out"],
     S["~annotate.in"],
     S["~type.make.in"],
+    S["~type.make"],
     S["~type.isReadonly"],
     S["~type.isOptional"],
     S["~type.default"],
@@ -2696,6 +2726,7 @@ export interface Class<Self, S extends Top & { readonly fields: Struct.Fields },
     Class<Self, S, Self>,
     SchemaAnnotations.Declaration<Self, readonly [S]>,
     S["~type.make.in"],
+    Self,
     S["~type.isReadonly"],
     S["~type.isOptional"],
     S["~type.default"],
@@ -2761,6 +2792,7 @@ function makeClass<
     declare static readonly "~rebuild.out": Class<Self, S, Self>
     declare static readonly "~annotate.in": SchemaAnnotations.Declaration<Self, readonly [S]>
     declare static readonly "~type.make.in": S["~type.make.in"]
+    declare static readonly "~type.make": Self
 
     declare static readonly "~type.isReadonly": S["~type.isReadonly"]
     declare static readonly "~type.isOptional": S["~type.isOptional"]
