@@ -5,6 +5,7 @@
 import * as Option from "./Option.js"
 import type * as Schema from "./Schema.js"
 import type * as SchemaAST from "./SchemaAST.js"
+import type { JsonSchema } from "./SchemaToJsonSchema.js"
 
 /**
  * @category Model
@@ -37,8 +38,16 @@ export interface Documentation extends Annotations {
  * @since 4.0.0
  */
 export interface Bottom<T> extends Documentation {
+  readonly identifier?: string | undefined
   readonly default?: T | undefined
   readonly examples?: ReadonlyArray<T> | undefined
+  /**
+   * Totally replace (“override”) the default JSON Schema for this type.
+   */
+  readonly jsonSchema?: {
+    readonly type: "override"
+    readonly override: (defaultJson: JsonSchema) => JsonSchema
+  } | undefined
 }
 
 /**
@@ -80,10 +89,10 @@ export interface Filter extends Documentation {
    */
   readonly jsonSchema?: {
     readonly type: "fragment"
-    readonly fragment: Record<string, unknown>
+    readonly fragment: JsonSchema
   } | {
     readonly type: "fragments"
-    readonly fragments: readonly [Record<string, unknown>, ...ReadonlyArray<Record<string, unknown>>]
+    readonly fragments: Record<string, JsonSchema>
   } | undefined
 
   /**
@@ -99,7 +108,7 @@ export interface Filter extends Documentation {
  * @since 4.0.0
  */
 export const get = (key: string) => (annotations: Annotations | undefined): Option.Option<unknown> => {
-  if (annotations && Object.prototype.hasOwnProperty.call(annotations, key)) {
+  if (annotations && Object.hasOwn(annotations, key)) {
     return Option.some(annotations[key])
   }
   return Option.none()
