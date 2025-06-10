@@ -56,11 +56,14 @@ const make = (input: Record.ReadonlyRecord<string, string>): Mutable<Headers> =>
  * @since 4.0.0
  * @category schemas
  */
-export const schemaFromSelf: Schema.Schema<Headers> = Schema.declareRefinement({
+export const schema: Schema.Schema<Headers> = Schema.declareRefinement({
   is: isHeaders,
   annotations: {
     identifier: "Headers",
-    equivalence: () => Record.getEquivalence(String.Equivalence)
+    equivalence: {
+      type: "declaration",
+      declaration: () => Record.getEquivalence(String.Equivalence)
+    }
   }
 })
 
