@@ -953,6 +953,38 @@ Output:
 */
 ```
 
+## Literals
+
+### Deriving new literals
+
+You can map the members of a `Schema.Literals` schema using the `mapMembers` method. The `mapMembers` method accepts a function from `Literals.members` to new members, and returns a new `Schema.Union` based on the result.
+
+```ts
+import { Schema, Tuple } from "effect"
+
+const schema = Schema.Literals(["red", "green", "blue"]).mapMembers(
+  Tuple.evolve([
+    (a) => Schema.Struct({ _tag: a, a: Schema.String }),
+    (b) => Schema.Struct({ _tag: b, b: Schema.Number }),
+    (c) => Schema.Struct({ _tag: c, c: Schema.Boolean })
+  ])
+)
+
+/*
+type Type = {
+    readonly _tag: "red";
+    readonly a: string;
+} | {
+    readonly _tag: "green";
+    readonly b: number;
+} | {
+    readonly _tag: "blue";
+    readonly c: boolean;
+}
+*/
+type Type = (typeof schema)["Type"]
+```
+
 ## Structs
 
 ### Optional and Mutable Keys
@@ -1450,7 +1482,7 @@ export type Encoded = typeof schema.Encoded
 
 ### Deriving Structs
 
-You can map the fields of a struct schema using the `map` method on `Schema.Struct`. The `map` method accepts a function from `Struct.Fields` to new fields, and returns a new `Schema.Struct` based on the result.
+You can map the fields of a struct schema using the `mapFields` static method on `Schema.Struct`. The `mapFields` static method accepts a function from `Struct.Fields` to new fields, and returns a new `Schema.Struct` based on the result.
 
 This can be used to pick, omit, modify, or extend struct fields.
 
@@ -1471,7 +1503,7 @@ const schema: Schema.Struct<{
 const schema = Schema.Struct({
   a: Schema.String,
   b: Schema.Number
-}).derive(Struct.pick(["a"]))
+}).mapFields(Struct.pick(["a"]))
 ```
 
 #### Omit
@@ -1491,7 +1523,7 @@ const schema: Schema.Struct<{
 const schema = Schema.Struct({
   a: Schema.String,
   b: Schema.Number
-}).derive(Struct.omit(["b"]))
+}).mapFields(Struct.omit(["b"]))
 ```
 
 #### Merge
@@ -1513,7 +1545,7 @@ const schema: Schema.Struct<{
 const schema = Schema.Struct({
   a: Schema.String,
   b: Schema.Number
-}).derive(
+}).mapFields(
   Struct.merge({
     c: Schema.Boolean
   })
@@ -1532,7 +1564,7 @@ const original = Schema.Struct({
   b: Schema.String
 }).check(SchemaCheck.make(({ a, b }) => a === b, { title: "a === b" }))
 
-const schema = original.derive(Struct.merge({ c: Schema.String }), {
+const schema = original.mapFields(Struct.merge({ c: Schema.String }), {
   preserveChecks: true
 })
 
@@ -1568,7 +1600,7 @@ const schema: Schema.Struct<{
 const schema = Schema.Struct({
   a: Schema.String,
   b: Schema.Number
-}).derive(
+}).mapFields(
   Struct.evolve({
     a: (field) => Schema.optionalKey(field)
   })
@@ -1595,7 +1627,7 @@ const schema = Schema.Struct({
   a: Schema.String,
   b: Schema.Number,
   c: Schema.Boolean
-}).derive(Struct.map(Schema.optionalKey))
+}).mapFields(Struct.map(Schema.optionalKey))
 ```
 
 #### Mapping a subset of fields at once
@@ -1618,7 +1650,7 @@ const schema = Schema.Struct({
   a: Schema.String,
   b: Schema.Number,
   c: Schema.Boolean
-}).derive(Struct.mapPick(["a", "c"], Schema.optionalKey))
+}).mapFields(Struct.mapPick(["a", "c"], Schema.optionalKey))
 ```
 
 Or if it's more convenient, you can use `Struct.mapOmit`.
@@ -1637,7 +1669,7 @@ const schema = Schema.Struct({
   a: Schema.String,
   b: Schema.Number,
   c: Schema.Boolean
-}).derive(Struct.mapOmit(["b"], Schema.optionalKey))
+}).mapFields(Struct.mapOmit(["b"], Schema.optionalKey))
 ```
 
 #### Mapping individual keys
@@ -1658,7 +1690,7 @@ const schema: Schema.Struct<{
 const schema = Schema.Struct({
   a: Schema.String,
   b: Schema.Number
-}).derive(
+}).mapFields(
   Struct.evolveKeys({
     a: (key) => String.toUpperCase(key)
   })
@@ -1681,7 +1713,7 @@ const schema: Schema.Struct<{
 const schema = Schema.Struct({
   a: Schema.String,
   b: Schema.Number
-}).derive(
+}).mapFields(
   Struct.renameKeys({
     a: "A"
   })
@@ -1706,7 +1738,7 @@ const schema: Schema.Struct<{
 const schema = Schema.Struct({
   a: Schema.String,
   b: Schema.Number
-}).derive(
+}).mapFields(
   Struct.evolveEntries({
     a: (key, value) => [String.toUpperCase(key), Schema.optionalKey(value)]
   })
@@ -1733,7 +1765,7 @@ const schema: Schema.Struct<{
   readonly b: Schema.Number;
 }>
 */
-const schema = A.derive(
+const schema = A.mapFields(
   Struct.evolve({
     a: (field) => Schema.optionalKey(field)
   })
@@ -2151,7 +2183,7 @@ readonly [string]
 
 ### Deriving Tuples
 
-You can map the elements of a tuple schema using the `map` method on `Schema.Tuple`. The `map` method accepts a function from `Tuple.elements` to new elements, and returns a new `Schema.Tuple` based on the result.
+You can map the elements of a tuple schema using the `mapElements` static method on `Schema.Tuple`. The `mapElements` static method accepts a function from `Tuple.elements` to new elements, and returns a new `Schema.Tuple` based on the result.
 
 #### Pick
 
@@ -2169,7 +2201,7 @@ const schema = Schema.Tuple([
   Schema.String,
   Schema.Number,
   Schema.Boolean
-]).derive(Tuple.pick([0, 2]))
+]).mapElements(Tuple.pick([0, 2]))
 ```
 
 #### Omit
@@ -2188,7 +2220,7 @@ const schema = Schema.Tuple([
   Schema.String,
   Schema.Number,
   Schema.Boolean
-]).derive(Tuple.omit([1]))
+]).mapElements(Tuple.omit([1]))
 ```
 
 #### Adding Elements
@@ -2210,8 +2242,8 @@ const schema: Schema.Tuple<readonly [
 ]>
 */
 const schema = Schema.Tuple([Schema.String, Schema.Number])
-  .derive(Tuple.appendElement(Schema.Boolean)) // adds a single element
-  .derive(Tuple.appendElements([Schema.String, Schema.Number])) // adds multiple elements
+  .mapElements(Tuple.appendElement(Schema.Boolean)) // adds a single element
+  .mapElements(Tuple.appendElements([Schema.String, Schema.Number])) // adds multiple elements
 ```
 
 #### Mapping individual elements
@@ -2234,7 +2266,7 @@ const schema = Schema.Tuple([
   Schema.String,
   Schema.Number,
   Schema.Boolean
-]).derive(
+]).mapElements(
   Tuple.evolve([
     (v) => Schema.NullOr(v),
     undefined, // no change
@@ -2263,7 +2295,7 @@ const schema = Schema.Tuple([
   Schema.String,
   Schema.Number,
   Schema.Boolean
-]).derive(Tuple.map(Schema.NullOr))
+]).mapElements(Tuple.map(Schema.NullOr))
 ```
 
 #### Mapping a subset of elements at once
@@ -2286,7 +2318,7 @@ const schema = Schema.Tuple([
   Schema.String,
   Schema.Number,
   Schema.Boolean
-]).derive(Tuple.mapPick([0, 2], Schema.NullOr))
+]).mapElements(Tuple.mapPick([0, 2], Schema.NullOr))
 ```
 
 Or if it's more convenient, you can use `Tuple.mapOmit`.
@@ -2305,7 +2337,7 @@ const schema = Schema.Tuple([
   Schema.String,
   Schema.Number,
   Schema.Boolean
-]).derive(Tuple.mapOmit([1], Schema.NullOr))
+]).mapElements(Tuple.mapOmit([1], Schema.NullOr))
 ```
 
 #### Renaming Indices
@@ -2328,7 +2360,7 @@ const schema = Schema.Tuple([
   Schema.String,
   Schema.Number,
   Schema.Boolean
-]).derive(
+]).mapElements(
   Tuple.renameIndices(["1", "0"]) // flip the first and second elements
 )
 ```
@@ -2349,7 +2381,7 @@ const schema = Schema.Tuple([
   Schema.String,
   Schema.Number,
   Schema.Boolean
-]).derive(
+]).mapElements(
   Tuple.renameIndices([
     "2", // last element becomes first
     "1", // second element keeps its index
@@ -2886,7 +2918,7 @@ Expected exactly one successful result for { readonly "a": string } ⊻ { readon
 
 ### Deriving Unions
 
-You can map the members of a union schema using the `map` method on `Schema.Union`. The `map` method accepts a function from `Union.members` to new members, and returns a new `Schema.Union` based on the result.
+You can map the members of a union schema using the `mapMembers` static method on `Schema.Union`. The `mapMembers` static method accepts a function from `Union.members` to new members, and returns a new `Schema.Union` based on the result.
 
 #### Adding Members
 
@@ -2907,8 +2939,8 @@ const schema: Schema.Union<readonly [
 ]>
 */
 const schema = Schema.Union([Schema.String, Schema.Number])
-  .derive(Tuple.appendElement(Schema.Boolean)) // adds a single member
-  .derive(Tuple.appendElements([Schema.String, Schema.Number])) // adds multiple members
+  .mapMembers(Tuple.appendElement(Schema.Boolean)) // adds a single member
+  .mapMembers(Tuple.appendElements([Schema.String, Schema.Number])) // adds multiple members
 ```
 
 #### Mapping individual members
@@ -2931,7 +2963,7 @@ const schema = Schema.Union([
   Schema.String,
   Schema.Number,
   Schema.Boolean
-]).derive(
+]).mapMembers(
   Tuple.evolve([
     (v) => Schema.Array(v),
     undefined, // no change
@@ -2960,7 +2992,7 @@ const schema = Schema.Union([
   Schema.String,
   Schema.Number,
   Schema.Boolean
-]).derive(Tuple.map(Schema.Array))
+]).mapMembers(Tuple.map(Schema.Array))
 ```
 
 ## Transformations Redesign
@@ -3826,7 +3858,11 @@ import { Schema } from "effect"
 
 const schema = Schema.Literals(["red", "green", "blue"])
 
+// readonly ["red", "green", "blue"]
 schema.literals
+
+// readonly [Schema.Literal<"red">, Schema.Literal<"green">, Schema.Literal<"blue">]
+schema.members
 ```
 
 ### Strings
