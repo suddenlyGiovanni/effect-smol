@@ -754,7 +754,7 @@ describe("Schema", () => {
 
     it("refine", () => {
       const min2 = SchemaCheck.greaterThanOrEqualTo(2).pipe(SchemaCheck.brand("min2"))
-      const int = SchemaCheck.int.pipe(SchemaCheck.brand("int"))
+      const int = SchemaCheck.int().pipe(SchemaCheck.brand("int"))
 
       const schema = Schema.Number.pipe(
         Schema.refine(min2.and(int))
@@ -796,6 +796,15 @@ describe("Schema", () => {
       >()
       expect(schema).type.toBe<Schema.Record$<Schema.String, typeof NumberFromString>>()
       expect(schema.annotate({})).type.toBe<Schema.Record$<Schema.String, typeof NumberFromString>>()
+    })
+
+    it("Record(`${number}`, NumberFromString)", () => {
+      const schema = Schema.Record(Schema.TemplateLiteral([Schema.Number]), NumberFromString)
+      expect(Schema.revealCodec(schema)).type.toBe<
+        Schema.Codec<{ readonly [x: `${number}`]: number }, { readonly [x: `${number}`]: string }, never>
+      >()
+      expect(schema).type.toBe<Schema.Record$<Schema.TemplateLiteral<readonly [Schema.Number]>, typeof NumberFromString>>()
+      expect(schema.annotate({})).type.toBe<Schema.Record$<Schema.TemplateLiteral<readonly [Schema.Number]>, typeof NumberFromString>>()
     })
   })
 
@@ -941,6 +950,15 @@ describe("Schema", () => {
     expect(schema.makeSync).type.toBe<
       (input: MyError, options?: Schema.MakeOptions | undefined) => MyError
     >()
+  })
+
+  describe("decodeTo", () => {
+    it("should allow partial application", () => {
+      const f = Schema.decodeTo(Schema.String)
+      expect(f).type.toBe<<From extends Schema.Top>(from: From) => Schema.compose<Schema.String, From>>()
+
+      expect(f(Schema.Number)).type.toBe<Schema.compose<Schema.String, Schema.Number>>()
+    })
   })
 
   describe("passthrough", () => {
@@ -1737,6 +1755,48 @@ describe("Schema", () => {
       >()
       expect(schema).type.toBe<
         Schema.Struct<{ readonly A: Schema.optionalKey<Schema.String>; readonly b: Schema.Number }>
+      >()
+    })
+
+    it("typeCodec", () => {
+      const schema = Schema.Struct({
+        a: Schema.FiniteFromString,
+        b: Schema.Number
+      }).mapFields(Struct.map(Schema.typeCodec))
+
+      expect(Schema.revealCodec(schema)).type.toBe<
+        Schema.Codec<
+          { readonly a: number; readonly b: number },
+          { readonly a: number; readonly b: number },
+          never,
+          never
+        >
+      >()
+      expect(schema).type.toBe<
+        Schema.Struct<
+          { readonly a: Schema.typeCodec<Schema.FiniteFromString>; readonly b: Schema.typeCodec<Schema.Number> }
+        >
+      >()
+    })
+
+    it("encodedCodec", () => {
+      const schema = Schema.Struct({
+        a: Schema.FiniteFromString,
+        b: Schema.Number
+      }).mapFields(Struct.map(Schema.encodedCodec))
+
+      expect(Schema.revealCodec(schema)).type.toBe<
+        Schema.Codec<
+          { readonly a: string; readonly b: number },
+          { readonly a: string; readonly b: number },
+          never,
+          never
+        >
+      >()
+      expect(schema).type.toBe<
+        Schema.Struct<
+          { readonly a: Schema.encodedCodec<Schema.FiniteFromString>; readonly b: Schema.encodedCodec<Schema.Number> }
+        >
       >()
     })
 

@@ -7,6 +7,7 @@ import { PipeableClass } from "./internal/schema/util.js"
 import * as Option from "./Option.js"
 import * as Predicate from "./Predicate.js"
 import * as Result from "./Result.js"
+import type * as SchemaAnnotations from "./SchemaAnnotations.js"
 import type * as SchemaAST from "./SchemaAST.js"
 import * as SchemaIssue from "./SchemaIssue.js"
 import * as SchemaResult from "./SchemaResult.js"
@@ -104,8 +105,8 @@ export function onNone<T, R = never>(
  * @category constructors
  * @since 4.0.0
  */
-export function required<T>(): SchemaGetter<T, T> {
-  return onNone(() => SchemaResult.fail(new SchemaIssue.MissingKey()))
+export function required<T>(annotations?: SchemaAnnotations.Key): SchemaGetter<T, T> {
+  return onNone(() => SchemaResult.fail(new SchemaIssue.MissingKey(annotations)))
 }
 
 /**
@@ -306,8 +307,8 @@ export function parseJson<E extends string>(options?: {
     Result.try({
       try: () => Option.some(JSON.parse(input, options?.options?.reviver)),
       catch: (e) =>
-        new SchemaIssue.InvalidData(Option.some(input), {
-          message: e instanceof Error ? e.message : globalThis.String(e)
+        new SchemaIssue.InvalidValue(Option.some(input), {
+          description: e instanceof Error ? e.message : globalThis.String(e)
         })
     })
   )
@@ -332,8 +333,8 @@ export function stringifyJson(options?: {
     Result.try({
       try: () => Option.some(JSON.stringify(input, options?.options?.replacer, options?.options?.space)),
       catch: (e) =>
-        new SchemaIssue.InvalidData(Option.some(input), {
-          message: e instanceof Error ? e.message : globalThis.String(e)
+        new SchemaIssue.InvalidValue(Option.some(input), {
+          description: e instanceof Error ? e.message : globalThis.String(e)
         })
     })
   )

@@ -34,7 +34,7 @@ export function isIssue(u: unknown): u is Issue {
 export type Issue =
   // leaf
   | InvalidType
-  | InvalidData
+  | InvalidValue
   | MissingKey
   | Forbidden
   | OneOf
@@ -42,13 +42,14 @@ export type Issue =
   | Check
   | Pointer
   | Composite
+  | AnyOf
 
 class Base {
   readonly [TypeId] = TypeId
 }
 
 /**
- * Issue that occurs when a check has an issue.
+ * Issue that occurs when a check fails.
  *
  * @category model
  * @since 4.0.0
@@ -57,9 +58,9 @@ export class Check extends Base {
   readonly _tag = "Check"
   constructor(
     /**
-     * The schema that caused the issue.
+     * The input value that caused the issue.
      */
-    readonly ast: SchemaAST.AST,
+    readonly actual: unknown,
     /**
      * The check that failed.
      */
@@ -69,7 +70,7 @@ export class Check extends Base {
      */
     readonly issue: Issue,
     /**
-     * Whether the decoding process has been aborted after this check has failed.
+     * Whether the parsing process has been aborted after this check has failed.
      */
     readonly abort: boolean
   ) {
@@ -93,11 +94,7 @@ export class Pointer extends Base {
     /**
      * The issue that occurred.
      */
-    readonly issue: Issue,
-    /**
-     * The annotations for the key that caused the issue.
-     */
-    readonly annotations?: SchemaAnnotations.Documentation
+    readonly issue: Issue
   ) {
     super()
   }
@@ -111,6 +108,14 @@ export class Pointer extends Base {
  */
 export class MissingKey extends Base {
   readonly _tag = "MissingKey"
+  constructor(
+    /**
+     * The metadata for the issue.
+     */
+    readonly annotations: SchemaAnnotations.Key | undefined
+  ) {
+    super()
+  }
 }
 
 /**
@@ -127,7 +132,7 @@ export class Composite extends Base {
      */
     readonly ast: SchemaAST.AST,
     /**
-     * The actual value that caused the issue.
+     * The input value that caused the issue.
      */
     readonly actual: Option.Option<unknown>,
     /**
@@ -140,7 +145,8 @@ export class Composite extends Base {
 }
 
 /**
- * Issue that occurs when the type of the input is invalid.
+ * Issue that occurs when the type of the input is different from the expected
+ * type.
  *
  * @category model
  * @since 4.0.0
@@ -153,7 +159,7 @@ export class InvalidType extends Base {
      */
     readonly ast: SchemaAST.AST,
     /**
-     * The actual value that caused the issue.
+     * The input value that caused the issue.
      */
     readonly actual: Option.Option<unknown>
   ) {
@@ -167,11 +173,35 @@ export class InvalidType extends Base {
  * @category model
  * @since 4.0.0
  */
-export class InvalidData extends Base {
-  readonly _tag = "InvalidData"
+export class InvalidValue extends Base {
+  readonly _tag = "InvalidValue"
   constructor(
     /**
-     * The actual value that caused the issue.
+     * The value that caused the issue.
+     */
+    readonly actual: Option.Option<unknown>,
+    /**
+     * The metadata for the issue.
+     */
+    readonly annotations?: SchemaAnnotations.Annotations | undefined
+  ) {
+    super()
+  }
+}
+
+/**
+ * Issue that occurs when a forbidden operation is encountered, such as when
+ * encountering an Effect that is not allowed to execute (e.g., using
+ * `runSync`).
+ *
+ * @category model
+ * @since 4.0.0
+ */
+export class Forbidden extends Base {
+  readonly _tag = "Forbidden"
+  constructor(
+    /**
+     * The input value that caused the issue.
      */
     readonly actual: Option.Option<unknown>,
     /**
@@ -184,23 +214,27 @@ export class InvalidData extends Base {
 }
 
 /**
- * Issue that occurs when a forbidden operation is encountered, such as when
- * encountering an Effect that is not allowed to execute (e.g., using `runSync`).
+ * Issue that occurs when a value does not match any of the schemas in the
+ * union.
  *
  * @category model
  * @since 4.0.0
  */
-export class Forbidden extends Base {
-  readonly _tag = "Forbidden"
+export class AnyOf extends Base {
+  readonly _tag = "AnyOf"
   constructor(
     /**
-     * The actual value that caused the issue.
+     * The schema that caused the issue.
+     */
+    readonly ast: SchemaAST.AST,
+    /**
+     * The input value that caused the issue.
      */
     readonly actual: Option.Option<unknown>,
     /**
-     * The metadata for the issue.
+     * The issues that occurred.
      */
-    readonly annotations: SchemaAnnotations.Annotations | undefined
+    readonly issues: readonly [Issue, ...ReadonlyArray<Issue>]
   ) {
     super()
   }
@@ -221,9 +255,13 @@ export class OneOf extends Base {
      */
     readonly ast: SchemaAST.UnionType,
     /**
-     * The actual value that caused the issue.
+     * The input value that caused the issue.
      */
-    readonly actual: unknown
+    readonly actual: unknown,
+    /**
+     * The schemas that were successful.
+     */
+    readonly successes: ReadonlyArray<SchemaAST.AST>
   ) {
     super()
   }

@@ -294,7 +294,7 @@ function run<T, R>(ast: SchemaAST.AST) {
     const oa = parser(oinput, options ?? defaultParseOptions)
     return oa.pipe(SchemaResult.flatMap((oa) => {
       if (Option.isNone(oa)) {
-        return SchemaResult.fail(new SchemaIssue.InvalidType(ast, oinput))
+        return SchemaResult.fail(new SchemaIssue.InvalidValue(oa))
       }
       return SchemaResult.succeed(oa.value)
     }))
@@ -408,7 +408,7 @@ const go = SchemaAST.memoize(
             srou = link.transformation.decode(srou, ast, options)
           }
         }
-        srou = srou.pipe(SchemaResult.mapError((e) => new SchemaIssue.Composite(ast, ou, [e])))
+        srou = srou.pipe(SchemaResult.mapError((issue) => new SchemaIssue.Composite(ast, ou, [issue])))
       }
 
       const parser = ast.parser(go)
@@ -427,8 +427,8 @@ const go = SchemaAST.memoize(
               case "Filter": {
                 const iu = check.run(value, ast, options)
                 if (iu) {
-                  const [issue, abort] = iu
-                  issues.push(new SchemaIssue.Check(ast, check, issue, abort))
+                  const { abort, issue } = iu
+                  issues.push(new SchemaIssue.Check(value, check, issue, abort))
                   if (abort || !errorsAllOption) {
                     return
                   }

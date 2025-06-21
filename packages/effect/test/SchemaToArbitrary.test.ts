@@ -1,14 +1,7 @@
 import { Schema, SchemaAST, SchemaCheck, SchemaToArbitrary } from "effect"
 import { describe, it } from "vitest"
-import * as Util from "./SchemaTest.js"
-import { deepStrictEqual, fail, strictEqual, throws } from "./utils/assert.js"
-
-const assertions = Util.assertions({
-  deepStrictEqual,
-  strictEqual,
-  throws,
-  fail
-})
+import { deepStrictEqual } from "./utils/assert.js"
+import { assertions } from "./utils/schema.js"
 
 function assertFragments(schema: Schema.Schema<any>, ctx: SchemaToArbitrary.Context) {
   const ast = schema.ast
@@ -439,12 +432,12 @@ describe("SchemaToArbitrary", () => {
     })
 
     it("int", () => {
-      const schema = Schema.Number.check(SchemaCheck.int)
+      const schema = Schema.Number.check(SchemaCheck.int())
       assertions.arbitrary.satisfy(schema)
     })
 
     it("int32", () => {
-      const schema = Schema.Number.check(SchemaCheck.int32)
+      const schema = Schema.Number.check(SchemaCheck.int32())
       assertions.arbitrary.satisfy(schema)
     })
 
@@ -564,7 +557,7 @@ describe("SchemaToArbitrary", () => {
     })
 
     it("String & nonEmpty & minLength(2)", () => {
-      assertFragments(Schema.String.check(SchemaCheck.nonEmpty).check(SchemaCheck.minLength(2)), {
+      assertFragments(Schema.String.check(SchemaCheck.nonEmpty()).check(SchemaCheck.minLength(2)), {
         fragments: {
           array: {
             type: "array",
@@ -579,7 +572,7 @@ describe("SchemaToArbitrary", () => {
     })
 
     it("String & minLength(2) & nonEmpty", () => {
-      assertFragments(Schema.String.check(SchemaCheck.minLength(2)).check(SchemaCheck.nonEmpty), {
+      assertFragments(Schema.String.check(SchemaCheck.minLength(2)).check(SchemaCheck.nonEmpty()), {
         fragments: {
           array: {
             type: "array",
@@ -594,7 +587,7 @@ describe("SchemaToArbitrary", () => {
     })
 
     it("String & nonEmpty & maxLength(2)", () => {
-      assertFragments(Schema.String.check(SchemaCheck.nonEmpty).check(SchemaCheck.maxLength(2)), {
+      assertFragments(Schema.String.check(SchemaCheck.nonEmpty()).check(SchemaCheck.maxLength(2)), {
         fragments: {
           array: {
             type: "array",
@@ -656,7 +649,7 @@ describe("SchemaToArbitrary", () => {
     })
 
     it("finite", () => {
-      assertFragments(Schema.Number.check(SchemaCheck.finite), {
+      assertFragments(Schema.Number.check(SchemaCheck.finite()), {
         fragments: {
           number: {
             type: "number",
@@ -668,7 +661,7 @@ describe("SchemaToArbitrary", () => {
     })
 
     it("int", () => {
-      assertFragments(Schema.Number.check(SchemaCheck.int), {
+      assertFragments(Schema.Number.check(SchemaCheck.int()), {
         fragments: {
           number: {
             type: "number",
@@ -679,7 +672,7 @@ describe("SchemaToArbitrary", () => {
     })
 
     it("finite & int", () => {
-      assertFragments(Schema.Number.check(SchemaCheck.finite, SchemaCheck.int), {
+      assertFragments(Schema.Number.check(SchemaCheck.finite(), SchemaCheck.int()), {
         fragments: {
           number: {
             type: "number",
@@ -692,7 +685,7 @@ describe("SchemaToArbitrary", () => {
     })
 
     it("int32", () => {
-      assertFragments(Schema.Number.check(SchemaCheck.int32), {
+      assertFragments(Schema.Number.check(SchemaCheck.int32()), {
         fragments: {
           number: {
             type: "number",
@@ -751,7 +744,7 @@ describe("SchemaToArbitrary", () => {
     })
 
     it("validDate", () => {
-      assertFragments(Schema.Date.check(SchemaCheck.validDate), {
+      assertFragments(Schema.Date.check(SchemaCheck.validDate()), {
         fragments: {
           date: {
             type: "date",
@@ -762,7 +755,7 @@ describe("SchemaToArbitrary", () => {
     })
 
     it("validDate & greaterThanOrEqualToDate", () => {
-      assertFragments(Schema.Date.check(SchemaCheck.validDate, SchemaCheck.greaterThanOrEqualToDate(new Date(0))), {
+      assertFragments(Schema.Date.check(SchemaCheck.validDate(), SchemaCheck.greaterThanOrEqualToDate(new Date(0))), {
         fragments: {
           date: {
             type: "date",

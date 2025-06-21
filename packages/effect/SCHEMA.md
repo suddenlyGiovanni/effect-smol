@@ -73,7 +73,7 @@ const enc = Schema.encodeUnknownEffect(schema)({ a: "a" })
 
 ## Default JSON Serialization
 
-The `SchemaSerializer.json` function creates a codec that converts a schema’s encoded type into a JSON-friendly format and back. Given a `schema: Codec<T, E>`:
+The `SchemaSerializer.json` function creates a codec that converts a schema's encoded type into a JSON-friendly format and back. Given a `schema: Codec<T, E>`:
 
 - `Schema.encodeUnknownSync(schema)` produces a value of type `E`.
 - `Schema.encodeUnknownSync(SchemaSerializer.json(schema))` produces a JSON-compatible version of `E`. If `E` already fits JSON types, it is unchanged; otherwise, any `serialization` annotations on `E` are applied.
@@ -536,7 +536,7 @@ Schema.String
 
 //      ┌─── Schema.String
 //      ▼
-const NonEmptyString = Schema.String.check(SchemaCheck.nonEmpty)
+const NonEmptyString = Schema.String.check(SchemaCheck.nonEmpty())
 
 //      ┌─── Schema.String
 //      ▼
@@ -578,7 +578,7 @@ const schema = Schema.String.check(
 
 Schema.decodeUnknownEffect(schema)(" a")
   .pipe(
-    Effect.mapError((err) => SchemaFormatter.TreeFormatter.format(err.issue)),
+    Effect.mapError((err) => SchemaFormatter.getTree().format(err.issue)),
     Effect.runPromise
   )
   .then(console.log, console.error)
@@ -601,7 +601,7 @@ const schema = Schema.Struct({ length: Schema.Number }).check(
 
 Schema.decodeUnknownEffect(schema)({ length: 2 })
   .pipe(
-    Effect.mapError((err) => SchemaFormatter.TreeFormatter.format(err.issue)),
+    Effect.mapError((err) => SchemaFormatter.getTree().format(err.issue)),
     Effect.runPromise
   )
   .then(console.log, console.error)
@@ -609,7 +609,7 @@ Schema.decodeUnknownEffect(schema)({ length: 2 })
 Output:
 { readonly "length": number } & minLength(3)
 └─ minLength(3)
-   └─ Invalid value {"length":2}
+   └─ Invalid data {"length":2}
 */
 ```
 
@@ -622,7 +622,7 @@ const schema = Schema.Array(Schema.String).check(SchemaCheck.minLength(3))
 
 Schema.decodeUnknownEffect(schema)(["a", "b"])
   .pipe(
-    Effect.mapError((err) => SchemaFormatter.TreeFormatter.format(err.issue)),
+    Effect.mapError((err) => SchemaFormatter.getTree().format(err.issue)),
     Effect.runPromise
   )
   .then(console.log, console.error)
@@ -648,7 +648,7 @@ const schema = Schema.String.check(
 
 Schema.decodeUnknownEffect(schema)(" a", { errors: "all" })
   .pipe(
-    Effect.mapError((err) => SchemaFormatter.TreeFormatter.format(err.issue)),
+    Effect.mapError((err) => SchemaFormatter.getTree().format(err.issue)),
     Effect.runPromise
   )
   .then(console.log, console.error)
@@ -656,9 +656,9 @@ Schema.decodeUnknownEffect(schema)(" a", { errors: "all" })
 Output:
 string & minLength(3) & trimmed
 ├─ minLength(3)
-│  └─ Invalid value " a"
+│  └─ Invalid data " a"
 └─ trimmed
-   └─ Invalid value " a"
+   └─ Invalid data " a"
 */
 ```
 
@@ -676,7 +676,7 @@ const schema = Schema.String.check(
 
 Schema.decodeUnknownEffect(schema)(" a", { errors: "all" })
   .pipe(
-    Effect.mapError((err) => SchemaFormatter.TreeFormatter.format(err.issue)),
+    Effect.mapError((err) => SchemaFormatter.getTree().format(err.issue)),
     Effect.runPromise
   )
   .then(console.log, console.error)
@@ -684,7 +684,7 @@ Schema.decodeUnknownEffect(schema)(" a", { errors: "all" })
 Output:
 string & minLength(3) & trimmed
 └─ minLength(3)
-   └─ Invalid value " a"
+   └─ Invalid data " a"
 */
 ```
 
@@ -927,14 +927,14 @@ These filters are evaluated separately from item-level filters and allow multipl
 import { Effect, Schema, SchemaCheck, SchemaFormatter } from "effect"
 
 const schema = Schema.Struct({
-  tags: Schema.Array(Schema.String.check(SchemaCheck.nonEmpty)).check(
+  tags: Schema.Array(Schema.String.check(SchemaCheck.nonEmpty())).check(
     SchemaCheck.minLength(3) // structural filter
   )
 })
 
 Schema.decodeUnknownEffect(schema)({ tags: ["a", ""] }, { errors: "all" })
   .pipe(
-    Effect.mapError((err) => SchemaFormatter.TreeFormatter.format(err.issue)),
+    Effect.mapError((err) => SchemaFormatter.getTree().format(err.issue)),
     Effect.runPromise
   )
   .then(console.log, console.error)
@@ -947,9 +947,9 @@ Output:
       ├─ [1]
       │  └─ string & minLength(1)
       │     └─ minLength(1)
-      │        └─ Expected a value with a length of at least 1, actual ""
+      │        └─ Invalid data ""
       └─ minLength(3)
-         └─ Expected a value with a length of at least 3, actual ["a",""]
+         └─ Invalid data ["a",""]
 */
 ```
 
@@ -1389,30 +1389,37 @@ console.log(Schema.decodeUnknownSync(Product)({ quantity: "2" }))
 
 ### Key Annotations
 
-You can annotate keys using `Schema.annotateKey`.
+You can annotate individual keys using `Schema.annotateKey`. This is useful for adding a description or customizing the error message shown when the key is missing.
 
-**Example** (Annotating a key)
+**Example** (Annotating a required `username` field)
 
 ```ts
 import { Effect, Schema, SchemaFormatter } from "effect"
 
 const schema = Schema.Struct({
-  a: Schema.String.pipe(
-    Schema.annotateKey({ description: "my key description" })
+  username: Schema.String.pipe(
+    Schema.annotateKey({
+      // Custom description shown in the default error message
+      // beside the key name
+      description: "The username used to log in",
+      // Custom message shown if the key is missing
+      missingMessage: "Username is required"
+    })
   )
 })
 
 Schema.decodeUnknownEffect(schema)({})
   .pipe(
-    Effect.mapError((err) => SchemaFormatter.TreeFormatter.format(err.issue)),
+    Effect.mapError((err) => SchemaFormatter.getTree().format(err.issue)),
     Effect.runPromise
   )
   .then(console.log, console.error)
+
 /*
 Output:
-{ readonly "a": string }
-└─ ["a"] (my key description)
-   └─ Missing key
+{ readonly "username": string }
+└─ ["username"] (The username used to log in)
+   └─ Username is required
 */
 ```
 
@@ -1570,7 +1577,7 @@ const schema = original.mapFields(Struct.merge({ c: Schema.String }), {
 
 Schema.decodeUnknownEffect(schema)({ a: "a", b: "b", c: "c" })
   .pipe(
-    Effect.mapError((err) => SchemaFormatter.TreeFormatter.format(err.issue)),
+    Effect.mapError((err) => SchemaFormatter.getTree().format(err.issue)),
     Effect.runPromise
   )
   .then(console.log, console.error)
@@ -1578,7 +1585,7 @@ Schema.decodeUnknownEffect(schema)({ a: "a", b: "b", c: "c" })
 Output:
 { readonly "a": string; readonly "b": string; readonly "c": string } & a === b
 └─ a === b
-   └─ Expected a === b, actual {"a":"a","b":"b","c":"c"}
+   └─ Invalid data {"a":"a","b":"b","c":"c"}
 */
 ```
 
@@ -2004,14 +2011,14 @@ class Person extends Schema.Opaque<Person>()(
 
 Schema.decodeUnknownEffect(Person)({ name: "" })
   .pipe(
-    Effect.mapError((err) => SchemaFormatter.TreeFormatter.format(err.issue)),
+    Effect.mapError((err) => SchemaFormatter.getTree().format(err.issue)),
     Effect.runPromise
   )
   .then(console.log, console.error)
 /*
 Person & <filter>
 └─ <filter>
-   └─ Invalid value {"name":""}
+   └─ Invalid data {"name":""}
 */
 ```
 
@@ -2163,13 +2170,17 @@ import { Effect, Schema, SchemaFormatter } from "effect"
 
 const schema = Schema.Tuple([
   Schema.String.pipe(
-    Schema.annotateKey({ description: "my element description" })
+    Schema.annotateKey({
+      description: "my element description",
+      // a message to display when the element is missing
+      missingMessage: "this element is required"
+    })
   )
 ])
 
 Schema.decodeUnknownEffect(schema)([])
   .pipe(
-    Effect.mapError((err) => SchemaFormatter.TreeFormatter.format(err.issue)),
+    Effect.mapError((err) => SchemaFormatter.getTree().format(err.issue)),
     Effect.runPromise
   )
   .then(console.log, console.error)
@@ -2177,7 +2188,7 @@ Schema.decodeUnknownEffect(schema)([])
 Output:
 readonly [string]
 └─ [0] (my element description)
-   └─ Missing key
+   └─ this element is required
 */
 ```
 
@@ -2420,7 +2431,7 @@ try {
 } catch (error) {
   if (error instanceof Error) {
     if (SchemaIssue.isIssue(error.cause)) {
-      console.error(SchemaFormatter.TreeFormatter.format(error.cause))
+      console.error(SchemaFormatter.Tree.format(error.cause))
     } else {
       console.error(error)
     }
@@ -2431,7 +2442,7 @@ readonly [string, number & finite]
 └─ [1]
    └─ number & finite
       └─ finite
-         └─ Invalid value NaN
+         └─ Invalid data NaN
 */
 ```
 
@@ -2691,7 +2702,7 @@ export const b: B = A.makeSync({ a: "a" })
 import { Schema, SchemaCheck, SchemaFormatter, SchemaIssue } from "effect"
 
 class A extends Schema.Class<A>("A")({
-  a: Schema.String.check(SchemaCheck.nonEmpty)
+  a: Schema.String.check(SchemaCheck.nonEmpty())
 }) {}
 
 try {
@@ -2699,7 +2710,7 @@ try {
 } catch (error) {
   if (error instanceof Error) {
     if (SchemaIssue.isIssue(error.cause)) {
-      console.error(SchemaFormatter.TreeFormatter.format(error.cause))
+      console.error(SchemaFormatter.getTree().format(error.cause))
     } else {
       console.error(error)
     }
@@ -2710,7 +2721,7 @@ try {
 └─ ["a"]
    └─ string & minLength(1)
       └─ minLength(1)
-         └─ Invalid value ""
+         └─ Invalid data ""
 */
 ```
 
@@ -2732,7 +2743,7 @@ try {
   Schema.decodeUnknownSync(A)({ a: null })
 } catch (error) {
   if (SchemaIssue.isIssue(error)) {
-    console.error(SchemaFormatter.TreeFormatter.format(error))
+    console.error(SchemaFormatter.Tree.format(error))
   } else {
     console.error(error)
   }
@@ -2906,7 +2917,7 @@ const schema = Schema.Union(
 
 Schema.decodeUnknownEffect(schema)({ a: "a", b: 1 })
   .pipe(
-    Effect.mapError((err) => SchemaFormatter.TreeFormatter.format(err.issue)),
+    Effect.mapError((err) => SchemaFormatter.getTree().format(err.issue)),
     Effect.runPromise
   )
   .then(console.log, console.error)
@@ -3151,8 +3162,6 @@ const schema = From.pipe(
 )
 ```
 
-### Parse JSON
-
 ## Generics Improvements
 
 Using generics in schema composition and filters can be difficult.
@@ -3197,7 +3206,7 @@ const schema = Schema.String.pipe(Schema.catchDecoding(() => fallback))
 
 Schema.decodeUnknownEffect(schema)(null)
   .pipe(
-    Effect.mapError((err) => SchemaFormatter.TreeFormatter.format(err.issue)),
+    Effect.mapError((err) => SchemaFormatter.getTree().format(err.issue)),
     Effect.runPromise
   )
   .then(console.log, console.error)
@@ -3240,7 +3249,7 @@ const provided = schema.pipe(
 
 Schema.decodeUnknownEffect(provided)(null)
   .pipe(
-    Effect.mapError((err) => SchemaFormatter.TreeFormatter.format(err.issue)),
+    Effect.mapError((err) => SchemaFormatter.getTree().format(err.issue)),
     Effect.runPromise
   )
   .then(console.log, console.error)
@@ -3252,19 +3261,19 @@ b
 
 ## Formatters
 
-### TreeFormatter
+### Tree formatter
 
 ```ts
 import { Effect, Schema, SchemaCheck, SchemaFormatter } from "effect"
 
 const schema = Schema.Struct({
-  a: Schema.String.check(SchemaCheck.nonEmpty),
+  a: Schema.String.check(SchemaCheck.nonEmpty()),
   b: Schema.Number
 })
 
 Schema.decodeUnknownEffect(schema)({ a: "", b: null }, { errors: "all" })
   .pipe(
-    Effect.mapError((err) => SchemaFormatter.TreeFormatter.format(err.issue)),
+    Effect.mapError((err) => SchemaFormatter.getTree().format(err.issue)),
     Effect.runPromise
   )
   .then(console.log, console.error)
@@ -3280,53 +3289,56 @@ Output:
 */
 ```
 
-### StructuredFormatter
+### Structured formatter
 
 ```ts
 import { Effect, Schema, SchemaCheck, SchemaFormatter } from "effect"
 
 const schema = Schema.Struct({
-  a: Schema.String.check(SchemaCheck.nonEmpty),
+  a: Schema.String.check(SchemaCheck.nonEmpty()),
   b: Schema.Number
 })
 
 Schema.decodeUnknownEffect(schema)({ a: "", b: null }, { errors: "all" })
   .pipe(
-    Effect.mapError((err) =>
-      SchemaFormatter.StructuredFormatter.format(err.issue)
-    ),
+    Effect.mapError((err) => SchemaFormatter.getStructured().format(err.issue)),
     Effect.runPromise
   )
-  .then(console.log, console.error)
+  .then(console.log, (issue) => console.dir(issue, { depth: null }))
 /*
 Output:
 [
   {
-    _tag: 'InvalidData',
-    ast: StringKeyword {
-      annotations: undefined,
-      checks: [Array],
-      encoding: undefined,
-      context: undefined,
-      _tag: 'StringKeyword'
-    },
-    actual: { _id: 'Option', _tag: 'Some', value: '' },
+    _tag: 'InvalidValue',
+    annotations: undefined,
+    actual: { value: '' },
     path: [ 'a' ],
-    meta: { id: 'minLength', minLength: 1 },
+    message: 'Invalid data ""',
+    check: {
+      title: 'minLength(1)',
+      description: 'a value with a length of at least 1',
+      jsonSchema: {
+        type: 'fragments',
+        fragments: { string: { minLength: 1 }, array: { minItems: 1 } }
+      },
+      meta: { id: 'minLength', minLength: 1 },
+      '~structural': true,
+      arbitrary: {
+        type: 'fragments',
+        fragments: {
+          string: { type: 'string', minLength: 1 },
+          array: { type: 'array', minLength: 1 }
+        }
+      }
+    },
     abort: false
   },
   {
     _tag: 'InvalidType',
-    ast: NumberKeyword {
-      annotations: undefined,
-      checks: undefined,
-      encoding: undefined,
-      context: undefined,
-      _tag: 'NumberKeyword'
-    },
-    actual: { _id: 'Option', _tag: 'Some', value: null },
+    annotations: undefined,
+    actual: { value: null },
     path: [ 'b' ],
-    meta: undefined
+    message: 'Expected number, actual null'
   }
 ]
 */
@@ -3487,14 +3499,14 @@ Whenever you call `.check(...)` on a schema, Effect attaches a filter which may 
 
 These fragments are then merged into the final JSON Schema:
 
-- `type: "fragment"`: the `fragment` object’s properties are merged into the parent schema (possibly under an `allOf` array).
+- `type: "fragment"`: the `fragment` object's properties are merged into the parent schema (possibly under an `allOf` array).
 - `type: "fragments"`: each key/value in `fragments` becomes a named “sub‐schema” that can be referenced via `$ref` or combined, depending on context.
 
 Below are the two most common scenarios:
 
 #### Single-fragment filters (e.g. `minLength`, `maxLength`, `exclusiveMinimum`, etc.)
 
-Effect’s built-in checks already carry a `jsonSchema` fragment. For example:
+Effect's built-in checks already carry a `jsonSchema` fragment. For example:
 
 ```ts
 import { Schema, SchemaCheck, SchemaToJsonSchema } from "effect"
@@ -3623,7 +3635,7 @@ const lazyArb = SchemaToArbitrary.makeLazy(Schema.String)
 const arb = lazyArb(FastCheck, {}) // same as make(...)
 ```
 
-Under the hood, the library walks your schema’s AST and, for each node:
+Under the hood, the library walks your schema's AST and, for each node:
 
 - Emits constants (`null`, `undefined`)
 - Maps keywords `fc.boolean()` / `fc.integer()` / `fc.string()` / `fc.bigInt()`
@@ -3771,6 +3783,173 @@ const schema = Schema.Struct({
 )
 
 const equivalence = SchemaToEquivalence.make(schema)
+```
+
+## Message system
+
+In order to make the examples in this documentation more readable, we'll use a few utils:
+
+**Examples utils**
+
+```ts
+// utils.ts
+import { Result, Schema, SchemaFormatter } from "effect"
+import i18next from "i18next"
+
+i18next.init({
+  lng: "en",
+  resources: {
+    en: {
+      translation: {
+        "string.mismatch": "Please enter a valid string",
+        "string.minLength": "Please enter at least 1 character",
+        "struct.missingKey": "This field is required",
+        "struct.mismatch": "Please enter a valid object"
+      }
+    }
+  }
+})
+
+export const t = i18next.t
+
+export function logIssues<
+  S extends Schema.Codec<unknown, unknown, never, never>
+>(
+  schema: S,
+  input: unknown,
+  options?: {
+    readonly leafMessageFormatter?:
+      | SchemaFormatter.LeafMessageFormatter
+      | undefined
+    readonly checkMessageFormatter?:
+      | SchemaFormatter.CheckMessageFormatter
+      | undefined
+  }
+) {
+  console.log(
+    Schema.decodeUnknownResult(schema)(input, { errors: "all" }).pipe(
+      Result.mapErr(
+        (err) =>
+          SchemaFormatter.getStandardSchemaV1(options).format(err.issue).issues
+      ),
+      Result.merge
+    )
+  )
+}
+```
+
+### StandardSchemaV1 formatter
+
+By default this formatter will use the `~system` prefix to identify system messages.
+
+**Example**
+
+```ts
+import { Schema, SchemaCheck } from "effect"
+import { logIssues } from "./utils.js"
+
+const Person = Schema.Struct({
+  name: Schema.String.check(SchemaCheck.nonEmpty())
+})
+
+// Mismatch
+logIssues(Person, null)
+// [ { path: [], message: '~system|InvalidType|TypeLiteral' } ]
+
+// Missing key
+logIssues(Person, {})
+// [ { path: [ 'name' ], message: '~system|MissingKey' } ]
+
+// Mismatch on a field
+logIssues(Person, { name: 1 })
+// [ { path: [ 'name' ], message: '~system|InvalidType|StringKeyword' } ]
+
+// minLength failure
+logIssues(Person, { name: "" })
+// [ { path: [ 'name' ], message: '~system|check|minLength|{"minLength":1}' } ]
+```
+
+You can customize the messages in two ways:
+
+- By annotating the schema with a custom message using the `message` / `missingMessage` annotations.
+- By providing hooks to the formatter
+
+#### Inline custom messages
+
+You can add a custom message to the schema by annotating it with a string or a function that returns a string.
+
+**Example**
+
+```ts
+import { Schema, SchemaCheck } from "effect"
+import { logIssues, t } from "./utils.js"
+
+const Person = Schema.Struct({
+  name: Schema.String.annotate({ message: t("string.mismatch") })
+    .check(SchemaCheck.nonEmpty({ message: t("string.minLength") }))
+    .pipe(Schema.annotateKey({ missingMessage: t("struct.missingKey") }))
+}).annotate({ message: t("struct.mismatch") })
+
+logIssues(Person, null)
+// [ { path: [], message: 'Please enter a valid object' } ]
+
+logIssues(Person, {})
+// [ { path: [ 'name' ], message: 'This field is required' } ]
+
+logIssues(Person, { name: 1 })
+// [ { path: [ 'name' ], message: 'Please enter a valid string' } ]
+
+logIssues(Person, { name: "" })
+// [ { path: [ 'name' ], message: 'Please enter at least 1 character' } ]
+```
+
+#### Hooks
+
+There are two hooks that you can use to customize the messages:
+
+- `leafMessageFormatter` (default: `getStandardSchemaV1SystemMessage`)
+- `checkMessageFormatter` (default: `getStandardSchemaV1CheckSystemMessage`)
+
+The `leafMessageFormatter` is used to format the messages for the leaf nodes of the issue tree, namely:
+
+- `InvalidType`
+- `InvalidValue`
+- `MissingKey`
+- `Forbidden`
+- `OneOf`
+
+The `checkMessageFormatter` is used to format the messages for the `Check` nodes of the issue tree.
+
+**Example**
+
+```ts
+import { Schema, SchemaCheck, SchemaFormatter } from "effect"
+import { logIssues } from "./utils.js"
+
+const Person = Schema.Struct({
+  name: Schema.String.check(SchemaCheck.nonEmpty())
+})
+
+const options = {
+  leafMessageFormatter: SchemaFormatter.getTreeDefaultMessage,
+  checkMessageFormatter: SchemaFormatter.getStandardSchemaV1CheckDefaultMessage
+}
+
+// Mismatch
+logIssues(Person, null, options)
+// [ { path: [], message: 'Expected { readonly "name": string & minLength(1) }, actual null' } ]
+
+// Missing key
+logIssues(Person, {}, options)
+// [ { path: [ 'name' ], message: 'Missing key' } ]
+
+// Mismatch on a field
+logIssues(Person, { name: 1 }, options)
+// [ { path: [ 'name' ], message: 'Expected string & minLength(1), actual 1' } ]
+
+// minLength failure
+logIssues(Person, { name: "" }, options)
+// [ { path: [ 'name' ], message: 'Expected a value with a length of at least 1' } ]
 ```
 
 ## Usage
@@ -4012,7 +4191,7 @@ export type Type = typeof email.Type
 
 Schema.decodeUnknownEffect(email)("@b.com")
   .pipe(
-    Effect.mapError((err) => SchemaFormatter.TreeFormatter.format(err.issue)),
+    Effect.mapError((err) => SchemaFormatter.getTree().format(err.issue)),
     Effect.runPromise
   )
   .then(console.log, console.error)
@@ -4039,7 +4218,7 @@ export type Type = typeof email.Type
 
 Schema.decodeUnknownEffect(email)("a@b.com")
   .pipe(
-    Effect.mapError((err) => SchemaFormatter.TreeFormatter.format(err.issue)),
+    Effect.mapError((err) => SchemaFormatter.getTree().format(err.issue)),
     Effect.runPromise
   )
   .then(console.log, console.error)
@@ -4051,8 +4230,6 @@ Schema.decodeUnknownEffect(email)("a@b.com")
 - https://github.com/Anastasia-Labs/lucid-evolution/blob/5068114c9f8f95c6b997d0d2233a9e9543632f35/packages/experimental/src/TSchema.ts#L353
 
 ## Snippets
-
-### Memoization
 
 ```ts
 function memoizeIdempotent(f: (ast: AST) => AST): (ast: AST) => AST {
@@ -4079,5 +4256,30 @@ function memoizeInvolution(f: (ast: AST) => AST): (ast: AST) => AST {
     cache.set(result, ast)
     return result
   }
+}
+
+/**
+ * Conditionally shortens a string by keeping a configurable number of
+ * characters from the start + end and inserting a *mask* in the middle.
+ *
+ * @param s the original string
+ * @param keep total number of original characters to keep (split across the start and end). 0 means "always return the ellipsis".
+ * @param ellipsis what to insert when the string is longer than `keep + ellipsis.length` (default: `"..."`)
+ *
+ * @internal
+ */
+export function truncateMiddle(
+  s: string,
+  keep: number,
+  ellipsis: string = "..."
+): string {
+  if (keep <= 0) return ellipsis // nothing to keep
+  if (s.length <= keep + ellipsis.length) return s // no need to shorten
+  if (keep === 1) return s[0] + ellipsis // degenerate split
+
+  const head = Math.ceil(keep / 2)
+  const tail = keep - head
+
+  return s.slice(0, head) + ellipsis + s.slice(-tail)
 }
 ```

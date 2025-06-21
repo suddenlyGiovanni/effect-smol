@@ -2,7 +2,6 @@
  * @since 4.0.0
  */
 
-import * as Option from "./Option.js"
 import type * as Schema from "./Schema.js"
 import type * as SchemaAST from "./SchemaAST.js"
 import type * as SchemaToArbitrary from "./SchemaToArbitrary.js"
@@ -40,6 +39,14 @@ export interface Documentation extends Annotations {
  * @category Model
  * @since 4.0.0
  */
+export interface Key extends Documentation {
+  readonly missingMessage?: string | (() => string) | undefined
+}
+
+/**
+ * @category Model
+ * @since 4.0.0
+ */
 export interface JsonSchema<T> extends Documentation {
   readonly identifier?: string | undefined
   readonly default?: T | undefined
@@ -56,6 +63,7 @@ export interface JsonSchema<T> extends Documentation {
  */
 export interface Bottom<T> extends JsonSchema<T> {
   readonly arbitrary?: SchemaToArbitrary.Annotation.Override<T> | undefined
+  readonly message?: string | (() => string) | undefined
 }
 
 /**
@@ -112,14 +120,5 @@ export interface Filter extends Documentation {
   } | undefined
 
   readonly arbitrary?: SchemaToArbitrary.Annotation.Fragment | SchemaToArbitrary.Annotation.Fragments | undefined
-}
-
-/**
- * @since 4.0.0
- */
-export const get = (key: string) => (annotations: Annotations | undefined): Option.Option<unknown> => {
-  if (annotations && Object.hasOwn(annotations, key)) {
-    return Option.some(annotations[key])
-  }
-  return Option.none()
+  readonly message?: string | (() => string) | undefined
 }

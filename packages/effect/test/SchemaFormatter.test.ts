@@ -1,14 +1,6 @@
 import { Effect, Option, Schema, SchemaCheck, SchemaFormatter, SchemaGetter, SchemaIssue, SchemaToParser } from "effect"
 import { describe, it } from "vitest"
-import * as Util from "./SchemaTest.js"
-import { deepStrictEqual, fail, strictEqual, throws } from "./utils/assert.js"
-
-const assertions = Util.assertions({
-  deepStrictEqual,
-  strictEqual,
-  throws,
-  fail
-})
+import { assertions } from "./utils/schema.js"
 
 const assertStructuredIssue = async <T, E>(
   schema: Schema.Codec<T, E>,
@@ -16,7 +8,7 @@ const assertStructuredIssue = async <T, E>(
   expected: ReadonlyArray<SchemaFormatter.StructuredIssue>
 ) => {
   const r = await SchemaToParser.decodeUnknownEffect(schema)(input, { errors: "all" }).pipe(
-    Effect.mapError((issue) => SchemaFormatter.StructuredFormatter.format(issue)),
+    Effect.mapError((issue) => SchemaFormatter.getStructured().format(issue)),
     Effect.result,
     Effect.runPromise
   )
@@ -24,7 +16,27 @@ const assertStructuredIssue = async <T, E>(
   return assertions.result.err(r, expected)
 }
 
-describe("StructuredFormatter", () => {
+describe("Tree formatter", () => {
+  it("should use the identifier annotation if present", async () => {
+    await assertions.decoding.fail(
+      Schema.String.annotate({ identifier: "id" }),
+      null,
+      `Expected id, actual null`
+    )
+    await assertions.decoding.fail(
+      Schema.NonEmptyString.annotate({ identifier: "id" }),
+      null,
+      `Expected id, actual null`
+    )
+    await assertions.decoding.fail(
+      Schema.String.check(SchemaCheck.nonEmpty({ identifier: "id" })),
+      null,
+      `Expected id, actual null`
+    )
+  })
+})
+
+describe("Structured formatter", () => {
   it("single InvalidType", async () => {
     const schema = Schema.Struct({
       a: Schema.String
@@ -65,61 +77,80 @@ describe("StructuredFormatter", () => {
     ])
   })
 
-  it("InvalidData", async () => {
+  it("InvalidValue", async () => {
     const schema = Schema.Struct({
       a: Schema.NonEmptyString
     })
 
     await assertStructuredIssue(schema, { a: "" }, [
       {
-        _tag: "InvalidData",
+        _tag: "InvalidValue",
         path: ["a"],
-        message: `Expected a value with a length of at least 1, actual ""`,
+        message: `Invalid data ""`,
         actual: Option.some(""),
         abort: false,
-        annotations: schema.fields.a.ast.checks?.[0]?.annotations
+        annotations: undefined,
+        check: schema.fields.a.ast.checks?.[0]?.annotations
       }
     ])
   })
 
-  it("single MissingKey", async () => {
-    const schema = Schema.Struct({
-      a: Schema.String
+  describe("MissingKey", () => {
+    it("single missing key", async () => {
+      const schema = Schema.Struct({
+        a: Schema.String
+      })
+
+      await assertStructuredIssue(schema, {}, [
+        {
+          _tag: "MissingKey",
+          path: ["a"],
+          message: "Missing key",
+          actual: Option.none(),
+          annotations: undefined
+        }
+      ])
     })
 
-    await assertStructuredIssue(schema, {}, [
-      {
-        _tag: "MissingKey",
-        path: ["a"],
-        message: "Missing key",
-        actual: Option.none(),
-        annotations: schema.ast.annotations
-      }
-    ])
-  })
+    it("multiple missing keys", async () => {
+      const schema = Schema.Struct({
+        a: Schema.String,
+        b: Schema.Number
+      })
 
-  it("multiple MissingKeys", async () => {
-    const schema = Schema.Struct({
-      a: Schema.String,
-      b: Schema.Number
+      await assertStructuredIssue(schema, {}, [
+        {
+          _tag: "MissingKey",
+          path: ["a"],
+          message: "Missing key",
+          actual: Option.none(),
+          annotations: undefined
+        },
+        {
+          _tag: "MissingKey",
+          path: ["b"],
+          message: "Missing key",
+          actual: Option.none(),
+          annotations: undefined
+        }
+      ])
     })
 
-    await assertStructuredIssue(schema, {}, [
-      {
-        _tag: "MissingKey",
-        path: ["a"],
-        message: "Missing key",
-        actual: Option.none(),
-        annotations: schema.ast.annotations
-      },
-      {
-        _tag: "MissingKey",
-        path: ["b"],
-        message: "Missing key",
-        actual: Option.none(),
-        annotations: schema.ast.annotations
-      }
-    ])
+    it("annotated key", async () => {
+      const schema = Schema.Struct({
+        a: Schema.String.pipe(Schema.annotateKey({ missingMessage: "Missing key" }))
+      })
+
+      await assertStructuredIssue(schema, {}, [
+        {
+          _tag: "MissingKey",
+          path: ["a"],
+          message: "Missing key",
+          actual: Option.none(),
+          annotations: schema.fields.a.ast.context?.annotations
+        }
+      ])
+    })
   })
 
   it("Forbidden", async () => {
@@ -143,12 +174,8 @@ describe("StructuredFormatter", () => {
 
   it("Union", async () => {
     const schema = Schema.Union([
-      Schema.Struct({
-        a: Schema.String
-      }),
-      Schema.Struct({
-        b: Schema.Number
-      })
+      Schema.Struct({ a: Schema.String }),
+      Schema.Struct({ b: Schema.Number })
     ], { mode: "oneOf" })
 
     await assertStructuredIssue(schema, { a: "a", b: 1 }, [
@@ -156,7 +183,7 @@ describe("StructuredFormatter", () => {
         _tag: "OneOf",
         path: [],
         message:
-          `Expected exactly one successful result for { readonly "a": string } ⊻ { readonly "b": number }, actual {"a":"a","b":1}`,
+          `Expected exactly one successful schema for {"a":"a","b":1} in { readonly "a": string } ⊻ { readonly "b": number }`,
         actual: Option.some({ a: "a", b: 1 }),
         annotations: schema.ast.annotations
       }
@@ -168,13 +195,13 @@ describe("StructuredFormatter", () => {
 
     await assertStructuredIssue(schema, "", [
       {
-        _tag: "InvalidData",
+        _tag: "InvalidValue",
         path: [],
-        message:
-          "Expected a string matching the pattern ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$, actual \"\"",
+        message: `Invalid data ""`,
         actual: Option.some(""),
         abort: false,
-        annotations: schema.ast.checks?.[0]?.annotations
+        annotations: undefined,
+        check: schema.ast.checks?.[0]?.annotations
       }
     ])
   })
@@ -187,20 +214,22 @@ describe("StructuredFormatter", () => {
 
       await assertStructuredIssue(schema, { tags: ["a", ""] }, [
         {
-          _tag: "InvalidData",
+          _tag: "InvalidValue",
           path: ["tags", 1],
-          message: `Expected a value with a length of at least 1, actual ""`,
+          message: `Invalid data ""`,
           actual: Option.some(""),
           abort: false,
-          annotations: schema.fields.tags.ast.rest[0].checks?.[0]?.annotations
+          annotations: undefined,
+          check: schema.fields.tags.ast.rest[0].checks?.[0]?.annotations
         },
         {
-          _tag: "InvalidData",
+          _tag: "InvalidValue",
           path: ["tags"],
-          message: `Expected a value with a length of at least 3, actual ["a",""]`,
+          message: `Invalid data ["a",""]`,
           actual: Option.some(["a", ""]),
           abort: false,
-          annotations: schema.fields.tags.ast.checks?.[0]?.annotations
+          annotations: undefined,
+          check: schema.fields.tags.ast.checks?.[0]?.annotations
         }
       ])
     })

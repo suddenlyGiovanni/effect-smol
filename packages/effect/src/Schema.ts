@@ -151,7 +151,7 @@ export function annotate<S extends Top>(annotations: S["~annotate.in"]) {
 /**
  * @since 4.0.0
  */
-export function annotateKey<S extends Top>(annotations: SchemaAnnotations.Documentation) {
+export function annotateKey<S extends Top>(annotations: SchemaAnnotations.Key) {
   return (self: S): S["~rebuild.out"] => {
     return self.rebuild(SchemaAST.annotateKey(self.ast, annotations))
   }
@@ -361,13 +361,21 @@ function makeStandardResult<A>(exit: Exit.Exit<StandardSchemaV1.Result<A>>): Sta
  */
 export const standardSchemaV1 = <S extends Top>(
   self: S,
-  options?: SchemaAST.ParseOptions
+  options?: {
+    readonly parseOptions?: SchemaAST.ParseOptions | undefined
+    readonly leafMessageFormatter?: SchemaFormatter.LeafMessageFormatter | undefined
+    readonly checkMessageFormatter?: SchemaFormatter.CheckMessageFormatter | undefined
+  }
 ): StandardSchemaV1<S["Encoded"], S["Type"]> & S => {
   const decodeUnknownEffect = SchemaToParser.decodeUnknownEffect(self) as (
     input: unknown,
     options?: SchemaAST.ParseOptions
   ) => Effect.Effect<S["Type"], SchemaIssue.Issue, never>
-  options = { errors: "all", ...options }
+  const parseOptions: SchemaAST.ParseOptions = { errors: "all", ...options?.parseOptions }
+  const formatter = SchemaFormatter.getStandardSchemaV1({
+    leafMessageFormatter: options?.leafMessageFormatter,
+    checkMessageFormatter: options?.checkMessageFormatter
+  })
   const standard: StandardSchemaV1<S["Encoded"], S["Type"]> = {
     "~standard": {
       version: 1,
@@ -375,8 +383,8 @@ export const standardSchemaV1 = <S extends Top>(
       validate(value) {
         const scheduler = new Scheduler.MixedScheduler()
         const fiber = Effect.runFork(
-          Effect.match(decodeUnknownEffect(value, options), {
-            onFailure: SchemaFormatter.StandardFormatter.format,
+          Effect.match(decodeUnknownEffect(value, parseOptions), {
+            onFailure: formatter.format,
             onSuccess: (value): StandardSchemaV1.Result<S["Type"]> => ({ value })
           }),
           { scheduler }
@@ -434,7 +442,7 @@ export const decodeEffect: <T, E, RD, RE>(
  */
 export function decodeUnknownResult<T, E, RE>(codec: Codec<T, E, never, RE>) {
   const parser = SchemaToParser.decodeUnknownResult(codec)
-  return (input: E, options?: SchemaAST.ParseOptions): Result.Result<T, SchemaError> => {
+  return (input: unknown, options?: SchemaAST.ParseOptions): Result.Result<T, SchemaError> => {
     return Result.mapErr(parser(input, options), (issue) => new SchemaError({ issue }))
   }
 }
@@ -531,7 +539,7 @@ export const encodeUnknownOption = SchemaToParser.encodeUnknownOption
  * @category Encoding
  * @since 4.0.0
  */
-export const encodePromise = SchemaToParser.encodePromise
+export const encodeOption = SchemaToParser.encodeOption
 
 /**
  * @category Encoding
@@ -543,7 +551,7 @@ export const encodeUnknownPromise = SchemaToParser.encodeUnknownPromise
  * @category Encoding
  * @since 4.0.0
  */
-export const encodeOption = SchemaToParser.encodeOption
+export const encodePromise = SchemaToParser.encodePromise
 
 /**
  * @category Encoding
@@ -739,12 +747,17 @@ export interface typeCodec<S extends Top> extends
   >
 {}
 
+interface typeCodecLambda extends Lambda {
+  <S extends Top>(self: S): typeCodec<S>
+  readonly "~lambda.out": this["~lambda.in"] extends Top ? typeCodec<this["~lambda.in"]> : never
+}
+
 /**
  * @since 4.0.0
  */
-export function typeCodec<S extends Top>(schema: S): typeCodec<S> {
-  return make<typeCodec<S>>(SchemaAST.typeAST(schema.ast))
-}
+export const typeCodec = lambda<typeCodecLambda>(function typeCodec<S extends Top>(self: S): typeCodec<S> {
+  return new makeWithSchema$<S, typeCodec<S>>(SchemaAST.typeAST(self.ast), self)
+})
 
 /**
  * @category Api interface
@@ -769,12 +782,17 @@ export interface encodedCodec<S extends Top> extends
   >
 {}
 
+interface encodedCodecLambda extends Lambda {
+  <S extends Top>(self: S): encodedCodec<S>
+  readonly "~lambda.out": this["~lambda.in"] extends Top ? encodedCodec<this["~lambda.in"]> : never
+}
+
 /**
  * @since 4.0.0
  */
-export function encodedCodec<S extends Top>(schema: S): encodedCodec<S> {
-  return make<encodedCodec<S>>(SchemaAST.encodedAST(schema.ast))
-}
+export const encodedCodec = lambda<encodedCodecLambda>(function encodedCodec<S extends Top>(self: S): encodedCodec<S> {
+  return new makeWithSchema$<S, encodedCodec<S>>(SchemaAST.encodedAST(self.ast), self)
+})
 
 /**
  * @category Api interface
@@ -2615,14 +2633,10 @@ export function Option<S extends Top>(value: S): Option<S> {
         if (O.isNone(oinput)) {
           return Result.okNone
         }
-        const input = oinput.value
-        return SchemaToParser.decodeUnknownSchemaResult(value)(input, options).pipe(SchemaResult.mapBoth(
+        return SchemaToParser.decodeUnknownSchemaResult(value)(oinput.value, options).pipe(SchemaResult.mapBoth(
           {
             onSuccess: O.some,
-            onFailure: (issue) => {
-              const actual = O.some(oinput)
-              return new SchemaIssue.Composite(ast, actual, [issue])
-            }
+            onFailure: (issue) => new SchemaIssue.Composite(ast, oinput, [issue])
           }
         ))
       }
@@ -2667,7 +2681,7 @@ export function Option<S extends Top>(value: S): Option<S> {
 /**
  * @since 4.0.0
  */
-export const NonEmptyString = String.check(SchemaCheck.nonEmpty)
+export const NonEmptyString = String.check(SchemaCheck.nonEmpty())
 
 /**
  * @category Api interface
@@ -2884,7 +2898,7 @@ export interface ValidDate extends Date {
 /**
  * @since 4.0.0
  */
-export const ValidDate = Date.check(SchemaCheck.validDate)
+export const ValidDate = Date.check(SchemaCheck.validDate())
 
 /**
  * @category Api interface
@@ -2917,7 +2931,7 @@ export interface Finite extends Number {
  *
  * @since 4.0.0
  */
-export const Finite = Number.check(SchemaCheck.finite)
+export const Finite = Number.check(SchemaCheck.finite())
 
 /**
  * @category Api interface

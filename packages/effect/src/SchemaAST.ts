@@ -155,7 +155,7 @@ export class Context {
     readonly defaultValue: Encoding | undefined,
     /** Used for constructor encoding (e.g. `Class` API) */
     readonly make: Encoding | undefined,
-    readonly annotations: SchemaAnnotations.Documentation | undefined
+    readonly annotations: SchemaAnnotations.Key | undefined
   ) {}
 }
 
@@ -169,7 +169,7 @@ export type Checks = readonly [SchemaCheck.SchemaCheck<any>, ...ReadonlyArray<Sc
  * @category model
  * @since 4.0.0
  */
-export abstract class Extensions implements Annotated {
+export abstract class Base implements Annotated {
   constructor(
     readonly annotations: Annotations | undefined,
     readonly checks: Checks | undefined,
@@ -182,7 +182,7 @@ export abstract class Extensions implements Annotated {
  * @category model
  * @since 4.0.0
  */
-export abstract class Concrete extends Extensions {
+export abstract class Abstract extends Base {
   /** @internal */
   typeAST(this: AST): AST {
     return replaceEncoding(this, undefined)
@@ -200,7 +200,7 @@ export abstract class Concrete extends Extensions {
  * @category model
  * @since 4.0.0
  */
-export class Declaration extends Extensions {
+export class Declaration extends Base {
   readonly _tag = "Declaration"
 
   constructor(
@@ -258,7 +258,7 @@ export class Declaration extends Extensions {
  * @category model
  * @since 4.0.0
  */
-export class NullKeyword extends Concrete {
+export class NullKeyword extends Abstract {
   readonly _tag = "NullKeyword"
   /** @internal */
   parser() {
@@ -275,7 +275,7 @@ export const nullKeyword = new NullKeyword(undefined, undefined, undefined, unde
  * @category model
  * @since 4.0.0
  */
-export class UndefinedKeyword extends Concrete {
+export class UndefinedKeyword extends Abstract {
   readonly _tag = "UndefinedKeyword"
   /** @internal */
   parser() {
@@ -292,7 +292,7 @@ export const undefinedKeyword = new UndefinedKeyword(undefined, undefined, undef
  * @category model
  * @since 4.0.0
  */
-export class VoidKeyword extends Concrete {
+export class VoidKeyword extends Abstract {
   readonly _tag = "VoidKeyword"
   /** @internal */
   parser() {
@@ -309,7 +309,7 @@ export const voidKeyword = new VoidKeyword(undefined, undefined, undefined, unde
  * @category model
  * @since 4.0.0
  */
-export class NeverKeyword extends Concrete {
+export class NeverKeyword extends Abstract {
   readonly _tag = "NeverKeyword"
   /** @internal */
   parser() {
@@ -326,7 +326,7 @@ export const neverKeyword = new NeverKeyword(undefined, undefined, undefined, un
  * @category model
  * @since 4.0.0
  */
-export class AnyKeyword extends Concrete {
+export class AnyKeyword extends Abstract {
   readonly _tag = "AnyKeyword"
   /** @internal */
   parser() {
@@ -343,7 +343,7 @@ export const anyKeyword = new AnyKeyword(undefined, undefined, undefined, undefi
  * @category model
  * @since 4.0.0
  */
-export class UnknownKeyword extends Concrete {
+export class UnknownKeyword extends Abstract {
   readonly _tag = "UnknownKeyword"
   /** @internal */
   parser() {
@@ -360,7 +360,7 @@ export const unknownKeyword = new UnknownKeyword(undefined, undefined, undefined
  * @category model
  * @since 4.0.0
  */
-export class ObjectKeyword extends Concrete {
+export class ObjectKeyword extends Abstract {
   readonly _tag = "ObjectKeyword"
   /** @internal */
   parser() {
@@ -372,7 +372,7 @@ export class ObjectKeyword extends Concrete {
  * @category model
  * @since 4.0.0
  */
-export class Enums extends Concrete {
+export class Enums extends Abstract {
   readonly _tag = "Enums"
   constructor(
     readonly enums: ReadonlyArray<readonly [string, string | number]>,
@@ -445,7 +445,7 @@ function isASTPart(ast: AST): ast is TemplateLiteral.ASTPart {
  * @category model
  * @since 4.0.0
  */
-export class TemplateLiteral extends Concrete {
+export class TemplateLiteral extends Abstract {
   readonly _tag = "TemplateLiteral"
   /** @internal */
   readonly flippedParts: ReadonlyArray<TemplateLiteral.ASTPart>
@@ -552,7 +552,7 @@ export type Literal = string | number | boolean | bigint
  * @category model
  * @since 4.0.0
  */
-export class UniqueSymbol extends Concrete {
+export class UniqueSymbol extends Abstract {
   readonly _tag = "UniqueSymbol"
   constructor(
     readonly symbol: symbol,
@@ -573,7 +573,7 @@ export class UniqueSymbol extends Concrete {
  * @category model
  * @since 4.0.0
  */
-export class LiteralType extends Concrete {
+export class LiteralType extends Abstract {
   readonly _tag = "LiteralType"
   constructor(
     readonly literal: Literal,
@@ -599,7 +599,7 @@ export class LiteralType extends Concrete {
  * @category model
  * @since 4.0.0
  */
-export class StringKeyword extends Concrete {
+export class StringKeyword extends Abstract {
   readonly _tag = "StringKeyword"
   /** @internal */
   parser() {
@@ -616,7 +616,7 @@ export const stringKeyword = new StringKeyword(undefined, undefined, undefined, 
  * @category model
  * @since 4.0.0
  */
-export class NumberKeyword extends Concrete {
+export class NumberKeyword extends Abstract {
   readonly _tag = "NumberKeyword"
   /** @internal */
   parser() {
@@ -633,7 +633,7 @@ export const numberKeyword = new NumberKeyword(undefined, undefined, undefined, 
  * @category model
  * @since 4.0.0
  */
-export class BooleanKeyword extends Concrete {
+export class BooleanKeyword extends Abstract {
   readonly _tag = "BooleanKeyword"
   /** @internal */
   parser() {
@@ -650,7 +650,7 @@ export const booleanKeyword = new BooleanKeyword(undefined, undefined, undefined
  * @category model
  * @since 4.0.0
  */
-export class SymbolKeyword extends Concrete {
+export class SymbolKeyword extends Abstract {
   readonly _tag = "SymbolKeyword"
   /** @internal */
   parser() {
@@ -667,7 +667,7 @@ export const symbolKeyword = new SymbolKeyword(undefined, undefined, undefined, 
  * @category model
  * @since 4.0.0
  */
-export class BigIntKeyword extends Concrete {
+export class BigIntKeyword extends Abstract {
   readonly _tag = "BigIntKeyword"
   /** @internal */
   parser() {
@@ -734,7 +734,7 @@ export class IndexSignature {
  * @category model
  * @since 4.0.0
  */
-export class TupleType extends Extensions {
+export class TupleType extends Base {
   readonly _tag = "TupleType"
   constructor(
     readonly isMutable: boolean,
@@ -806,10 +806,10 @@ export class TupleType extends Extensions {
         const element = ast.elements[i]
         const value = i < input.length ? Option.some(input[i]) : Option.none()
         const parser = go(element)
-        const annotations = element.context?.annotations
+        const keyAnnotations = element.context?.annotations
         const r = yield* Effect.result(SchemaResult.asEffect(parser(value, options)))
         if (Result.isErr(r)) {
-          const issue = new SchemaIssue.Pointer([i], r.err, annotations)
+          const issue = new SchemaIssue.Pointer([i], r.err)
           if (errorsAllOption) {
             issues.push(issue)
           } else {
@@ -820,7 +820,7 @@ export class TupleType extends Extensions {
             output[i] = r.ok.value
           } else {
             if (!element.context?.isOptional) {
-              const issue = new SchemaIssue.Pointer([i], new SchemaIssue.MissingKey(), annotations)
+              const issue = new SchemaIssue.Pointer([i], new SchemaIssue.MissingKey(keyAnnotations))
               if (errorsAllOption) {
                 issues.push(issue)
               } else {
@@ -837,11 +837,11 @@ export class TupleType extends Extensions {
       if (Arr.isNonEmptyReadonlyArray(ast.rest)) {
         const [head, ...tail] = ast.rest
         const parser = go(head)
-        const annotations = head.context?.annotations
+        const keyAnnotations = head.context?.annotations
         for (; i < len - tail.length; i++) {
           const r = yield* Effect.result(SchemaResult.asEffect(parser(Option.some(input[i]), options)))
           if (Result.isErr(r)) {
-            const issue = new SchemaIssue.Pointer([i], r.err, annotations)
+            const issue = new SchemaIssue.Pointer([i], r.err)
             if (errorsAllOption) {
               issues.push(issue)
             } else {
@@ -851,7 +851,7 @@ export class TupleType extends Extensions {
             if (Option.isSome(r.ok)) {
               output[i] = r.ok.value
             } else {
-              const issue = new SchemaIssue.Pointer([i], new SchemaIssue.MissingKey(), annotations)
+              const issue = new SchemaIssue.Pointer([i], new SchemaIssue.MissingKey(keyAnnotations))
               if (errorsAllOption) {
                 issues.push(issue)
               } else {
@@ -868,10 +868,10 @@ export class TupleType extends Extensions {
             continue
           } else {
             const parser = go(tail[j])
-            const annotations = tail[j].context?.annotations
+            const keyAnnotations = tail[j].context?.annotations
             const r = yield* Effect.result(SchemaResult.asEffect(parser(Option.some(input[i]), options)))
             if (Result.isErr(r)) {
-              const issue = new SchemaIssue.Pointer([i], r.err, annotations)
+              const issue = new SchemaIssue.Pointer([i], r.err)
               if (errorsAllOption) {
                 issues.push(issue)
               } else {
@@ -881,7 +881,7 @@ export class TupleType extends Extensions {
               if (Option.isSome(r.ok)) {
                 output[i] = r.ok.value
               } else {
-                const issue = new SchemaIssue.Pointer([i], new SchemaIssue.MissingKey(), annotations)
+                const issue = new SchemaIssue.Pointer([i], new SchemaIssue.MissingKey(keyAnnotations))
                 if (errorsAllOption) {
                   issues.push(issue)
                 } else {
@@ -928,7 +928,7 @@ export function getIndexSignatureKeys(
  * @category model
  * @since 4.0.0
  */
-export class TypeLiteral extends Extensions {
+export class TypeLiteral extends Base {
   readonly _tag = "TypeLiteral"
   constructor(
     readonly propertySignatures: ReadonlyArray<PropertySignature>,
@@ -1040,10 +1040,10 @@ export class TypeLiteral extends Extensions {
           value = Option.some(input[name])
         }
         const parser = go(type)
-        const annotations = type.context?.annotations
+        const keyAnnotations = type.context?.annotations
         const r = yield* Effect.result(SchemaResult.asEffect(parser(value, options)))
         if (Result.isErr(r)) {
-          const issue = new SchemaIssue.Pointer([name], r.err, annotations)
+          const issue = new SchemaIssue.Pointer([name], r.err)
           if (errorsAllOption) {
             issues.push(issue)
             continue
@@ -1057,7 +1057,7 @@ export class TypeLiteral extends Extensions {
             internalRecord.set(out, name, r.ok.value)
           } else {
             if (!ps.type.context?.isOptional) {
-              const issue = new SchemaIssue.Pointer([name], new SchemaIssue.MissingKey(), annotations)
+              const issue = new SchemaIssue.Pointer([name], new SchemaIssue.MissingKey(keyAnnotations))
               if (errorsAllOption) {
                 issues.push(issue)
                 continue
@@ -1078,14 +1078,13 @@ export class TypeLiteral extends Extensions {
         const keys = getIndexSignatureKeys(input, is)
         for (const key of keys) {
           const parserKey = go(is.parameter)
-          const annotations = is.parameter.context?.annotations
           const rKey =
             (yield* Effect.result(SchemaResult.asEffect(parserKey(Option.some(key), options)))) as Result.Result<
               Option.Option<PropertyKey>,
               SchemaIssue.Issue
             >
           if (Result.isErr(rKey)) {
-            const issue = new SchemaIssue.Pointer([key], rKey.err, annotations)
+            const issue = new SchemaIssue.Pointer([key], rKey.err)
             if (errorsAllOption) {
               issues.push(issue)
               continue
@@ -1100,7 +1099,7 @@ export class TypeLiteral extends Extensions {
           const parserValue = go(is.type)
           const rValue = yield* Effect.result(SchemaResult.asEffect(parserValue(value, options)))
           if (Result.isErr(rValue)) {
-            const issue = new SchemaIssue.Pointer([key], rValue.err, annotations)
+            const issue = new SchemaIssue.Pointer([key], rValue.err)
             if (errorsAllOption) {
               issues.push(issue)
               continue
@@ -1299,7 +1298,7 @@ export function getCandidates(input: unknown, types: ReadonlyArray<AST>): Readon
  * @category model
  * @since 4.0.0
  */
-export class UnionType<A extends AST = AST> extends Extensions {
+export class UnionType<A extends AST = AST> extends Base {
   readonly _tag = "UnionType"
   constructor(
     readonly types: ReadonlyArray<A>,
@@ -1341,7 +1340,13 @@ export class UnionType<A extends AST = AST> extends Extensions {
       const candidates = getCandidates(input, ast.types)
       const issues: Array<SchemaIssue.Issue> = []
 
-      let out: Option.Option<unknown> | undefined = undefined
+      const tracking: {
+        out: Option.Option<unknown> | undefined
+        successes: Array<AST>
+      } = {
+        out: undefined,
+        successes: []
+      }
       for (const candidate of candidates) {
         const parser = go(candidate)
         const r = yield* Effect.result(SchemaResult.asEffect(parser(oinput, options)))
@@ -1349,18 +1354,20 @@ export class UnionType<A extends AST = AST> extends Extensions {
           issues.push(r.err)
           continue
         } else {
-          if (out && oneOf) {
-            return yield* SchemaResult.fail(new SchemaIssue.OneOf(ast, input))
+          if (tracking.out && oneOf) {
+            tracking.successes.push(candidate)
+            return yield* SchemaResult.fail(new SchemaIssue.OneOf(ast, input, tracking.successes))
           }
-          out = r.ok
+          tracking.out = r.ok
+          tracking.successes.push(candidate)
           if (!oneOf) {
             break
           }
         }
       }
 
-      if (out) {
-        return out
+      if (tracking.out) {
+        return tracking.out
       } else if (Arr.isNonEmptyArray(issues)) {
         if (candidates.length === 1) {
           return yield* SchemaResult.fail(issues[0])
@@ -1378,7 +1385,7 @@ export class UnionType<A extends AST = AST> extends Extensions {
  * @category model
  * @since 4.0.0
  */
-export class Suspend extends Extensions {
+export class Suspend extends Base {
   readonly _tag = "Suspend"
   constructor(
     readonly thunk: () => AST,
@@ -1519,19 +1526,14 @@ export function memoize<A extends AST, O>(f: (ast: A) => O): (ast: A) => O {
   }
 }
 
-function modifyAnnotations<A extends AST>(
-  ast: A,
-  f: (annotations: Annotations | undefined) => Annotations | undefined
-): A {
-  return modifyOwnPropertyDescriptors(ast, (d) => {
-    d.annotations.value = f(ast.annotations)
-  })
-}
-
 /** @internal */
 export function annotate<A extends AST>(ast: A, annotations: Annotations): A {
-  return modifyAnnotations(ast, (existing) => {
-    return { ...existing, ...annotations }
+  if (ast.checks) {
+    const last = ast.checks[ast.checks.length - 1]
+    return replaceChecks(ast, Arr.append(ast.checks.slice(0, -1), last.annotate(annotations)))
+  }
+  return modifyOwnPropertyDescriptors(ast, (d) => {
+    d.annotations.value = { ...ast.annotations, ...annotations }
   })
 }
 
@@ -1748,13 +1750,9 @@ const formatTemplateLiteralASTWithinUnion = (part: TemplateLiteral.ASTPart): str
 }
 
 function formatAST(ast: AST): string {
-  const identifier = ast.annotations?.identifier
-  if (Predicate.isString(identifier)) {
-    return identifier
-  }
-  const title = ast.annotations?.title
-  if (Predicate.isString(title)) {
-    return title
+  const compact = ast.annotations?.identifier ?? ast.annotations?.title
+  if (Predicate.isString(compact)) {
+    return compact
   }
   switch (ast._tag) {
     case "Declaration": {
@@ -1888,14 +1886,54 @@ function formatEncoding(encoding: Encoding): string {
   }
 }
 
-/** @internal */
-export const format = memoize((ast: AST): string => {
-  let out = formatAST(ast)
+/**
+ * Returns the identifier of the AST, if it has one. If the AST has checks, the
+ * identifier is the value of the `identifier` annotation of the last check. If
+ * the AST has no identifier, it returns `undefined`.
+ *
+ * @internal
+ */
+export function getIdentifier(ast: AST): string | undefined {
   if (ast.checks) {
-    for (const modifier of ast.checks) {
-      out += ` & ${formatCheck(modifier)}`
+    const last = ast.checks[ast.checks.length - 1]
+    const identifier = last.annotations?.identifier
+    if (Predicate.isString(identifier)) {
+      return identifier
+    }
+  } else {
+    const identifier = ast.annotations?.identifier
+    if (Predicate.isString(identifier)) {
+      return identifier
+    }
+    if (isSuspend(ast)) {
+      return getIdentifier(ast.thunk())
     }
   }
+}
+
+/** @internal */
+export const format = memoize((ast: AST): string => {
+  let id: string | undefined
+  let checks: string = ""
+  const identifier = ast.annotations?.identifier
+  if (Predicate.isString(identifier)) {
+    id = identifier
+  }
+  if (ast.checks) {
+    for (const check of ast.checks) {
+      const identifier = check.annotations?.identifier
+      if (Predicate.isString(identifier)) {
+        id = identifier
+        checks = ""
+      } else {
+        checks += ` & ${formatCheck(check)}`
+      }
+    }
+  }
+  if (id !== undefined) {
+    return id + checks
+  }
+  let out = formatAST(ast) + checks
   if (ast.encoding) {
     out += formatEncoding(ast.encoding)
   }
