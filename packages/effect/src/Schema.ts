@@ -2636,14 +2636,14 @@ export function Option<S extends Top>(value: S): Option<S> {
         return SchemaToParser.decodeUnknownSchemaResult(value)(oinput.value, options).pipe(SchemaResult.mapBoth(
           {
             onSuccess: O.some,
-            onFailure: (issue) => new SchemaIssue.Composite(ast, oinput, [issue])
+            onFailure: (issue) => new SchemaIssue.Composite(ast, oinput, [new SchemaIssue.Pointer(["value"], issue)])
           }
         ))
       }
       return Result.err(new SchemaIssue.InvalidType(ast, O.some(oinput)))
     },
     {
-      constructorTitle: "Option",
+      title: "Option",
       defaultJsonSerializer: ([value]) =>
         link<O.Option<S["Encoded"]>>()(
           Union([Tuple([value]), Tuple([])]),
@@ -2708,14 +2708,15 @@ export function Map<Key extends Top, Value extends Top>(key: Key, value: Value):
         return SchemaToParser.decodeUnknownSchemaResult(array)([...input], options).pipe(SchemaResult.mapBoth(
           {
             onSuccess: (array: ReadonlyArray<readonly [Key["Type"], Value["Type"]]>) => new globalThis.Map(array),
-            onFailure: (issue) => new SchemaIssue.Composite(ast, O.some(input), [issue])
+            onFailure: (issue) =>
+              new SchemaIssue.Composite(ast, O.some(input), [new SchemaIssue.Pointer(["entries"], issue)])
           }
         ))
       }
       return Result.err(new SchemaIssue.InvalidType(ast, O.some(input)))
     },
     {
-      constructorTitle: "Map",
+      title: "Map",
       defaultJsonSerializer: ([key, value]) =>
         link<globalThis.Map<Key["Encoded"], Value["Encoded"]>>()(
           Array(Tuple([key, value])),
@@ -2913,7 +2914,7 @@ export interface UnknownFromJsonString extends decodeTo<Unknown, String, never, 
  */
 export const UnknownFromJsonString: UnknownFromJsonString = String.pipe(
   decodeTo(
-    Unknown,
+    Unknown.annotate({ title: "JSON parsed value" }),
     SchemaTransformation.json()
   )
 )
