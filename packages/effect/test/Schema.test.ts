@@ -23,7 +23,7 @@ import {
 import { produce } from "immer"
 import { describe, it } from "vitest"
 import { assertFalse, assertInclude, assertTrue, deepStrictEqual, strictEqual, throws } from "./utils/assert.js"
-import { assertions, standard } from "./utils/schema.js"
+import { assertions } from "./utils/schema.js"
 
 const Trim = Schema.String.pipe(Schema.decode(SchemaTransformation.trim()))
 
@@ -120,34 +120,7 @@ describe("Schema", () => {
       await assertions.make.fail(
         schema,
         "yellow",
-        `"red" | "green" | "blue"
-├─ Expected "red", actual "yellow"
-├─ Expected "green", actual "yellow"
-└─ Expected "blue", actual "yellow"`
-      )
-
-      await assertions.decoding.succeed(schema, "red")
-      await assertions.decoding.succeed(schema, "green")
-      await assertions.decoding.succeed(schema, "blue")
-      await assertions.decoding.fail(
-        schema,
-        "yellow",
-        `"red" | "green" | "blue"
-├─ Expected "red", actual "yellow"
-├─ Expected "green", actual "yellow"
-└─ Expected "blue", actual "yellow"`
-      )
-
-      await assertions.encoding.succeed(schema, "red")
-      await assertions.encoding.succeed(schema, "green")
-      await assertions.encoding.succeed(schema, "blue")
-      await assertions.encoding.fail(
-        schema,
-        "yellow",
-        `"red" | "green" | "blue"
-├─ Expected "red", actual "yellow"
-├─ Expected "green", actual "yellow"
-└─ Expected "blue", actual "yellow"`
+        `Expected "red" | "green" | "blue", actual "yellow"`
       )
     })
   })
@@ -2506,6 +2479,14 @@ describe("Schema", () => {
         `Expected exactly one successful schema for {"a":"a","b":1} in { readonly "a": string } ⊻ { readonly "b": number }`
       )
     })
+
+    it("{} & Literal", async () => {
+      const schema = Schema.Union([
+        Schema.Struct({}),
+        Schema.Literal("a")
+      ])
+      await assertions.decoding.succeed(schema, [])
+    })
   })
 
   describe("TupleWithRest", () => {
@@ -3480,13 +3461,11 @@ describe("Schema", () => {
         "cabd",
         `readonly ["c", readonly ["a", string, "b"] | "e", "d"]
 └─ [1]
-   └─ readonly ["a", string, "b"] | "e"
-      ├─ readonly ["a", string, "b"]
-      │  └─ [1]
-      │     └─ string & minLength(1)
-      │        └─ minLength(1)
-      │           └─ Invalid data ""
-      └─ Expected "e", actual "ab"`
+   └─ readonly ["a", string, "b"]
+      └─ [1]
+         └─ string & minLength(1)
+            └─ minLength(1)
+               └─ Invalid data ""`
       )
       await assertions.decoding.fail(
         schema,
@@ -3513,24 +3492,20 @@ describe("Schema", () => {
         "ca1.1bd",
         `readonly ["c", readonly ["a", number, "b"] | "e", "d"]
 └─ [1]
-   └─ readonly ["a", number, "b"] | "e"
-      ├─ readonly ["a", number, "b"]
-      │  └─ [1]
-      │     └─ number & finite & int
-      │        └─ int
-      │           └─ Invalid data 1.1
-      └─ Expected "e", actual "a1.1b"`
+   └─ readonly ["a", number, "b"]
+      └─ [1]
+         └─ number & finite & int
+            └─ int
+               └─ Invalid data 1.1`
       )
       await assertions.decoding.fail(
         schema,
         "ca-bd",
         `readonly ["c", readonly ["a", number, "b"] | "e", "d"]
 └─ [1]
-   └─ readonly ["a", number, "b"] | "e"
-      ├─ readonly ["a", number, "b"]
-      │  └─ [0]
-      │     └─ Missing key
-      └─ Expected "e", actual "a-b"`
+   └─ readonly ["a", number, "b"]
+      └─ [0]
+         └─ Missing key`
       )
     })
 
@@ -5091,189 +5066,6 @@ describe("SchemaGetter", () => {
           }
         )
       })
-    })
-  })
-})
-
-describe("Message system", () => {
-  describe("String", () => {
-    it("message as string", async () => {
-      const schema = Schema.String.annotate({ message: "string.mismatch" })
-      const standardSchema = Schema.standardSchemaV1(schema)
-      await assertions.decoding.fail(schema, null, "string.mismatch")
-      standard.expectSyncFailure(standardSchema, null, [
-        {
-          message: "string.mismatch",
-          path: []
-        }
-      ])
-    })
-
-    it("message as function", async () => {
-      const schema = Schema.String.annotate({
-        message: () => "string.mismatch"
-      })
-      const standardSchema = Schema.standardSchemaV1(schema)
-      await assertions.decoding.fail(schema, null, "string.mismatch")
-      standard.expectSyncFailure(standardSchema, null, [
-        {
-          message: "string.mismatch",
-          path: []
-        }
-      ])
-    })
-  })
-
-  it("Filter", async () => {
-    const schema = Schema.String.annotate({ message: "string.mismatch" }).check(
-      SchemaCheck.nonEmpty({ message: "string.too_short" }),
-      SchemaCheck.maxLength(2, { message: () => "string.too_long" })
-    )
-    const standardSchema = Schema.standardSchemaV1(schema)
-    await assertions.decoding.fail(
-      schema,
-      null,
-      `string.mismatch`
-    )
-    standard.expectSyncFailure(standardSchema, null, [
-      {
-        message: "string.mismatch",
-        path: []
-      }
-    ])
-    await assertions.decoding.fail(
-      schema,
-      "",
-      `string & minLength(1) & maxLength(2)
-└─ string.too_short`
-    )
-    standard.expectSyncFailure(standardSchema, "", [
-      {
-        message: "string.too_short",
-        path: []
-      }
-    ])
-    await assertions.decoding.fail(
-      schema,
-      "aaa",
-      `string & minLength(1) & maxLength(2)
-└─ string.too_long`
-    )
-    standard.expectSyncFailure(standardSchema, "aaa", [
-      {
-        message: "string.too_long",
-        path: []
-      }
-    ])
-  })
-
-  it("FilterGroup", async () => {
-    const schema = Schema.Number.check(SchemaCheck.int32())
-    const standardSchema = Schema.standardSchemaV1(schema)
-    await assertions.decoding.fail(
-      schema,
-      1.1,
-      `number & int32
-└─ int
-   └─ Invalid data 1.1`
-    )
-    standard.expectSyncFailure(standardSchema, 1.1, [
-      {
-        message: "~system|check|int|{}",
-        path: []
-      }
-    ])
-    await assertions.decoding.fail(
-      schema,
-      2147483647 + 1,
-      `number & int32
-└─ between(-2147483648, 2147483647)
-   └─ Invalid data 2147483648`
-    )
-    standard.expectSyncFailure(standardSchema, 2147483647 + 1, [
-      {
-        message: `~system|check|between|{"minimum":-2147483648,"maximum":2147483647}`,
-        path: []
-      }
-    ])
-  })
-
-  describe("Struct", () => {
-    it("struct.mismatch", async () => {
-      const schema = Schema.Struct({
-        a: Schema.String
-      }).annotate({ message: "struct.mismatch" })
-      const standardSchema = Schema.standardSchemaV1(schema)
-      await assertions.decoding.fail(schema, null, "struct.mismatch")
-      standard.expectSyncFailure(standardSchema, null, [
-        {
-          message: "struct.mismatch",
-          path: []
-        }
-      ])
-    })
-
-    describe("missingMessage", () => {
-      it("message as string", async () => {
-        const schema = Schema.Struct({
-          a: Schema.String.pipe(
-            Schema.annotateKey({ missingMessage: () => "missingMessage" })
-          )
-        })
-        const standardSchema = Schema.standardSchemaV1(schema)
-        await assertions.decoding.fail(
-          schema,
-          {},
-          `{ readonly "a": string }
-└─ ["a"]
-   └─ missingMessage`
-        )
-        standard.expectSyncFailure(standardSchema, {}, [
-          {
-            message: "missingMessage",
-            path: ["a"]
-          }
-        ])
-      })
-
-      it("message as function", async () => {
-        const schema = Schema.Struct({
-          a: Schema.String.pipe(
-            Schema.annotateKey({ missingMessage: () => "missingMessage" })
-          )
-        })
-        const standardSchema = Schema.standardSchemaV1(schema)
-        await assertions.decoding.fail(
-          schema,
-          {},
-          `{ readonly "a": string }
-└─ ["a"]
-   └─ missingMessage`
-        )
-        standard.expectSyncFailure(standardSchema, {}, [
-          {
-            message: "missingMessage",
-            path: ["a"]
-          }
-        ])
-      })
-    })
-  })
-
-  describe("Union", () => {
-    it("union.mismatch", async () => {
-      const schema = Schema.Union([
-        Schema.Struct({ a: Schema.String }).annotate({ message: "union.a" }),
-        Schema.Struct({ b: Schema.Number }).annotate({ message: "union.b" })
-      ]).annotate({ message: "union.mismatch" })
-      const standardSchema = Schema.standardSchemaV1(schema)
-      await assertions.decoding.fail(schema, null, "union.mismatch")
-      standard.expectSyncFailure(standardSchema, null, [
-        {
-          message: "union.mismatch",
-          path: []
-        }
-      ])
     })
   })
 })
