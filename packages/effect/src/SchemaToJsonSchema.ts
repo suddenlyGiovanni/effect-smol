@@ -3,6 +3,7 @@
  */
 import { formatPath, hasOwn } from "./internal/schema/util.js"
 import * as Predicate from "./Predicate.js"
+import type * as Record from "./Record.js"
 import type * as Schema from "./Schema.js"
 import type * as SchemaAnnotations from "./SchemaAnnotations.js"
 import * as SchemaAST from "./SchemaAST.js"
@@ -45,17 +46,13 @@ export declare namespace Annotation {
 /**
  * @since 4.0.0
  */
-export function getAnnotation(ast: SchemaAST.AST): Annotation.Override | undefined {
-  return ast.annotations?.jsonSchema as any
-}
-
-/**
- * @since 4.0.0
- */
-export function getCheckAnnotation(
-  check: SchemaCheck.SchemaCheck<any>
-): Annotation.Fragment | Annotation.Fragments | undefined {
-  return check.annotations?.jsonSchema as any
+function getAnnotation(
+  annotations: SchemaAnnotations.Annotations | undefined
+): Annotation.Override | Annotation.Fragment | Annotation.Fragments | undefined {
+  const jsonSchema = annotations?.jsonSchema
+  if (Predicate.isObject(jsonSchema)) { // TODO: better refinement
+    return jsonSchema as any
+  }
 }
 
 /**
@@ -290,35 +287,27 @@ function getAnnotations(annotations: SchemaAnnotations.Annotations | undefined):
   }
 }
 
-function getFragment(
+function getAnnotationFragment(
   check: SchemaCheck.SchemaCheck<any>,
-  types?: Annotation.FragmentKey | ReadonlyArray<Annotation.FragmentKey>
+  fragmentKey?: Annotation.FragmentKey
 ): JsonSchema.JsonSchema | undefined {
-  const annotation = getCheckAnnotation(check)
+  const annotation = getAnnotation(check.annotations)
   if (annotation) {
     switch (annotation.type) {
       case "fragment":
         return annotation.fragment
       case "fragments": {
-        if (types) {
-          if (Predicate.isString(types)) {
-            return annotation.fragments[types]
-          } else {
-            for (const type of types) {
-              if (hasOwn(annotation.fragments, type)) {
-                return annotation.fragments[type]
-              }
-            }
-          }
+        if (fragmentKey !== undefined) {
+          return annotation.fragments[fragmentKey]
         }
       }
     }
   }
 }
 
-function getChecks(
+function getChecksFragment(
   ast: SchemaAST.AST,
-  types?: Annotation.FragmentKey | ReadonlyArray<Annotation.FragmentKey>
+  fragmentKey?: Annotation.FragmentKey
 ): Record<string, unknown> | undefined {
   let out: { [x: string]: unknown; allOf: globalThis.Array<unknown> } = {
     ...getAnnotations(ast.annotations),
@@ -326,7 +315,7 @@ function getChecks(
   }
   if (ast.checks) {
     function go(check: SchemaCheck.SchemaCheck<any>) {
-      const fragment = { ...getAnnotations(check.annotations), ...getFragment(check, types) }
+      const fragment = { ...getAnnotations(check.annotations), ...getAnnotationFragment(check, fragmentKey) }
       if (hasOwn(fragment, "type")) {
         out.type = fragment.type
         delete fragment.type
@@ -367,8 +356,9 @@ function containsUndefined(ast: SchemaAST.AST): boolean {
   }
 }
 
-function isOptional(ast: SchemaAST.AST): boolean {
-  return ast.context?.isOptional || containsUndefined(ast)
+/** Either the AST is optional or it contains an undefined keyword */
+function isLooseOptional(ast: SchemaAST.AST): boolean {
+  return SchemaAST.isOptional(ast) || containsUndefined(ast)
 }
 
 function getPattern(
@@ -399,11 +389,6 @@ type GoOptions = {
   readonly additionalPropertiesStrategy: AdditionalPropertiesStrategy
 }
 
-/**
- * Returns the identifier of the AST, if it has one. If the AST has checks, the
- * identifier is the value of the `identifier` annotation of the last check. If
- * the AST has no identifier, it returns `undefined`.
- */
 function getIdentifier(ast: SchemaAST.AST): string | undefined {
   if (ast.checks) {
     const last = ast.checks[ast.checks.length - 1]
@@ -429,12 +414,6 @@ function go(
   ignoreIdentifier: boolean = false,
   ignoreJsonSchemaAnnotation: boolean = false
 ): JsonSchema.JsonSchema {
-  if (!ignoreJsonSchemaAnnotation) {
-    const annotation = getAnnotation(ast)
-    if (annotation) {
-      return annotation.override(go(ast, path, options, ignoreIdentifier, true))
-    }
-  }
   if (!ignoreIdentifier) {
     const identifier = getIdentifier(ast)
     if (identifier !== undefined) {
@@ -449,6 +428,12 @@ function go(
       }
     }
   }
+  if (!ignoreJsonSchemaAnnotation) {
+    const annotation = getAnnotation(ast.annotations)
+    if (annotation && annotation.type === "override") {
+      return annotation.override(go(ast, path, options, ignoreIdentifier, true))
+    }
+  }
   switch (ast._tag) {
     case "Declaration":
     case "VoidKeyword":
@@ -459,46 +444,46 @@ function go(
       throw new Error(`cannot generate JSON Schema for ${ast._tag} at ${formatPath(path) || "root"}`)
     case "UnknownKeyword":
     case "AnyKeyword":
-      return { ...getChecks(ast) }
+      return { ...getChecksFragment(ast) }
     case "NeverKeyword":
-      return { not: {}, ...getChecks(ast) }
+      return { not: {}, ...getChecksFragment(ast) }
     case "NullKeyword":
-      return { type: "null", ...getChecks(ast, "null") }
+      return { type: "null", ...getChecksFragment(ast, "null") }
     case "StringKeyword":
-      return { type: "string", ...getChecks(ast, "string") }
+      return { type: "string", ...getChecksFragment(ast, "string") }
     case "NumberKeyword":
-      return { type: "number", ...getChecks(ast, "number") }
+      return { type: "number", ...getChecksFragment(ast, "number") }
     case "BooleanKeyword":
-      return { type: "boolean", ...getChecks(ast, "boolean") }
+      return { type: "boolean", ...getChecksFragment(ast, "boolean") }
     case "ObjectKeyword":
       return {
         anyOf: [
           { type: "object" },
           { type: "array" }
         ],
-        ...getChecks(ast, ["object", "array"])
+        ...getChecksFragment(ast)
       }
     case "LiteralType": {
       if (Predicate.isString(ast.literal)) {
-        return { type: "string", enum: [ast.literal], ...getChecks(ast, "string") }
+        return { type: "string", enum: [ast.literal], ...getChecksFragment(ast, "string") }
       } else if (Predicate.isNumber(ast.literal)) {
-        return { type: "number", enum: [ast.literal], ...getChecks(ast, "number") }
+        return { type: "number", enum: [ast.literal], ...getChecksFragment(ast, "number") }
       } else if (Predicate.isBoolean(ast.literal)) {
-        return { type: "boolean", enum: [ast.literal], ...getChecks(ast, "boolean") }
+        return { type: "boolean", enum: [ast.literal], ...getChecksFragment(ast, "boolean") }
       }
       throw new Error(`cannot generate JSON Schema for ${ast._tag} at ${formatPath(path) || "root"}`)
     }
     case "Enums": {
       return {
         ...go(SchemaAST.enumsToLiterals(ast), path, options),
-        ...getChecks(ast)
+        ...getChecksFragment(ast)
       }
     }
     case "TemplateLiteral":
       return {
         type: "string",
         pattern: SchemaAST.getTemplateLiteralRegExp(ast).source,
-        ...getChecks(ast, "string")
+        ...getChecksFragment(ast, "string")
       }
     case "TupleType": {
       // ---------------------------------------------
@@ -511,13 +496,13 @@ function go(
       }
       const out: JsonSchema.Array = {
         type: "array",
-        ...getChecks(ast, "array")
+        ...getChecksFragment(ast, "array")
       }
       // ---------------------------------------------
       // handle elements
       // ---------------------------------------------
       const items = ast.elements.map((e, i) => go(e, [...path, i], options))
-      const minItems = ast.elements.findIndex(isOptional)
+      const minItems = ast.elements.findIndex(isLooseOptional)
       if (minItems !== -1) {
         out.minItems = minItems
       }
@@ -550,12 +535,12 @@ function go(
             { type: "object" },
             { type: "array" }
           ],
-          ...getChecks(ast, "object")
+          ...getChecksFragment(ast)
         }
       }
       const out: JsonSchema.Object = {
         type: "object",
-        ...getChecks(ast, "object")
+        ...getChecksFragment(ast, "object")
       }
       // ---------------------------------------------
       // handle property signatures
@@ -568,7 +553,7 @@ function go(
           throw new Error(`cannot generate JSON Schema for ${ast._tag} at ${formatPath([...path, name]) || "root"}`)
         } else {
           out.properties[name] = go(ps.type, [...path, name], options)
-          if (!isOptional(ps.type)) {
+          if (!isLooseOptional(ps.type)) {
             out.required.push(String(name))
           }
         }
@@ -605,9 +590,9 @@ function go(
         default:
           switch (ast.mode) {
             case "anyOf":
-              return { "anyOf": members, ...getChecks(ast) }
+              return { "anyOf": members, ...getChecksFragment(ast) }
             case "oneOf":
-              return { "oneOf": members, ...getChecks(ast) }
+              return { "oneOf": members, ...getChecksFragment(ast) }
           }
       }
     }
@@ -616,7 +601,11 @@ function go(
       if (identifier !== undefined) {
         return go(ast.thunk(), path, options, true)
       }
-      throw new Error(`cannot generate JSON Schema for ${ast._tag} at ${formatPath(path) || "root"}`)
+      throw new Error(
+        `cannot generate JSON Schema for ${ast._tag} at ${
+          formatPath(path) || "root"
+        }, required \`identifier\` annotation`
+      )
     }
   }
 }
