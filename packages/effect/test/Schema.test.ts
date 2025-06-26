@@ -324,6 +324,60 @@ describe("Schema", () => {
       )
     })
 
+    describe("onExcessProperty", () => {
+      it("error", async () => {
+        const schema = Schema.Struct({
+          a: Schema.String
+        })
+        await assertions.decoding.fail(
+          schema,
+          { a: "a", b: "b" },
+          `{ readonly "a": string }
+└─ ["b"]
+   └─ Unexpected key`,
+          {
+            parseOptions: { onExcessProperty: "error" }
+          }
+        )
+        await assertions.decoding.fail(
+          schema,
+          { a: "a", b: "b", c: "c" },
+          `{ readonly "a": string }
+├─ ["b"]
+│  └─ Unexpected key
+└─ ["c"]
+   └─ Unexpected key`,
+          {
+            parseOptions: { onExcessProperty: "error", errors: "all" }
+          }
+        )
+        const sym = Symbol("sym")
+        await assertions.decoding.fail(
+          schema,
+          { a: "a", [sym]: "sym" },
+          `{ readonly "a": string }
+└─ [Symbol(sym)]
+   └─ Unexpected key`,
+          {
+            parseOptions: { onExcessProperty: "error" }
+          }
+        )
+      })
+
+      it("preserve", async () => {
+        const schema = Schema.Struct({
+          a: Schema.String
+        })
+
+        const sym = Symbol("sym")
+        await assertions.decoding.succeed(
+          schema,
+          { a: "a", b: "b", c: "c", [sym]: "sym" },
+          { parseOptions: { onExcessProperty: "preserve" } }
+        )
+      })
+    })
+
     it(`{ readonly "a": string }`, async () => {
       const schema = Schema.Struct({
         a: Schema.String
@@ -628,6 +682,27 @@ describe("Schema", () => {
       throws(
         () => Schema.Tuple([Schema.optional(Schema.String), Schema.String]),
         new Error("A required element cannot follow an optional element. ts(1257)")
+      )
+    })
+
+    it("should fail on unexpected indexes", async () => {
+      const schema = Schema.Tuple([Schema.String])
+      await assertions.decoding.fail(
+        schema,
+        ["a", "b"],
+        `readonly [string]
+└─ [1]
+   └─ Unexpected key`
+      )
+      await assertions.decoding.fail(
+        schema,
+        ["a", "b", "c"],
+        `readonly [string]
+├─ [1]
+│  └─ Unexpected key
+└─ [2]
+   └─ Unexpected key`,
+        { parseOptions: { errors: "all" } }
       )
     })
 
@@ -4549,10 +4624,10 @@ describe("SchemaGetter", () => {
   })
 
   describe("annotateKey", () => {
-    describe("the missingMessage annotation should be used as a error message", () => {
+    describe("the missingKeyMessage annotation should be used as a error message", () => {
       it("Struct", async () => {
         const schema = Schema.Struct({
-          a: Schema.String.pipe(Schema.annotateKey({ missingMessage: "this field is required" }))
+          a: Schema.String.pipe(Schema.annotateKey({ missingKeyMessage: "this field is required" }))
         })
 
         await assertions.decoding.fail(
@@ -4566,7 +4641,7 @@ describe("SchemaGetter", () => {
 
       it("Tuple", async () => {
         const schema = Schema.Tuple([
-          Schema.String.pipe(Schema.annotateKey({ missingMessage: "this element is required" }))
+          Schema.String.pipe(Schema.annotateKey({ missingKeyMessage: "this element is required" }))
         ])
 
         await assertions.decoding.fail(

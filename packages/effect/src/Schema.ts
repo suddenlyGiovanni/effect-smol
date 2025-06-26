@@ -1318,7 +1318,7 @@ export interface Struct<Fields extends Struct.Fields> extends
     Struct.EncodingContext<Fields>,
     SchemaAST.TypeLiteral,
     Struct<Fields>,
-    SchemaAnnotations.Bottom<Simplify<Struct.Type<Fields>>>,
+    SchemaAnnotations.Struct<Simplify<Struct.Type<Fields>>>,
     Simplify<Struct.MakeIn<Fields>>
   >
 {

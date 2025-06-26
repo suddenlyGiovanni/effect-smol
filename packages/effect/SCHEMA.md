@@ -1373,7 +1373,7 @@ const schema = Schema.Struct({
     Schema.annotateKey({
       description: "The username used to log in",
       // Custom message shown if the key is missing
-      missingMessage: "Username is required"
+      missingKeyMessage: "Username is required"
     })
   )
 })
@@ -1390,6 +1390,66 @@ Output:
 { readonly "username": string }
 └─ ["username"]
    └─ Username is required
+*/
+```
+
+### Unexpected Key Message
+
+You can annotate a struct with a custom message to use when a key is unexpected (when `onExcessProperty` is `error`).
+
+**Example** (Annotating a struct with a custom message)
+
+```ts
+import { Effect, Schema, SchemaFormatter } from "effect"
+
+const schema = Schema.Struct({
+  a: Schema.String
+}).annotate({ unexpectedKeyMessage: "Custom message" })
+
+Schema.decodeUnknownEffect(schema)(
+  { a: "a", b: "b" },
+  { onExcessProperty: "error" }
+)
+  .pipe(
+    Effect.mapError((err) => SchemaFormatter.getTree().format(err.issue)),
+    Effect.runPromise
+  )
+  .then(console.log, console.error)
+
+/*
+Output:
+{ readonly "a": string }
+└─ ["b"]
+   └─ Custom message
+*/
+```
+
+### Preserve unexpected keys
+
+You can preserve unexpected keys by setting `onExcessProperty` to `preserve`.
+
+**Example** (Preserving unexpected keys)
+
+```ts
+import { Effect, Schema, SchemaFormatter } from "effect"
+
+const schema = Schema.Struct({
+  a: Schema.String
+})
+
+Schema.decodeUnknownEffect(schema)(
+  { a: "a", b: "b" },
+  { onExcessProperty: "preserve" }
+)
+  .pipe(
+    Effect.mapError((err) => SchemaFormatter.getTree().format(err.issue)),
+    Effect.runPromise
+  )
+  .then(console.log, console.error)
+
+/*
+Output:
+{ b: 'b', a: 'a' }
 */
 ```
 
@@ -2143,7 +2203,7 @@ const schema = Schema.Tuple([
     Schema.annotateKey({
       description: "my element description",
       // a message to display when the element is missing
-      missingMessage: "this element is required"
+      missingKeyMessage: "this element is required"
     })
   )
 ])
@@ -3799,7 +3859,7 @@ export interface Issue {
 You can customize the messages of the `Issue` object in two main ways:
 
 - By passing formatter hooks
-- By annotating schemas with `message` or `missingMessage`
+- By annotating schemas with `message` or `missingKeyMessage` or `unexpectedKeyMessage`
 
 #### Hooks
 
@@ -3817,6 +3877,7 @@ There are two kinds of hooks:
 - `InvalidType`
 - `InvalidValue`
 - `MissingKey`
+- `UnexpectedKey`
 - `Forbidden`
 - `OneOf`
 
@@ -3841,6 +3902,7 @@ i18next.init({
         "string.mismatch": "Please enter a valid string",
         "string.minLength": "Please enter at least {{minLength}} character(s)",
         "struct.missingKey": "This field is required",
+        "struct.unexpectedKey": "This field is not allowed",
         "struct.mismatch": "Please enter a valid object",
         "default.mismatch": "Invalid type",
         "default.invalidValue": "Invalid value",
@@ -3904,6 +3966,8 @@ const logIssues = getLogIssues({
       }
       case "MissingKey":
         return t("struct.missingKey")
+      case "UnexpectedKey":
+        return t("struct.unexpectedKey")
       case "Forbidden":
         return t("default.forbidden")
       case "OneOf":
@@ -3960,7 +4024,7 @@ const Person = Schema.Struct({
     // Message for invalid type (e.g., number instead of string)
     .annotate({ message: t("string.mismatch") })
     // Message to show when the key is missing
-    .pipe(Schema.annotateKey({ missingMessage: t("struct.missingKey") }))
+    .pipe(Schema.annotateKey({ missingKeyMessage: t("struct.missingKey") }))
     // Message to show when the string is empty
     .check(
       SchemaCheck.nonEmpty({ message: t("string.minLength", { minLength: 1 }) })
@@ -4009,6 +4073,7 @@ export interface StructuredIssue {
     | "InvalidType"
     | "InvalidValue"
     | "MissingKey"
+    | "UnexpectedKey"
     | "Forbidden"
     | "OneOf"
   /** The annotations of the issue, if any. */
