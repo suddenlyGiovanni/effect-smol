@@ -1,23 +1,23 @@
 /**
  * @since 4.0.0
  */
-import * as Arr from "../Array.js"
-import * as Equal from "../Equal.js"
-import * as Equivalence_ from "../Equivalence.js"
-import { dual } from "../Function.js"
-import * as Hash from "../Hash.js"
-import { type Inspectable } from "../Inspectable.js"
-import { PipeInspectableProto } from "../internal/core.js"
-import * as Option from "../Option.js"
-import type { Pipeable } from "../Pipeable.js"
-import { hasProperty } from "../Predicate.js"
-import * as Result from "../Result.js"
-import * as Schema from "../Schema.js"
-import * as SchemaIssue from "../SchemaIssue.js"
-import * as SchemaResult from "../SchemaResult.js"
-import * as SchemaTransformation from "../SchemaTransformation.js"
-import * as String$ from "../String.js"
-import * as Tuple from "../Tuple.js"
+import * as Arr from "../../Array.js"
+import * as Equal from "../../Equal.js"
+import * as Equivalence_ from "../../Equivalence.js"
+import { dual } from "../../Function.js"
+import * as Hash from "../../Hash.js"
+import { type Inspectable } from "../../Inspectable.js"
+import { PipeInspectableProto } from "../../internal/core.js"
+import * as Option from "../../Option.js"
+import type { Pipeable } from "../../Pipeable.js"
+import { hasProperty } from "../../Predicate.js"
+import * as Result from "../../Result.js"
+import * as Schema from "../../Schema.js"
+import * as SchemaIssue from "../../SchemaIssue.js"
+import * as SchemaResult from "../../SchemaResult.js"
+import * as SchemaTransformation from "../../SchemaTransformation.js"
+import * as String$ from "../../String.js"
+import * as Tuple from "../../Tuple.js"
 
 /**
  * @since 4.0.0
@@ -357,7 +357,7 @@ const baseUrl = (): string | undefined => {
  *
  * ```ts
  * import * as assert from "node:assert"
- * import * as UrlParams from "effect/unstable/UrlParams"
+ * import { UrlParams } from "effect/unstable/http"
  *
  * const urlParams = UrlParams.fromInput({ a: 1, b: true, c: "string", e: [1, 2, 3] })
  * const result = UrlParams.toRecord(urlParams)
@@ -392,7 +392,7 @@ export const toRecord = (self: UrlParams): Record<string, string | Arr.NonEmptyA
  *
  * ```ts
  * import { Schema } from "effect"
- * import * as UrlParams from "effect/unstable/UrlParams"
+ * import { UrlParams } from "effect/unstable/http"
  *
  * const extractFoo = UrlParams.schemaJsonField("foo").pipe(
  *   Schema.decodeTo(Schema.Struct({
@@ -448,7 +448,7 @@ export interface schemaRecord extends
  *
  * ```ts
  * import { Schema } from "effect"
- * import * as UrlParams from "effect/unstable/UrlParams"
+ * import { UrlParams } from "effect/unstable/http"
  *
  * const toStruct = UrlParams.schemaRecord.pipe(
  *   Schema.decodeTo(Schema.Struct({
