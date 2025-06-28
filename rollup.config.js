@@ -1,7 +1,9 @@
+/* eslint-disable no-undef */
 import { nodeResolve } from "@rollup/plugin-node-resolve"
 import replace from "@rollup/plugin-replace"
 import terser from "@rollup/plugin-terser"
 import esbuild from "rollup-plugin-esbuild"
+import { visualizer } from "rollup-plugin-visualizer"
 
 export default {
   output: {
@@ -24,7 +26,13 @@ export default {
     terser({
       format: { comments: false },
       compress: true,
-      mangle: true
-    })
+      mangle: process.env.VISUALIZE !== "true"
+    }),
+    ...(process.env.VISUALIZE === "true" ?
+      [visualizer({
+        open: true,
+        gzipSize: true
+      })] :
+      [])
   ]
 }
