@@ -841,7 +841,11 @@ export class IndexSignature {
     readonly type: AST,
     readonly merge: Merge | undefined
   ) {
-    // TODO: check that parameter is a Parameter
+    if (process.env.NODE_ENV !== "production") {
+      if (isOptional(type) && !containsUndefined(type)) {
+        throw new Error("Cannot use `Schema.optionalKey` with index signatures, use `Schema.optional` instead.")
+      }
+    }
   }
 }
 
@@ -1936,6 +1940,18 @@ function formatPropertySignature(ps: PropertySignature): string {
 
 function formatPropertySignatures(pss: ReadonlyArray<PropertySignature>): string {
   return pss.map(formatPropertySignature).join("; ")
+}
+
+/** @internal */
+export function containsUndefined(ast: AST): boolean {
+  switch (ast._tag) {
+    case "UndefinedKeyword":
+      return true
+    case "UnionType":
+      return ast.types.some(containsUndefined)
+    default:
+      return false
+  }
 }
 
 function formatIndexSignature(is: IndexSignature): string {
