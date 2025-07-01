@@ -2173,3 +2173,59 @@ export function getFilters(checks: Checks | undefined): Array<Check.Filter<any>>
   }
   return []
 }
+
+/**
+ * @category Reducer
+ * @since 4.0.0
+ */
+export type ReducerAlg<A> = {
+  readonly onEnter?: ((ast: AST, reduce: (ast: AST) => A) => Option.Option<A>) | undefined
+  readonly Declaration: (ast: Declaration, reduce: (ast: AST) => A) => A
+  readonly NullKeyword: (ast: NullKeyword, reduce: (ast: AST) => A) => A
+  readonly UndefinedKeyword: (ast: UndefinedKeyword, reduce: (ast: AST) => A) => A
+  readonly VoidKeyword: (ast: VoidKeyword, reduce: (ast: AST) => A) => A
+  readonly NeverKeyword: (ast: NeverKeyword, reduce: (ast: AST) => A) => A
+  readonly UnknownKeyword: (ast: UnknownKeyword, reduce: (ast: AST) => A) => A
+  readonly AnyKeyword: (ast: AnyKeyword, reduce: (ast: AST) => A) => A
+  readonly StringKeyword: (ast: StringKeyword, reduce: (ast: AST) => A) => A
+  readonly NumberKeyword: (ast: NumberKeyword, reduce: (ast: AST) => A) => A
+  readonly BooleanKeyword: (ast: BooleanKeyword, reduce: (ast: AST) => A) => A
+  readonly SymbolKeyword: (ast: SymbolKeyword, reduce: (ast: AST) => A) => A
+  readonly BigIntKeyword: (ast: BigIntKeyword, reduce: (ast: AST) => A) => A
+  readonly UniqueSymbol: (ast: UniqueSymbol, reduce: (ast: AST) => A) => A
+  readonly ObjectKeyword: (ast: ObjectKeyword, reduce: (ast: AST) => A) => A
+  readonly Enums: (ast: Enums, reduce: (ast: AST) => A) => A
+  readonly LiteralType: (ast: LiteralType, reduce: (ast: AST) => A) => A
+  readonly TemplateLiteral: (ast: TemplateLiteral, reduce: (ast: AST) => A) => A
+  readonly TupleType: (ast: TupleType, reduce: (ast: AST) => A) => A
+  readonly TypeLiteral: (ast: TypeLiteral, reduce: (ast: AST) => A) => A
+  readonly UnionType: (ast: UnionType, reduce: (ast: AST) => A, getCandidates: (ast: AST) => ReadonlyArray<AST>) => A
+  readonly Suspend: (ast: Suspend, reduce: (ast: AST) => A) => A
+}
+
+/**
+ * @category Reducer
+ * @since 4.0.0
+ */
+export function getReducer<A>(alg: ReducerAlg<A>) {
+  return function reduce(ast: AST): A {
+    // ---------------------------------------------
+    // handle hooks
+    // ---------------------------------------------
+    if (alg.onEnter) {
+      const oa = alg.onEnter(ast, reduce)
+      if (Option.isSome(oa)) {
+        return oa.value
+      }
+    }
+    // ---------------------------------------------
+    // handle AST nodes
+    // ---------------------------------------------
+    switch (ast._tag) {
+      case "UnionType":
+        return alg.UnionType(ast, reduce, (t) => getCandidates(t, ast.types))
+      default:
+        return alg[ast._tag](ast as any, reduce)
+    }
+  }
+}
