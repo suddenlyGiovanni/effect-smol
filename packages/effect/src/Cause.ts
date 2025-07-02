@@ -4,6 +4,7 @@
 import type * as Context from "./Context.js"
 import type * as Effect from "./Effect.js"
 import type { Equal } from "./Equal.js"
+import type * as Filter from "./Filter.js"
 import type { Inspectable } from "./Inspectable.js"
 import * as core from "./internal/core.js"
 import * as effect from "./internal/effect.js"
@@ -62,6 +63,30 @@ export const failureIsDie: <E>(self: Failure<E>) => self is Die = core.failureIs
  * @category guards
  */
 export const failureIsInterrupt: <E>(self: Failure<E>) => self is Interrupt = core.failureIsInterrupt
+
+/**
+ * @since 4.0.0
+ * @category Filters
+ */
+export const failureFilterFail: <E>(self: Failure<E>) => Fail<E> | Filter.absent = core.failureFilterFail
+
+/**
+ * @since 4.0.0
+ * @category Filters
+ */
+export const failureFilterError: <E>(self: Failure<E>) => E | Filter.absent = core.failureFilterError
+
+/**
+ * @since 4.0.0
+ * @category Filters
+ */
+export const failureFilterDie: <E>(self: Failure<E>) => Die | Filter.absent = core.failureFilterDie
+
+/**
+ * @since 4.0.0
+ * @category Filters
+ */
+export const failureFilterInterrupt: <E>(self: Failure<E>) => Interrupt | Filter.absent = core.failureFilterInterrupt
 
 /**
  * @since 2.0.0
@@ -166,16 +191,40 @@ export const squash: <E>(self: Cause<E>) => unknown = effect.causeSquash
 export const hasFail: <E>(self: Cause<E>) => boolean = effect.causeHasFail
 
 /**
+ * @since 4.0.0
+ * @category Filters
+ */
+export const filterFail: <E>(self: Cause<E>) => Fail<E> | Filter.absent = effect.causeFilterFail
+
+/**
+ * @since 4.0.0
+ * @category Filters
+ */
+export const filterError: <E>(self: Cause<E>) => E | Filter.absent = effect.causeFilterError
+
+/**
  * @since 2.0.0
  * @category utils
  */
 export const hasDie: <E>(self: Cause<E>) => boolean = effect.causeHasDie
 
 /**
+ * @since 4.0.0
+ * @category Filters
+ */
+export const filterDie: <E>(self: Cause<E>) => Die | Filter.absent = effect.causeFilterDie
+
+/**
  * @since 2.0.0
  * @category utils
  */
 export const hasInterrupt: <E>(self: Cause<E>) => boolean = effect.causeHasInterrupt
+
+/**
+ * @since 4.0.0
+ * @category Filters
+ */
+export const filterInterrupt: <E>(self: Cause<E>) => Interrupt | Filter.absent = effect.causeFilterInterrupt
 
 /**
  * @since 2.0.0
