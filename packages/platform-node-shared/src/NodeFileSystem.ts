@@ -1,7 +1,6 @@
 /**
  * @since 1.0.0
  */
-import type * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import { effectify } from "effect/Effect"
 import * as Exit from "effect/Exit"
@@ -570,7 +569,7 @@ const watchNode = (path: string) =>
     )
   )
 
-const watch = (backend: Option.Option<Context.Tag.Service<FileSystem.WatchBackend>>, path: string) =>
+const watch = (backend: Option.Option<FileSystem.WatchBackend["Service"]>, path: string) =>
   stat(path).pipe(
     Effect.map((stat) =>
       backend.pipe(

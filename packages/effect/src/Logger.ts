@@ -3,7 +3,6 @@
  */
 import * as Array from "./Array.js"
 import type * as Cause from "./Cause.js"
-import * as Context from "./Context.js"
 import type * as Duration from "./Duration.js"
 import type * as Effect from "./Effect.js"
 import type * as Fiber from "./Fiber.js"
@@ -19,6 +18,7 @@ import type { PlatformError } from "./PlatformError.js"
 import * as Predicate from "./Predicate.js"
 import { CurrentLogAnnotations, CurrentLogSpans } from "./References.js"
 import type * as Scope from "./Scope.js"
+import * as ServiceMap from "./ServiceMap.js"
 import type * as Types from "./Types.js"
 
 /**
@@ -87,7 +87,7 @@ export const isLogger = (u: unknown): u is Logger<unknown, unknown> => Predicate
  * @since 4.0.0
  * @category references
  */
-export const CurrentLoggers: Context.Reference<ReadonlySet<Logger<unknown, any>>> = effect.CurrentLoggers
+export const CurrentLoggers: ServiceMap.Reference<ReadonlySet<Logger<unknown, any>>> = effect.CurrentLoggers
 
 /**
  * @since 2.0.0
@@ -493,13 +493,13 @@ export const layer = <
     Scope.Scope
   >
 > =>
-  Layer.effectContext(
+  Layer.effectServices(
     withFiber(effect.fnUntraced(function*(fiber) {
       const currentLoggers = new Set(options?.mergeWithExisting === true ? fiber.getRef(effect.CurrentLoggers) : [])
       for (const logger of loggers) {
         currentLoggers.add(isEffect(logger) ? yield* logger : logger)
       }
-      return Context.make(effect.CurrentLoggers, currentLoggers)
+      return ServiceMap.make(effect.CurrentLoggers, currentLoggers)
     }))
   )
 

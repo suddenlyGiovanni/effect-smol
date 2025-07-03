@@ -3,7 +3,6 @@
  */
 import type { NonEmptyReadonlyArray } from "../../Array.js"
 import * as Cause from "../../Cause.js"
-import * as Context from "../../Context.js"
 import * as Effect from "../../Effect.js"
 import * as Exit from "../../Exit.js"
 import type { Fiber } from "../../Fiber.js"
@@ -17,6 +16,7 @@ import * as Ref from "../../Ref.js"
 import * as Result from "../../Result.js"
 import * as Schedule from "../../Schedule.js"
 import type * as Scope from "../../Scope.js"
+import * as ServiceMap from "../../ServiceMap.js"
 import * as Stream from "../../Stream.js"
 import * as Tracer from "../../Tracer.js"
 import type { ExcludeTag, ExtractTag, NoExcessProperties, NoInfer, Tags } from "../../Types.js"
@@ -121,7 +121,7 @@ export declare namespace HttpClient {
  * @since 4.0.0
  * @category tags
  */
-export const HttpClient: Context.Tag<HttpClient, HttpClient> = Context.GenericTag<HttpClient, HttpClient>(
+export const HttpClient: ServiceMap.Key<HttpClient, HttpClient> = ServiceMap.Key<HttpClient, HttpClient>(
   "effect/HttpClient"
 )
 
@@ -954,7 +954,7 @@ export const followRedirects: {
  * @since 4.0.0
  * @category References
  */
-export class TracerDisabledWhen extends Context.Reference<
+export class TracerDisabledWhen extends ServiceMap.Reference<
   "effect/HttpClient/TracerDisabledWhen",
   Predicate.Predicate<HttpClientRequest.HttpClientRequest>
 >("effect/HttpClient/TracerDisabledWhen", {
@@ -965,7 +965,7 @@ export class TracerDisabledWhen extends Context.Reference<
  * @since 4.0.0
  * @category References
  */
-export class TracerPropagationEnabled extends Context.Reference("effect/HttpClient/TracerPropagationEnabled", {
+export class TracerPropagationEnabled extends ServiceMap.Reference("effect/HttpClient/TracerPropagationEnabled", {
   defaultValue: () => constTrue
 }) {}
 
@@ -973,7 +973,7 @@ export class TracerPropagationEnabled extends Context.Reference("effect/HttpClie
  * @since 4.0.0
  * @category References
  */
-export class SpanNameGenerator extends Context.Reference<
+export class SpanNameGenerator extends ServiceMap.Reference<
   "effect/HttpClient/SpanNameGenerator",
   (request: HttpClientRequest.HttpClientRequest) => string
 >("effect/HttpClient/SpanNameGenerator", {
@@ -983,16 +983,16 @@ export class SpanNameGenerator extends Context.Reference<
 /**
  * @since 4.0.0
  */
-export const layerMergedContext = <E, R>(
+export const layerMergedServices = <E, R>(
   effect: Effect.Effect<HttpClient, E, R>
 ): Layer.Layer<HttpClient, E, R> =>
   Layer.effect(
     HttpClient,
-    Effect.flatMap(Effect.context<never>(), (context) =>
+    Effect.flatMap(Effect.services<never>(), (context) =>
       Effect.map(effect, (client) =>
         transformResponse(
           client,
-          Effect.updateContext((input: Context.Context<never>) => Context.merge(context, input))
+          Effect.updateServices((input: ServiceMap.ServiceMap<never>) => ServiceMap.merge(context, input))
         )))
   )
 
