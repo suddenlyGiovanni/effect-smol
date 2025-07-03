@@ -775,20 +775,83 @@ export const fnUntraced: Effect.fn.Gen = (
     }
 }
 
-const unsafeFromIterator: (
-  iterator: Iterator<YieldWrap<Effect.Yieldable<any, any, any>>>
-) => Effect.Effect<any, any, any> = makePrimitive({
-  op: "Iterator",
-  contA(value, fiber) {
-    const state = this[args].next(value)
-    if (state.done) return succeed(state.value)
-    fiber._stack.push(this)
-    return yieldWrapGet(state.value).asEffect()
-  },
-  eval(this: any, fiber: FiberImpl) {
-    return this[successCont](undefined, fiber)
+/** @internal */
+export const fnUntracedEager: Effect.fn.Gen = (
+  body: Function,
+  ...pipeables: Array<any>
+) => {
+  return pipeables.length === 0
+    ? function(this: any, ...args: Array<any>) {
+      return unsafeFromIteratorEager(() => body.apply(this, args))
+    }
+    : function(this: any, ...args: Array<any>) {
+      let effect = unsafeFromIteratorEager(() => body.apply(this, args))
+      for (const pipeable of pipeables) {
+        effect = pipeable(effect)
+      }
+      return effect
+    }
+}
+
+const unsafeFromIteratorEager = (
+  createIterator: () => Iterator<YieldWrap<Effect.Yieldable<any, any, any>>>
+): Effect.Effect<any, any, any> => {
+  try {
+    const iterator = createIterator()
+    let value: any = undefined
+
+    // Try to resolve synchronously in a loop
+    while (true) {
+      const state = iterator.next(value)
+
+      if (state.done) {
+        return succeed(state.value)
+      }
+
+      const yieldable = yieldWrapGet(state.value)
+      const effect = yieldable.asEffect()
+      const primitive = effect as any
+
+      if (primitive && primitive._tag === "Success") {
+        value = primitive.value
+        continue
+      } else if (primitive && primitive._tag === "Failure") {
+        return effect
+      } else {
+        let isFirstExecution = true
+
+        return suspend(() => {
+          if (isFirstExecution) {
+            isFirstExecution = false
+            return flatMap(effect, (value) => unsafeFromIterator(iterator, value))
+          } else {
+            return suspend(() => unsafeFromIterator(createIterator()))
+          }
+        })
+      }
+    }
+  } catch (error) {
+    return die(error)
   }
-})
+}
+
+const unsafeFromIterator = (
+  iterator: Iterator<YieldWrap<Effect.Yieldable<any, any, any>>>,
+  initial = undefined
+): Effect.Effect<any, any, any> =>
+  makePrimitive({
+    op: "Iterator",
+    contA(value, fiber) {
+      const state = this[args].next(value)
+      if (state.done) return succeed(state.value)
+      fiber._stack.push(this)
+      // @ts-expect-error
+      return yieldWrapGet(state.value).asEffect()
+    },
+    eval(this: any, fiber: FiberImpl) {
+      return this[successCont](initial, fiber)
+    }
+  })(iterator)
 
 // ----------------------------------------------------------------------------
 // mapping & sequencing
@@ -904,7 +967,7 @@ export const asVoid = <A, E, R>(
 export const exit = <A, E, R>(
   self: Effect.Effect<A, E, R>
 ): Effect.Effect<Exit.Exit<A, E>, never, R> =>
-  matchCause(self, {
+  matchCauseEager(self, {
     onFailure: exitFailCause,
     onSuccess: exitSucceed
   })
@@ -1130,6 +1193,30 @@ const OnSuccessProto = makePrimitiveProto({
   }
 })
 
+const effectIsExit = <A, E, R>(effect: Effect.Effect<A, E, R>): effect is Exit.Exit<A, E> => ExitTypeId in effect
+
+/** @internal */
+export const flatMapEager: {
+  <A, B, E2, R2>(
+    f: (a: A) => Effect.Effect<B, E2, R2>
+  ): <E, R>(self: Effect.Effect<A, E, R>) => Effect.Effect<B, E | E2, R | R2>
+  <A, E, R, B, E2, R2>(
+    self: Effect.Effect<A, E, R>,
+    f: (a: A) => Effect.Effect<B, E2, R2>
+  ): Effect.Effect<B, E | E2, R | R2>
+} = dual(
+  2,
+  <A, E, R, B, E2, R2>(
+    self: Effect.Effect<A, E, R>,
+    f: (a: A) => Effect.Effect<B, E2, R2>
+  ): Effect.Effect<B, E | E2, R | R2> => {
+    if (effectIsExit(self)) {
+      return self._tag === "Success" ? f(self.value) : self as Exit.Exit<never, E>
+    }
+    return flatMap(self, f)
+  }
+)
+
 // ----------------------------------------------------------------------------
 // mapping & sequencing
 // ----------------------------------------------------------------------------
@@ -1154,6 +1241,82 @@ export const map: {
     self: Effect.Effect<A, E, R>,
     f: (a: A) => B
   ): Effect.Effect<B, E, R> => flatMap(self, (a) => succeed(f(a)))
+)
+
+/** @internal */
+export const mapEager: {
+  <A, B>(
+    f: (a: A) => B
+  ): <E, R>(self: Effect.Effect<A, E, R>) => Effect.Effect<B, E, R>
+  <A, E, R, B>(
+    self: Effect.Effect<A, E, R>,
+    f: (a: A) => B
+  ): Effect.Effect<B, E, R>
+} = dual(
+  2,
+  <A, E, R, B>(
+    self: Effect.Effect<A, E, R>,
+    f: (a: A) => B
+  ): Effect.Effect<B, E, R> => effectIsExit(self) ? exitMap(self, f) : map(self, f)
+)
+
+/** @internal */
+export const mapErrorEager: {
+  <E, E2>(
+    f: (e: E) => E2
+  ): <A, R>(self: Effect.Effect<A, E, R>) => Effect.Effect<A, E2, R>
+  <A, E, R, E2>(
+    self: Effect.Effect<A, E, R>,
+    f: (e: E) => E2
+  ): Effect.Effect<A, E2, R>
+} = dual(
+  2,
+  <A, E, R, E2>(
+    self: Effect.Effect<A, E, R>,
+    f: (e: E) => E2
+  ): Effect.Effect<A, E2, R> => effectIsExit(self) ? exitMapError(self, f) : mapError(self, f)
+)
+
+/** @internal */
+export const mapBothEager: {
+  <E, E2, A, A2>(
+    options: { readonly onFailure: (e: E) => E2; readonly onSuccess: (a: A) => A2 }
+  ): <R>(self: Effect.Effect<A, E, R>) => Effect.Effect<A2, E2, R>
+  <A, E, R, E2, A2>(
+    self: Effect.Effect<A, E, R>,
+    options: { readonly onFailure: (e: E) => E2; readonly onSuccess: (a: A) => A2 }
+  ): Effect.Effect<A2, E2, R>
+} = dual(
+  2,
+  <A, E, R, E2, A2>(
+    self: Effect.Effect<A, E, R>,
+    options: { readonly onFailure: (e: E) => E2; readonly onSuccess: (a: A) => A2 }
+  ): Effect.Effect<A2, E2, R> => effectIsExit(self) ? exitMapBoth(self, options) : mapBoth(self, options)
+)
+
+/** @internal */
+export const catchEager: {
+  <E, B, E2, R2>(
+    f: (e: NoInfer<E>) => Effect.Effect<B, E2, R2>
+  ): <A, R>(self: Effect.Effect<A, E, R>) => Effect.Effect<A | B, E2, R | R2>
+  <A, E, R, B, E2, R2>(
+    self: Effect.Effect<A, E, R>,
+    f: (e: NoInfer<E>) => Effect.Effect<B, E2, R2>
+  ): Effect.Effect<A | B, E2, R | R2>
+} = dual(
+  2,
+  <A, E, R, B, E2, R2>(
+    self: Effect.Effect<A, E, R>,
+    f: (e: NoInfer<E>) => Effect.Effect<B, E2, R2>
+  ): Effect.Effect<A | B, E2, R | R2> => {
+    if (effectIsExit(self)) {
+      if (self._tag === "Success") return self as Exit.Exit<A>
+      const error = causeFilterError(self.cause)
+      if (error === Filter.absent) return self as Exit.Exit<never>
+      return f(error as E)
+    }
+    return catch_(self, f)
+  }
 )
 
 // ----------------------------------------------------------------------------
@@ -1198,7 +1361,43 @@ export const exitMap: {
 } = dual(
   2,
   <A, E, B>(self: Exit.Exit<A, E>, f: (a: A) => B): Exit.Exit<B, E> =>
-    exitIsSuccess(self) ? exitSucceed(f(self.value)) : (self as any)
+    self._tag === "Success" ? exitSucceed(f(self.value)) : (self as any)
+)
+
+/** @internal */
+export const exitMapError: {
+  <E, E2>(f: (a: NoInfer<E>) => E2): <A>(self: Exit.Exit<A, E>) => Exit.Exit<A, E2>
+  <A, E, E2>(self: Exit.Exit<A, E>, f: (a: NoInfer<E>) => E2): Exit.Exit<A, E2>
+} = dual(
+  2,
+  <A, E, E2>(self: Exit.Exit<A, E>, f: (a: NoInfer<E>) => E2): Exit.Exit<A, E2> => {
+    if (self._tag === "Success") return self as Exit.Exit<A>
+    const error = causeFilterError(self.cause)
+    if (error === Filter.absent) return self as Exit.Exit<never>
+    return exitFail(f(error))
+  }
+)
+
+/** @internal */
+export const exitMapBoth: {
+  <E, E2, A, A2>(
+    options: { readonly onFailure: (e: E) => E2; readonly onSuccess: (a: A) => A2 }
+  ): (self: Exit.Exit<A, E>) => Exit.Exit<A2, E2>
+  <A, E, E2, A2>(
+    self: Exit.Exit<A, E>,
+    options: { readonly onFailure: (e: E) => E2; readonly onSuccess: (a: A) => A2 }
+  ): Exit.Exit<A2, E2>
+} = dual(
+  2,
+  <A, E, E2, A2>(
+    self: Exit.Exit<A, E>,
+    options: { readonly onFailure: (e: E) => E2; readonly onSuccess: (a: A) => A2 }
+  ): Exit.Exit<A2, E2> => {
+    if (self._tag === "Success") return exitSucceed(options.onSuccess(self.value))
+    const error = causeFilterError(self.cause)
+    if (error === Filter.absent) return self as Exit.Exit<never>
+    return exitFail(options.onFailure(error))
+  }
 )
 
 /** @internal */
@@ -2057,7 +2256,8 @@ export const option = <A, E, R>(
 /** @internal */
 export const result = <A, E, R>(
   self: Effect.Effect<A, E, R>
-): Effect.Effect<Result.Result<A, E>, never, R> => match(self, { onFailure: Result.fail, onSuccess: Result.succeed })
+): Effect.Effect<Result.Result<A, E>, never, R> =>
+  matchEager(self, { onFailure: Result.fail, onSuccess: Result.succeed })
 
 // ----------------------------------------------------------------------------
 // pattern matching
@@ -2191,6 +2391,68 @@ export const match: {
       onFailure: (error) => sync(() => options.onFailure(error)),
       onSuccess: (value) => sync(() => options.onSuccess(value))
     })
+)
+
+/** @internal */
+export const matchEager: {
+  <E, A2, A, A3>(options: {
+    readonly onFailure: (error: E) => A2
+    readonly onSuccess: (value: A) => A3
+  }): <R>(self: Effect.Effect<A, E, R>) => Effect.Effect<A2 | A3, never, R>
+  <A, E, R, A2, A3>(
+    self: Effect.Effect<A, E, R>,
+    options: {
+      readonly onFailure: (error: E) => A2
+      readonly onSuccess: (value: A) => A3
+    }
+  ): Effect.Effect<A2 | A3, never, R>
+} = dual(
+  2,
+  <A, E, R, A2, A3>(
+    self: Effect.Effect<A, E, R>,
+    options: {
+      readonly onFailure: (error: E) => A2
+      readonly onSuccess: (value: A) => A3
+    }
+  ): Effect.Effect<A2 | A3, never, R> => {
+    if (effectIsExit(self)) {
+      if (self._tag === "Success") return exitSucceed(options.onSuccess(self.value))
+      const error = causeFilterError(self.cause)
+      if (error === Filter.absent) return self as Exit.Exit<never>
+      return exitSucceed(options.onFailure(error))
+    }
+    return match(self, options)
+  }
+)
+
+/** @internal */
+export const matchCauseEager: {
+  <E, A2, A, A3>(options: {
+    readonly onFailure: (cause: Cause.Cause<E>) => A2
+    readonly onSuccess: (value: A) => A3
+  }): <R>(self: Effect.Effect<A, E, R>) => Effect.Effect<A2 | A3, never, R>
+  <A, E, R, A2, A3>(
+    self: Effect.Effect<A, E, R>,
+    options: {
+      readonly onFailure: (cause: Cause.Cause<E>) => A2
+      readonly onSuccess: (value: A) => A3
+    }
+  ): Effect.Effect<A2 | A3, never, R>
+} = dual(
+  2,
+  <A, E, R, A2, A3>(
+    self: Effect.Effect<A, E, R>,
+    options: {
+      readonly onFailure: (cause: Cause.Cause<E>) => A2
+      readonly onSuccess: (value: A) => A3
+    }
+  ): Effect.Effect<A2 | A3, never, R> => {
+    if (effectIsExit(self)) {
+      if (self._tag === "Success") return exitSucceed(options.onSuccess(self.value))
+      return exitSucceed(options.onFailure(self.cause))
+    }
+    return matchCause(self, options)
+  }
 )
 
 // ----------------------------------------------------------------------------

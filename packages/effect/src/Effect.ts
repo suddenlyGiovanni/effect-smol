@@ -2151,7 +2151,7 @@ export const tapError: {
  *
  * This function is helpful when you need to log, monitor, or handle specific
  * error causes in your effects. It gives you access to the full error cause,
- * whether it’s a failure, defect, or other exceptional conditions, without
+ * whether it's a failure, defect, or other exceptional conditions, without
  * altering the error or the overall result of the effect.
  *
  * @since 2.0.0
@@ -2863,6 +2863,56 @@ export const match: {
 } = internal.match
 
 /**
+ * Handles both success and failure cases of an effect without performing side
+ * effects, with eager evaluation for resolved effects.
+ *
+ * **Details**
+ *
+ * `matchEager` works like `match` but provides better performance for resolved
+ * effects (Success or Failure). When the effect is already resolved, it applies
+ * the handlers immediately without fiber scheduling. For unresolved effects,
+ * it falls back to the regular `match` behavior.
+ *
+ * **When to Use**
+ *
+ * Use this when you need to handle both success and failure cases and want
+ * optimal performance for resolved effects. This is particularly useful in
+ * scenarios where you frequently work with already computed values.
+ *
+ * @example
+ * ```ts
+ * import { Effect } from "effect"
+ *
+ * const program = Effect.gen(function* () {
+ *   const result = yield* Effect.matchEager(Effect.succeed(42), {
+ *     onFailure: (error) => `Failed: ${error}`,
+ *     onSuccess: (value) => `Success: ${value}`
+ *   })
+ *   console.log(result) // "Success: 42"
+ * })
+ * ```
+ *
+ * @see {@link match} for the non-eager version.
+ * @see {@link matchEffect} if you need to perform side effects in the handlers.
+ *
+ * @since 2.0.0
+ * @category Pattern matching
+ */
+export const matchEager: {
+  <E, A2, A, A3>(options: {
+    readonly onFailure: (error: E) => A2
+    readonly onSuccess: (value: A) => A3
+  }): <R>(self: Effect<A, E, R>) => Effect<A2 | A3, never, R>
+  <A, E, R, A2, A3>(
+    self: Effect<A, E, R>,
+    options: {
+      readonly onFailure: (error: E) => A2
+      readonly onSuccess: (value: A) => A3
+    }
+  ): Effect<A2 | A3, never, R>
+} = internal.matchEager
+
+/**
  * Handles failures by matching the cause of failure.
  *
  * **Details**
@@ -2896,6 +2946,48 @@ export const matchCause: {
     }
   ): Effect<A2 | A3, never, R>
 } = internal.matchCause
+
+/**
+ * Handles failures by matching the cause of failure with eager evaluation.
+ *
+ * **Details**
+ *
+ * `matchCauseEager` works like `matchCause` but provides better performance for resolved
+ * effects by immediately applying the matching function instead of deferring it
+ * through the effect pipeline.
+ *
+ * **When to Use**
+ *
+ * This is useful when you have effects that are likely to be already resolved
+ * and you want to avoid the overhead of the effect pipeline. For pending effects,
+ * it automatically falls back to the regular `matchCause` behavior.
+ *
+ * @example
+ * ```ts
+ * import { Effect } from "effect"
+ *
+ * const handleResult = Effect.matchCauseEager(Effect.succeed(42), {
+ *   onSuccess: (value) => `Success: ${value}`,
+ *   onFailure: (cause) => `Failed: ${cause}`
+ * })
+ * ```
+ *
+ * @since 3.8.0
+ * @category Pattern matching
+ */
+export const matchCauseEager: {
+  <E, A2, A, A3>(options: {
+    readonly onFailure: (cause: Cause.Cause<E>) => A2
+    readonly onSuccess: (value: A) => A3
+  }): <R>(self: Effect<A, E, R>) => Effect<A2 | A3, never, R>
+  <A, E, R, A2, A3>(
+    self: Effect<A, E, R>,
+    options: {
+      readonly onFailure: (cause: Cause.Cause<E>) => A2
+      readonly onSuccess: (value: A) => A3
+    }
+  ): Effect<A2 | A3, never, R>
+} = internal.matchCauseEager
 
 /**
  * Handles failures with access to the cause and allows performing side effects.
@@ -6009,33 +6101,218 @@ export const ensureErrorType = <E>() => <A, E2 extends E, R>(effect: Effect<A, E
 export const ensureRequirementsType = <R>() => <A, E, R2 extends R>(effect: Effect<A, E, R2>): Effect<A, E, R2> =>
   effect
 
-// TODO: add eager versions of all the these functions
 /**
+ * An optimized version of `map` that checks if an effect is already resolved
+ * and applies the mapping function eagerly when possible.
+ *
+ * **When to Use**
+ *
+ * `mapEager` provides better performance for effects that are already resolved
+ * by applying the transformation immediately instead of deferring it through
+ * the effect pipeline.
+ *
+ * **Behavior**
+ *
+ * - For **Success effects**: Applies the mapping function immediately to the value
+ * - For **Failure effects**: Returns the failure as-is without applying the mapping
+ * - For **Pending effects**: Falls back to the regular `map` behavior
+ *
+ * @example
+ * ```ts
+ * import { Effect } from "effect"
+ *
+ * // For resolved effects, the mapping is applied immediately
+ * const resolved = Effect.succeed(5)
+ * const mapped = Effect.mapEager(resolved, n => n * 2) // Applied eagerly
+ *
+ * // For pending effects, behaves like regular map
+ * const pending = Effect.delay(Effect.succeed(5), "100 millis")
+ * const mappedPending = Effect.mapEager(pending, n => n * 2) // Uses regular map
+ * ```
+ *
  * @since 4.0.0
  * @category Eager
  */
-export const mapEager = map
+export const mapEager: {
+  <A, B>(f: (a: A) => B): <E, R>(self: Effect<A, E, R>) => Effect<B, E, R>
+  <A, E, R, B>(self: Effect<A, E, R>, f: (a: A) => B): Effect<B, E, R>
+} = internal.mapEager
+
+/**
+ * An optimized version of `mapError` that checks if an effect is already resolved
+ * and applies the error mapping function eagerly when possible.
+ *
+ * **When to Use**
+ *
+ * `mapErrorEager` provides better performance for effects that are already resolved
+ * by applying the error transformation immediately instead of deferring it through
+ * the effect pipeline.
+ *
+ * **Behavior**
+ *
+ * - For **Success effects**: Returns the success as-is (no error to transform)
+ * - For **Failure effects**: Applies the mapping function immediately to the error
+ * - For **Pending effects**: Falls back to the regular `mapError` behavior
+ *
+ * @example
+ * ```ts
+ * import { Effect } from "effect"
+ *
+ * // For resolved failure effects, the error mapping is applied immediately
+ * const failed = Effect.fail("original error")
+ * const mapped = Effect.mapErrorEager(failed, (err: string) => `mapped: ${err}`) // Applied eagerly
+ *
+ * // For pending effects, behaves like regular mapError
+ * const pending = Effect.delay(Effect.fail("error"), "100 millis")
+ * const mappedPending = Effect.mapErrorEager(pending, (err: string) => `mapped: ${err}`) // Uses regular mapError
+ * ```
+ *
+ * @since 4.0.0
+ * @category Eager
+ */
+export const mapErrorEager: {
+  <E, E2>(f: (e: E) => E2): <A, R>(self: Effect<A, E, R>) => Effect<A, E2, R>
+  <A, E, R, E2>(self: Effect<A, E, R>, f: (e: E) => E2): Effect<A, E2, R>
+} = internal.mapErrorEager
+
+/**
+ * An optimized version of `mapBoth` that checks if an effect is already resolved
+ * and applies the appropriate mapping function eagerly when possible.
+ *
+ * **When to Use**
+ *
+ * `mapBothEager` provides better performance for effects that are already resolved
+ * by applying the transformation immediately instead of deferring it through
+ * the effect pipeline.
+ *
+ * **Behavior**
+ *
+ * - For **Success effects**: Applies the `onSuccess` function immediately to the value
+ * - For **Failure effects**: Applies the `onFailure` function immediately to the error
+ * - For **Pending effects**: Falls back to the regular `mapBoth` behavior
+ *
+ * @example
+ * ```ts
+ * import { Effect } from "effect"
+ *
+ * // For resolved effects, the appropriate mapping is applied immediately
+ * const success = Effect.succeed(5)
+ * const mapped = Effect.mapBothEager(success, {
+ *   onFailure: (err: string) => `Failed: ${err}`,
+ *   onSuccess: (n: number) => n * 2
+ * }) // onSuccess applied eagerly
+ *
+ * const failure = Effect.fail("error")
+ * const mappedError = Effect.mapBothEager(failure, {
+ *   onFailure: (err: string) => `Failed: ${err}`,
+ *   onSuccess: (n: number) => n * 2
+ * }) // onFailure applied eagerly
+ * ```
+ *
+ * @since 4.0.0
+ * @category Eager
+ */
+export const mapBothEager: {
+  <E, E2, A, A2>(
+    options: { readonly onFailure: (e: E) => E2; readonly onSuccess: (a: A) => A2 }
+  ): <R>(self: Effect<A, E, R>) => Effect<A2, E2, R>
+  <A, E, R, E2, A2>(
+    self: Effect<A, E, R>,
+    options: { readonly onFailure: (e: E) => E2; readonly onSuccess: (a: A) => A2 }
+  ): Effect<A2, E2, R>
+} = internal.mapBothEager
+
+/**
+ * An optimized version of `flatMap` that checks if an effect is already resolved
+ * and applies the flatMap function eagerly when possible.
+ *
+ * **When to Use**
+ *
+ * `flatMapEager` provides better performance for effects that are already resolved
+ * by applying the transformation immediately instead of deferring it through
+ * the effect pipeline.
+ *
+ * **Behavior**
+ *
+ * - For **Success effects**: Applies the flatMap function immediately to the value
+ * - For **Failure effects**: Returns the failure as-is without applying the flatMap
+ * - For **Pending effects**: Falls back to the regular `flatMap` behavior
+ *
+ * @example
+ * ```ts
+ * import { Effect } from "effect"
+ *
+ * // For resolved effects, the flatMap is applied immediately
+ * const resolved = Effect.succeed(5)
+ * const flatMapped = Effect.flatMapEager(resolved, n => Effect.succeed(n * 2)) // Applied eagerly
+ *
+ * // For pending effects, behaves like regular flatMap
+ * const pending = Effect.delay(Effect.succeed(5), "100 millis")
+ * const flatMappedPending = Effect.flatMapEager(pending, n => Effect.succeed(n * 2)) // Uses regular flatMap
+ * ```
+ *
+ * @since 4.0.0
+ * @category Eager
+ */
+export const flatMapEager: {
+  <A, B, E2, R2>(f: (a: A) => Effect<B, E2, R2>): <E, R>(self: Effect<A, E, R>) => Effect<B, E | E2, R | R2>
+  <A, E, R, B, E2, R2>(self: Effect<A, E, R>, f: (a: A) => Effect<B, E2, R2>): Effect<B, E | E2, R | R2>
+} = internal.flatMapEager
+
+/**
+ * An optimized version of `catch` that checks if an effect is already resolved
+ * and applies the catch function eagerly when possible.
+ *
+ * **When to Use**
+ *
+ * `catchEager` provides better performance for effects that are already resolved
+ * by applying the error recovery immediately instead of deferring it through
+ * the effect pipeline.
+ *
+ * **Behavior**
+ *
+ * - For **Success effects**: Returns the success as-is (no error to catch)
+ * - For **Failure effects**: Applies the catch function immediately to the error
+ * - For **Pending effects**: Falls back to the regular `catch` behavior
+ *
+ * @example
+ * ```ts
+ * import { Effect } from "effect"
+ *
+ * // For resolved failure effects, the catch function is applied immediately
+ * const failed = Effect.fail("original error")
+ * const recovered = Effect.catchEager(failed, (err: string) =>
+ *   Effect.succeed(`recovered from: ${err}`)
+ * ) // Applied eagerly
+ *
+ * // For success effects, returns success as-is
+ * const success = Effect.succeed(42)
+ * const unchanged = Effect.catchEager(success, (err: string) =>
+ *   Effect.succeed(`recovered from: ${err}`)
+ * ) // Returns success as-is
+ *
+ * // For pending effects, behaves like regular catch
+ * const pending = Effect.delay(Effect.fail("error"), "100 millis")
+ * const recoveredPending = Effect.catchEager(pending, (err: string) =>
+ *   Effect.succeed(`recovered from: ${err}`)
+ * ) // Uses regular catch
+ * ```
+ *
+ * @since 4.0.0
+ * @category Eager
+ */
+export const catchEager: {
+  <E, B, E2, R2>(
+    f: (e: NoInfer<E>) => Effect<B, E2, R2>
+  ): <A, R>(self: Effect<A, E, R>) => Effect<A | B, E2, R | R2>
+  <A, E, R, B, E2, R2>(
+    self: Effect<A, E, R>,
+    f: (e: NoInfer<E>) => Effect<B, E2, R2>
+  ): Effect<A | B, E2, R | R2>
+} = internal.catchEager
 
 /**
  * @since 4.0.0
  * @category Eager
  */
-export const mapErrorEager = mapError
-
-/**
- * @since 4.0.0
- * @category Eager
- */
-export const mapBothEager = mapBoth
-
-/**
- * @since 4.0.0
- * @category Eager
- */
-export const flatMapEager = flatMap
-
-/**
- * @since 4.0.0
- * @category Eager
- */
-export const catchEager = catch_
+export const fnUntracedEager: fn.Untraced = internal.fnUntracedEager
