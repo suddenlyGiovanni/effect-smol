@@ -18,9 +18,23 @@ import * as Stream from "./Stream.js"
 
 /**
  * @since 4.0.0
+ * @category TypeId
+ */
+export const TypeId: TypeId = "~effect/FileSystem"
+
+/**
+ * @since 4.0.0
+ * @category TypeId
+ */
+export type TypeId = "~effect/FileSystem"
+
+/**
+ * @since 4.0.0
  * @category model
  */
 export interface FileSystem {
+  readonly [TypeId]: TypeId
+
   /**
    * Check if a file can be accessed.
    * You can optionally specify the level of access to check for.
@@ -447,10 +461,11 @@ export const FileSystem: ServiceMap.Key<FileSystem, FileSystem> = ServiceMap.Key
  * @category constructor
  */
 export const make = (
-  impl: Omit<FileSystem, "exists" | "readFileString" | "stream" | "sink" | "writeFileString">
+  impl: Omit<FileSystem, TypeId | "exists" | "readFileString" | "stream" | "sink" | "writeFileString">
 ): FileSystem =>
   FileSystem.of({
     ...impl,
+    [TypeId]: TypeId,
     exists: (path) =>
       pipe(
         impl.access(path),
@@ -537,6 +552,7 @@ const notFound = (method: string, path: string) =>
  */
 export const makeNoop = (fileSystem: Partial<FileSystem>): FileSystem =>
   FileSystem.of({
+    [TypeId]: TypeId,
     access(path) {
       return Effect.fail(notFound("access", path))
     },
@@ -640,15 +656,13 @@ export const layerNoop = (fileSystem: Partial<FileSystem>): Layer.Layer<FileSyst
  * @since 4.0.0
  * @category type id
  */
-export const FileTypeId: unique symbol = Symbol.for(
-  "effect/FileSystem/File"
-)
+export const FileTypeId: FileTypeId = "~effect/FileSystem/File"
 
 /**
  * @since 4.0.0
  * @category type id
  */
-export type FileTypeId = typeof FileTypeId
+export type FileTypeId = "~effect/FileSystem/File"
 
 /**
  * @since 4.0.0
