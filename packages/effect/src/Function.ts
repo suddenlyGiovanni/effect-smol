@@ -5,6 +5,18 @@ import type { TypeLambda } from "./HKT.js"
 import { pipeArguments } from "./Pipeable.js"
 
 /**
+ * Type lambda for function types, used for higher-kinded type operations.
+ *
+ * @example
+ * ```ts
+ * import type { Kind } from "effect/HKT"
+ * import type { FunctionTypeLambda } from "effect/Function"
+ *
+ * // Create a function type using the type lambda
+ * type StringToNumber = Kind<FunctionTypeLambda, string, never, never, number>
+ * // Equivalent to: (a: string) => number
+ * ```
+ *
  * @category type lambdas
  * @since 2.0.0
  */
@@ -45,6 +57,20 @@ export const isFunction = (input: unknown): input is Function => typeof input ==
  * You can pass either the arity of the uncurried function or a predicate
  * which determines if the function is being used in a data-first or
  * data-last style.
+ *
+ * @example
+ * ```ts
+ * import { dual, pipe } from "effect/Function"
+ *
+ * // Using arity to determine data-first or data-last style
+ * const sum = dual<
+ *   (that: number) => (self: number) => number,
+ *   (self: number, that: number) => number
+ * >(2, (self, that) => self + that)
+ *
+ * console.log(sum(2, 3)) // 5 (data-first)
+ * console.log(pipe(2, sum(3))) // 5 (data-last)
+ * ```
  *
  * **Example** (Using arity to determine data-first or data-last style)
  *
@@ -91,6 +117,7 @@ export const isFunction = (input: unknown): input is Function => typeof input ==
  * console.log(pipe(2, sum(3))) // 5
  * ```
  *
+ * @category combinators
  * @since 2.0.0
  */
 export const dual: {
@@ -161,6 +188,7 @@ export const dual: {
  * assert.deepStrictEqual(pipe(length, apply("hello")), 5)
  * ```
  *
+ * @category combinators
  * @since 2.0.0
  */
 export const apply = <A>(a: A) => <B>(self: (a: A) => B): B => self(a)
@@ -176,19 +204,24 @@ export const apply = <A>(a: A) => <B>(self: (a: A) => B): B => self(a)
  * const constNull: LazyArg<null> = constant(null)
  * ```
  *
+ * @category models
  * @since 2.0.0
  */
 export type LazyArg<A> = () => A
 
 /**
+ * Represents a function with multiple arguments.
+ *
  * @example
  * ```ts
  * import * as assert from "node:assert"
  * import { FunctionN } from "effect/Function"
  *
  * const sum: FunctionN<[number, number], number> = (a, b) => a + b
+ * assert.deepStrictEqual(sum(2, 3), 5)
  * ```
  *
+ * @category models
  * @since 2.0.0
  */
 export type FunctionN<A extends ReadonlyArray<unknown>, B> = (...args: A) => B
@@ -204,6 +237,7 @@ export type FunctionN<A extends ReadonlyArray<unknown>, B> = (...args: A) => B
  * assert.deepStrictEqual(identity(5), 5)
  * ```
  *
+ * @category combinators
  * @since 2.0.0
  */
 export const identity = <A>(a: A): A => a
@@ -226,6 +260,7 @@ export const identity = <A>(a: A): A => a
  * assert.deepStrictEqual(satisfies<number>()(5), 5)
  * ```
  *
+ * @category type utils
  * @since 2.0.0
  */
 export const satisfies = <A>() => <B extends A>(b: B) => b
@@ -241,6 +276,7 @@ export const satisfies = <A>() => <B extends A>(b: B) => b
  * assert.deepStrictEqual(unsafeCoerce, identity)
  * ```
  *
+ * @category type utils
  * @since 2.0.0
  */
 export const unsafeCoerce: <A, B>(a: A) => B = identity as any
@@ -262,6 +298,7 @@ export const unsafeCoerce: <A, B>(a: A) => B = identity as any
  * assert.deepStrictEqual(constNull(), null)
  * ```
  *
+ * @category constructors
  * @since 2.0.0
  */
 export const constant = <A>(value: A): LazyArg<A> => () => value
@@ -277,6 +314,7 @@ export const constant = <A>(value: A): LazyArg<A> => () => value
  * assert.deepStrictEqual(constTrue(), true)
  * ```
  *
+ * @category constants
  * @since 2.0.0
  */
 export const constTrue: LazyArg<boolean> = constant(true)
@@ -292,6 +330,7 @@ export const constTrue: LazyArg<boolean> = constant(true)
  * assert.deepStrictEqual(constFalse(), false)
  * ```
  *
+ * @category constants
  * @since 2.0.0
  */
 export const constFalse: LazyArg<boolean> = constant(false)
@@ -307,6 +346,7 @@ export const constFalse: LazyArg<boolean> = constant(false)
  * assert.deepStrictEqual(constNull(), null)
  * ```
  *
+ * @category constants
  * @since 2.0.0
  */
 export const constNull: LazyArg<null> = constant(null)
@@ -322,6 +362,7 @@ export const constNull: LazyArg<null> = constant(null)
  * assert.deepStrictEqual(constUndefined(), undefined)
  * ```
  *
+ * @category constants
  * @since 2.0.0
  */
 export const constUndefined: LazyArg<undefined> = constant(undefined)
@@ -337,6 +378,7 @@ export const constUndefined: LazyArg<undefined> = constant(undefined)
  * assert.deepStrictEqual(constVoid(), undefined)
  * ```
  *
+ * @category constants
  * @since 2.0.0
  */
 export const constVoid: LazyArg<void> = constUndefined
@@ -354,6 +396,7 @@ export const constVoid: LazyArg<void> = constUndefined
  * assert.deepStrictEqual(flip(f)('aaa')(2), -1)
  * ```
  *
+ * @category combinators
  * @since 2.0.0
  */
 export const flip = <A extends Array<unknown>, B extends Array<unknown>, C>(
@@ -377,6 +420,7 @@ export const flip = <A extends Array<unknown>, B extends Array<unknown>, C>(
  * assert.strictEqual(compose(increment, square)(2), 9);
  * ```
  *
+ * @category combinators
  * @since 2.0.0
  */
 export const compose: {
@@ -390,6 +434,16 @@ export const compose: {
  *
  * This function is particularly useful when it's necessary to specify that certain cases are impossible.
  *
+ * @example
+ * ```ts
+ * import { absurd } from "effect/Function"
+ *
+ * const handleNever = (value: never) => {
+ *   return absurd(value) // This will throw an error if called
+ * }
+ * ```
+ *
+ * @category utilities
  * @since 2.0.0
  */
 export const absurd = <A>(_: never): A => {
@@ -397,7 +451,7 @@ export const absurd = <A>(_: never): A => {
 }
 
 /**
- * Creates a   version of this function: instead of `n` arguments, it accepts a single tuple argument.
+ * Creates a tupled version of this function: instead of `n` arguments, it accepts a single tuple argument.
  *
  * @example
  * ```ts
@@ -409,6 +463,7 @@ export const absurd = <A>(_: never): A => {
  * assert.deepStrictEqual(sumTupled([1, 2]), 3)
  * ```
  *
+ * @category combinators
  * @since 2.0.0
  */
 export const tupled = <A extends ReadonlyArray<unknown>, B>(f: (...a: A) => B): (a: A) => B => (a) => f(...a)
@@ -426,6 +481,7 @@ export const tupled = <A extends ReadonlyArray<unknown>, B>(f: (...a: A) => B): 
  * assert.deepStrictEqual(getFirst(1, 2), 1)
  * ```
  *
+ * @category combinators
  * @since 2.0.0
  */
 export const untupled = <A extends ReadonlyArray<unknown>, B>(f: (a: A) => B): (...a: A) => B => (...a) => f(a)
@@ -496,6 +552,22 @@ export const untupled = <A extends ReadonlyArray<unknown>, B>(f: (a: A) => B): (
  * // Output: 2
  * ```
  *
+ * @example
+ * ```ts
+ * import { pipe } from "effect"
+ *
+ * // Simple transformation pipeline
+ * const result = pipe(
+ *   5,
+ *   x => x * 2,      // 10
+ *   x => x + 1,      // 11
+ *   x => x.toString() // "11"
+ * )
+ *
+ * console.log(result) // "11"
+ * ```
+ *
+ * @category combinators
  * @since 2.0.0
  */
 export function pipe<A>(a: A): A
@@ -968,6 +1040,7 @@ export function pipe(a: unknown, ...args: Array<any>): unknown {
  * assert.strictEqual(f('aaa'), 6)
  * ```
  *
+ * @category combinators
  * @since 2.0.0
  */
 export function flow<A extends ReadonlyArray<unknown>, B = never>(
@@ -1136,8 +1209,17 @@ export function flow(
 }
 
 /**
- * Type hole simulation.
+ * Type hole simulation. Creates a placeholder for any type, primarily used during development.
  *
+ * @example
+ * ```ts
+ * import { hole } from "effect/Function"
+ *
+ * // Use during development as a placeholder
+ * const placeholder: string = hole<string>()
+ * ```
+ *
+ * @category utilities
  * @since 2.0.0
  */
 export const hole: <T>() => T = unsafeCoerce(absurd)
@@ -1156,6 +1238,7 @@ export const hole: <T>() => T = unsafeCoerce(absurd)
  * assert.deepStrictEqual(SK(0, "hello"), "hello")
  * ```
  *
+ * @category combinators
  * @since 2.0.0
  */
 export const SK = <A, B>(_: A, b: B): B => b

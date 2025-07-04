@@ -1,4 +1,69 @@
 /**
+ * This module provides utilities for working with `Deferred`, a powerful concurrency
+ * primitive that represents an asynchronous variable that can be set exactly once.
+ * Multiple fibers can await the same `Deferred` and will all be notified when it
+ * completes.
+ *
+ * A `Deferred<A, E>` can be:
+ * - **Completed successfully** with a value of type `A`
+ * - **Failed** with an error of type `E`
+ * - **Interrupted** if the fiber setting it is interrupted
+ *
+ * Key characteristics:
+ * - **Single assignment**: Can only be completed once
+ * - **Multiple waiters**: Many fibers can await the same `Deferred`
+ * - **Fiber-safe**: Thread-safe operations across concurrent fibers
+ * - **Composable**: Works seamlessly with other Effect operations
+ *
+ * @example
+ * ```ts
+ * import { Deferred, Effect, Fiber } from "effect"
+ *
+ * // Basic usage: coordinate between fibers
+ * const program = Effect.gen(function* () {
+ *   const deferred = yield* Deferred.make<string, never>()
+ *
+ *   // Fiber 1: waits for the value
+ *   const waiter = yield* Effect.fork(
+ *     Effect.gen(function* () {
+ *       const value = yield* Deferred.await(deferred)
+ *       console.log("Received:", value)
+ *       return value
+ *     })
+ *   )
+ *
+ *   // Fiber 2: sets the value after a delay
+ *   const setter = yield* Effect.fork(
+ *     Effect.gen(function* () {
+ *       yield* Effect.sleep("1 second")
+ *       yield* Deferred.succeed(deferred, "Hello from setter!")
+ *     })
+ *   )
+ *
+ *   // Wait for both fibers
+ *   yield* Fiber.join(waiter)
+ *   yield* Fiber.join(setter)
+ * })
+ *
+ * // Producer-consumer pattern
+ * const producerConsumer = Effect.gen(function* () {
+ *   const buffer = yield* Deferred.make<number[], never>()
+ *
+ *   const producer = Effect.gen(function* () {
+ *     const data = [1, 2, 3, 4, 5]
+ *     yield* Deferred.succeed(buffer, data)
+ *   })
+ *
+ *   const consumer = Effect.gen(function* () {
+ *     const data = yield* Deferred.await(buffer)
+ *     return data.reduce((sum, n) => sum + n, 0)
+ *   })
+ *
+ *   const [, result] = yield* Effect.all([producer, consumer])
+ *   return result // 15
+ * })
+ * ```
+ *
  * @since 2.0.0
  */
 import * as Cause from "./Cause.js"
@@ -92,6 +157,14 @@ const DeferredProto = {
 /**
  * Unsafely creates a new `Deferred` from the specified `FiberId`.
  *
+ * @example
+ * ```ts
+ * import { Deferred } from "effect"
+ *
+ * const deferred = Deferred.unsafeMake<number>()
+ * console.log(deferred)
+ * ```
+ *
  * @since 2.0.0
  * @category unsafe
  */
@@ -104,6 +177,18 @@ export const unsafeMake = <A, E = never>(): Deferred<A, E> => {
 
 /**
  * Creates a new `Deferred`.
+ *
+ * @example
+ * ```ts
+ * import { Deferred, Effect } from "effect"
+ *
+ * const program = Effect.gen(function*() {
+ *   const deferred = yield* Deferred.make<number>()
+ *   yield* Deferred.succeed(deferred, 42)
+ *   const value = yield* Deferred.await(deferred)
+ *   console.log(value) // 42
+ * })
+ * ```
  *
  * @since 2.0.0
  * @category constructors
@@ -122,6 +207,19 @@ export {
    * Retrieves the value of the `Deferred`, suspending the fiber running the
    * workflow until the result is available.
    *
+   * @example
+   * ```ts
+   * import { Deferred, Effect } from "effect"
+   *
+   * const program = Effect.gen(function*() {
+   *   const deferred = yield* Deferred.make<number>()
+   *   yield* Deferred.succeed(deferred, 42)
+   *
+   *   const value = yield* Deferred.await(deferred)
+   *   console.log(value) // 42
+   * })
+   * ```
+   *
    * @since 2.0.0
    * @category getters
    */
@@ -134,6 +232,20 @@ export {
  *
  * Note that `Deferred.completeWith` will be much faster, so consider using
  * that if you do not need to memoize the result of the specified effect.
+ *
+ * @example
+ * ```ts
+ * import { Deferred, Effect } from "effect"
+ *
+ * const program = Effect.gen(function*() {
+ *   const deferred = yield* Deferred.make<number>()
+ *   const completed = yield* Deferred.complete(deferred, Effect.succeed(42))
+ *   console.log(completed) // true
+ *
+ *   const value = yield* Deferred.await(deferred)
+ *   console.log(value) // 42
+ * })
+ * ```
  *
  * @since 2.0.0
  * @category utils
@@ -151,6 +263,20 @@ export const complete: {
  * Completes the deferred with the result of the specified effect. If the
  * deferred has already been completed, the method will produce false.
  *
+ * @example
+ * ```ts
+ * import { Deferred, Effect } from "effect"
+ *
+ * const program = Effect.gen(function*() {
+ *   const deferred = yield* Deferred.make<number>()
+ *   const completed = yield* Deferred.completeWith(deferred, Effect.succeed(42))
+ *   console.log(completed) // true
+ *
+ *   const value = yield* Deferred.await(deferred)
+ *   console.log(value) // 42
+ * })
+ * ```
+ *
  * @since 2.0.0
  * @category utils
  */
@@ -167,6 +293,19 @@ export const completeWith: {
  * Exits the `Deferred` with the specified `Exit` value, which will be
  * propagated to all fibers waiting on the value of the `Deferred`.
  *
+ * @example
+ * ```ts
+ * import { Deferred, Effect, Exit } from "effect"
+ *
+ * const program = Effect.gen(function*() {
+ *   const deferred = yield* Deferred.make<number>()
+ *   yield* Deferred.done(deferred, Exit.succeed(42))
+ *
+ *   const value = yield* Deferred.await(deferred)
+ *   console.log(value) // 42
+ * })
+ * ```
+ *
  * @since 2.0.0
  * @category utils
  */
@@ -179,6 +318,17 @@ export const done: {
  * Fails the `Deferred` with the specified error, which will be propagated to
  * all fibers waiting on the value of the `Deferred`.
  *
+ * @example
+ * ```ts
+ * import { Deferred, Effect } from "effect"
+ *
+ * const program = Effect.gen(function*() {
+ *   const deferred = yield* Deferred.make<number, string>()
+ *   const success = yield* Deferred.fail(deferred, "Operation failed")
+ *   console.log(success) // true
+ * })
+ * ```
+ *
  * @since 2.0.0
  * @category utils
  */
@@ -190,6 +340,17 @@ export const fail: {
 /**
  * Fails the `Deferred` with the specified error, which will be propagated to
  * all fibers waiting on the value of the `Deferred`.
+ *
+ * @example
+ * ```ts
+ * import { Deferred, Effect } from "effect"
+ *
+ * const program = Effect.gen(function*() {
+ *   const deferred = yield* Deferred.make<number, string>()
+ *   const success = yield* Deferred.failSync(deferred, () => "Lazy error")
+ *   console.log(success) // true
+ * })
+ * ```
  *
  * @since 2.0.0
  * @category utils
@@ -207,6 +368,17 @@ export const failSync: {
  * Fails the `Deferred` with the specified `Cause`, which will be propagated to
  * all fibers waiting on the value of the `Deferred`.
  *
+ * @example
+ * ```ts
+ * import { Deferred, Effect, Cause } from "effect"
+ *
+ * const program = Effect.gen(function*() {
+ *   const deferred = yield* Deferred.make<number, string>()
+ *   const success = yield* Deferred.failCause(deferred, Cause.fail("Operation failed"))
+ *   console.log(success) // true
+ * })
+ * ```
+ *
  * @since 2.0.0
  * @category utils
  */
@@ -221,6 +393,17 @@ export const failCause: {
 /**
  * Fails the `Deferred` with the specified `Cause`, which will be propagated to
  * all fibers waiting on the value of the `Deferred`.
+ *
+ * @example
+ * ```ts
+ * import { Deferred, Effect, Cause } from "effect"
+ *
+ * const program = Effect.gen(function*() {
+ *   const deferred = yield* Deferred.make<number, string>()
+ *   const success = yield* Deferred.failCauseSync(deferred, () => Cause.fail("Lazy error"))
+ *   console.log(success) // true
+ * })
+ * ```
  *
  * @since 2.0.0
  * @category utils
@@ -238,6 +421,17 @@ export const failCauseSync: {
  * Kills the `Deferred` with the specified defect, which will be propagated to
  * all fibers waiting on the value of the `Deferred`.
  *
+ * @example
+ * ```ts
+ * import { Deferred, Effect } from "effect"
+ *
+ * const program = Effect.gen(function*() {
+ *   const deferred = yield* Deferred.make<number>()
+ *   const success = yield* Deferred.die(deferred, new Error("Something went wrong"))
+ *   console.log(success) // true
+ * })
+ * ```
+ *
  * @since 2.0.0
  * @category utils
  */
@@ -249,6 +443,17 @@ export const die: {
 /**
  * Kills the `Deferred` with the specified defect, which will be propagated to
  * all fibers waiting on the value of the `Deferred`.
+ *
+ * @example
+ * ```ts
+ * import { Deferred, Effect } from "effect"
+ *
+ * const program = Effect.gen(function*() {
+ *   const deferred = yield* Deferred.make<number>()
+ *   const success = yield* Deferred.dieSync(deferred, () => new Error("Lazy error"))
+ *   console.log(success) // true
+ * })
+ * ```
  *
  * @since 2.0.0
  * @category utils
@@ -267,6 +472,17 @@ export const dieSync: {
  * waiting on the value of the `Deferred` with the `FiberId` of the fiber
  * calling this method.
  *
+ * @example
+ * ```ts
+ * import { Deferred, Effect } from "effect"
+ *
+ * const program = Effect.gen(function*() {
+ *   const deferred = yield* Deferred.make<number>()
+ *   const success = yield* Deferred.interrupt(deferred)
+ *   console.log(success) // true
+ * })
+ * ```
+ *
  * @since 2.0.0
  * @category utils
  */
@@ -276,6 +492,17 @@ export const interrupt = <A, E>(self: Deferred<A, E>): Effect<boolean> =>
 /**
  * Completes the `Deferred` with interruption. This will interrupt all fibers
  * waiting on the value of the `Deferred` with the specified `FiberId`.
+ *
+ * @example
+ * ```ts
+ * import { Deferred, Effect } from "effect"
+ *
+ * const program = Effect.gen(function*() {
+ *   const deferred = yield* Deferred.make<number>()
+ *   const success = yield* Deferred.interruptWith(deferred, 42)
+ *   console.log(success) // true
+ * })
+ * ```
  *
  * @since 2.0.0
  * @category utils
@@ -292,6 +519,21 @@ export const interruptWith: {
  * Returns `true` if this `Deferred` has already been completed with a value or
  * an error, `false` otherwise.
  *
+ * @example
+ * ```ts
+ * import { Deferred, Effect } from "effect"
+ *
+ * const program = Effect.gen(function*() {
+ *   const deferred = yield* Deferred.make<number>()
+ *   const beforeCompletion = yield* Deferred.isDone(deferred)
+ *   console.log(beforeCompletion) // false
+ *
+ *   yield* Deferred.succeed(deferred, 42)
+ *   const afterCompletion = yield* Deferred.isDone(deferred)
+ *   console.log(afterCompletion) // true
+ * })
+ * ```
+ *
  * @since 2.0.0
  * @category getters
  */
@@ -301,6 +543,21 @@ export const isDone = <A, E>(self: Deferred<A, E>): Effect<boolean> =>
 /**
  * Returns a `Some<Effect<A, E, R>>` from the `Deferred` if this `Deferred` has
  * already been completed, `None` otherwise.
+ *
+ * @example
+ * ```ts
+ * import { Deferred, Effect, Option } from "effect"
+ *
+ * const program = Effect.gen(function*() {
+ *   const deferred = yield* Deferred.make<number>()
+ *   const beforeCompletion = yield* Deferred.poll(deferred)
+ *   console.log(Option.isNone(beforeCompletion)) // true
+ *
+ *   yield* Deferred.succeed(deferred, 42)
+ *   const afterCompletion = yield* Deferred.poll(deferred)
+ *   console.log(Option.isSome(afterCompletion)) // true
+ * })
+ * ```
  *
  * @since 2.0.0
  * @category getters
@@ -312,6 +569,19 @@ export const poll = <A, E>(
 /**
  * Completes the `Deferred` with the specified value.
  *
+ * @example
+ * ```ts
+ * import { Deferred, Effect } from "effect"
+ *
+ * const program = Effect.gen(function*() {
+ *   const deferred = yield* Deferred.make<number>()
+ *   yield* Deferred.succeed(deferred, 42)
+ *
+ *   const value = yield* Deferred.await(deferred)
+ *   console.log(value) // 42
+ * })
+ * ```
+ *
  * @since 2.0.0
  * @category utils
  */
@@ -322,6 +592,19 @@ export const succeed: {
 
 /**
  * Completes the `Deferred` with the specified lazily evaluated value.
+ *
+ * @example
+ * ```ts
+ * import { Deferred, Effect } from "effect"
+ *
+ * const program = Effect.gen(function*() {
+ *   const deferred = yield* Deferred.make<number>()
+ *   yield* Deferred.sync(deferred, () => 42)
+ *
+ *   const value = yield* Deferred.await(deferred)
+ *   console.log(value) // 42
+ * })
+ * ```
  *
  * @since 2.0.0
  * @category utils
@@ -338,6 +621,15 @@ export const sync: {
 /**
  * Unsafely exits the `Deferred` with the specified `Exit` value, which will be
  * propagated to all fibers waiting on the value of the `Deferred`.
+ *
+ * @example
+ * ```ts
+ * import { Deferred, Effect } from "effect"
+ *
+ * const deferred = Deferred.unsafeMake<number>()
+ * const success = Deferred.unsafeDone(deferred, Effect.succeed(42))
+ * console.log(success) // true
+ * ```
  *
  * @since 2.0.0
  * @category unsafe
