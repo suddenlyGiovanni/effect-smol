@@ -172,15 +172,67 @@ pnpm lint --fix packages/effect/src/TargetFile.ts
 - **Nested Namespace Types**: Always check if types are nested within namespaces and use proper access syntax `Module.Namespace.Type` (e.g., `Request.Request.Success` not `Request.Success`)
 - **Type Extractors**: For type-level utilities, demonstrate type extraction using conditional types and `infer`, not instance creation
 
-### 4. Documentation Standards
+### 4. Efficient Development Workflow
+
+**Using Scratchpad for Development:**
+
+To efficiently create and modify examples, you can use temporary files in the `./scratchpad/` directory:
+
+```bash
+# Create temporary development files in scratchpad
+touch ./scratchpad/test-example.ts
+
+# Check TypeScript compilation without emitting files
+tsc --noEmit ./scratchpad/test-example.ts
+
+# Fix formatting using project linting rules
+pnpm lint --fix ./scratchpad/test-example.ts
+
+# Run scratchpad scripts when needed for testing
+pnpm tsx ./scratchpad/test-example.ts
+```
+
+**Scratchpad Benefits:**
+- ✅ Rapid prototyping of complex examples
+- ✅ Safe testing without affecting main codebase
+- ✅ Easy iteration on example code
+- ✅ Type checking validation before copying to JSDoc
+
+**Workflow:**
+1. Create example in `./scratchpad/example.ts`
+2. Use `tsc --noEmit` to validate TypeScript
+3. Use `pnpm lint --fix` to format correctly
+4. Test execution with `pnpm tsx` if needed
+5. Copy validated example to JSDoc documentation
+6. **IMPORTANT**: Clean up scratchpad files when done: `rm scratchpad/test-*.ts`
+
+**⚠️ Remember to Clean Up:**
+Always remove temporary files from scratchpad when finished:
+```bash
+# Clean up specific test files
+rm scratchpad/test-*.ts
+
+# Or clean up all temporary TypeScript files
+rm scratchpad/temp*.ts scratchpad/example*.ts
+```
+
+### 5. Documentation Standards
 
 **Import Patterns:**
 ```typescript
-// Always import what you need
+// Core Effect library imports
 import { Schedule, Effect, Duration, Console } from "effect"
+
+// Schema imports (note: lowercase 'schema')
+import { Schema } from "effect/schema"
+
+// For mixed usage
+import { Effect } from "effect"
+import { Schema } from "effect/schema"
 
 // For type-only imports when needed
 import type { Schedule } from "effect"
+import type { Schema } from "effect/schema"
 ```
 
 **Error Handling:**
@@ -211,6 +263,37 @@ const safeProgram = Effect.gen(function* () {
 })
 ```
 
+**Schema Patterns:**
+```typescript
+// Basic schema usage
+import { Schema } from "effect/schema"
+
+// Simple validation
+const result = Schema.decodeUnknownSync(Schema.String)("hello")
+
+// With Effect for async validation
+import { Effect } from "effect"
+import { Schema } from "effect/schema"
+
+const program = Effect.gen(function* () {
+  const validated = yield* Schema.decodeUnknownEffect(Schema.Number)(42)
+  return validated
+})
+
+// Struct schemas
+const PersonSchema = Schema.Struct({
+  name: Schema.String,
+  age: Schema.Number
+})
+
+// Complex validation with error handling
+const safeValidation = Effect.gen(function* () {
+  const result = yield* Schema.decodeUnknownEffect(PersonSchema)(input)
+  console.log("Valid person:", result)
+  return result
+})
+```
+
 **Categories to Use:**
 - `constructors` - Functions that create new instances
 - `destructors` - Functions that extract or convert values  
@@ -232,7 +315,7 @@ const safeProgram = Effect.gen(function* () {
 - `testing` - Test utilities and helpers
 - `interop` - Interoperability functions
 
-### 5. Handle Complex Functions
+### 6. Handle Complex Functions
 
 **After adding examples for complex functions, immediately run:**
 ```bash
@@ -280,7 +363,7 @@ For low-level or advanced functions that are rarely used directly:
  */
 ```
 
-### 6. Validation and Testing
+### 7. Validation and Testing
 
 **Required Checks (run after every edit):**
 ```bash
@@ -306,7 +389,7 @@ node scripts/analyze-jsdoc.mjs --file=ModifiedFile.ts (use relative paths like s
 - ✅ 100% coverage achieved for target file
 - ✅ Documentation follows Effect patterns
 
-### 7. Git Workflow
+### 8. Git Workflow
 
 **Commit Strategy:**
 ```bash
@@ -349,6 +432,9 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 - ❌ **Outdated patterns** - Use current Effect API, not deprecated approaches
 - ❌ **Incorrect nested type access** - Use `Module.Namespace.Type` syntax for nested types (e.g., `Request.Request.Success` not `Request.Success`)
 - ❌ **Wrong type extractor examples** - Type-level utilities should show type extraction, not instance creation
+- ❌ **Wrong schema imports** - Use `effect/schema` (lowercase), not `effect/Schema` or `@effect/schema`
+- ❌ **Missing Schema import** - Always import Schema when using schema functions like `decodeUnknownSync`
+- ❌ **Incorrect validation patterns** - Use `decodeUnknownSync` for sync validation, `decodeUnknownEffect` for async
 
 ## Success Metrics
 
