@@ -277,6 +277,45 @@ console.log(serialized)
 
 In this example, the `Date` is encoded as a string and decoded back using the standard ISO format.
 
+## Explicit JSON Serialization
+
+### UnknownFromJsonString
+
+A schema that decodes a JSON-encoded string into an unknown value.
+
+This schema takes a string as input and attempts to parse it as JSON during decoding. If parsing succeeds, the result is passed along as an unknown value. If the string is not valid JSON, decoding fails.
+
+When encoding, any value is converted back into a JSON string using JSON.stringify. If the value is not a valid JSON value, encoding fails.
+
+**Example**
+
+```ts
+import { Schema } from "effect/schema"
+
+Schema.decodeUnknownSync(Schema.UnknownFromJsonString)(`{"a":1,"b":2}`)
+// => { a: 1, b: 2 }
+```
+
+### fromJsonString
+
+Returns a schema that decodes a JSON string and then decodes the parsed value using the given schema.
+
+This is useful when working with JSON-encoded strings where the actual structure of the value is known and described by an existing schema.
+
+The resulting schema first parses the input string as JSON, and then runs the provided schema on the parsed result.
+
+**Example**
+
+```ts
+import { Schema } from "effect/schema"
+
+const schema = Schema.Struct({ a: Schema.Number })
+const schemaFromJsonString = Schema.fromJsonString(schema)
+
+Schema.decodeUnknownSync(schemaFromJsonString)(`{"a":1,"b":2}`)
+// => { a: 1 }
+```
+
 ## 🆕 Flipping Schemas
 
 You can now flip a schema to create a new one that reverses its input and output types.
@@ -1078,42 +1117,9 @@ export const deriveGreaterThan = <T>(options: {
 }
 ```
 
-## Literals
-
-### Deriving new literals
-
-You can map the members of a `Schema.Literals` schema using the `mapMembers` method. The `mapMembers` method accepts a function from `Literals.members` to new members, and returns a new `Schema.Union` based on the result.
-
-```ts
-import { Tuple } from "effect"
-import { Schema } from "effect/schema"
-
-const schema = Schema.Literals(["red", "green", "blue"]).mapMembers(
-  Tuple.evolve([
-    (a) => Schema.Struct({ _tag: a, a: Schema.String }),
-    (b) => Schema.Struct({ _tag: b, b: Schema.Number }),
-    (c) => Schema.Struct({ _tag: c, c: Schema.Boolean })
-  ])
-)
-
-/*
-type Type = {
-    readonly _tag: "red";
-    readonly a: string;
-} | {
-    readonly _tag: "green";
-    readonly b: number;
-} | {
-    readonly _tag: "blue";
-    readonly c: boolean;
-}
-*/
-type Type = (typeof schema)["Type"]
-```
-
 ## Structs
 
-### Optional and Mutable Keys
+### 🆕 Optional and Mutable Keys
 
 You can mark struct properties as optional or mutable using `Schema.optionalKey` and `Schema.mutableKey`.
 
@@ -1977,180 +1983,20 @@ const schema = A.mapFields(
 )
 ```
 
-## Records
-
-### Key Transformations
-
-`Schema.Record` supports transforming keys during decoding and encoding. This can be useful when working with different naming conventions.
-
-**Example** (Transforming snake_case keys to camelCase)
-
-```ts
-import { Schema, Transformation } from "effect/schema"
-
-const SnakeToCamel = Schema.String.pipe(
-  Schema.decode(Transformation.snakeToCamel())
-)
-
-const schema = Schema.Record(SnakeToCamel, Schema.Number)
-
-console.log(Schema.decodeUnknownSync(schema)({ a_b: 1, c_d: 2 }))
-// { aB: 1, cD: 2 }
-```
-
-By default, if a transformation results in duplicate keys, the last value wins.
-
-**Example** (Merging transformed keys by keeping the last one)
-
-```ts
-import { Schema, Transformation } from "effect/schema"
-
-const SnakeToCamel = Schema.String.pipe(
-  Schema.decode(Transformation.snakeToCamel())
-)
-
-const schema = Schema.Record(SnakeToCamel, Schema.Number)
-
-console.log(Schema.decodeUnknownSync(schema)({ a_b: 1, aB: 2 }))
-// { aB: 2 }
-```
-
-You can customize how key conflicts are resolved by providing a `combine` function.
-
-**Example** (Combining values for conflicting keys)
-
-```ts
-import { Schema, Transformation } from "effect/schema"
-
-const SnakeToCamel = Schema.String.pipe(
-  Schema.decode(Transformation.snakeToCamel())
-)
-
-const schema = Schema.Record(SnakeToCamel, Schema.Number, {
-  key: {
-    decode: {
-      // When decoding, combine values of conflicting keys by summing them
-      combine: ([_, v1], [k2, v2]) => [k2, v1 + v2] // you can pass a Semigroup to combine keys
-    },
-    encode: {
-      // Same logic applied when encoding
-      combine: ([_, v1], [k2, v2]) => [k2, v1 + v2]
-    }
-  }
-})
-
-console.log(Schema.decodeUnknownSync(schema)({ a_b: 1, aB: 2 }))
-// { aB: 3 }
-
-console.log(Schema.encodeUnknownSync(schema)({ a_b: 1, aB: 2 }))
-// { a_b: 3 }
-```
-
-### Mutability
-
-By default, records are tagged as `readonly`. You can mark a record as mutable using `Schema.mutableKey` as you do with structs.
-
-**Example** (Defining a mutable record)
-
-```ts
-import { Schema } from "effect/schema"
-
-export const schema = Schema.Record(
-  Schema.String,
-  Schema.mutableKey(Schema.Number)
-)
-
-/*
-type Type = {
-    [x: string]: number;
-}
-*/
-export type Type = typeof schema.Type
-
-/*
-type Encoded = {
-    [x: string]: number;
-}
-*/
-export type Encoded = typeof schema.Encoded
-```
-
-### Literal Structs
-
-When you pass a union of string literals as the key schema to `Schema.Record`, you get a struct-like schema where each literal becomes a required key. This mirrors how TypeScript's built-in `Record` type behaves.
-
-**Example** (Creating a literal struct with fixed string keys)
-
-```ts
-import { Schema } from "effect/schema"
-
-const schema = Schema.Record(Schema.Literals(["a", "b"]), Schema.Number)
-
-/*
-type Type = {
-    readonly a: number;
-    readonly b: number;
-}
-*/
-export type Type = typeof schema.Type
-```
-
-#### Mutable Keys
-
-By default, keys are readonly. To make them mutable, use `Schema.mutableKey` just as you would with a standard struct.
-
-**Example** (Literal struct with mutable keys)
-
-```ts
-import { Schema } from "effect/schema"
-
-const schema = Schema.Record(
-  Schema.Literals(["a", "b"]),
-  Schema.mutableKey(Schema.Number)
-)
-
-/*
-type Type = {
-    a: number;
-    b: number;
-}
-*/
-export type Type = typeof schema.Type
-```
-
-#### Optional Keys
-
-You can make the keys optional by wrapping the value schema with `Schema.optional`.
-
-**Example** (Literal struct with optional keys)
-
-```ts
-import { Schema } from "effect/schema"
-
-const schema = Schema.Record(
-  Schema.Literals(["a", "b"]),
-  Schema.optional(Schema.Number)
-)
-
-/*
-type Type = {
-    readonly a?: number;
-    readonly b?: number;
-}
-*/
-export type Type = typeof schema.Type
-```
-
 ## Opaque Structs
 
-**Use Case**: When you are fine with a struct but you want an opaque type for its `Type`.
+Use an opaque struct when you want to create a distinct type from a `Struct` without adding runtime behavior.
 
-Opaque structs wrap an existing struct in a new class type. They preserve the schema's shape but hide implementation details.
-Instance methods or custom constructors **are not allowed** on opaque structs.
+An opaque struct wraps a `Struct` in a class while preserving its schema shape.
 
-**Open Problems**:
+Instance methods and custom constructors **are not allowed** in opaque structs. This is not enforced at the type level, but it may be enforced through a linter in the future.
 
-- instance methods are not supported but this is not enforced (eslint rule?)
+Use `Schema.Class` instead of an opaque struct when you need runtime behavior.
+
+`Schema.Class` wraps a `Struct` in a class and allows:
+
+- Defining instance methods, getters, and custom constructors
+- Structural equality via the `Equal` trait
 
 **Example** (Creating an Opaque Struct)
 
@@ -2393,6 +2239,170 @@ type Encoded = {
 }
 */
 export type Encoded = (typeof Operation)["Encoded"]
+```
+
+## Records
+
+### Key Transformations
+
+`Schema.Record` supports transforming keys during decoding and encoding. This can be useful when working with different naming conventions.
+
+**Example** (Transforming snake_case keys to camelCase)
+
+```ts
+import { Schema, Transformation } from "effect/schema"
+
+const SnakeToCamel = Schema.String.pipe(
+  Schema.decode(Transformation.snakeToCamel())
+)
+
+const schema = Schema.Record(SnakeToCamel, Schema.Number)
+
+console.log(Schema.decodeUnknownSync(schema)({ a_b: 1, c_d: 2 }))
+// { aB: 1, cD: 2 }
+```
+
+By default, if a transformation results in duplicate keys, the last value wins.
+
+**Example** (Merging transformed keys by keeping the last one)
+
+```ts
+import { Schema, Transformation } from "effect/schema"
+
+const SnakeToCamel = Schema.String.pipe(
+  Schema.decode(Transformation.snakeToCamel())
+)
+
+const schema = Schema.Record(SnakeToCamel, Schema.Number)
+
+console.log(Schema.decodeUnknownSync(schema)({ a_b: 1, aB: 2 }))
+// { aB: 2 }
+```
+
+You can customize how key conflicts are resolved by providing a `combine` function.
+
+**Example** (Combining values for conflicting keys)
+
+```ts
+import { Schema, Transformation } from "effect/schema"
+
+const SnakeToCamel = Schema.String.pipe(
+  Schema.decode(Transformation.snakeToCamel())
+)
+
+const schema = Schema.Record(SnakeToCamel, Schema.Number, {
+  key: {
+    decode: {
+      // When decoding, combine values of conflicting keys by summing them
+      combine: ([_, v1], [k2, v2]) => [k2, v1 + v2] // you can pass a Semigroup to combine keys
+    },
+    encode: {
+      // Same logic applied when encoding
+      combine: ([_, v1], [k2, v2]) => [k2, v1 + v2]
+    }
+  }
+})
+
+console.log(Schema.decodeUnknownSync(schema)({ a_b: 1, aB: 2 }))
+// { aB: 3 }
+
+console.log(Schema.encodeUnknownSync(schema)({ a_b: 1, aB: 2 }))
+// { a_b: 3 }
+```
+
+### Mutability
+
+By default, records are tagged as `readonly`. You can mark a record as mutable using `Schema.mutableKey` as you do with structs.
+
+**Example** (Defining a mutable record)
+
+```ts
+import { Schema } from "effect/schema"
+
+export const schema = Schema.Record(
+  Schema.String,
+  Schema.mutableKey(Schema.Number)
+)
+
+/*
+type Type = {
+    [x: string]: number;
+}
+*/
+export type Type = typeof schema.Type
+
+/*
+type Encoded = {
+    [x: string]: number;
+}
+*/
+export type Encoded = typeof schema.Encoded
+```
+
+### Literal Structs
+
+When you pass a union of string literals as the key schema to `Schema.Record`, you get a struct-like schema where each literal becomes a required key. This mirrors how TypeScript's built-in `Record` type behaves.
+
+**Example** (Creating a literal struct with fixed string keys)
+
+```ts
+import { Schema } from "effect/schema"
+
+const schema = Schema.Record(Schema.Literals(["a", "b"]), Schema.Number)
+
+/*
+type Type = {
+    readonly a: number;
+    readonly b: number;
+}
+*/
+export type Type = typeof schema.Type
+```
+
+#### Mutable Keys
+
+By default, keys are readonly. To make them mutable, use `Schema.mutableKey` just as you would with a standard struct.
+
+**Example** (Literal struct with mutable keys)
+
+```ts
+import { Schema } from "effect/schema"
+
+const schema = Schema.Record(
+  Schema.Literals(["a", "b"]),
+  Schema.mutableKey(Schema.Number)
+)
+
+/*
+type Type = {
+    a: number;
+    b: number;
+}
+*/
+export type Type = typeof schema.Type
+```
+
+#### Optional Keys
+
+You can make the keys optional by wrapping the value schema with `Schema.optional`.
+
+**Example** (Literal struct with optional keys)
+
+```ts
+import { Schema } from "effect/schema"
+
+const schema = Schema.Record(
+  Schema.Literals(["a", "b"]),
+  Schema.optional(Schema.Number)
+)
+
+/*
+type Type = {
+    readonly a?: number;
+    readonly b?: number;
+}
+*/
+export type Type = typeof schema.Type
 ```
 
 ## Tuples
@@ -3236,7 +3246,7 @@ Expected "a" | "b", actual null
 */
 ```
 
-### Exclusive Unions
+### 🆕 Exclusive Unions
 
 You can create an exclusive union, where the union matches if exactly one member matches, by passing the `{ mode: "oneOf" }` option.
 
@@ -3256,7 +3266,7 @@ Formatter.decodeUnknownEffect(Formatter.getTree())(schema)({ a: "a", b: 1 })
   .then(console.log, console.error)
 /*
 Output:
-Expected exactly one successful schema for {"a":"a","b":1} in { readonly "a": string } ⊻ { readonly "b": number }
+Expected exactly one member to match the input {"a":"a","b":1}, but multiple members matched in { readonly "a": string } ⊻ { readonly "b": number }
 */
 ```
 
@@ -3340,6 +3350,47 @@ const schema = Schema.Union([
   Schema.Number,
   Schema.Boolean
 ]).mapMembers(Tuple.map(Schema.Array))
+```
+
+### 🆕 Union of Literals
+
+You can create a union of literals using `Schema.Literals`.
+
+```ts
+import { Schema } from "effect/schema"
+
+const schema = Schema.Literals(["red", "green", "blue"])
+```
+
+#### Deriving new literals
+
+You can map the members of a `Schema.Literals` schema using the `mapMembers` method. The `mapMembers` method accepts a function from `Literals.members` to new members, and returns a new `Schema.Union` based on the result.
+
+```ts
+import { Tuple } from "effect"
+import { Schema } from "effect/schema"
+
+const schema = Schema.Literals(["red", "green", "blue"]).mapMembers(
+  Tuple.evolve([
+    (a) => Schema.Struct({ _tag: a, a: Schema.String }),
+    (b) => Schema.Struct({ _tag: b, b: Schema.Number }),
+    (c) => Schema.Struct({ _tag: c, c: Schema.Boolean })
+  ])
+)
+
+/*
+type Type = {
+    readonly _tag: "red";
+    readonly a: string;
+} | {
+    readonly _tag: "green";
+    readonly b: number;
+} | {
+    readonly _tag: "blue";
+    readonly c: boolean;
+}
+*/
+type Type = (typeof schema)["Type"]
 ```
 
 ## Transformations Redesign
