@@ -16,6 +16,20 @@ import * as TestClock from "effect/TestClock"
 class ATag extends ServiceMap.Key<ATag, "A">()("ATag") {}
 
 describe("Effect", () => {
+  describe("tracing", () => {
+    it.effect("failCause captures current span", () =>
+      Effect.gen(function*() {
+        const cause = yield* Effect.failCause(Cause.die(new Error("boom"))).pipe(
+          Effect.withSpan("test span"),
+          Effect.sandbox,
+          Effect.flip
+        )
+        const annotations = Cause.annotations(cause)
+        const span = ServiceMap.unsafeGet(annotations, Cause.CurrentSpan)
+        assert.strictEqual(span.name, "test span")
+      }))
+  })
+
   it("callback can branch over sync/async", async () => {
     const program = Effect.callback<number>(function(resume) {
       if (this.executionMode === "sync") {

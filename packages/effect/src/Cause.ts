@@ -47,7 +47,9 @@ import * as core from "./internal/core.js"
 import * as effect from "./internal/effect.js"
 import type { Option } from "./Option.js"
 import type { Pipeable } from "./Pipeable.js"
-import type * as ServiceMap from "./ServiceMap.js"
+import * as ServiceMap from "./ServiceMap.js"
+import type { Span } from "./Tracer.js"
+import type { NoInfer } from "./Types.js"
 
 /**
  * @example
@@ -1003,3 +1005,74 @@ export interface UnknownError extends YieldableError {
  * @since 4.0.0
  */
 export const UnknownError: new(cause: unknown, message?: string) => UnknownError = effect.UnknownError
+
+/**
+ * Adds annotations to a `Cause` using a `ServiceMap.Key` to store metadata
+ * that can be retrieved later for debugging or tracing purposes.
+ *
+ * @example
+ * ```ts
+ * import { Cause, ServiceMap } from "effect"
+ *
+ * // Define a custom annotation key
+ * class UserId extends ServiceMap.Key<UserId, string>()("UserId") {}
+ *
+ * // Create a cause and add an annotation
+ * const originalCause = Cause.fail("Something went wrong")
+ * const annotatedCause = Cause.annotate(originalCause, UserId, "user123")
+ * ```
+ *
+ * @category Annotations
+ * @since 4.0.0
+ */
+export const annotate: {
+  <I, S>(
+    key: ServiceMap.Key<I, S>,
+    value: NoInfer<S>
+  ): <E>(self: Cause<E>) => Cause<E>
+  <E, I, S>(
+    self: Cause<E>,
+    key: ServiceMap.Key<I, S>,
+    value: NoInfer<S>
+  ): Cause<E>
+} = core.causeAnnotate
+
+/**
+ * Retrieves the annotations from a `Failure`.
+ *
+ * @category Annotations
+ * @since 4.0.0
+ */
+export const failureAnnotations: <E>(self: Failure<E>) => ServiceMap.ServiceMap<never> = effect.failureAnnotations
+
+/**
+ * Retrieves the merged annotations from all failures in a `Cause`.
+ *
+ * @category Annotations
+ * @since 4.0.0
+ */
+export const annotations: <E>(self: Cause<E>) => ServiceMap.ServiceMap<never> = effect.causeAnnotations
+
+/**
+ * Represents the span captured at the point of failure.
+ *
+ * @category Annotations
+ * @since 4.0.0
+ */
+export class CurrentSpan extends ServiceMap.Key<CurrentSpan, Span>()("effect/Cause/CurrentSpan") {}
+
+/**
+ * Represents the trace captured at the point an Effect.fn was called.
+ *
+ * @category Annotations
+ * @since 4.0.0
+ */
+export class FnCallsiteTrace extends ServiceMap.Key<FnCallsiteTrace, Error>()("effect/Cause/FnCallsiteTrace") {}
+
+/**
+ * Represents the trace captured at the point an Effect.fn was defined.
+ *
+ * @category Annotations
+ * @since 4.0.0
+ */
+export class FnDefinitionTrace extends ServiceMap.Key<FnDefinitionTrace, Error>()("effect/Cause/FnDefinitionTrace") {}
