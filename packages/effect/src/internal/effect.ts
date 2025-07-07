@@ -41,6 +41,7 @@ import { yieldWrapGet } from "../Utils.js"
 import type { Primitive } from "./core.js"
 import {
   args,
+  causeDie,
   causeFromFailures,
   CauseImpl,
   ensureCont,
@@ -3106,7 +3107,8 @@ export const forEach: {
 
     return callback((resume) => {
       const fibers = new Set<Fiber.Fiber<unknown, unknown>>()
-      let result: Exit.Exit<any, any> | undefined = undefined
+      const failures: Array<Cause.Failure<E>> = []
+      let failed = false
       let inProgress = 0
       let doneCount = 0
       let pumping = false
@@ -3127,10 +3129,17 @@ export const forEach: {
               }
               fibers.delete(child)
               if (exit._tag === "Failure") {
-                if (result === undefined) {
-                  result = exit
+                if (!failed) {
+                  failed = true
                   length = index
+                  // eslint-disable-next-line no-restricted-syntax
+                  failures.push(...exit.cause.failures)
                   fibers.forEach((fiber) => fiber.unsafeInterrupt())
+                } else {
+                  for (const f of exit.cause.failures) {
+                    if (f._tag === "Interrupt") continue
+                    failures.push(f)
+                  }
                 }
               } else if (out !== undefined) {
                 out[currentIndex] = exit.value
@@ -3138,14 +3147,15 @@ export const forEach: {
               doneCount++
               inProgress--
               if (doneCount === length) {
-                resume(result ?? succeed(out))
-              } else if (!pumping && inProgress < concurrency) {
+                resume(failures.length > 0 ? exitFailCause(causeFromFailures(failures)) : succeed(out))
+              } else if (!pumping && !failed && inProgress < concurrency) {
                 pump()
               }
             })
           } catch (err) {
-            result = exitDie(err)
+            failed = true
             length = index
+            failures.push(causeDie(err).failures[0])
             fibers.forEach((fiber) => fiber.unsafeInterrupt())
           }
         }
