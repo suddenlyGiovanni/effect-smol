@@ -42,19 +42,19 @@ export const evaluate = `${TypeId}/evaluate` as const
 export type evaluate = typeof evaluate
 
 /** @internal */
-export const successCont = `${TypeId}/successCont` as const
+export const contA = `${TypeId}/successCont` as const
 /** @internal */
-export type successCont = typeof successCont
+export type contA = typeof contA
 
 /** @internal */
-export const failureCont = `${TypeId}/failureCont` as const
+export const contE = `${TypeId}/failureCont` as const
 /** @internal */
-export type failureCont = typeof failureCont
+export type contE = typeof contE
 
 /** @internal */
-export const ensureCont = `${TypeId}/ensureCont` as const
+export const contAll = `${TypeId}/ensureCont` as const
 /** @internal */
-export type ensureCont = typeof ensureCont
+export type contAll = typeof contAll
 
 /** @internal */
 export const Yield = Symbol.for("effect/Effect/Yield")
@@ -235,7 +235,12 @@ class Fail<E> extends FailureBase<"Fail"> implements Cause.Fail<E> {
       error: this.error
     }
   }
-  annotate<I, S>(tag: ServiceMap.Key<I, S>, value: S): this {
+  annotate<I, S>(tag: ServiceMap.Key<I, S>, value: S, options?: {
+    readonly overwrite?: boolean | undefined
+  }): this {
+    if (options?.overwrite !== true && this.annotations.has(tag.key)) {
+      return this
+    }
     return new Fail(
       this.error,
       new Map([...this.annotations, [tag.key, value]])
@@ -277,7 +282,12 @@ class Die extends FailureBase<"Die"> implements Cause.Die {
       defect: this.defect
     }
   }
-  annotate<I, S>(tag: ServiceMap.Key<I, S>, value: S): this {
+  annotate<I, S>(tag: ServiceMap.Key<I, S>, value: S, options?: {
+    readonly overwrite?: boolean | undefined
+  }): this {
+    if (options?.overwrite !== true && this.annotations.has(tag.key)) {
+      return this
+    }
     return new Die(
       this.defect,
       new Map([...this.annotations, [tag.key, value]])
@@ -305,20 +315,29 @@ export const causeDie = (defect: unknown): Cause.Cause<never> => new CauseImpl([
 export const causeAnnotate: {
   <I, S>(
     key: ServiceMap.Key<I, S>,
-    value: NoInfer<S>
+    value: NoInfer<S>,
+    options?: {
+      readonly overwrite?: boolean | undefined
+    }
   ): <E>(self: Cause.Cause<E>) => Cause.Cause<E>
   <E, I, S>(
     self: Cause.Cause<E>,
     key: ServiceMap.Key<I, S>,
-    value: NoInfer<S>
+    value: NoInfer<S>,
+    options?: {
+      readonly overwrite?: boolean | undefined
+    }
   ): Cause.Cause<E>
 } = dual(
-  3,
+  (args) => isCause(args[0]),
   <E, I, S>(
     self: Cause.Cause<E>,
     key: ServiceMap.Key<I, S>,
-    value: NoInfer<S>
-  ): Cause.Cause<E> => new CauseImpl(self.failures.map((f) => f.annotate(key, value)))
+    value: NoInfer<S>,
+    options?: {
+      readonly overwrite?: boolean | undefined
+    }
+  ): Cause.Cause<E> => new CauseImpl(self.failures.map((f) => f.annotate(key, value, options)))
 )
 
 /** @internal */
@@ -335,13 +354,13 @@ export const failureIsInterrupt = <E>(self: Cause.Failure<E>): self is Cause.Int
 /** @internal */
 export interface Primitive {
   readonly [identifier]: string
-  readonly [successCont]:
+  readonly [contA]:
     | ((value: unknown, fiber: FiberImpl) => Primitive | Yield)
     | undefined
-  readonly [failureCont]:
+  readonly [contE]:
     | ((cause: Cause.Cause<unknown>, fiber: FiberImpl) => Primitive | Yield)
     | undefined
-  readonly [ensureCont]:
+  readonly [contAll]:
     | ((
       fiber: FiberImpl
     ) =>
@@ -358,20 +377,20 @@ function defaultEvaluate(_fiber: FiberImpl): Primitive | Yield {
 /** @internal */
 export const makePrimitiveProto = <Op extends string>(options: {
   readonly op: Op
-  readonly eval?: (
+  readonly [evaluate]?: (
     fiber: FiberImpl
   ) => Primitive | Effect.Effect<any, any, any> | Yield
-  readonly contA?: (
+  readonly [contA]?: (
     this: Primitive,
     value: any,
     fiber: FiberImpl
   ) => Primitive | Effect.Effect<any, any, any> | Yield
-  readonly contE?: (
+  readonly [contE]?: (
     this: Primitive,
     cause: Cause.Cause<any>,
     fiber: FiberImpl
   ) => Primitive | Effect.Effect<any, any, any> | Yield
-  readonly ensure?: (
+  readonly [contAll]?: (
     this: Primitive,
     fiber: FiberImpl
   ) => void | ((value: any, fiber: FiberImpl) => void)
@@ -379,10 +398,10 @@ export const makePrimitiveProto = <Op extends string>(options: {
   ({
     ...EffectProto,
     [identifier]: options.op,
-    [evaluate]: options.eval ?? defaultEvaluate,
-    [successCont]: options.contA,
-    [failureCont]: options.contE,
-    [ensureCont]: options.ensure
+    [evaluate]: options[evaluate] ?? defaultEvaluate,
+    [contA]: options[contA],
+    [contE]: options[contE],
+    [contAll]: options[contAll]
   }) as any
 
 /** @internal */
@@ -392,27 +411,27 @@ export const makePrimitive = <
 >(options: {
   readonly op: string
   readonly single?: Single
-  readonly eval?: (
+  readonly [evaluate]?: (
     this: Primitive & {
       readonly [args]: Single extends true ? Parameters<Fn>[0] : Parameters<Fn>
     },
     fiber: FiberImpl
   ) => Primitive | Effect.Effect<any, any, any> | Yield
-  readonly contA?: (
+  readonly [contA]?: (
     this: Primitive & {
       readonly [args]: Single extends true ? Parameters<Fn>[0] : Parameters<Fn>
     },
     value: any,
     fiber: FiberImpl
   ) => Primitive | Effect.Effect<any, any, any> | Yield
-  readonly contE?: (
+  readonly [contE]?: (
     this: Primitive & {
       readonly [args]: Single extends true ? Parameters<Fn>[0] : Parameters<Fn>
     },
     cause: Cause.Cause<any>,
     fiber: FiberImpl
   ) => Primitive | Effect.Effect<any, any, any> | Yield
-  readonly ensure?: (
+  readonly [contAll]?: (
     this: Primitive & {
       readonly [args]: Single extends true ? Parameters<Fn>[0] : Parameters<Fn>
     },
@@ -434,7 +453,7 @@ export const makeExit = <
 >(options: {
   readonly op: "Success" | "Failure"
   readonly prop: Prop
-  readonly eval: (
+  readonly [evaluate]: (
     this: Exit.Exit<unknown, unknown> & { [args]: Parameters<Fn>[0] },
     fiber: FiberImpl<unknown, unknown>
   ) => Primitive | Yield
@@ -467,9 +486,9 @@ export const makeExit = <
   return function(value: unknown) {
     const self = Object.create(Proto)
     self[args] = value
-    self[successCont] = undefined
-    self[failureCont] = undefined
-    self[ensureCont] = undefined
+    self[contA] = undefined
+    self[contE] = undefined
+    self[contAll] = undefined
     return self
   } as Fn
 }
@@ -478,30 +497,36 @@ export const makeExit = <
 export const exitSucceed: <A>(a: A) => Exit.Exit<A> = makeExit({
   op: "Success",
   prop: "value",
-  eval(fiber) {
-    const cont = fiber.getCont(successCont)
-    return cont ? cont[successCont](this[args], fiber) : fiber.yieldWith(this)
+  [evaluate](fiber) {
+    const cont = fiber.getCont(contA)
+    return cont ? cont[contA](this[args], fiber) : fiber.yieldWith(this)
   }
 })
 
-const CurrentSpanKey = {
+/** @internal */
+export const CurrentSpanKey = {
   key: "effect/Cause/CurrentSpan" satisfies typeof Cause.CurrentSpan.key
 } as ServiceMap.Key<Cause.CurrentSpan, Span>
+
+/** @internal */
+export const InterruptorSpanKey = {
+  key: "effect/Cause/InterruptorSpan" satisfies typeof Cause.InterruptorSpan.key
+} as ServiceMap.Key<Cause.InterruptorSpan, Span>
 
 /** @internal */
 export const exitFailCause: <E>(cause: Cause.Cause<E>) => Exit.Exit<never, E> = makeExit({
   op: "Failure",
   prop: "cause",
-  eval(fiber) {
+  [evaluate](fiber) {
     let cause = this[args]
     if (fiber.currentSpan && fiber.currentSpan._tag === "Span") {
       cause = causeAnnotate(cause, CurrentSpanKey, fiber.currentSpan)
     }
-    let cont = fiber.getCont(failureCont)
+    let cont = fiber.getCont(contE)
     while (fiber.interruptible && fiber._interruptedCause && cont) {
-      cont = fiber.getCont(failureCont)
+      cont = fiber.getCont(contE)
     }
-    return cont ? cont[failureCont](cause, fiber) : fiber.yieldWith(this[args] === cause ? this : exitFailCause(cause))
+    return cont ? cont[contE](cause, fiber) : fiber.yieldWith(this[args] === cause ? this : exitFailCause(cause))
   }
 })
 
@@ -516,7 +541,7 @@ export const withFiber: <A, E = never, R = never>(
   evaluate: (fiber: FiberImpl<unknown, unknown>) => Effect.Effect<A, E, R>
 ) => Effect.Effect<A, E, R> = makePrimitive({
   op: "WithFiber",
-  eval(fiber) {
+  [evaluate](fiber) {
     return this[args](fiber)
   }
 })
