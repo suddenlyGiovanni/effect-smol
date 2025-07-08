@@ -59,7 +59,9 @@ export type TypeId = "~effect/Redacted"
  * @since 3.3.0
  * @category models
  */
-export interface Redacted<out A = string> extends Redacted.Variance<A>, Equal.Equal, Pipeable {}
+export interface Redacted<out A = string> extends Redacted.Variance<A>, Equal.Equal, Pipeable {
+  readonly label: string | undefined
+}
 
 /**
  * @example
@@ -145,8 +147,11 @@ export const isRedacted = (u: unknown): u is Redacted<unknown> => hasProperty(u,
  * @since 3.3.0
  * @category constructors
  */
-export const make = <T>(value: T): Redacted<T> => {
+export const make = <T>(value: T, label?: string | undefined): Redacted<T> => {
   const redacted = Object.create(Proto)
+  if (label) {
+    redacted.label = label
+  }
   redactedRegistry.set(redacted, value)
   return redacted
 }
@@ -155,9 +160,13 @@ const Proto = {
   [TypeId]: {
     _A: (_: never) => _
   },
+  label: undefined,
   ...PipeInspectableProto,
   toJSON() {
-    return "<redacted>"
+    return `<${this.label ?? "redacted"}>`
+  },
+  toString() {
+    return `<${this.label ?? "redacted"}>`
   },
   [Hash.symbol]<T>(this: Redacted<T>): number {
     return Hash.cached(this, () => Hash.hash(redactedRegistry.get(this)))
@@ -191,9 +200,28 @@ export const value = <T>(self: Redacted<T>): T => {
   if (redactedRegistry.has(self)) {
     return redactedRegistry.get(self)
   } else {
-    throw new Error("Unable to get redacted value")
+    const label_ = label(self)
+    throw new Error("Unable to get redacted value" + (label_ ? ` with label: "${label_}"` : ""))
   }
 }
+
+/**
+ * Retrieves the label of a `Redacted` instance.
+ *
+ * @example
+ * ```ts
+ * import * as assert from "node:assert"
+ * import { Redacted } from "effect"
+ *
+ * const API_KEY = Redacted.make(123, "API_KEY")
+ *
+ * assert.equal(Redacted.label(API_KEY), "API_KEY")
+ * ```
+ *
+ * @since 3.3.0
+ * @category getters
+ */
+export const label = (self: Redacted<any>): string | undefined => self.label
 
 /**
  * Erases the underlying value of a `Redacted` instance, rendering it unusable.
