@@ -1383,82 +1383,139 @@ type Type =
   | "bigint"
   | "function"
 
-function getInputType(input: unknown): Type {
-  if (input === null) {
-    return "null"
-  }
-  if (Array.isArray(input)) {
-    return "array"
-  }
-  return typeof input
-}
-
-const getCandidateTypes = memoize((ast: AST): ReadonlyArray<Type> | Type | null => {
-  switch (ast._tag) {
-    case "NullKeyword":
-      return "null"
-    case "UndefinedKeyword":
-    case "VoidKeyword":
-      return "undefined"
-    case "StringKeyword":
-    case "TemplateLiteral":
-      return "string"
-    case "NumberKeyword":
-      return "number"
-    case "BooleanKeyword":
-      return "boolean"
-    case "SymbolKeyword":
-    case "UniqueSymbol":
-      return "symbol"
-    case "BigIntKeyword":
-      return "bigint"
-    case "TypeLiteral":
-    case "ObjectKeyword":
-      return ["object", "array"]
-    case "Enums":
-      return ["string", "number"]
-    case "TupleType":
-      return "array"
-    case "LiteralType":
-      return typeof ast.literal
-    case "Declaration":
-    case "NeverKeyword":
-    case "AnyKeyword":
-    case "UnknownKeyword":
-    case "UnionType":
-    case "Suspend":
-      return null
-  }
-})
-
 /** @internal */
 export type Sentinel = {
   readonly key: PropertyKey
   readonly literal: Literal
-  readonly isOptional: boolean
+}
+
+function getCandidateTypes(ast: AST): ReadonlyArray<Type> {
+  switch (ast._tag) {
+    case "NullKeyword":
+      return ["null"]
+    case "UndefinedKeyword":
+    case "VoidKeyword":
+      return ["undefined"]
+    case "StringKeyword":
+    case "TemplateLiteral":
+      return ["string"]
+    case "NumberKeyword":
+      return ["number"]
+    case "BooleanKeyword":
+      return ["boolean"]
+    case "SymbolKeyword":
+    case "UniqueSymbol":
+      return ["symbol"]
+    case "BigIntKeyword":
+      return ["bigint"]
+    case "TupleType":
+      return ["array"]
+    case "ObjectKeyword":
+      return ["object", "array", "function"]
+    case "TypeLiteral":
+      return ast.propertySignatures.length || ast.indexSignatures.length
+        ? ["object"]
+        : ["object", "array"]
+    case "Enums":
+      return ["string", "number"]
+    case "LiteralType":
+      return [typeof ast.literal]
+    default:
+      return [
+        "null",
+        "undefined",
+        "string",
+        "number",
+        "boolean",
+        "symbol",
+        "bigint",
+        "object",
+        "array",
+        "function"
+      ]
+  }
 }
 
 /** @internal */
-export const collectSentinels = memoize((ast: AST): ReadonlySet<Sentinel> | undefined => {
+export function collectSentinels(ast: AST): Array<Sentinel> | undefined {
   switch (ast._tag) {
     case "Declaration": {
-      const sentinels = ast.annotations?.["~sentinels"]
-      if (sentinels instanceof Set) {
-        return sentinels
-      }
-      return undefined
+      const s = ast.annotations?.["~sentinels"]
+      return Array.isArray(s) && s.length ? s : undefined
     }
     case "TypeLiteral": {
-      const out: Set<Sentinel> = new Set()
-      for (const ps of ast.propertySignatures) {
-        if (isLiteralType(ps.type)) {
-          out.add({ key: ps.name, literal: ps.type.literal, isOptional: isOptional(ps.type) })
-        }
+      const v = ast.propertySignatures.flatMap((ps) =>
+        isLiteralType(ps.type) && !isOptional(ps.type)
+          ? [{ key: ps.name, literal: ps.type.literal }]
+          : []
+      )
+      return v.length ? v : undefined
+    }
+    case "TupleType": {
+      const v = ast.elements.flatMap((e, i) =>
+        isLiteralType(e) && !isOptional(e)
+          ? [{ key: i, literal: e.literal }]
+          : []
+      )
+      return v.length ? v : undefined
+    }
+    case "Suspend":
+      return collectSentinels(ast.thunk())
+  }
+}
+
+type CandidateIndex = {
+  byType?: { [K in Type]?: Array<AST> }
+  bySentinel?: Map<PropertyKey, Map<Literal, Array<AST>>>
+  otherwise?: { [K in Type]?: Array<AST> }
+}
+
+const candidateIndexCache = new WeakMap<ReadonlyArray<AST>, CandidateIndex>()
+
+/** @internal */
+function getIndex(types: ReadonlyArray<AST>): CandidateIndex {
+  let idx = candidateIndexCache.get(types)
+  if (idx) return idx
+
+  idx = {}
+  for (const a of types) {
+    const encoded = encodedAST(a)
+    const types = getCandidateTypes(encoded)
+    const sentinels = collectSentinels(encoded)
+
+    // by-type (always filled – cheap primary filter)
+    idx.byType ??= {}
+    for (const t of types) (idx.byType[t] ??= []).push(a)
+
+    if (sentinels?.length) { // discriminated variants
+      idx.bySentinel ??= new Map()
+      for (const { key, literal } of sentinels) {
+        let m = idx.bySentinel.get(key)
+        if (!m) idx.bySentinel.set(key, m = new Map())
+        let arr = m.get(literal)
+        if (!arr) m.set(literal, arr = [])
+        arr.push(a)
       }
-      return out.size > 0 ? out : undefined
+    } else { // non-discriminated
+      idx.otherwise ??= {}
+      for (const t of types) (idx.otherwise[t] ??= []).push(a)
     }
   }
-})
+
+  candidateIndexCache.set(types, idx)
+  return idx
+}
+
+function filterLiterals(input: any) {
+  return (ast: AST) => {
+    const encoded = encodedAST(ast)
+    return encoded._tag === "LiteralType" ?
+      encoded.literal === input
+      : encoded._tag === "UniqueSymbol" ?
+      encoded.symbol === input
+      : true
+  }
+}
 
 /**
  * The goal is to reduce the number of a union members that will be checked.
@@ -1467,38 +1524,25 @@ export const collectSentinels = memoize((ast: AST): ReadonlySet<Sentinel> | unde
  * @internal
  */
 export function getCandidates(input: any, types: ReadonlyArray<AST>): ReadonlyArray<AST> {
-  const type = getInputType(input)
-  if (type) {
-    return types.filter((ast) => {
-      const encoded = encodedAST(ast)
-      const types = getCandidateTypes(encoded)
-      const out = types === null || types === type || types.includes(type)
-      if (out) {
-        switch (encoded._tag) {
-          case "LiteralType":
-            return encoded.literal === input
-          case "UniqueSymbol":
-            return encoded.symbol === input
-        }
-        if (type === "object") {
-          const sentinels = collectSentinels(encoded)
-          if (sentinels) {
-            for (const sentinel of sentinels) {
-              if (Object.hasOwn(input, sentinel.key)) {
-                if (sentinel.literal !== input[sentinel.key]) {
-                  return false
-                }
-              } else if (!sentinel.isOptional) {
-                return false
-              }
-            }
-          }
+  const idx = getIndex(types)
+  const runtimeType: Type = input === null ? "null" : Array.isArray(input) ? "array" : typeof input
+
+  // 1. Try sentinel-based dispatch (most selective)
+  if (idx.bySentinel) {
+    const base = idx.otherwise?.[runtimeType] ?? []
+    if (runtimeType === "object" || runtimeType === "array") {
+      for (const [k, m] of idx.bySentinel) {
+        if (Object.hasOwn(input, k)) {
+          const match = m.get((input as any)[k])
+          if (match) return [...match, ...base].filter(filterLiterals(input))
         }
       }
-      return out
-    })
+    }
+    return base
   }
-  return types
+
+  // 2. Fallback: runtime-type dispatch only
+  return (idx.byType?.[runtimeType] ?? []).filter(filterLiterals(input))
 }
 
 /**
