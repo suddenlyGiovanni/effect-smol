@@ -1,14 +1,12 @@
 {
   "extends": "../../tsconfig.base.json",
   "include": ["src"],
-  "references": [
-    { "path": "../effect/tsconfig.src.json" },
-    { "path": "../platform-node-shared/tsconfig.src.json" }
-  ],
+  "exclude": ["src/**/.*.ts"],
+  "references": [{ "path": "../effect/tsconfig.src.json" }, { "path": "../platform-node-shared/tsconfig.src.json" }],
   "compilerOptions": {
     "tsBuildInfoFile": ".tsbuildinfo/src.tsbuildinfo",
+    "outDir": ".tsbuildinfo/src",
     "rootDir": "src",
-    "outDir": "build/src",
     "types": ["bun"]
   }
 }

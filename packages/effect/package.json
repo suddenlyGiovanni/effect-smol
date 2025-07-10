@@ -43,16 +43,14 @@
   },
   "scripts": {
     "codegen": "build-utils prepare-v4",
-    "build": "pnpm build-esm && pnpm build-annotate && pnpm build-cjs && build-utils pack-v4",
-    "build-esm": "tsc -b tsconfig.build.json",
-    "build-cjs": "babel build/esm --plugins @babel/transform-export-namespace-from --plugins @babel/transform-modules-commonjs --out-dir build/cjs --source-maps",
-    "build-annotate": "babel build/esm --plugins annotate-pure-calls --out-dir build/esm --source-maps",
+    "build": "tsc -b tsconfig.build.json && babel build --plugins annotate-pure-calls --out-dir build --source-maps && build-utils pack-v5",
     "test-types": "tstyche",
     "check": "tsc -b tsconfig.json",
     "test": "vitest",
     "coverage": "vitest --coverage"
   },
   "devDependencies": {
+    "@types/node": "^24.0.12",
     "ajv": "^8.17.1",
     "arktype": "^2.1.20",
     "ast-types": "^0.14.2",
@@ -62,6 +60,6 @@
   },
   "dependencies": {
     "@standard-schema/spec": "^1.0.0",
-    "fast-check": "^4.1.1"
+    "fast-check": "^4.2.0"
   }
 }
