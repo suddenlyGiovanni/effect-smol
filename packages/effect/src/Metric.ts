@@ -141,7 +141,7 @@ import * as Arr from "./Array.js"
 import * as Duration from "./Duration.js"
 import type { Effect } from "./Effect.js"
 import type { Exit } from "./Exit.js"
-import { dual } from "./Function.js"
+import { constUndefined, dual } from "./Function.js"
 import * as InternalEffect from "./internal/effect.js"
 import * as InternalMetric from "./internal/metric.js"
 import * as Layer from "./Layer.js"
@@ -1657,82 +1657,28 @@ export const CurrentMetricAttributesKey = "effect/Metric/CurrentMetricAttributes
  * @since 4.0.0
  * @category References
  */
-export class CurrentMetricAttributes extends ServiceMap.Reference(CurrentMetricAttributesKey, {
-  defaultValue: () => ({}) as Metric.AttributeSet
-}) {}
+export const CurrentMetricAttributes = ServiceMap.Reference<Metric.AttributeSet>(CurrentMetricAttributesKey, {
+  defaultValue: () => ({})
+})
 
 /**
  * Service key for the current metric registry context.
  *
- * @example
- * ```ts
- * import { Metric, Effect, Layer, Data } from "effect"
- *
- * class RegistryError extends Data.TaggedError("RegistryError")<{
- *   readonly operation: string
- * }> {}
- *
- * const program = Effect.gen(function* () {
- *   // The key is used internally by the Effect runtime to manage metric registry
- *   const key = Metric.CurrentMetricRegistryKey
- *   console.log("Registry key:", key) // "effect/Metric/CurrentMetricRegistry"
- *
- *   // Create a custom registry
- *   const customRegistry = new Map()
- *
- *   // Use with Layer to provide custom registry
- *   const layer = Layer.succeed(Metric.CurrentMetricRegistry, customRegistry)
- *
- *   return yield* Effect.gen(function* () {
- *     const counter = Metric.counter("test_counter")
- *     yield* Metric.update(counter, 1)
- *     return yield* Metric.value(counter)
- *   }).pipe(Effect.provide(layer))
- * })
- * ```
- *
  * @since 4.0.0
  * @category References
  */
-export const CurrentMetricRegistryKey = "effect/Metric/CurrentMetricRegistry" as const
+export const MetricRegistryKey = "effect/Metric/CurrentMetricRegistry" as const
 
 /**
- * Service class for managing the current metric registry context.
- *
- * @example
- * ```ts
- * import { Metric, Effect, Layer, Data } from "effect"
- *
- * class RegistryError extends Data.TaggedError("RegistryError")<{
- *   readonly operation: string
- * }> {}
- *
- * const program = Effect.gen(function* () {
- *   // Access the current metric registry
- *   const registry = yield* Metric.CurrentMetricRegistry
- *   console.log("Registry size:", registry.size)
- *
- *   // Create metrics and observe registry growth
- *   const counter = Metric.counter("requests")
- *   const gauge = Metric.gauge("memory_usage")
- *
- *   yield* Metric.update(counter, 1)
- *   yield* Metric.update(gauge, 1024)
- *
- *   // Check registry after adding metrics
- *   const updatedRegistry = yield* Metric.CurrentMetricRegistry
- *   console.log("Updated registry size:", updatedRegistry.size)
- *
- *   return updatedRegistry
- * })
- * ```
+ * Service class for accessing the current metric registry.
  *
  * @since 4.0.0
  * @category References
  */
-export class CurrentMetricRegistry extends ServiceMap.Reference(CurrentMetricRegistryKey, {
-  defaultValue: () => new Map<string, Metric.Metadata<any, any>>()
-}) {}
+export const MetricRegistry = ServiceMap.Reference<Map<string, Metric.Metadata<any, any>>>(
+  MetricRegistryKey,
+  { defaultValue: () => new Map() }
+)
 
 abstract class Metric$<in Input, out State> implements Metric<Input, State> {
   readonly "~effect/Metric" = "~effect/Metric"
@@ -1789,7 +1735,7 @@ abstract class Metric$<in Input, out State> implements Metric<Input, State> {
     attributes: Metric.Attributes | undefined
   ): Metric.Metadata<Input, State> {
     const key = makeKey(this, attributes)
-    const registry = ServiceMap.get(context, CurrentMetricRegistry)
+    const registry = ServiceMap.get(context, MetricRegistry)
     if (registry.has(key)) {
       return registry.get(key)!
     }
@@ -2054,7 +2000,7 @@ class SummaryMetric extends Metric$<readonly [value: number, timestamp: number],
     }
 
     const get = (context: ServiceMap.ServiceMap<never>) => {
-      const clock = ServiceMap.get(context, InternalEffect.CurrentClock)
+      const clock = ServiceMap.get(context, InternalEffect.ClockRef)
       const quantiles = snapshot(clock.unsafeCurrentTimeMillis())
       return { quantiles, count, min, max, sum }
     }
@@ -2504,7 +2450,7 @@ export const summary = (name: string, options: {
   mapInput(summaryWithTimestamp(name, options), (input, context) =>
     [
       input,
-      ServiceMap.get(context, InternalEffect.CurrentClock).unsafeCurrentTimeMillis()
+      ServiceMap.get(context, InternalEffect.ClockRef).unsafeCurrentTimeMillis()
     ] as [number, number])
 
 /**
@@ -3144,7 +3090,7 @@ export const dump: Effect<string> = InternalEffect.flatMap(InternalEffect.servic
  * @category Snapshotting
  */
 export const unsafeSnapshot = (services: ServiceMap.ServiceMap<never>): ReadonlyArray<Metric.Snapshot> => {
-  const registry = ServiceMap.get(services, CurrentMetricRegistry)
+  const registry = ServiceMap.get(services, MetricRegistry)
   return Array.from(registry.values()).map(({ hooks, ...meta }) => ({
     ...meta,
     state: hooks.get(services)
@@ -3518,9 +3464,10 @@ export interface FiberRuntimeMetricsService {
  * @since 4.0.0
  * @category Runtime Metrics
  */
-export class FiberRuntimeMetrics extends ServiceMap.Reference(InternalMetric.FiberRuntimeMetricsKey, {
-  defaultValue: (): FiberRuntimeMetricsService | undefined => undefined
-}) {}
+export const FiberRuntimeMetrics = ServiceMap.Reference<FiberRuntimeMetricsService | undefined>(
+  InternalMetric.FiberRuntimeMetricsKey,
+  { defaultValue: constUndefined }
+)
 
 /**
  * Default implementation of the fiber runtime metrics service.
