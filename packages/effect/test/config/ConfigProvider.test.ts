@@ -61,4 +61,26 @@ describe("ConfigProvider", () => {
         assert.strictEqual(yield* Config.String("fallback"), "value")
       }).pipe(Effect.provide(AddLayer)))
   })
+
+  describe("dotEnv", () => {
+    const Provider = ConfigProvider.layer(ConfigProvider.dotEnv()).pipe(
+      Layer.provide(FileSystem.layerNoop({
+        readFileString: () =>
+          Effect.succeed(`SHOUTING=value
+integer=123
+nested_config=hello
+secret=keepitsafe`)
+      }))
+    )
+
+    it.effect("reads config", () =>
+      Effect.gen(function*() {
+        assert.strictEqual(Redacted.value(yield* Config.Redacted("secret")), "keepitsafe")
+        assert.strictEqual(yield* Config.String("SHOUTING"), "value")
+        assert.strictEqual(yield* Config.Integer("integer"), 123)
+        assert.strictEqual(yield* Config.String("config").pipe(Config.nested("nested")), "hello")
+        const error = yield* Effect.flip(Config.String("fallback").asEffect())
+        assert.strictEqual(error.reason, "MissingData")
+      }).pipe(Effect.provide(Provider)))
+  })
 })

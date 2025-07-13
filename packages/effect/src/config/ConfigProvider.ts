@@ -406,15 +406,17 @@ export const orElse: {
  * @category Dotenv
  */
 export const dotEnv: (
-  path: string,
-  options?: { readonly pathDelimiter?: string | undefined } | undefined
+  options?: {
+    readonly path?: string | undefined
+    readonly pathDelimiter?: string | undefined
+  } | undefined
 ) => Effect.Effect<
   ConfigProvider,
   PlatformError,
   FileSystem.FileSystem
-> = Effect.fnUntraced(function*(path, options) {
+> = Effect.fnUntraced(function*(options) {
   const fs = yield* FileSystem.FileSystem
-  const content = yield* fs.readFileString(path)
+  const content = yield* fs.readFileString(options?.path ?? ".env")
   return fromEnv({
     environment: parseDotEnv(content),
     pathDelimiter: options?.pathDelimiter
