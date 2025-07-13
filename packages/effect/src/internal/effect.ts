@@ -77,7 +77,8 @@ import { version } from "./version.js"
 // Cause
 // ----------------------------------------------------------------------------
 
-class Interrupt extends FailureBase<"Interrupt"> implements Cause.Interrupt {
+/** @internal */
+export class Interrupt extends FailureBase<"Interrupt"> implements Cause.Interrupt {
   constructor(
     readonly fiberId: Option.Option<number>,
     annotations = new Map<string, unknown>()
@@ -117,6 +118,10 @@ class Interrupt extends FailureBase<"Interrupt"> implements Cause.Interrupt {
 }
 
 /** @internal */
+export const failureInterrupt = (fiberId?: number | undefined): Cause.Interrupt =>
+  new Interrupt(Option.fromNullable(fiberId))
+
+/** @internal */
 export const causeInterrupt = (
   fiberId?: number | undefined
 ): Cause.Cause<never> => new CauseImpl([new Interrupt(Option.fromNullable(fiberId))])
@@ -145,9 +150,10 @@ export const causeFilterDie = <E>(self: Cause.Cause<E>): Cause.Die | Filter.fail
   return failure ? failure : Filter.fail(self)
 }
 
-const causeFilterDefect = <E>(self: Cause.Cause<E>): unknown | Filter.fail<Cause.Cause<E>> => {
+/** @internal */
+export const causeFilterDefect = <E>(self: Cause.Cause<E>): {} | Filter.fail<Cause.Cause<E>> => {
   const failure = self.failures.find(failureIsDie)
-  return failure ? failure.defect : Filter.fail(self)
+  return failure ? failure.defect as {} : Filter.fail(self)
 }
 
 /** @internal */
@@ -160,21 +166,17 @@ export const causeFilterInterrupt = <E>(self: Cause.Cause<E>): Cause.Interrupt |
 }
 
 /** @internal */
-export const causeFilterInterruptor: <E>(self: Cause.Cause<E>) => number | Filter.fail<Cause.Cause<E>> = Filter
-  .composePassthrough(
-    causeFilterInterrupt,
-    (_) => _.fiberId._tag === "Some" ? _.fiberId.value : Filter.fail(_)
-  )
-
-/** @internal */
-export const causeFilterInterruptors = <E>(self: Cause.Cause<E>): ReadonlySet<number> | Filter.fail<Cause.Cause<E>> => {
-  const interruptors = new Set<number>()
-  for (const f of self.failures) {
-    if (f._tag === "Interrupt" && f.fiberId._tag === "Some") {
+export const causeFilterInterruptors = <E>(self: Cause.Cause<E>): Set<number> | Filter.fail<Cause.Cause<E>> => {
+  let interruptors: Set<number> | undefined
+  for (let i = 0; i < self.failures.length; i++) {
+    const f = self.failures[i]
+    if (f._tag !== "Interrupt") continue
+    interruptors ??= new Set()
+    if (f.fiberId._tag === "Some") {
       interruptors.add(f.fiberId.value)
     }
   }
-  return interruptors.size > 0 ? interruptors : Filter.fail(self)
+  return interruptors ? interruptors : Filter.fail(self)
 }
 
 /** @internal */
@@ -1571,7 +1573,13 @@ export const exitFilterCause = <A, E>(
 /** @internal */
 export const exitFilterError = Filter.composePassthrough(
   exitFilterCause,
-  (cause) => causeFilterError(cause)
+  causeFilterError
+)
+
+/** @internal */
+export const exitFilterDefect = Filter.composePassthrough(
+  exitFilterCause,
+  causeFilterDefect
 )
 
 /** @internal */
@@ -1937,7 +1945,7 @@ export const zipWith: {
 export const filterOrFailCause: {
   <A, E2, B, X>(
     filter: Filter.Filter<NoInfer<A>, B, X>,
-    orFailWith: (a: NoInfer<X>) => Cause.Cause<E2>
+    orFailWith: (a: X) => Cause.Cause<E2>
   ): <E, R>(self: Effect.Effect<A, E, R>) => Effect.Effect<B, E | E2, R>
   <A, E, R, E2, B, X>(
     self: Effect.Effect<A, E, R>,

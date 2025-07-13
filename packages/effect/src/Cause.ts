@@ -404,6 +404,24 @@ export const die: (defect: unknown) => Cause<never> = core.causeDie
 export const interrupt: (fiberId?: number | undefined) => Cause<never> = effect.causeInterrupt
 
 /**
+ * @category Failure
+ * @since 4.0.0
+ */
+export const failureFail = <E>(error: E): Fail<E> => new core.Fail(error)
+
+/**
+ * @category Failure
+ * @since 4.0.0
+ */
+export const failureDie = (defect: unknown): Die => new core.Die(defect)
+
+/**
+ * @category Failure
+ * @since 4.0.0
+ */
+export const failureInterrupt: (fiberId?: number | undefined) => Interrupt = effect.failureInterrupt
+
+/**
  * Tests if a `Cause` contains only interruptions.
  *
  * @example
@@ -516,12 +534,20 @@ export const filterError: <E>(self: Cause<E>) => E | Filter.fail<Cause<never>> =
 export const hasDie: <E>(self: Cause<E>) => boolean = effect.causeHasDie
 
 /**
- * Filters out the first defect from a `Cause`.
+ * Filters out the first Die failure from a `Cause`.
  *
  * @category filters
  * @since 4.0.0
  */
 export const filterDie: <E>(self: Cause<E>) => Die | Filter.fail<Cause<E>> = effect.causeFilterDie
+
+/**
+ * Filters out the first defect from a `Cause`.
+ *
+ * @category filters
+ * @since 4.0.0
+ */
+export const filterDefect: <E>(self: Cause<E>) => {} | Filter.fail<Cause<E>> = effect.causeFilterDefect
 
 /**
  * Tests if a `Cause` contains any interruptions.
@@ -554,7 +580,8 @@ export const filterInterrupt: <E>(self: Cause<E>) => Interrupt | Filter.fail<Cau
  * @since 4.0.0
  * @category filters
  */
-export const filterInterruptor: <E>(self: Cause<E>) => number | Filter.fail<Cause<E>> = effect.causeFilterInterruptor
+export const filterInterruptors: <E>(self: Cause<E>) => Set<number> | Filter.fail<Cause<E>> =
+  effect.causeFilterInterruptors
 
 /**
  * @since 4.0.0
