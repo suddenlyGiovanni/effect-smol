@@ -41,7 +41,7 @@ import type { Primitive } from "./core.js"
 import {
   args,
   causeAnnotate,
-  causeDie,
+  causeEmpty,
   causeFail,
   causeFromFailures,
   CauseImpl,
@@ -49,6 +49,7 @@ import {
   contAll,
   contE,
   CurrentSpanKey,
+  Die,
   evaluate,
   exitDie,
   exitFail,
@@ -416,11 +417,7 @@ const fiberIdStore = { id: 0 }
 const currentFiberUri = "effect/Fiber/currentFiber"
 
 /** @internal */
-export const getCurrentFiberOrUndefined = (): Fiber.Fiber<any, any> | undefined => (globalThis as any)[currentFiberUri]
-
-/** @internal */
-export const getCurrentFiber = (): Option.Option<Fiber.Fiber<any, any>> =>
-  Option.fromNullable((globalThis as any)[currentFiberUri])
+export const getCurrentFiber = (): Fiber.Fiber<any, any> | undefined => (globalThis as any)[currentFiberUri]
 
 const keepAlive = (() => {
   let count = 0
@@ -1081,7 +1078,10 @@ export const as: {
   <A, E, R, B>(
     self: Effect.Effect<A, E, R>,
     value: B
-  ): Effect.Effect<B, E, R> => map(self, (_) => value)
+  ): Effect.Effect<B, E, R> => {
+    const b = succeed(value)
+    return flatMap(self, (_) => b)
+  }
 )
 
 /** @internal */
@@ -2098,7 +2098,7 @@ export const forever: {
 ): Effect.Effect<never, E, R> =>
   whileLoop({
     while: constTrue,
-    body: constant(options?.autoYield ? flatMap(self, () => yieldNow) : self),
+    body: constant(options?.autoYield ? flatMap(self, (_) => yieldNow) : self),
     step: constVoid
   }) as any)
 
@@ -2811,10 +2811,16 @@ export const scopeTag: ServiceMap.Key<Scope.Scope, Scope.Scope> = ServiceMap.Key
 
 const ScopeProto = {
   [ScopeTypeId]: ScopeTypeId,
+  state: { _tag: "Empty" },
   close: fnUntraced(function*(this: Scope.Scope, exit_: Exit.Exit<any, any>) {
     if (this.state._tag === "Closed") return
+    const closed: Scope.Scope.State.Closed = { _tag: "Closed", exit: exit_ }
+    if (this.state._tag === "Empty") {
+      this.state = closed
+      return
+    }
     const { finalizers } = this.state
-    this.state = { _tag: "Closed", exit: exit_ }
+    this.state = closed
     if (finalizers.size === 0) {
       return
     } else if (finalizers.size === 1) {
@@ -2827,7 +2833,7 @@ const ScopeProto = {
       if (this.strategy === "sequential") {
         exits.push(yield* exit(finalizer(exit_)))
       } else {
-        fibers.push(unsafeFork(getCurrentFiberOrUndefined() as any, finalizer(exit_), true, true))
+        fibers.push(unsafeFork(getCurrentFiber() as any, finalizer(exit_), true, true))
       }
     }
     if (fibers.length > 0) {
@@ -2849,7 +2855,7 @@ export const scopeUnsafeFork = (scope: Scope.Scope, finalizerStrategy?: "sequent
     return newScope
   }
   const key = {}
-  scope.state.finalizers.set(key, (exit) => newScope.close(exit))
+  scopeUnsafeAddFinalizer(scope, key, (exit) => newScope.close(exit))
   scopeUnsafeAddFinalizer(newScope, key, (_) => sync(() => scopeUnsafeRemoveFinalizer(scope, key)))
   return newScope
 }
@@ -2860,11 +2866,11 @@ export const scopeAddFinalizerExit = (
   finalizer: (exit: Exit.Exit<any, any>) => Effect.Effect<unknown>
 ): Effect.Effect<void> => {
   return suspend(() => {
-    if (scope.state._tag === "Open") {
-      scope.state.finalizers.set({}, finalizer)
-      return void_
+    if (scope.state._tag === "Closed") {
+      return finalizer(scope.state.exit)
     }
-    return finalizer(scope.state.exit)
+    scopeUnsafeAddFinalizer(scope, {}, finalizer)
+    return void_
   })
 }
 
@@ -2880,7 +2886,9 @@ export const scopeUnsafeAddFinalizer = (
   key: {},
   finalizer: (exit: Exit.Exit<any, any>) => Effect.Effect<unknown>
 ): void => {
-  if (scope.state._tag === "Open") {
+  if (scope.state._tag === "Empty") {
+    scope.state = { _tag: "Open", finalizers: new Map([[key, finalizer]]) }
+  } else if (scope.state._tag === "Open") {
     scope.state.finalizers.set(key, finalizer)
   }
 }
@@ -2899,7 +2907,6 @@ export const scopeUnsafeRemoveFinalizer = (
 export const scopeUnsafeMake = (finalizerStrategy: "sequential" | "parallel" = "sequential"): Scope.Scope.Closeable => {
   const self = Object.create(ScopeProto)
   self.strategy = finalizerStrategy
-  self.state = { _tag: "Open", finalizers: new Map() }
   return self
 }
 
@@ -2965,13 +2972,34 @@ export const onExit: {
   <A, E, R, XE, XR>(
     self: Effect.Effect<A, E, R>,
     f: (exit: Exit.Exit<A, E>) => Effect.Effect<void, XE, XR>
+  ): Effect.Effect<A, E | XE, R | XR> => uninterruptibleMask((restore) => onExitInterruptible(restore(self), f))
+)
+
+/** @internal */
+export const onExitInterruptible: {
+  <A, E, XE, XR>(
+    f: (exit: Exit.Exit<A, E>) => Effect.Effect<void, XE, XR>
+  ): <R>(self: Effect.Effect<A, E, R>) => Effect.Effect<A, E | XE, R | XR>
+  <A, E, R, XE, XR>(
+    self: Effect.Effect<A, E, R>,
+    f: (exit: Exit.Exit<A, E>) => Effect.Effect<void, XE, XR>
+  ): Effect.Effect<A, E | XE, R | XR>
+} = dual(
+  2,
+  <A, E, R, XE, XR>(
+    self: Effect.Effect<A, E, R>,
+    f: (exit: Exit.Exit<A, E>) => Effect.Effect<void, XE, XR>
   ): Effect.Effect<A, E | XE, R | XR> =>
-    uninterruptibleMask((restore) =>
-      matchCauseEffect(restore(self), {
-        onFailure: (cause) => flatMap(internalCall(() => f(exitFailCause(cause))), () => failCause(cause)),
-        onSuccess: (a) => flatMap(internalCall(() => f(exitSucceed(a))), () => succeed(a))
-      })
-    )
+    matchCauseEffect(self, {
+      onFailure(cause) {
+        const exit = exitFailCause(cause)
+        return flatMap(f(exit), (_) => exit)
+      },
+      onSuccess(a) {
+        const exit = exitSucceed(a)
+        return flatMap(f(exit), (_) => exit)
+      }
+    })
 )
 
 /** @internal */
@@ -3070,31 +3098,30 @@ export const acquireUseRelease = <Resource, E, R, A, E2, R2, E3, R3>(
 export const cachedInvalidateWithTTL: {
   (timeToLive: Duration.DurationInput): <A, E, R>(
     self: Effect.Effect<A, E, R>
-  ) => Effect.Effect<[Effect.Effect<A, E>, Effect.Effect<void>], never, R>
+  ) => Effect.Effect<[Effect.Effect<A, E, R>, Effect.Effect<void>]>
   <A, E, R>(
     self: Effect.Effect<A, E, R>,
     timeToLive: Duration.DurationInput
-  ): Effect.Effect<[Effect.Effect<A, E>, Effect.Effect<void>], never, R>
+  ): Effect.Effect<[Effect.Effect<A, E, R>, Effect.Effect<void>]>
 } = dual(2, <A, E, R>(
   self: Effect.Effect<A, E, R>,
   ttl: Duration.DurationInput
-): Effect.Effect<[Effect.Effect<A, E>, Effect.Effect<void>], never, R> =>
-  withFiber((fiber) => {
-    const services = fiber.services as ServiceMap.ServiceMap<R>
+): Effect.Effect<[Effect.Effect<A, E, R>, Effect.Effect<void>]> =>
+  sync(() => {
     const ttlMillis = Duration.toMillis(ttl)
     const latch = unsafeMakeLatch(false)
     let expiresAt = 0
     let running = false
     let exit: Exit.Exit<A, E> | undefined
     const wait = flatMap(latch.await, () => exit!)
-    return succeed([
+    return [
       withFiber((fiber) => {
         const now = fiber.getRef(ClockRef).unsafeCurrentTimeMillis()
         if (running || now < expiresAt) return exit ?? wait
         running = true
         latch.unsafeClose()
         exit = undefined
-        return onExit(provideServices(self, services), (exit_) => {
+        return onExit(self, (exit_) => {
           running = false
           expiresAt = now + ttlMillis
           exit = exit_
@@ -3106,28 +3133,28 @@ export const cachedInvalidateWithTTL: {
         latch.unsafeClose()
         exit = undefined
       })
-    ])
+    ]
   }))
 
 /** @internal */
 export const cachedWithTTL: {
   (
     timeToLive: Duration.DurationInput
-  ): <A, E, R>(self: Effect.Effect<A, E, R>) => Effect.Effect<Effect.Effect<A, E>, never, R>
+  ): <A, E, R>(self: Effect.Effect<A, E, R>) => Effect.Effect<Effect.Effect<A, E, R>>
   <A, E, R>(
     self: Effect.Effect<A, E, R>,
     timeToLive: Duration.DurationInput
-  ): Effect.Effect<Effect.Effect<A, E>, never, R>
+  ): Effect.Effect<Effect.Effect<A, E, R>>
 } = dual(
   2,
   <A, E, R>(
     self: Effect.Effect<A, E, R>,
     timeToLive: Duration.DurationInput
-  ): Effect.Effect<Effect.Effect<A, E>, never, R> => map(cachedInvalidateWithTTL(self, timeToLive), (tuple) => tuple[0])
+  ): Effect.Effect<Effect.Effect<A, E, R>> => map(cachedInvalidateWithTTL(self, timeToLive), (tuple) => tuple[0])
 )
 
 /** @internal */
-export const cached = <A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<Effect.Effect<A, E>, never, R> =>
+export const cached = <A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<Effect.Effect<A, E, R>> =>
   cachedWithTTL(self, Duration.infinity)
 
 // ----------------------------------------------------------------------------
@@ -3382,7 +3409,7 @@ export const forEach: {
           } catch (err) {
             failed = true
             length = index
-            failures.push(causeDie(err).failures[0])
+            failures.push(new Die(err))
             fibers.forEach((fiber) => fiber.unsafeInterrupt(parent.id, span))
           }
         }
@@ -3643,7 +3670,7 @@ export const forkIn: {
     withFiber((parent) => {
       const fiber = unsafeFork(parent, self, options?.startImmediately, true, options?.uninterruptible)
       if (!(fiber as FiberImpl<any, any>)._exit) {
-        if (scope.state._tag === "Open") {
+        if (scope.state._tag !== "Closed") {
           const key = {}
           const finalizer = () => withFiberId((interruptor) => interruptor === fiber.id ? void_ : fiberInterrupt(fiber))
           scopeUnsafeAddFinalizer(scope, key, finalizer)
@@ -3693,6 +3720,8 @@ export const runForkWith = <R>(services: ServiceMap.ServiceMap<R>) =>
   serviceMap.set(Scheduler.Scheduler.key, options?.scheduler ?? new Scheduler.MixedScheduler())
   const fiber = makeFiber<A, E>(ServiceMap.unsafeMake(serviceMap))
   fiber.evaluate(effect as any)
+  if (fiber._exit) return fiber
+
   if (options?.signal) {
     if (options.signal.aborted) {
       fiber.unsafeInterrupt()
@@ -3704,6 +3733,27 @@ export const runForkWith = <R>(services: ServiceMap.ServiceMap<R>) =>
   }
   return fiber
 }
+
+/** @internal */
+export const fiberRunIn: {
+  (scope: Scope.Scope): <A, E>(self: Fiber.Fiber<A, E>) => Fiber.Fiber<A, E>
+  <A, E>(
+    self: Fiber.Fiber<A, E>,
+    scope: Scope.Scope
+  ): Fiber.Fiber<A, E>
+} = dual(2, <A, E>(
+  self: FiberImpl<A, E>,
+  scope: Scope.Scope
+): Fiber.Fiber<A, E> => {
+  if (scope.state._tag === "Closed") {
+    self.unsafeInterrupt(self.id)
+    return self
+  }
+  const key = {}
+  scopeUnsafeAddFinalizer(scope, {}, () => fiberInterrupt(self))
+  self.addObserver(() => scopeUnsafeRemoveFinalizer(scope, key))
+  return self
+})
 
 /** @internal */
 export const runFork: <A, E>(
@@ -4500,7 +4550,7 @@ export const logWithLevel = (level?: LogLevel.LogLevel) =>
     }
   }
   if (cause === undefined) {
-    cause = causeFromFailures([])
+    cause = causeEmpty
   }
   return withFiber((fiber) => {
     const logLevel = level ?? fiber.getRef(CurrentLogLevel)
