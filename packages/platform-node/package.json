@@ -58,7 +58,9 @@
     "coverage": "vitest --coverage"
   },
   "dependencies": {
-    "@effect/platform-node-shared": "workspace:^"
+    "@effect/platform-node-shared": "workspace:^",
+    "mime": "^4.0.7",
+    "undici": "^7.11.0"
   },
   "peerDependencies": {
     "effect": "workspace:^"

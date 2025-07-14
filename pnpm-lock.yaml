@@ -234,6 +234,12 @@ importers:
       '@effect/platform-node-shared':
         specifier: workspace:^
         version: link:../platform-node-shared
+      mime:
+        specifier: ^4.0.7
+        version: 4.0.7
+      undici:
+        specifier: ^7.11.0
+        version: 7.11.0
     devDependencies:
       '@types/node':
         specifier: ^24.0.12
@@ -2932,6 +2938,11 @@ packages:
     resolution: {integrity: sha512-PXwfBhYu0hBCPw8Dn0E+WDYb7af3dSLVWKi3HGv84IdF4TyFoC0ysxFd0Goxw7nSv4T/PzEJQxsYsEiFCKo2BA==}
     engines: {node: '>=8.6'}
 
+  mime@4.0.7:
+    resolution: {integrity: sha512-2OfDPL+e03E0LrXaGYOtTFIYhiuzep94NSsuhrNULq+stylcJedcHdzHtz0atMUuGwJfFYs0YL5xeC/Ca2x0eQ==}
+    engines: {node: '>=16'}
+    hasBin: true
+
   mimic-fn@2.1.0:
     resolution: {integrity: sha512-OqbOk5oEQeAZ8WXWydlu9HJjz9WVdEIvamMCcXmuqUYjTknH/sqsWvhQ3vgwKFRR1HpjvNBKQ37nbJgYzGqGcg==}
     engines: {node: '>=6'}
@@ -3861,6 +3872,10 @@ packages:
 
   undici-types@7.8.0:
     resolution: {integrity: sha512-9UJ2xGDvQ43tYyVMpuHlsgApydB8ZKfVYTsLDhXkFL/6gfkp+U8xTGdh8pMJv1SpZna0zxG1DwsKZsreLbXBxw==}
+
+  undici@7.11.0:
+    resolution: {integrity: sha512-heTSIac3iLhsmZhUCjyS3JQEkZELateufzZuBaVM5RHXdSBMb1LPMQf5x+FH7qjsZYDP0ttAc3nnVpUB+wYbOg==}
+    engines: {node: '>=20.18.1'}
 
   universalify@0.1.2:
     resolution: {integrity: sha512-rBJeI5CXAlmy1pV+617WB9J63U6XcazHHF2f2dbJix4XzpUF0RS3Zbj0FGIOCAva5P/d/GBOYaACQ1w+0azUkg==}
@@ -7023,6 +7038,8 @@ snapshots:
       braces: 3.0.3
       picomatch: 2.3.1
 
+  mime@4.0.7: {}
+
   mimic-fn@2.1.0: {}
 
   minimatch@10.0.3:
@@ -7989,6 +8006,8 @@ snapshots:
     optional: true
 
   undici-types@7.8.0: {}
+
+  undici@7.11.0: {}
 
   universalify@0.1.2: {}
 
