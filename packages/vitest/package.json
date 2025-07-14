@@ -15,7 +15,6 @@
   },
   "sideEffects": [],
   "main": "./src/index.ts",
-  "types": "./src/index.ts",
   "exports": {
     "./package.json": "./package.json",
     ".": "./src/index.ts",
@@ -30,17 +29,10 @@
   "publishConfig": {
     "provenance": true,
     "main": "./dist/index.js",
-    "types": "./dist/index.d.ts",
     "exports": {
       "./package.json": "./package.json",
-      ".": {
-        "default": "./dist/index.js",
-        "types": "./dist/index.d.ts"
-      },
-      "./*": {
-        "default": "./dist/*.js",
-        "types": "./dist/*.d.ts"
-      },
+      ".": "./dist/index.js",
+      "./*": "./dist/*.js",
       "./internal/*": null,
       "./*/index": null
     }
