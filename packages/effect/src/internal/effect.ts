@@ -3129,6 +3129,7 @@ export const cachedInvalidateWithTTL: {
 ): Effect.Effect<[Effect.Effect<A, E, R>, Effect.Effect<void>]> =>
   sync(() => {
     const ttlMillis = Duration.toMillis(ttl)
+    const isFinite = Number.isFinite(ttlMillis)
     const latch = unsafeMakeLatch(false)
     let expiresAt = 0
     let running = false
@@ -3136,7 +3137,7 @@ export const cachedInvalidateWithTTL: {
     const wait = flatMap(latch.await, () => exit!)
     return [
       withFiber((fiber) => {
-        const now = fiber.getRef(ClockRef).unsafeCurrentTimeMillis()
+        const now = isFinite ? fiber.getRef(ClockRef).unsafeCurrentTimeMillis() : 0
         if (running || now < expiresAt) return exit ?? wait
         running = true
         latch.unsafeClose()
