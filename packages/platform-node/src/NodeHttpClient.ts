@@ -28,6 +28,28 @@ import * as NodeStream from "./NodeStream.js"
 import * as Undici from "./Undici.js"
 
 // -----------------------------------------------------------------------------
+// Fetch
+// -----------------------------------------------------------------------------
+
+export {
+  /**
+   * @since 1.0.0
+   * @category Fetch
+   */
+  Fetch,
+  /**
+   * @since 1.0.0
+   * @category Fetch
+   */
+  layer as layerFetch,
+  /**
+   * @since 1.0.0
+   * @category Fetch
+   */
+  RequestInit
+} from "effect/unstable/http/FetchHttpClient"
+
+// -----------------------------------------------------------------------------
 // Undici
 // -----------------------------------------------------------------------------
 
@@ -321,7 +343,7 @@ export const layerAgent: Layer.Layer<HttpAgent> = layerAgentOptions()
  * @since 1.0.0
  * @category node:http
  */
-export const makeHttp = Effect.gen(function*() {
+export const makeNodeHttp = Effect.gen(function*() {
   const agent = yield* HttpAgent
   return Client.make((request, url, signal) => {
     const nodeRequest = url.protocol === "https:" ?
@@ -519,10 +541,14 @@ class NodeHttpResponse extends NodeHttpIncomingMessage<Error.ResponseError> impl
  * @since 1.0.0
  * @category node:http
  */
-export const layerHttpNoAgent: Layer.Layer<Client.HttpClient, never, HttpAgent> = Client.layerMergedServices(makeHttp)
+export const layerNodeHttpNoAgent: Layer.Layer<
+  Client.HttpClient,
+  never,
+  HttpAgent
+> = Client.layerMergedServices(makeNodeHttp)
 
 /**
  * @since 1.0.0
  * @category node:http
  */
-export const layerHttp: Layer.Layer<Client.HttpClient> = Layer.provide(layerHttpNoAgent, layerAgent)
+export const layerNodeHttp: Layer.Layer<Client.HttpClient> = Layer.provide(layerNodeHttpNoAgent, layerAgent)

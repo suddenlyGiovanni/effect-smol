@@ -39,8 +39,12 @@ const JsonPlaceholder = ServiceMap.Key<JsonPlaceholder>("test/JsonPlaceholder")
 const JsonPlaceholderLive = Layer.effect(JsonPlaceholder, makeJsonPlaceholder)
 ;[
   {
+    name: "fetch",
+    layer: NodeClient.layerFetch
+  },
+  {
     name: "node:http",
-    layer: NodeClient.layerHttp
+    layer: NodeClient.layerNodeHttp
   },
   {
     name: "undici",
