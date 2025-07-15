@@ -17,6 +17,62 @@ In general, Schema v4 requires more explicit decisions from the user about which
 
 Ultimately, the intent is to eliminate the need for two separate paths like in version 3 (Effect as the full-featured version and Micro for more constrained use cases).
 
+## Summary
+
+### 1. Design Goals
+
+- **Smaller bundles & opt‑in features** – defaults like issue formatting moved out of the core; you explicitly import what you use.
+- **Keep v3 names when possible** while borrowing ergonomics from Zod v4, so migrating users feel at home.
+
+### 2. Core Type Model
+
+- `Bottom<…>` now tracks **14 type parameters** giving fine‑grained control over mutability, optionality, defaults, encoded/decoded shapes, etc.
+- Separate requirement type params **`RD` / `RE`** let decoding and encoding depend on different service environments.
+
+### 3. Encoding / Decoding
+
+- **Default JSON codec generator**: `Serializer.json(schema)` does round‑trip‑safe network serialization (Maps → pairs, Options → arrays, Dates → ISO strings, etc.).
+- **Explicit helpers**: `Schema.UnknownFromJsonString`, `Schema.fromJsonString`.
+
+### 4. Schema Algebra Goodies
+
+- `Schema.flip` ‑ swap input/output types (encode ≙ decode of the flipped schema).
+- **Redesigned constructors** (`makeSync`) everywhere, including unions, with smart handling of brands / refinements / defaults (sync or effectful).
+- **Optional & mutable keys** via `Schema.optionalKey` / `Schema.mutableKey`; nested default‑value resolution.
+- **Derivation APIs** for structs, tuples, unions (`mapFields`, `mapElements`, `mapMembers`, etc.) to pick/omit/evolve/rename without losing checks.
+
+### 5. Validation Pipeline
+
+- Filters (`Check`) are **first‑class values**:
+  - chainable without losing original schema type info,
+  - reusable (groups, factories),
+  - structural vs element filters,
+  - `abort` wrapper to short‑circuit,
+  - multi‑issue reporting with `{ errors: "all" }`.
+
+### 6. Transformations
+
+- Now standalone objects (`Transformation<T,E,RD,RE>`) you attach with `Schema.decode`, `Schema.decodeTo`, etc.—composable like optics.
+- Passthrough helpers (`passthrough`, `passthroughSubtype`, `passthroughSupertype`) ease schema‑to‑schema transformations.
+
+### 7. Data Types Beyond Plain Structs
+
+- **Opaque structs & classes** – wrap a `Struct` in a class for nominal typing; `Schema.Class` when you need methods/constructors/equality.
+- **Tagged structs / tagged unions** helpers (`Schema.TaggedStruct`, `Schema.TaggedUnion`, `Schema.asTaggedUnion`) with auto‑generated guards, matchers, helpers.
+
+### 8. Tooling
+
+- **Middlewares** – intercept decoding/encoding, supply services, or provide fallbacks.
+- Generators:
+  - **JSON Schema** exporter with override hooks and per‑check fragments.
+  - **Fast‑Check Arbitrary** (`ToArbitrary`), **Equivalence** (`ToEquivalence`) derivation.
+
+- **Formatters**: Tree (debug), StandardSchemaV1 (i18n‑friendly hooks), Structured (machine‑consumable).
+
+### 9. Misc
+
+- **UniqueArray**, **TemplateLiteral** & parser, index‑signature merging, key transforms on records, generics are now covariant & simpler.
+
 ## Model
 
 A "schema" in is a strongly typed wrapper around an untyped AST (abstract syntax tree) node.
@@ -1134,7 +1190,7 @@ type Encoded = {
     readonly d?: string | null | undefined;
 }
 */
-export type Encoded = typeof schema.Encoded
+type Encoded = typeof schema.Encoded
 
 /*
 type Type = {
@@ -1144,7 +1200,7 @@ type Type = {
     readonly d?: number | null | undefined;
 }
 */
-export type Type = typeof schema.Type
+type Type = typeof schema.Type
 ```
 
 #### Omitting Values When Transforming Optional Fields
@@ -1169,14 +1225,14 @@ type Encoded = {
     readonly a?: string | undefined;
 }
 */
-export type Encoded = typeof schema.Encoded
+type Encoded = typeof schema.Encoded
 
 /*
 type Type = {
     readonly a?: number;
 }
 */
-export type Type = typeof schema.Type
+type Type = typeof schema.Type
 ```
 
 #### Representing Optional Fields with never Type
@@ -1193,41 +1249,44 @@ type Encoded = {
     readonly a?: never;
 }
 */
-export type Encoded = typeof schema.Encoded
+type Encoded = typeof schema.Encoded
 
 /*
 type Type = {
     readonly a?: never;
 }
 */
-export type Type = typeof schema.Type
+type Type = typeof schema.Type
 ```
 
-### Decoding / Encoding with Default Values
+### Decoding Defaults
 
-**Example**
+You can assign default values to fields during decoding using:
+
+- `Schema.withDecodingDefaultKey`: for optional fields
+- `Schema.withDecodingDefault`: for optional or undefined fields
+
+In both cases, the provided value must be of the **encoded** type, and it is used when:
+
+1. the field is missing, or
+2. the field is explicitly `undefined`
+
+**Example** (Providing a default for a missing or undefined value)
 
 ```ts
-import { Getter, Schema } from "effect/schema"
+import { Schema } from "effect/schema"
 
 const schema = Schema.Struct({
-  a: Schema.optional(Schema.FiniteFromString).pipe(
-    Schema.decodeTo(Schema.Number, {
-      decode: Getter.withDefault(() => 1),
-      encode: Getter.passthrough()
-    })
-  )
+  a: Schema.FiniteFromString.pipe(Schema.withDecodingDefault(() => "1"))
 })
 
 //     ┌─── { readonly a?: string | undefined; }
 //     ▼
-export type Encoded = typeof schema.Encoded
+type Encoded = typeof schema.Encoded
 
 //     ┌─── { readonly a: number; }
 //     ▼
-export type Type = typeof schema.Type
-
-// Decoding examples with default applied
+type Type = typeof schema.Type
 
 console.log(Schema.decodeUnknownSync(schema)({}))
 // Output: { a: 1 }
@@ -1239,19 +1298,76 @@ console.log(Schema.decodeUnknownSync(schema)({ a: "2" }))
 // Output: { a: 2 }
 ```
 
-#### Exact Optional Property with Nullability
+#### Nested Decoding Defaults
+
+You can also apply decoding defaults within nested structures.
+
+**Example** (Nested struct with defaults for missing or undefined fields)
+
+```ts
+import { Schema } from "effect/schema"
+
+const schema = Schema.Struct({
+  a: Schema.Struct({
+    b: Schema.FiniteFromString.pipe(Schema.withDecodingDefault(() => "1"))
+  }).pipe(Schema.withDecodingDefault(() => ({})))
+})
+
+/*
+type Encoded = {
+    readonly a?: {
+        readonly b?: string | undefined;
+    } | undefined;
+}
+*/
+type Encoded = typeof schema.Encoded
+
+/*
+type Type = {
+    readonly a: {
+        readonly b: number;
+    };
+}
+*/
+type Type = typeof schema.Type
+
+console.log(Schema.decodeUnknownSync(schema)({}))
+// Output: { a: { b: 1 } }
+
+console.log(Schema.decodeUnknownSync(schema)({ a: undefined }))
+// Output: { a: { b: 1 } }
+
+console.log(Schema.decodeUnknownSync(schema)({ a: {} }))
+// Output: { a: { b: 1 } }
+
+console.log(Schema.decodeUnknownSync(schema)({ a: { b: undefined } }))
+// Output: { a: { b: 1 } }
+
+console.log(Schema.decodeUnknownSync(schema)({ a: { b: "2" } }))
+// Output: { a: { b: 2 } }
+```
+
+### Manual Decoding Defaults
+
+If the defaulting logic is more specific than just handling `undefined` or missing values, you can use `Schema.decodeTo` to apply custom fallback rules.
+
+This is useful when you need to account for values like `null` or other invalid states.
+
+**Example** (Providing a fallback when value is `null` or missing)
 
 ```ts
 import { Option, Predicate } from "effect"
 import { Getter, Schema } from "effect/schema"
 
 const schema = Schema.Struct({
-  a: Schema.optionalKey(Schema.NullOr(Schema.FiniteFromString)).pipe(
-    Schema.decodeTo(Schema.Number, {
+  a: Schema.optionalKey(Schema.NullOr(Schema.String)).pipe(
+    Schema.decodeTo(Schema.FiniteFromString, {
       decode: Getter.mapOptional((oe) =>
         oe.pipe(
+          // remove null values
           Option.filter(Predicate.isNotNull),
-          Option.orElseSome(() => 1)
+          // default to "1" if none
+          Option.orElseSome(() => "1")
         )
       ),
       encode: Getter.passthrough()
@@ -1259,13 +1375,13 @@ const schema = Schema.Struct({
   )
 })
 
-//     ┌─── { readonly a?: string | null | undefined; }
+//     ┌─── { readonly a?: string | null; }
 //     ▼
-export type Encoded = typeof schema.Encoded
+type Encoded = typeof schema.Encoded
 
 //     ┌─── { readonly a: number; }
 //     ▼
-export type Type = typeof schema.Type
+type Type = typeof schema.Type
 
 console.log(Schema.decodeUnknownSync(schema)({}))
 // Output: { a: 1 }
@@ -1280,19 +1396,21 @@ console.log(Schema.decodeUnknownSync(schema)({ a: "2" }))
 // Output: { a: 2 }
 ```
 
-#### Optional Property with Nullability
+**Example** (Providing a fallback when value is `null`, `undefined`, or missing)
 
 ```ts
 import { Option, Predicate } from "effect"
 import { Getter, Schema } from "effect/schema"
 
 const schema = Schema.Struct({
-  a: Schema.optional(Schema.NullOr(Schema.FiniteFromString)).pipe(
-    Schema.decodeTo(Schema.Number, {
+  a: Schema.optional(Schema.NullOr(Schema.String)).pipe(
+    Schema.decodeTo(Schema.FiniteFromString, {
       decode: Getter.mapOptional((oe) =>
         oe.pipe(
+          // remove null and undefined
           Option.filter(Predicate.isNotNullish),
-          Option.orElseSome(() => 1)
+          // default to "1" if none
+          Option.orElseSome(() => "1")
         )
       ),
       encode: Getter.passthrough()
@@ -1302,11 +1420,11 @@ const schema = Schema.Struct({
 
 //     ┌─── { readonly a?: string | null | undefined; }
 //     ▼
-export type Encoded = typeof schema.Encoded
+type Encoded = typeof schema.Encoded
 
 //     ┌─── { readonly a: number; }
 //     ▼
-export type Type = typeof schema.Type
+type Type = typeof schema.Type
 
 console.log(Schema.decodeUnknownSync(schema)({}))
 // Output: { a: 1 }
@@ -1343,7 +1461,7 @@ const Product = Schema.Struct({
 
 //     ┌─── { readonly quantity?: string; }
 //     ▼
-export type Encoded = typeof Product.Encoded
+type Encoded = typeof Product.Encoded
 
 //     ┌─── { readonly quantity: Option<number>; }
 //     ▼
@@ -1385,7 +1503,7 @@ const Product = Schema.Struct({
 
 //     ┌─── { readonly quantity?: string; }
 //     ▼
-export type Encoded = typeof Product.Encoded
+type Encoded = typeof Product.Encoded
 
 //     ┌─── { readonly quantity: Option<number>; }
 //     ▼
@@ -1427,7 +1545,7 @@ const Product = Schema.Struct({
 
 //     ┌─── { readonly quantity?: string | null; }
 //     ▼
-export type Encoded = typeof Product.Encoded
+type Encoded = typeof Product.Encoded
 
 //     ┌─── { readonly quantity: Option<number>; }
 //     ▼
@@ -1466,7 +1584,7 @@ const Product = Schema.Struct({
 
 //     ┌─── { readonly quantity?: string | null | undefined; }
 //     ▼
-export type Encoded = typeof Product.Encoded
+type Encoded = typeof Product.Encoded
 
 //     ┌─── { readonly quantity: Option<number>; }
 //     ▼
@@ -1587,7 +1705,7 @@ type Type = {
     readonly a: number;
 }
 */
-export type Type = typeof schema.Type
+type Type = typeof schema.Type
 
 /*
 type Encoded = {
@@ -1595,7 +1713,7 @@ type Encoded = {
     readonly a: number;
 }
 */
-export type Encoded = typeof schema.Encoded
+type Encoded = typeof schema.Encoded
 ```
 
 If you want the record part to be mutable, you can wrap it in `Schema.mutable`.
@@ -1616,7 +1734,7 @@ type Type = {
     readonly a: number;
 }
 */
-export type Type = typeof schema.Type
+type Type = typeof schema.Type
 
 /*
 type Encoded = {
@@ -1624,7 +1742,7 @@ type Encoded = {
     readonly a: number;
 }
 */
-export type Encoded = typeof schema.Encoded
+type Encoded = typeof schema.Encoded
 ```
 
 ### 🆕 Deriving Structs
@@ -2291,14 +2409,14 @@ type Type = {
     [x: string]: number;
 }
 */
-export type Type = typeof schema.Type
+type Type = typeof schema.Type
 
 /*
 type Encoded = {
     [x: string]: number;
 }
 */
-export type Encoded = typeof schema.Encoded
+type Encoded = typeof schema.Encoded
 ```
 
 ### Literal Structs
@@ -2318,7 +2436,7 @@ type Type = {
     readonly b: number;
 }
 */
-export type Type = typeof schema.Type
+type Type = typeof schema.Type
 ```
 
 #### Mutable Keys
@@ -2338,7 +2456,7 @@ type Type = {
     b: number;
 }
 */
-export type Type = typeof schema.Type
+type Type = typeof schema.Type
 ```
 
 #### Optional Keys
@@ -2358,7 +2476,7 @@ type Type = {
     readonly b?: number;
 }
 */
-export type Type = typeof schema.Type
+type Type = typeof schema.Type
 ```
 
 ## Tuples
@@ -2380,12 +2498,12 @@ export const schema = Schema.TupleWithRest(Schema.Tuple([Schema.FiniteFromString
 /*
 type Type = readonly [number, string, ...boolean[], string]
 */
-export type Type = typeof schema.Type
+type Type = typeof schema.Type
 
 /*
 type Encoded = readonly [string, string, ...boolean[], string]
 */
-export type Encoded = typeof schema.Encoded
+type Encoded = typeof schema.Encoded
 ```
 
 ### Element Annotations
@@ -3768,6 +3886,69 @@ const From = Schema.String
 const To = Schema.Number
 
 const schema = From.pipe(Schema.decodeTo(To, Transformation.passthrough({ strict: false })))
+```
+
+### Managing Optional Keys
+
+You can control how optional values are handled during transformations using the `Transformation.transformOptional` helper.
+
+This helper works with `Option<E>` and returns an `Option<T>`, where:
+
+- `E` is the encoded type
+- `T` is the decoded type
+
+This function is useful when dealing with optional values that may be present or missing during decoding or encoding.
+
+If the input is `Option.none()`, it means the value is not provided.
+If it is `Option.some(value)`, then the transformation logic is applied to `value`.
+
+You control the optionality of the output by returning an `Option`:
+
+- `Option.none()`: exclude the key from the output
+- `Option.some(transformedValue)`: include the transformed value
+
+**Example** (Optional string key transformed to `Option<NonEmptyString>`)
+
+```ts
+import { Option } from "effect"
+import { Schema, Transformation } from "effect/schema"
+
+const OptionFromNonEmptyString = Schema.optionalKey(Schema.String).pipe(
+  Schema.decodeTo(
+    Schema.Option(Schema.NonEmptyString),
+    Transformation.transformOptional({
+      // Convert empty strings to None, and non-empty strings to Some(value)
+      decode: (oe) =>
+        Option.isSome(oe) && oe.value !== "" ? Option.some(Option.some(oe.value)) : Option.some(Option.none()),
+
+      // Flatten nested Options back to a single optional string
+      encode: (ot) => Option.flatten(ot)
+    })
+  )
+)
+
+const schema = Schema.Struct({
+  foo: OptionFromNonEmptyString
+})
+
+// Decoding examples
+
+console.log(Schema.decodeUnknownSync(schema)({}))
+// Output: { foo: None }
+
+console.log(Schema.decodeUnknownSync(schema)({ foo: "" }))
+// Output: { foo: None }
+
+console.log(Schema.decodeUnknownSync(schema)({ foo: "hi" }))
+// Output: { foo: Some("hi") }
+
+// Encoding examples
+
+console.log(Schema.encodeSync(schema)({ foo: Option.none() }))
+// Output: {}
+
+console.log(Schema.encodeSync(schema)({ foo: Option.some("hi") }))
+// Output: { foo: "hi" }
 ```
 
 ## Generics Improvements
