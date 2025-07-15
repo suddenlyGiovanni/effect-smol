@@ -1,6 +1,6 @@
 import * as Duration from "../../Duration.js"
 import * as Effect from "../../Effect.js"
-import * as FiberSet from "../../FiberSet.js"
+import * as Fiber from "../../Fiber.js"
 import * as Num from "../../Number.js"
 import * as Option from "../../Option.js"
 import * as Schedule from "../../Schedule.js"
@@ -106,19 +106,15 @@ export const make: (
       package: "@effect/opentelemetry",
       module: options.label
     }),
-    Effect.forkIn(scope),
-    Effect.interruptible
+    Effect.forkIn(scope)
   )
 
-  const runFork = yield* FiberSet.makeRuntime().pipe(
-    Effect.interruptible
-  )
   return {
     push(data) {
       if (disabled) return
       buffer.push(data)
       if (options.maxBatchSize !== "disabled" && buffer.length >= options.maxBatchSize) {
-        runFork(runExport)
+        Fiber.runIn(Effect.runFork(runExport), scope)
       }
     }
   }
