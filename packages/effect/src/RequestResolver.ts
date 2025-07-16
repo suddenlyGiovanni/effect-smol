@@ -833,7 +833,7 @@ export const withSpan: {
     name: string,
     options?: Tracer.SpanOptions | ((entries: NonEmptyArray<Request.Entry<A>>) => Tracer.SpanOptions) | undefined
   ): RequestResolver<A>
-} = dual(2, <A extends Request.Any>(
+} = dual((args) => isRequestResolver(args[0]), <A extends Request.Any>(
   self: RequestResolver<A>,
   name: string,
   options?: Tracer.SpanOptions | ((entries: NonEmptyArray<Request.Entry<A>>) => Tracer.SpanOptions) | undefined
