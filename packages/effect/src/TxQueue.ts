@@ -727,18 +727,20 @@ export const offerAll: {
 } = dual(
   2,
   <A, E>(self: TxEnqueue<A, E>, values: Iterable<A>): Effect.Effect<Chunk.Chunk<A>> =>
-    Effect.gen(function*() {
-      const rejected: Array<A> = []
+    Effect.atomic(
+      Effect.gen(function*() {
+        const rejected: Array<A> = []
 
-      for (const value of values) {
-        const accepted = yield* offer(self, value)
-        if (!accepted) {
-          rejected.push(value)
+        for (const value of values) {
+          const accepted = yield* offer(self, value)
+          if (!accepted) {
+            rejected.push(value)
+          }
         }
-      }
 
-      return Chunk.fromIterable(rejected)
-    })
+        return Chunk.fromIterable(rejected)
+      })
+    )
 )
 
 /**
@@ -826,21 +828,23 @@ export const take = <A, E>(self: TxDequeue<A, E>): Effect.Effect<A, E> =>
  * @category combinators
  */
 export const poll = <A, E>(self: TxDequeue<A, E>): Effect.Effect<Option.Option<A>> =>
-  Effect.gen(function*() {
-    const state = yield* TxRef.get(self.stateRef)
-    if (state._tag === "Done") {
-      return Option.none()
-    }
+  Effect.atomic(
+    Effect.gen(function*() {
+      const state = yield* TxRef.get(self.stateRef)
+      if (state._tag === "Done") {
+        return Option.none()
+      }
 
-    const chunk = yield* TxChunk.get(self.items)
-    const head = Chunk.head(chunk)
-    if (Option.isNone(head)) {
-      return Option.none()
-    }
+      const chunk = yield* TxChunk.get(self.items)
+      const head = Chunk.head(chunk)
+      if (Option.isNone(head)) {
+        return Option.none()
+      }
 
-    yield* TxChunk.drop(self.items, 1)
-    return Option.some(head.value)
-  })
+      yield* TxChunk.drop(self.items, 1)
+      return Option.some(head.value)
+    })
+  )
 
 /**
  * Takes all items from the queue. Blocks if the queue is empty.
@@ -1245,7 +1249,7 @@ export const isFull = (self: TxQueueState): Effect.Effect<boolean> =>
  * @category combinators
  */
 export const interrupt = <A, E>(self: TxEnqueue<A, E>): Effect.Effect<boolean> =>
-  Effect.withFiber((fiber) => done(self, Cause.interrupt(fiber.id)))
+  Effect.withFiber((fiber) => failCause(self, Cause.interrupt(fiber.id)))
 
 /**
  * Fails the queue with the specified error.
@@ -1304,7 +1308,7 @@ export const fail: {
  *
  *   // Complete with specific cause
  *   const cause = Cause.interrupt()
- *   const result = yield* TxQueue.done(queue, cause)
+ *   const result = yield* TxQueue.failCause(queue, cause)
  *   console.log(result) // true
  * })
  * ```
@@ -1312,7 +1316,7 @@ export const fail: {
  * @since 4.0.0
  * @category combinators
  */
-export const done: {
+export const failCause: {
   <E>(cause: Cause.Cause<E>): <A>(self: TxEnqueue<A, E>) => Effect.Effect<boolean>
   <A, E>(self: TxEnqueue<A, E>, cause: Cause.Cause<E>): Effect.Effect<boolean>
 } = dual(2, <A, E>(self: TxEnqueue<A, E>, cause: Cause.Cause<E>): Effect.Effect<boolean> =>
@@ -1340,7 +1344,7 @@ export const done: {
  * Ends a queue by signaling completion with a NoSuchElementError error.
  *
  * This function provides a clean way to signal the end of a queue by calling
- * `done` with a new `NoSuchElementError` instance. This is a convenience function for
+ * `failCause` with a new `NoSuchElementError` instance. This is a convenience function for
  * queues that are typed to accept `NoSuchElementError` in their error channel.
  * When a queue is ended, all subsequent operations (take, peek, etc.) will fail with
  * the NoSuchElementError, propagating through the E-channel.
@@ -1371,7 +1375,7 @@ export const done: {
  * @category combinators
  */
 export const end = <A, E>(self: TxEnqueue<A, E | Cause.NoSuchElementError>): Effect.Effect<boolean> =>
-  done(self, Cause.fail(new Cause.NoSuchElementError()))
+  failCause(self, Cause.fail(new Cause.NoSuchElementError()))
 
 /**
  * Clears all elements from the queue without affecting its state.
