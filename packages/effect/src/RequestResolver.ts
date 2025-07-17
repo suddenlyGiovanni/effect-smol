@@ -2,15 +2,17 @@
  * @since 2.0.0
  */
 import type { NonEmptyArray } from "./Array.js"
+import * as Cache from "./caching/Cache.js"
 import * as Duration from "./Duration.js"
 import type { Effect } from "./Effect.js"
 import { constTrue, dual, identity } from "./Function.js"
 import { exitFail, exitSucceed } from "./internal/core.js"
 import * as effect from "./internal/effect.js"
+import * as internal from "./internal/request.js"
 import * as MutableHashMap from "./MutableHashMap.js"
 import { type Pipeable, pipeArguments } from "./Pipeable.js"
 import { hasProperty } from "./Predicate.js"
-import * as Request from "./Request.js"
+import type * as Request from "./Request.js"
 import * as ServiceMap from "./ServiceMap.js"
 import * as Tracer from "./Tracer.js"
 import type * as Types from "./Types.js"
@@ -362,14 +364,26 @@ export const fromFunctionBatched = <A extends Request.Any>(
  * @since 2.0.0
  * @category constructors
  */
-export const fromEffect = <A extends Request.Request<any>>(
+export const fromEffect = <A extends Request.Any>(
   f: (entry: Request.Entry<A>) => Effect<Request.Success<A>, Request.Error<A>>
 ): RequestResolver<A> =>
-  make(
-    (entries) =>
-      effect.forEach(entries, (entry) => Request.completeEffect(entry, f(entry)), {
-        discard: true
-      })
+  make((entries) =>
+    effect.callback<void>((resume) => {
+      effect.fork(effect.void) // ensure middleware is registered
+      const parent = effect.getCurrentFiber()!
+      let done = 0
+      for (let i = 0; i < entries.length; i++) {
+        const entry = entries[i]
+        const fiber = effect.unsafeFork(parent as any, f(entry), true)
+        fiber.addObserver((exit) => {
+          entry.unsafeComplete(exit)
+          done++
+          if (done === entries.length) {
+            resume(effect.void)
+          }
+        })
+      }
+    })
   )
 
 /**
@@ -406,7 +420,7 @@ export const fromEffect = <A extends Request.Request<any>>(
  * @since 2.0.0
  * @category constructors
  */
-export const fromEffectTagged = <A extends Request.Request<any, any, any> & { readonly _tag: string }>() =>
+export const fromEffectTagged = <A extends Request.Any & { readonly _tag: string }>() =>
 <
   Fns extends {
     readonly [Tag in A["_tag"]]: [Extract<A, { readonly _tag: Tag }>] extends [infer Req]
@@ -861,3 +875,29 @@ export const withSpan: {
         })
       })
   }))
+
+/**
+ * @since 4.0.0
+ * @category combinators
+ */
+export const withCache: {
+  <A extends Request.Any>(options: {
+    readonly capacity: number
+    readonly timeToLive?: ((exit: Request.Result<A>, request: A) => Duration.DurationInput) | undefined
+  }): (self: RequestResolver<A>) => Effect<RequestResolver<A>>
+  <A extends Request.Any>(self: RequestResolver<A>, options: {
+    readonly capacity: number
+    readonly timeToLive?: ((exit: Request.Result<A>, request: A) => Duration.DurationInput) | undefined
+  }): Effect<RequestResolver<A>>
+} = dual(2, <A extends Request.Any>(self: RequestResolver<A>, options: {
+  readonly capacity: number
+  readonly timeToLive?: ((exit: Request.Result<A>, request: A) => Duration.DurationInput) | undefined
+}): Effect<RequestResolver<A>> =>
+  effect.map(
+    Cache.makeWithTtl({
+      capacity: options.capacity,
+      timeToLive: options.timeToLive as any,
+      lookup: (req: A) => internal.request(req, self) as Effect<Request.Success<A>, Request.Error<A>>
+    }),
+    (cache) => fromEffect<A>((entry) => effect.provideServices(Cache.get(cache, entry.request), entry.services))
+  ))
