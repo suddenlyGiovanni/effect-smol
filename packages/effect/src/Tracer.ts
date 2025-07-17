@@ -414,18 +414,31 @@ export class NativeSpan implements Span {
   readonly traceId: string = "native"
   readonly sampled = true
 
+  readonly name: string
+  readonly parent: Option.Option<AnySpan>
+  readonly context: ServiceMap.ServiceMap<never>
+  readonly links: ReadonlyArray<SpanLink>
+  readonly startTime: bigint
+  readonly kind: SpanKind
+
   status: SpanStatus
   attributes: Map<string, unknown>
   events: Array<[name: string, startTime: bigint, attributes: Record<string, unknown>]> = []
 
   constructor(
-    readonly name: string,
-    readonly parent: Option.Option<AnySpan>,
-    readonly context: ServiceMap.ServiceMap<never>,
-    readonly links: ReadonlyArray<SpanLink>,
-    readonly startTime: bigint,
-    readonly kind: SpanKind
+    name: string,
+    parent: Option.Option<AnySpan>,
+    context: ServiceMap.ServiceMap<never>,
+    links: ReadonlyArray<SpanLink>,
+    startTime: bigint,
+    kind: SpanKind
   ) {
+    this.name = name
+    this.parent = parent
+    this.context = context
+    this.links = links
+    this.startTime = startTime
+    this.kind = kind
     this.status = {
       _tag: "Started",
       startTime
