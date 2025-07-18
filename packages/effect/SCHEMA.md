@@ -4038,8 +4038,7 @@ import { Schema, ToJsonSchema } from "effect/schema"
 
 const schema = Schema.Tuple([Schema.String, Schema.Number])
 
-// you can omit the target, default target is draft-07
-const jsonSchema = ToJsonSchema.make(schema, { target: "draft-07" })
+const jsonSchema = ToJsonSchema.makeDraft07(schema)
 
 console.log(JSON.stringify(jsonSchema, null, 2))
 /*
@@ -4067,7 +4066,7 @@ import { Schema, ToJsonSchema } from "effect/schema"
 
 const schema = Schema.Tuple([Schema.String, Schema.Number])
 
-const jsonSchema = ToJsonSchema.make(schema, { target: "draft-2020-12" })
+const jsonSchema = ToJsonSchema.makeDraft2020(schema)
 
 console.log(JSON.stringify(jsonSchema, null, 2))
 /*
@@ -4110,7 +4109,7 @@ const schema = Schema.NonEmptyString.annotate({
   examples: ["alice", "bob"]
 })
 
-const jsonSchema = ToJsonSchema.make(schema)
+const jsonSchema = ToJsonSchema.makeDraft07(schema)
 
 console.log(JSON.stringify(jsonSchema, null, 2))
 /*
@@ -4125,78 +4124,54 @@ Output:
     "alice",
     "bob"
   ],
-  "allOf": [
-    {
-      "title": "minLength(1)",
-      "description": "a value with a length of at least 1",
-      "minLength": 1
-    }
-  ]
+  "minLength": 1
 }
 */
 ```
 
 ### Overriding the Generated JSON Schema
 
-Sometimes you want to tamper with the default JSON Schema that Effect would generate. For that, use the special `jsonSchema: { _tag: "override"; override: (default) => JsonSchema }` in your annotation. In other words:
+Sometimes you want to tamper with the default JSON Schema that Effect would generate. For that, use the special `jsonSchema: { _tag: "override"; override: () => JsonSchema }` in your annotation. In other words:
 
 ```ts
-import { Schema, Check, ToJsonSchema } from "effect/schema"
+import { Check, Schema, ToJsonSchema } from "effect/schema"
 
-const schema = Schema.Number.check(Check.greaterThan(0)).annotate({
+const schema = Schema.Number.check(Check.make((n) => n > 0)).annotate({
   jsonSchema: {
     _tag: "override",
-    override: (defaultJson) => {
-      // `defaultJson` would look like:
-      //   { type: "number", exclusiveMinimum: 0, description: "...", title: "greaterThan(0)" }
-      // We can replace `type: "number"` with `type: "integer"`:
-      return { ...defaultJson, type: "integer" }
-    }
+    // this thunk is evaluated at the time of schema generation
+    // must return a JSON‐Schema compatible object representing the override
+    override: () => ({ type: "number", minimum: 0 })
   }
 })
 
-const jsonSchema = ToJsonSchema.make(schema)
+const jsonSchema = ToJsonSchema.makeDraft07(schema)
 
 console.log(JSON.stringify(jsonSchema, null, 2))
 /*
 Output:
 {
   "$schema": "http://json-schema.org/draft-07/schema",
-  "type": "integer",
-  "title": "greaterThan(0)",
-  "description": "a value greater than 0",
-  "exclusiveMinimum": 0
+  "type": "number",
+  "minimum": 0
 }
 */
 ```
 
-- The override function receives exactly the JSON Schema that Effect built for you, including any `title/description/default/examples` you may have supplied.
-- You can manipulate or drop any piece of that output. Whatever you return is taken verbatim as your final JSON Schema content (aside from the `$schema` header).
+### JSON Schema Fragments For Filters
 
-### Embedding Schema-Level Fragments via `check` Annotations
+Whenever you call `.check(...)` on a schema, Effect attaches a filter which may carry a `"jsonSchema"` annotation that represents a JSON Schema fragment that will be merged into the final JSON Schema.
 
-Whenever you call `.check(...)` on a schema, Effect attaches a filter which may carry a `"jsonSchema"` annotation of one of two forms:
-
-- A single fragment. (`_tag: "fragment"; fragment: JsonSchema`)
-- Multiple named fragments. (`_tag: "fragments"; fragments: Record<string, JsonSchema>`)
-
-These fragments are then merged into the final JSON Schema:
-
-- `_tag: "fragment"`: the `fragment` object's properties are merged into the parent schema (possibly under an `allOf` array).
-- `_tag: "fragments"`: each key/value in `fragments` becomes a named “sub‐schema” that can be referenced via `$ref` or combined, depending on context.
-
-Below are the two most common scenarios:
-
-#### Single-fragment filters (e.g. `minLength`, `maxLength`, `exclusiveMinimum`, etc.)
+#### Built-in Filters
 
 Effect's built-in checks already carry a `jsonSchema` fragment. For example:
 
 ```ts
-import { Schema, Check, ToJsonSchema } from "effect"
+import { Check, Schema, ToJsonSchema } from "effect/schema"
 
 const schema = Schema.String.check(Check.minLength(1))
 
-const jsonSchema = ToJsonSchema.make(schema)
+const jsonSchema = ToJsonSchema.makeDraft07(schema)
 
 console.log(JSON.stringify(jsonSchema, null, 2))
 /*
@@ -4216,11 +4191,11 @@ Because no “outer” annotate() was used, and this is the first filter, we mer
 If you stack two filters:
 
 ```ts
-import { Schema, Check, ToJsonSchema } from "effect/schema"
+import { Check, Schema, ToJsonSchema } from "effect/schema"
 
 const schema = Schema.String.check(Check.minLength(1), Check.maxLength(2))
 
-const jsonSchema = ToJsonSchema.make(schema)
+const jsonSchema = ToJsonSchema.makeDraft07(schema)
 
 console.log(JSON.stringify(jsonSchema, null, 2))
 /*
@@ -4251,28 +4226,29 @@ In other words:
 - Any **subsequent** fragments are wrapped under `"allOf": [ { /* fragment */ }, … ]`.
 - If you later call `.annotate(...)` on top of these checks, your `title/description/default/examples` appear alongside (or above) these filter fragments but never conflict.
 
-#### Declaring your own single-fragment filter
+#### Declaring your own fragment filter
 
 You can build a custom filter and attach a JSON fragment yourself:
 
 ```ts
-import { Schema, Check, ToJsonSchema } from "effect/schema"
+import { Check, Schema, ToJsonSchema } from "effect/schema"
 
 const schema = Schema.String.check(
   Check.make((s) => /foo/.test(s), {
+    title: "containsFoo",
     description: "must contain 'foo'",
     jsonSchema: {
       _tag: "fragment",
-      fragment: {
-        pattern: "foo", // any valid JSON‐Schema string keyword
-        minLength: 3
-      }
-    },
-    meta: { id: "containsFoo" }
+      // this thunk is evaluated at the time of schema generation
+      // must return a JSON‐Schema fragment representing the filter
+      fragment: () => ({
+        pattern: "foo"
+      })
+    }
   })
 )
 
-const jsonSchema = ToJsonSchema.make(schema)
+const jsonSchema = ToJsonSchema.makeDraft07(schema)
 
 console.log(JSON.stringify(jsonSchema, null, 2))
 /*
@@ -4280,16 +4256,51 @@ Output:
 {
   "$schema": "http://json-schema.org/draft-07/schema",
   "type": "string",
+  "title": "containsFoo",
   "description": "must contain 'foo'",
-  "pattern": "foo",
-  "minLength": 3
+  "pattern": "foo"
 }
 */
 ```
 
-The resulting JSON Schema merges `pattern: "foo"` at top level, along with the human‐readable `title` and `description` from your filter.
+The resulting JSON Schema merges `pattern: "foo"` at top level, along with the human‐readable `title` and `description` from your filter (if any).
 
-If your filter applies to multiple kind of schemas (e.g. `Check.minLength` which can be applied to `string` and `array`), you can use `type: "fragments"` to attach multiple fragments, one for each schema type.
+### The fromJsonString combinator
+
+When using `fromJsonString` with `draft-2020-12` or `openApi3.1`, the
+resulting schema will be a JSON Schema with a `contentSchema` property that
+contains the JSON Schema for the given schema.
+
+```ts
+import { Schema, ToJsonSchema } from "effect/schema"
+
+const original = Schema.Struct({ a: Schema.String })
+const schema = Schema.fromJsonString(original)
+
+const jsonSchema = ToJsonSchema.makeDraft2020(schema)
+
+console.log(JSON.stringify(jsonSchema, null, 2))
+/*
+Output:
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "string",
+  "contentMediaType": "application/json",
+  "contentSchema": {
+    "type": "object",
+    "properties": {
+      "a": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "a"
+    ],
+    "additionalProperties": false
+  }
+}
+*/
+```
 
 ## Generating an Arbitrary from a Schema
 
