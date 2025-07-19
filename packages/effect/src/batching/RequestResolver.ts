@@ -891,37 +891,37 @@ export const withSpan: {
 export const asCache: {
   <
     A extends Request.Any,
-    ServiceMode extends "lookup" | "construction" = "lookup"
+    ServiceMode extends "lookup" | "construction" = never
   >(options: {
     readonly capacity: number
     readonly timeToLive?: ((exit: Request.Result<A>, request: A) => Duration.DurationInput) | undefined
-    readonly requireServicesAt?: ServiceMode & "lookup" | "construction" | undefined
+    readonly requireServicesAt?: ServiceMode | undefined
   }): (self: RequestResolver<A>) => Effect<
     Cache.Cache<
       A,
       Request.Success<A>,
       Request.Error<A>,
-      ServiceMode extends "lookup" ? Request.Services<A> : never
+      "construction" extends ServiceMode ? never : Request.Services<A>
     >,
     never,
-    ServiceMode extends "lookup" ? never : Request.Services<A>
+    "construction" extends ServiceMode ? Request.Services<A> : never
   >
   <
     A extends Request.Any,
-    ServiceMode extends "lookup" | "construction" = "lookup"
+    ServiceMode extends "lookup" | "construction" = never
   >(self: RequestResolver<A>, options: {
     readonly capacity: number
     readonly timeToLive?: ((exit: Request.Result<A>, request: A) => Duration.DurationInput) | undefined
-    readonly requireServicesAt?: ServiceMode & "lookup" | "construction" | undefined
+    readonly requireServicesAt?: ServiceMode | undefined
   }): Effect<
     Cache.Cache<
       A,
       Request.Success<A>,
       Request.Error<A>,
-      ServiceMode extends "lookup" ? Request.Services<A> : never
+      "construction" extends ServiceMode ? never : Request.Services<A>
     >,
     never,
-    ServiceMode extends "lookup" ? never : Request.Services<A>
+    "construction" extends ServiceMode ? Request.Services<A> : never
   >
 } = dual(2, <
   A extends Request.Any,
