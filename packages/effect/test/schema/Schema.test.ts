@@ -207,6 +207,24 @@ describe("Schema", () => {
     await assertions.encoding.fail(schema, "a", `Expected number, actual "a"`)
   })
 
+  it("Boolean", async () => {
+    const schema = Schema.Boolean
+
+    assertions.schema.format(schema, `boolean`)
+
+    await assertions.make.succeed(schema, true)
+    await assertions.make.succeed(schema, false)
+    await assertions.make.fail(schema, null, `Expected boolean, actual null`)
+
+    await assertions.decoding.succeed(schema, true)
+    await assertions.decoding.succeed(schema, false)
+    await assertions.decoding.fail(schema, "a", `Expected boolean, actual "a"`)
+
+    await assertions.encoding.succeed(schema, true)
+    await assertions.encoding.succeed(schema, false)
+    await assertions.encoding.fail(schema, "a", `Expected boolean, actual "a"`)
+  })
+
   it("Symbol", async () => {
     const schema = Schema.Symbol
 
@@ -2153,12 +2171,10 @@ describe("Schema", () => {
   })
 
   it("declareRefinement", async () => {
-    const schema = Schema.declareRefinement({
-      is: (u) => u instanceof File,
-      annotations: {
-        title: "File"
-      }
-    })
+    const schema = Schema.declare(
+      (u) => u instanceof File,
+      { title: "File" }
+    )
 
     await assertions.decoding.succeed(schema, new File([], "a.txt"))
     await assertions.decoding.fail(schema, "a", `Expected File, actual "a"`)
@@ -3039,10 +3055,9 @@ describe("Schema", () => {
         }
       }
 
-      const schema = Schema.instanceOf({
-        constructor: MyError,
-
-        annotations: {
+      const schema = Schema.instanceOf(
+        MyError,
+        {
           title: "MyError",
           defaultJsonSerializer: () =>
             Schema.link<MyError>()(
@@ -3053,7 +3068,7 @@ describe("Schema", () => {
               })
             )
         }
-      })
+      )
 
       assertions.formatter.formatAST(schema, `MyError`)
 
@@ -3156,6 +3171,27 @@ describe("Schema", () => {
          └─ Missing key`
       )
     })
+  })
+
+  it("Trim", async () => {
+    const schema = Schema.Trim
+
+    assertions.schema.format(schema, `string`)
+
+    await assertions.decoding.succeed(schema, "a")
+    await assertions.decoding.succeed(schema, "a ", { expected: "a" })
+    await assertions.decoding.succeed(schema, " a", { expected: "a" })
+    await assertions.decoding.succeed(schema, " a ", { expected: "a" })
+    await assertions.decoding.succeed(schema, "a\n", { expected: "a" })
+
+    await assertions.encoding.succeed(schema, "a")
+    await assertions.encoding.fail(
+      schema,
+      "a ",
+      `string & trimmed
+└─ trimmed
+   └─ Invalid data "a "`
+    )
   })
 
   it("transformOrFail", async () => {
