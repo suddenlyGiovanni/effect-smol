@@ -1188,6 +1188,54 @@ describe("Schema", () => {
         )
       })
 
+      it("capitalized", async () => {
+        const schema = Schema.String.check(Check.capitalized())
+
+        assertions.formatter.formatAST(schema, `string & capitalized`)
+
+        await assertions.decoding.succeed(schema, "Abc")
+        await assertions.decoding.fail(
+          schema,
+          "abc",
+          `string & capitalized
+└─ capitalized
+   └─ Invalid data "abc"`
+        )
+
+        await assertions.encoding.succeed(schema, "Abc")
+        await assertions.encoding.fail(
+          schema,
+          "abc",
+          `string & capitalized
+└─ capitalized
+   └─ Invalid data "abc"`
+        )
+      })
+
+      it("uncapitalized", async () => {
+        const schema = Schema.String.check(Check.uncapitalized())
+
+        assertions.formatter.formatAST(schema, `string & uncapitalized`)
+
+        await assertions.decoding.succeed(schema, "aBC")
+        await assertions.decoding.fail(
+          schema,
+          "ABC",
+          `string & uncapitalized
+└─ uncapitalized
+   └─ Invalid data "ABC"`
+        )
+
+        await assertions.encoding.succeed(schema, "aBC")
+        await assertions.encoding.fail(
+          schema,
+          "ABC",
+          `string & uncapitalized
+└─ uncapitalized
+   └─ Invalid data "ABC"`
+        )
+      })
+
       it("trimmed", async () => {
         const schema = Schema.String.check(Check.trimmed())
 
@@ -1388,6 +1436,27 @@ describe("Schema", () => {
           `number & int
 └─ int
    └─ Invalid data 1.1`
+        )
+        await assertions.decoding.fail(
+          schema,
+          NaN,
+          `number & int
+└─ int
+   └─ Invalid data NaN`
+        )
+        await assertions.decoding.fail(
+          schema,
+          Infinity,
+          `number & int
+└─ int
+   └─ Invalid data Infinity`
+        )
+        await assertions.decoding.fail(
+          schema,
+          -Infinity,
+          `number & int
+└─ int
+   └─ Invalid data -Infinity`
         )
       })
 
@@ -5537,6 +5606,22 @@ describe("Schema", () => {
       )
     })
 
+    it("by default should pass through the value", async () => {
+      const schema = Schema.Struct({
+        a: Schema.FiniteFromString.pipe(Schema.withDecodingDefaultKey(() => "1"))
+      })
+
+      await assertions.encoding.succeed(schema, { a: 1 }, { expected: { a: "1" } })
+    })
+
+    it("should omit the value if the encoding strategy is set to omit", async () => {
+      const schema = Schema.Struct({
+        a: Schema.FiniteFromString.pipe(Schema.withDecodingDefaultKey(() => "1", { encodingStrategy: "omit" }))
+      })
+
+      await assertions.encoding.succeed(schema, { a: 1 }, { expected: {} })
+    })
+
     it("nested default values", async () => {
       const schema = Schema.Struct({
         a: Schema.Struct({
@@ -5572,6 +5657,22 @@ describe("Schema", () => {
       await assertions.decoding.succeed(schema, { a: "2" }, { expected: { a: 2 } })
     })
 
+    it("by default should pass through the value", async () => {
+      const schema = Schema.Struct({
+        a: Schema.FiniteFromString.pipe(Schema.withDecodingDefault(() => "1"))
+      })
+
+      await assertions.encoding.succeed(schema, { a: 1 }, { expected: { a: "1" } })
+    })
+
+    it("should omit the value if the encoding strategy is set to omit", async () => {
+      const schema = Schema.Struct({
+        a: Schema.FiniteFromString.pipe(Schema.withDecodingDefault(() => "1", { encodingStrategy: "omit" }))
+      })
+
+      await assertions.encoding.succeed(schema, { a: 1 }, { expected: {} })
+    })
+
     it("nested default values", async () => {
       const schema = Schema.Struct({
         a: Schema.Struct({
@@ -5585,5 +5686,202 @@ describe("Schema", () => {
       await assertions.decoding.succeed(schema, { a: { b: undefined } }, { expected: { a: { b: 1 } } })
       await assertions.decoding.succeed(schema, { a: { b: "2" } }, { expected: { a: { b: 2 } } })
     })
+  })
+
+  it("NonEmptyString", async () => {
+    const schema = Schema.NonEmptyString
+
+    assertions.schema.format(schema, `string`)
+
+    await assertions.decoding.succeed(schema, "a")
+    await assertions.decoding.fail(
+      schema,
+      "",
+      `string & minLength(1)
+└─ minLength(1)
+   └─ Invalid data ""`
+    )
+    await assertions.encoding.succeed(schema, "a")
+    await assertions.encoding.fail(
+      schema,
+      "",
+      `string & minLength(1)
+└─ minLength(1)
+   └─ Invalid data ""`
+    )
+  })
+
+  it("Char", async () => {
+    const schema = Schema.Char
+
+    assertions.schema.format(schema, `string`)
+
+    await assertions.decoding.succeed(schema, "a")
+    await assertions.decoding.fail(
+      schema,
+      "ab",
+      `string & length(1)
+└─ length(1)
+   └─ Invalid data "ab"`
+    )
+    await assertions.encoding.succeed(schema, "a")
+    await assertions.encoding.fail(
+      schema,
+      "ab",
+      `string & length(1)
+└─ length(1)
+   └─ Invalid data "ab"`
+    )
+  })
+
+  it("Int", async () => {
+    const schema = Schema.Int
+
+    await assertions.decoding.succeed(schema, 1)
+    await assertions.decoding.fail(
+      schema,
+      1.1,
+      `number & int
+└─ int
+   └─ Invalid data 1.1`
+    )
+    await assertions.decoding.fail(
+      schema,
+      NaN,
+      `number & int
+└─ int
+   └─ Invalid data NaN`
+    )
+    await assertions.decoding.fail(
+      schema,
+      Infinity,
+      `number & int
+└─ int
+   └─ Invalid data Infinity`
+    )
+    await assertions.decoding.fail(
+      schema,
+      -Infinity,
+      `number & int
+└─ int
+   └─ Invalid data -Infinity`
+    )
+    await assertions.encoding.succeed(schema, 1)
+    await assertions.encoding.fail(
+      schema,
+      1.1,
+      `number & int
+└─ int
+   └─ Invalid data 1.1`
+    )
+  })
+})
+
+describe("Getter", () => {
+  it("succeed", async () => {
+    const schema = Schema.Literal(0).pipe(Schema.decodeTo(Schema.Literal("a"), {
+      decode: Getter.succeed("a"),
+      encode: Getter.succeed(0)
+    }))
+
+    assertions.schema.format(schema, `"a"`)
+
+    await assertions.decoding.succeed(schema, 0, { expected: "a" })
+    await assertions.decoding.fail(schema, 1, `Expected 0, actual 1`)
+    await assertions.encoding.succeed(schema, "a", { expected: 0 })
+    await assertions.encoding.fail(schema, "b", `Expected "a", actual "b"`)
+  })
+})
+
+describe("Check", () => {
+  it("ULID", async () => {
+    const schema = Schema.String.check(Check.ulid())
+
+    await assertions.decoding.succeed(schema, "01H4PGGGJVN2DKP2K1H7EH996V")
+    await assertions.decoding.fail(
+      schema,
+      "",
+      `string & ulid
+└─ ulid
+   └─ Invalid data ""`
+    )
+  })
+})
+
+describe("Transformation", () => {
+  it("Capitalize", async () => {
+    const schema = Schema.String.pipe(
+      Schema.decodeTo(
+        Schema.String.check(Check.capitalized()),
+        Transformation.capitalize()
+      )
+    )
+
+    await assertions.decoding.succeed(schema, "abc", { expected: "Abc" })
+    await assertions.encoding.succeed(schema, "Abc")
+    await assertions.encoding.fail(
+      schema,
+      "abc",
+      `string & capitalized
+└─ capitalized
+   └─ Invalid data "abc"`
+    )
+  })
+
+  it("Uncapitalize", async () => {
+    const schema = Schema.String.pipe(
+      Schema.decodeTo(
+        Schema.String.check(Check.uncapitalized()),
+        Transformation.uncapitalize()
+      )
+    )
+
+    await assertions.decoding.succeed(schema, "Abc", { expected: "abc" })
+    await assertions.encoding.succeed(schema, "abc")
+    await assertions.encoding.fail(
+      schema,
+      "Abc",
+      `string & uncapitalized
+└─ uncapitalized
+   └─ Invalid data "Abc"`
+    )
+  })
+
+  it("Lowercase", async () => {
+    const schema = Schema.String.pipe(
+      Schema.decodeTo(
+        Schema.String.check(Check.lowercased()),
+        Transformation.toLowerCase()
+      )
+    )
+
+    await assertions.decoding.succeed(schema, "ABC", { expected: "abc" })
+    await assertions.encoding.succeed(schema, "abc")
+    await assertions.encoding.fail(
+      schema,
+      "ABC",
+      `string & lowercased
+└─ lowercased
+   └─ Invalid data "ABC"`
+    )
+  })
+
+  it("Uppercase", async () => {
+    const schema = Schema.String.pipe(
+      Schema.decodeTo(
+        Schema.String.check(Check.uppercased()),
+        Transformation.toUpperCase()
+      )
+    )
+
+    await assertions.decoding.succeed(schema, "abc", { expected: "ABC" })
+    await assertions.encoding.succeed(schema, "ABC")
+    await assertions.encoding.fail(
+      schema,
+      "abc",
+      `string & uppercased
+└─ uppercased
+   └─ Invalid data "abc"`
+    )
   })
 })

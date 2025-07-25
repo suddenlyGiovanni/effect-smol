@@ -42,6 +42,14 @@ export class Getter<out T, in E, R = never> extends PipeableClass {
 }
 
 /**
+ * @category constructors
+ * @since 4.0.0
+ */
+export function succeed<const T, E>(t: T): Getter<T, E> {
+  return new Getter(() => Effect.succeedSome(t))
+}
+
+/**
  * Fail with an issue.
  *
  * @category constructors
@@ -241,6 +249,22 @@ export function Date<E extends string | number | Date>(): Getter<Date, E> {
  */
 export function trim<E extends string>(): Getter<string, E> {
   return map(Str.trim)
+}
+
+/**
+ * @category String transformations
+ * @since 4.0.0
+ */
+export function capitalize<E extends string>(): Getter<string, E> {
+  return map(Str.capitalize)
+}
+
+/**
+ * @category String transformations
+ * @since 4.0.0
+ */
+export function uncapitalize<E extends string>(): Getter<string, E> {
+  return map(Str.uncapitalize)
 }
 
 /**

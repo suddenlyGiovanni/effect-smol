@@ -2861,11 +2861,28 @@ export interface withDecodingDefaultKey<S extends Top> extends decodeTo<S, optio
 /**
  * @since 4.0.0
  */
-export function withDecodingDefaultKey<S extends Top>(defaultValue: () => S["Encoded"]) {
+export type DecodingDefaultOptions = {
+  readonly encodingStrategy?: "omit" | "passthrough" | undefined
+}
+
+/**
+ * **Options**
+ *
+ * - `encodingStrategy`: The strategy to use when encoding.
+ *   - `passthrough`: (default) Pass the default value through to the output.
+ *   - `omit`: Omit the value from the output.
+ *
+ * @since 4.0.0
+ */
+export function withDecodingDefaultKey<S extends Top>(
+  defaultValue: () => S["Encoded"],
+  options?: DecodingDefaultOptions
+) {
+  const encode = options?.encodingStrategy === "omit" ? Getter.omit() : Getter.passthrough()
   return (self: S): withDecodingDefaultKey<S> => {
     return optionalKey(encodedCodec(self)).pipe(decodeTo(self, {
       decode: Getter.withDefault(defaultValue),
-      encode: Getter.passthrough()
+      encode
     }))
   }
 }
@@ -2878,13 +2895,23 @@ export interface withDecodingDefault<S extends Top> extends decodeTo<S, optional
 }
 
 /**
+ * **Options**
+ *
+ * - `encodingStrategy`: The strategy to use when encoding.
+ *   - `passthrough`: (default) Pass the default value through to the output.
+ *   - `omit`: Omit the value from the output.
+ *
  * @since 4.0.0
  */
-export function withDecodingDefault<S extends Top>(defaultValue: () => S["Encoded"]) {
+export function withDecodingDefault<S extends Top>(
+  defaultValue: () => S["Encoded"],
+  options?: DecodingDefaultOptions
+) {
+  const encode = options?.encodingStrategy === "omit" ? Getter.omit() : Getter.passthrough()
   return (self: S): withDecodingDefault<S> => {
     return optional(encodedCodec(self)).pipe(decodeTo(self, {
       decode: Getter.withDefault(defaultValue),
-      encode: Getter.passthrough()
+      encode
     }))
   }
 }
@@ -3225,6 +3252,13 @@ export function Option<S extends Top>(value: S): Option<S> {
  * @since 4.0.0
  */
 export const NonEmptyString = String.check(Check.nonEmpty())
+
+/**
+ * A schema representing a single character.
+ *
+ * @since 4.0.0
+ */
+export const Char = String.check(Check.length(1))
 
 /**
  * @since 4.0.0
@@ -3592,6 +3626,14 @@ export interface Finite extends Number {
 export const Finite = Number.check(Check.finite())
 
 /**
+ * A schema for integers that validates and ensures the value is an integer,
+ * excluding `NaN`, `Infinity`, and `-Infinity`.
+ *
+ * @since 4.0.0
+ */
+export const Int = Number.check(Check.int())
+
+/**
  * @since 4.0.0
  */
 export interface FiniteFromString extends decodeTo<Number, String, never, never> {
@@ -3624,10 +3666,7 @@ export const Trimmed = String.check(Check.trimmed())
  *
  * @since 4.0.0
  */
-export const Trim = String.pipe(decodeTo(Trimmed, {
-  decode: Getter.trim(),
-  encode: Getter.passthrough()
-}))
+export const Trim = String.pipe(decodeTo(Trimmed, Transformation.trim()))
 
 //
 // Class APIs

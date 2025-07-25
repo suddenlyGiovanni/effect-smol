@@ -335,6 +335,17 @@ export function uuid(version?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8) {
  * @category String checks
  * @since 4.0.0
  */
+export function ulid(annotations?: Annotations.Filter) {
+  return regex(/^[0-9A-HJKMNP-TV-Za-hjkmnp-tv-z]{26}$/, {
+    title: "ulid",
+    ...annotations
+  })
+}
+
+/**
+ * @category String checks
+ * @since 4.0.0
+ */
 export function base64(annotations?: Annotations.Filter) {
   return regex(/^([0-9a-zA-Z+/]{4})*(([0-9a-zA-Z+/]{2}==)|([0-9a-zA-Z+/]{3}=))?$/, {
     title: "base64",
@@ -503,12 +514,76 @@ export function lowercased(annotations?: Annotations.Filter) {
   })
 }
 
+const CAPITALIZED_PATTERN = "^[^a-z]?.*$"
+
+/**
+ * Verifies that a string is capitalized.
+ *
+ * @category String checks
+ * @since 4.0.0
+ */
+export function capitalized(annotations?: Annotations.Filter) {
+  return make((s: string) => s.charAt(0).toUpperCase() === s.charAt(0), {
+    title: "capitalized",
+    description: "a string with the first character in uppercase",
+    jsonSchema: {
+      _tag: "Constraint",
+      constraint: () => ({
+        pattern: CAPITALIZED_PATTERN
+      })
+    },
+    meta: {
+      _tag: "capitalized"
+    },
+    arbitrary: {
+      _tag: "Constraint",
+      constraint: {
+        _tag: "StringConstraints",
+        patterns: [CAPITALIZED_PATTERN]
+      }
+    },
+    ...annotations
+  })
+}
+
+const UNCAPITALIZED_PATTERN = "^[^A-Z]?.*$"
+
+/**
+ * Verifies that a string is uncapitalized.
+ *
+ * @category String checks
+ * @since 4.0.0
+ */
+export function uncapitalized(annotations?: Annotations.Filter) {
+  return make((s: string) => s.charAt(0).toLowerCase() === s.charAt(0), {
+    title: "uncapitalized",
+    description: "a string with the first character in lowercase",
+    jsonSchema: {
+      _tag: "Constraint",
+      constraint: () => ({
+        pattern: UNCAPITALIZED_PATTERN
+      })
+    },
+    meta: {
+      _tag: "uncapitalized"
+    },
+    arbitrary: {
+      _tag: "Constraint",
+      constraint: {
+        _tag: "StringConstraints",
+        patterns: [UNCAPITALIZED_PATTERN]
+      }
+    },
+    ...annotations
+  })
+}
+
 /**
  * @category Number checks
  * @since 4.0.0
  */
 export function finite(annotations?: Annotations.Filter) {
-  return make((n: number) => globalThis.Number.isFinite(n), {
+  return make((n: number) => Number.isFinite(n), {
     title: "finite",
     description: "a finite number",
     meta: {
