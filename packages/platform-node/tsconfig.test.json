@@ -1,7 +1,7 @@
 {
   "$schema": "http://json.schemastore.org/tsconfig",
   "extends": "../../tsconfig.base.jsonc",
-  "include": ["test"],
+  "include": ["test/**/*.ts", "test/**/*.json"],
   "references": [{ "path": "tsconfig.src.json" }],
   "compilerOptions": {
     "tsBuildInfoFile": ".tsbuildinfo/test.tsbuildinfo",
@@ -9,6 +9,7 @@
     "rootDir": "test",
     "noEmit": true,
     "erasableSyntaxOnly": false,
+    "resolveJsonModule": true,
     "baseUrl": ".",
     "paths": {
       "@effect/platform-node": ["src/index.ts"],

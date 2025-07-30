@@ -2378,6 +2378,61 @@ export const flattenArray = <
   )
 
 /**
+ * @since 2.0.0
+ * @category Filtering
+ */
+export const filter: {
+  <OutElem, B, X>(
+    filter: Filter.Filter<OutElem, B, X>
+  ): <OutErr, OutDone, InElem, InErr, InDone, Env>(
+    self: Channel<OutElem, OutErr, OutDone, InElem, InErr, InDone, Env>
+  ) => Channel<B, OutErr, OutDone, InElem, InErr, InDone, Env>
+  <OutElem, OutErr, OutDone, InElem, InErr, InDone, Env, B, X>(
+    self: Channel<OutElem, OutErr, OutDone, InElem, InErr, InDone, Env>,
+    filter: Filter.Filter<OutElem, B, X>
+  ): Channel<B, OutErr, OutDone, InElem, InErr, InDone, Env>
+} = dual(2, <OutElem, OutErr, OutDone, InElem, InErr, InDone, Env, B, X>(
+  self: Channel<OutElem, OutErr, OutDone, InElem, InErr, InDone, Env>,
+  filter: Filter.Filter<OutElem, B, X>
+): Channel<B, OutErr, OutDone, InElem, InErr, InDone, Env> =>
+  fromTransform((upstream, scope) =>
+    Effect.map(
+      toTransform(self)(upstream, scope),
+      (pull) =>
+        Effect.flatMap(pull, function loop(elem): Pull.Pull<B, OutErr, OutDone> {
+          const result = filter(elem)
+          if (Filter.isFail(result)) {
+            return Effect.flatMap(pull, loop)
+          }
+          return Effect.succeed(result)
+        })
+    )
+  ))
+
+/**
+ * @since 2.0.0
+ * @category Filtering
+ */
+export const filterArray: {
+  <OutElem, B, X>(
+    filter: Filter.Filter<OutElem, B, X>
+  ): <OutErr, OutDone, InElem, InErr, InDone, Env>(
+    self: Channel<Arr.NonEmptyReadonlyArray<OutElem>, OutErr, OutDone, InElem, InErr, InDone, Env>
+  ) => Channel<Arr.NonEmptyReadonlyArray<B>, OutErr, OutDone, InElem, InErr, InDone, Env>
+  <OutElem, OutErr, OutDone, InElem, InErr, InDone, Env, B, X>(
+    self: Channel<Arr.NonEmptyReadonlyArray<OutElem>, OutErr, OutDone, InElem, InErr, InDone, Env>,
+    filter: Filter.Filter<OutElem, B, X>
+  ): Channel<Arr.NonEmptyReadonlyArray<B>, OutErr, OutDone, InElem, InErr, InDone, Env>
+} = dual(2, <OutElem, OutErr, OutDone, InElem, InErr, InDone, Env, B, X>(
+  self: Channel<Arr.NonEmptyReadonlyArray<OutElem>, OutErr, OutDone, InElem, InErr, InDone, Env>,
+  filter_: Filter.Filter<OutElem, B, X>
+): Channel<Arr.NonEmptyReadonlyArray<B>, OutErr, OutDone, InElem, InErr, InDone, Env> =>
+  filter(self, (arr) => {
+    const [passes] = Arr.partitionFilter(arr, filter_)
+    return Arr.isNonEmptyReadonlyArray(passes) ? passes : Filter.fail(arr)
+  }))
+
+/**
  * Catches any cause of failure from the channel and allows recovery by
  * creating a new channel based on the caught cause.
  *
