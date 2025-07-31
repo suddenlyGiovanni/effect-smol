@@ -785,6 +785,10 @@ export const fromOption: <A>(option: Option.Option<A>) => Effect.Effect<A, Cause
 export const fromResult: <A, E>(result: Result.Result<A, E>) => Effect.Effect<A, E> = fromYieldable
 
 /** @internal */
+export const fromNullable = <A>(value: A): Effect.Effect<NonNullable<A>, Cause.NoSuchElementError> =>
+  value == null ? fail(new NoSuchElementError()) : succeed(value)
+
+/** @internal */
 export const yieldNowWith: (priority?: number) => Effect.Effect<void> = makePrimitive({
   op: "Yield",
   [evaluate](fiber) {

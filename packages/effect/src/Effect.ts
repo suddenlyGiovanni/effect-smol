@@ -1664,7 +1664,7 @@ export const fromResult: <A, E>(result: Result.Result<A, E>) => Effect<A, E> = i
  * @example
  * ```ts
  * import { Effect } from "effect"
-import * as Option from "effect/data/Option"
+ * import * as Option from "effect/data/Option"
  *
  * const some = Option.some(42)
  * const none = Option.none()
@@ -1683,6 +1683,15 @@ import * as Option from "effect/data/Option"
 export const fromOption: <A>(
   option: Option<A>
 ) => Effect<A, Cause.NoSuchElementError> = internal.fromOption
+
+/**
+ * Converts a nullable value to an `Effect`, failing with a `NoSuchElementError`
+ * if the value is `null` or `undefined`.
+ *
+ * @since 4.0.0
+ * @category Conversions
+ */
+export const fromNullable: <A>(value: A) => Effect<NonNullable<A>, Cause.NoSuchElementError> = internal.fromNullable
 
 /**
  * Converts a yieldable value to an Effect.
