@@ -173,10 +173,12 @@ export const Key: {
     }
     return self
   }
-  return function(key: string, make?: any) {
+  return function(key: string, options?: {
+    readonly make?: any
+  }) {
     self.key = key
-    if (make) {
-      ;(self as any).make = make
+    if (options?.make) {
+      ;(self as any).make = options.make
     }
     return self
   }
