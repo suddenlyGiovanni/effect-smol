@@ -3301,10 +3301,10 @@ export const mergeAll: {
               Effect.forever,
               Effect.onError(Effect.fnUntraced(function*(cause) {
                 const halt = Pull.filterHalt(cause)
-                yield* Scope.close(
+                yield* Effect.exit(Scope.close(
                   childScope,
                   !Filter.isFail(halt) ? Exit.succeed(halt.leftover) : Exit.failCause(halt.fail)
-                )
+                ))
                 if (!fibers.has(fiber)) return
                 fibers.delete(fiber)
                 if (semaphore) yield* semaphore.release(1)
@@ -3659,12 +3659,20 @@ export const pipeToOrFail: {
 export const unwrap = <OutElem, OutErr, OutDone, InElem, InErr, InDone, R2, E, R>(
   channel: Effect.Effect<Channel<OutElem, OutErr, OutDone, InElem, InErr, InDone, R2>, E, R>
 ): Channel<OutElem, E | OutErr, OutDone, InElem, InErr, InDone, Exclude<R, Scope.Scope> | R2> =>
-  fromTransform((upstream, scope) =>
-    Effect.flatMap(
-      Scope.provide(channel, scope),
-      (channel) => toTransform(channel)(upstream, scope)
-    )
-  )
+  fromTransform((upstream, scope) => {
+    let pull: Pull.Pull<OutElem, E | OutErr, OutDone> | undefined
+    return Effect.succeed(Effect.suspend(() => {
+      if (pull) return pull
+      return channel.pipe(
+        Scope.provide(scope),
+        Effect.flatMap((channel) => toTransform(channel)(upstream, scope)),
+        Effect.flatMap((pull_) => {
+          pull = pull_
+          return pull_
+        })
+      )
+    }))
+  })
 
 /**
  * Returns a new channel which embeds the given input handler into a Channel.
