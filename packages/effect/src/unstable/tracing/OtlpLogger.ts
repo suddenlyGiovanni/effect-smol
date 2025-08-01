@@ -86,7 +86,11 @@ export const layer = (options: {
   readonly maxBatchSize?: number | undefined
   readonly shutdownTimeout?: Duration.DurationInput | undefined
   readonly excludeLogSpans?: boolean | undefined
-}): Layer.Layer<never, never, HttpClient.HttpClient> => Logger.layer([make(options)])
+  readonly mergeWithExisting?: boolean | undefined
+}): Layer.Layer<never, never, HttpClient.HttpClient> =>
+  Logger.layer([make(options)], {
+    mergeWithExisting: options.mergeWithExisting ?? true
+  })
 
 // internal
 

@@ -26,6 +26,7 @@ export const layer = (options: {
   readonly tracerContext?: (<X>(f: () => X, span: Tracer.AnySpan) => X) | undefined
   readonly loggerExportInterval?: Duration.DurationInput | undefined
   readonly loggerExcludeLogSpans?: boolean | undefined
+  readonly loggerMergeWithExisting?: boolean | undefined
   readonly metricsExportInterval?: Duration.DurationInput | undefined
   readonly tracerExportInterval?: Duration.DurationInput | undefined
   readonly shutdownTimeout?: Duration.DurationInput | undefined
@@ -38,7 +39,8 @@ export const layer = (options: {
       exportInterval: options.loggerExportInterval,
       maxBatchSize: options.maxBatchSize,
       shutdownTimeout: options.shutdownTimeout,
-      excludeLogSpans: options.loggerExcludeLogSpans
+      excludeLogSpans: options.loggerExcludeLogSpans,
+      mergeWithExisting: options.loggerMergeWithExisting
     }),
     OtlpMetrics.layer({
       url: new URL("/v1/metrics", options.baseUrl).toString(),
