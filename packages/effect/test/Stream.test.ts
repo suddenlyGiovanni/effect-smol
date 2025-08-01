@@ -1,5 +1,6 @@
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Exit, Fiber, Queue } from "effect"
+import { Array } from "effect/collections"
 import { Option } from "effect/data"
 import { Stream } from "effect/stream"
 
@@ -195,7 +196,7 @@ describe("Stream", () => {
           nums.length === 0 ?
             [n, Option.none()] as const :
             [n, Option.some([nums[0], nums.slice(1)] as const)] as const).pipe(Stream.runCollect)
-        assert.deepStrictEqual(Array.from(result), [0, 1, 2, 3])
+        assert.deepStrictEqual(result, [0, 1, 2, 3])
       }))
 
     it.effect("paginateEffect", () =>
@@ -210,14 +211,14 @@ describe("Stream", () => {
               Effect.succeed([n, Option.none()]) :
               Effect.succeed([n, Option.some([nums[0], nums.slice(1)])])
         ).pipe(Stream.runCollect)
-        assert.deepStrictEqual(Array.from(result), [0, 1, 2, 3])
+        assert.deepStrictEqual(result, [0, 1, 2, 3])
       }))
 
     it.effect("paginateChunk", () =>
       Effect.gen(function*() {
         const s: readonly [ReadonlyArray<number>, Array<number>] = [[0], [1, 2, 3, 4, 5]]
         const pageSize = 2
-        const result = yield* Stream.paginateChunk(s, ([chunk, nums]) =>
+        const result = yield* Stream.paginateArray(s, ([chunk, nums]) =>
           nums.length === 0 ?
             [chunk, Option.none()] as const :
             [
@@ -229,14 +230,14 @@ describe("Stream", () => {
                 ] as const
               )
             ] as const).pipe(Stream.runCollect)
-        assert.deepStrictEqual(Array.from(result), [0, 1, 2, 3, 4, 5])
+        assert.deepStrictEqual(result, [0, 1, 2, 3, 4, 5])
       }))
 
     it.effect("paginateChunkEffect", () =>
       Effect.gen(function*() {
         const s: readonly [ReadonlyArray<number>, Array<number>] = [[0], [1, 2, 3, 4, 5]]
         const pageSize = 2
-        const result = yield* Stream.paginateChunkEffect(s, ([chunk, nums]) =>
+        const result = yield* Stream.paginateArrayEffect(s, ([chunk, nums]) =>
           nums.length === 0 ?
             Effect.succeed([chunk, Option.none<readonly [ReadonlyArray<number>, Array<number>]>()] as const) :
             Effect.succeed(
@@ -268,6 +269,20 @@ describe("Stream", () => {
         )
         assert.deepStrictEqual(results, [1, 2, 3, 4, 5, 6])
         assert.strictEqual(error, "boom")
+      }))
+  })
+
+  describe("scanning", () => {
+    it.effect("scan", () =>
+      Effect.gen(function*() {
+        const stream = Stream.make(1, 2, 3, 4, 5)
+        const { result1, result2 } = yield* Effect.all({
+          result1: stream.pipe(Stream.scan(0, (acc, curr) => acc + curr), Stream.runCollect),
+          result2: Stream.runCollect(stream).pipe(
+            Effect.map((chunk) => Array.scan(chunk, 0, (acc, curr) => acc + curr))
+          )
+        })
+        assert.deepStrictEqual(result1, result2)
       }))
   })
 })
