@@ -1775,8 +1775,23 @@ export const updateServices: {
     withFiber<A, E, R2>((fiber) => {
       const prev = fiber.services as ServiceMap.ServiceMap<R2>
       fiber.setServices(f(prev))
+      const newServices = new Map<string, unknown>()
+      for (const [key, value] of fiber.services.unsafeMap) {
+        if (!prev.unsafeMap.has(key) || value !== prev.unsafeMap.get(key)) {
+          newServices.set(key, value)
+        }
+      }
       return onExit(self as any, () => {
-        fiber.setServices(prev)
+        const map = new Map(fiber.services.unsafeMap)
+        for (const [key, value] of newServices) {
+          if (value !== map.get(key)) continue
+          if (prev.unsafeMap.has(key)) {
+            map.set(key, prev.unsafeMap.get(key))
+          } else {
+            map.delete(key)
+          }
+        }
+        fiber.setServices(ServiceMap.unsafeMake(map))
         return void_
       })
     })
@@ -1859,11 +1874,29 @@ export const provideService: {
   ): Effect.Effect<A, E, Exclude<R, I>>
 } = function(this: any) {
   if (arguments.length === 1) {
-    return dual(2, (self, service) => updateServices(self, ServiceMap.add(arguments[0], service))) as any
+    return dual(2, (self, service) => provideServiceImpl(self, arguments[0], service)) as any
   }
-  return dual(3, (self, tag, service) => updateServices(self, ServiceMap.add(tag, service)))
+  return dual(3, (self, tag, service) => provideServiceImpl(self, tag, service))
     .apply(this, arguments as any) as any
 }
+
+const provideServiceImpl = <A, E, R, I, S>(
+  self: Effect.Effect<A, E, R>,
+  key: ServiceMap.Key<I, S>,
+  service: S
+): Effect.Effect<A, E, Exclude<R, I>> =>
+  withFiber((fiber) => {
+    const prev = ServiceMap.getOption(fiber.services, key)
+    fiber.setServices(ServiceMap.add(fiber.services, key, service))
+    return onExit(self, () => {
+      if (prev._tag === "Some") {
+        fiber.setServices(ServiceMap.add(fiber.services, key, prev.value))
+      } else {
+        fiber.setServices(ServiceMap.omit(key)(fiber.services))
+      }
+      return void_
+    })
+  }) as any
 
 /** @internal */
 export const provideServiceEffect: {

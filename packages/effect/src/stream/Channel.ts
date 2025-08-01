@@ -3666,10 +3666,7 @@ export const unwrap = <OutElem, OutErr, OutDone, InElem, InErr, InDone, R2, E, R
       return channel.pipe(
         Scope.provide(scope),
         Effect.flatMap((channel) => toTransform(channel)(upstream, scope)),
-        Effect.flatMap((pull_) => {
-          pull = pull_
-          return pull_
-        })
+        Effect.flatMap((pull_) => pull = pull_)
       )
     }))
   })
