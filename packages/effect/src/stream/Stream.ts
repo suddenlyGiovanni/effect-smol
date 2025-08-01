@@ -4,7 +4,7 @@
 // @effect-diagnostics returnEffectInGen:off
 import * as Cause from "../Cause.ts"
 import * as Arr from "../collections/Array.ts"
-import * as Filter from "../data/Filter.ts"
+import type * as Filter from "../data/Filter.ts"
 import * as Option from "../data/Option.ts"
 import { hasProperty } from "../data/Predicate.ts"
 import * as Effect from "../Effect.ts"
@@ -13,6 +13,7 @@ import * as Fiber from "../Fiber.ts"
 import type { LazyArg } from "../Function.ts"
 import { dual, identity } from "../Function.ts"
 import { type Pipeable, pipeArguments } from "../interfaces/Pipeable.ts"
+import type { ParentSpan, SpanOptions } from "../observability/Tracer.ts"
 import type * as PubSub from "../PubSub.ts"
 import * as Queue from "../Queue.ts"
 import * as Schedule from "../Schedule.ts"
@@ -1412,16 +1413,7 @@ export const drain = <A, E, R>(self: Stream<A, E, R>): Stream<never, E, R> => fr
  * @category sequencing
  */
 export const flattenIterable = <A, E, R>(self: Stream<Iterable<A>, E, R>): Stream<A, E, R> =>
-  fromChannel(Channel.flattenArray(Channel.filter(self.channel, (iters) => {
-    const chunk = Arr.empty<Arr.NonEmptyReadonlyArray<A>>()
-    for (const it of iters) {
-      const arr = Arr.fromIterable(it)
-      if (Arr.isNonEmptyReadonlyArray(arr)) {
-        chunk.push(arr)
-      }
-    }
-    return Arr.isNonEmptyArray(chunk) ? chunk : Filter.fail(iters)
-  })))
+  flatMap(self, fromIterable)
 
 /**
  * Concatenates two streams, emitting all elements from the first stream
@@ -2311,6 +2303,19 @@ export const provideServices: {
   2,
   <A, E, R, R2>(self: Stream<A, E, R>, services: ServiceMap.ServiceMap<R2>): Stream<A, E, Exclude<R, R2>> =>
     fromChannel(Channel.provideServices(self.channel, services))
+)
+
+/**
+ * @since 4.0.0
+ * @category Tracing
+ */
+export const withSpan: {
+  (name: string, options?: SpanOptions): <A, E, R>(self: Stream<A, E, R>) => Stream<A, E, Exclude<R, ParentSpan>>
+  <A, E, R>(self: Stream<A, E, R>, name: string, options?: SpanOptions): Stream<A, E, Exclude<R, ParentSpan>>
+} = dual(
+  2,
+  <A, E, R>(self: Stream<A, E, R>, name: string, options?: SpanOptions): Stream<A, E, Exclude<R, ParentSpan>> =>
+    fromChannel(Channel.withSpan(self.channel, name, options))
 )
 
 /**
