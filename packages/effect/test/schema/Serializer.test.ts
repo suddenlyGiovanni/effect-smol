@@ -79,6 +79,12 @@ describe("Serializer", () => {
         )
       })
 
+      it("Null", async () => {
+        const schema = Schema.Null
+
+        await assertions.serialization.json.schema.succeed(schema, null, null)
+      })
+
       it("String", async () => {
         const schema = Schema.String
 
@@ -659,6 +665,15 @@ describe("Serializer", () => {
         await assertions.deserialization.stringLeafJson.schema.succeed(schema, "a1b")
       })
 
+      it("NullOr(String)", async () => {
+        const schema = Schema.NullOr(Schema.String)
+
+        await assertions.serialization.stringLeafJson.schema.succeed(schema, "a", "a")
+        await assertions.serialization.stringLeafJson.schema.succeed(schema, null, "")
+        await assertions.deserialization.stringLeafJson.schema.succeed(schema, "", "")
+        await assertions.deserialization.stringLeafJson.schema.succeed(schema, "a", "a")
+      })
+
       it("NullOr(Number)", async () => {
         const schema = Schema.NullOr(Schema.Number)
 
@@ -689,6 +704,19 @@ describe("Serializer", () => {
           a: "1",
           b: ""
         }, { a: 1, b: null })
+      })
+
+      it("Struct with Symbol property name", async () => {
+        const a = Symbol.for("a")
+        const schema = Schema.Struct({
+          [a]: Schema.String
+        })
+
+        await assertions.serialization.stringLeafJson.schema.fail(
+          schema,
+          { [a]: "b" },
+          "cannot serialize to JSON, property names must be strings"
+        )
       })
 
       it("Suspend", async () => {

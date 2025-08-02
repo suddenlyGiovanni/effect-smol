@@ -386,7 +386,7 @@ export class Declaration extends Base {
         return replaceEncoding(ast, [new Link(to, link.transformation)])
       }
     } else {
-      return forbidden(ast)
+      return requiredDefaultJsonAnnotation(ast)
     }
   }
 }
@@ -2460,20 +2460,21 @@ export const goStringLeafJson = memoize((ast: AST): AST => {
   return out.goStringLeafJson?.() ?? out.go?.(goStringLeafJson) ?? out
 })
 
-const jsonForbiddenLink = new Link(
-  neverKeyword,
-  new Transformation.Transformation(
-    Getter.passthrough(),
-    Getter.fail(
-      (o) =>
-        new Issue.Forbidden(o, { message: "cannot serialize to JSON, required `defaultJsonSerializer` annotation" })
+/** @internal */
+export function forbidden<A extends AST>(ast: A, message: string): A {
+  const link = new Link(
+    neverKeyword,
+    new Transformation.Transformation(
+      Getter.passthrough(),
+      Getter.forbidden(message)
     )
   )
-)
+  return replaceEncoding(ast, [link])
+}
 
 /** @internal */
-export function forbidden(ast: AST): AST {
-  return replaceEncoding(ast, [jsonForbiddenLink])
+export function requiredDefaultJsonAnnotation(ast: AST): AST {
+  return forbidden(ast, "cannot serialize to JSON, required `defaultJsonSerializer` annotation")
 }
 
 const SYMBOL_PATTERN = /^Symbol\((.*)\)$/
