@@ -10,9 +10,4 @@ export * as Config from "./Config.ts"
 /**
  * @since 4.0.0
  */
-export * as ConfigError from "./ConfigError.ts"
-
-/**
- * @since 4.0.0
- */
 export * as ConfigProvider from "./ConfigProvider.ts"
