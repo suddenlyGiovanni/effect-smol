@@ -4,7 +4,7 @@
 import * as Option from "../../data/Option.ts"
 import type { Predicate } from "../../data/Predicate.ts"
 import type { ReadonlyRecord } from "../../data/Record.ts"
-import * as Effect from "../../Effect.js"
+import * as Effect from "../../Effect.ts"
 import { constFalse } from "../../Function.ts"
 import * as internalEffect from "../../internal/effect.ts"
 import * as Layer from "../../Layer.ts"
