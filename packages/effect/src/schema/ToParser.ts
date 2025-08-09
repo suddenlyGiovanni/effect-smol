@@ -9,6 +9,7 @@ import * as Effect from "../Effect.ts"
 import { defaultParseOptions } from "../internal/schema/util.ts"
 import * as AST from "./AST.ts"
 import type * as Check from "./Check.ts"
+import * as Formatter from "./Formatter.ts"
 import * as Issue from "./Issue.ts"
 import type * as Schema from "./Schema.ts"
 
@@ -32,7 +33,9 @@ export function makeSync<S extends Schema.Top>(schema: S) {
   const parser = makeEffect(schema)
   return (input: S["~type.make.in"], options?: Schema.MakeOptions): S["Type"] => {
     return Effect.runSync(
-      parser(input, options).pipe(Effect.mapErrorEager((issue) => new Error("makeSync failure", { cause: issue })))
+      parser(input, options).pipe(
+        Effect.mapErrorEager((issue) => new Error(Formatter.makeDefault().format(issue), { cause: issue }))
+      )
     )
   }
 }
@@ -62,7 +65,7 @@ export function asserts<T, E, RE>(codec: Schema.Codec<T, E, never, RE>) {
   return <I>(input: I): asserts input is I & T => {
     const result = parser(input, defaultParseOptions)
     if (Result.isFailure(result)) {
-      throw new Error("asserts failure", { cause: result.failure })
+      throw new Error(Formatter.makeDefault().format(result.failure), { cause: result.failure })
     }
   }
 }
@@ -284,7 +287,14 @@ function asSync<T, E, R>(
   parser: (input: E, options?: AST.ParseOptions) => Effect.Effect<T, Issue.Issue, R>
 ): (input: E, options?: AST.ParseOptions) => T {
   const parserResult = asResult(parser)
-  return (input: E, options?: AST.ParseOptions) => Result.getOrThrow(parserResult(input, options))
+  return (input: E, options?: AST.ParseOptions) => {
+    const r = parserResult(input, options)
+    if (Result.isFailure(r)) {
+      const issue = r.failure
+      throw new Error(Formatter.makeDefault().format(issue), { cause: issue })
+    }
+    return r.success
+  }
 }
 
 /** @internal */

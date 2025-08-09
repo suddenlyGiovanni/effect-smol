@@ -8,7 +8,7 @@ import * as Predicate from "../data/Predicate.ts"
 import * as Result from "../data/Result.ts"
 import * as Effect from "../Effect.ts"
 import * as internalRecord from "../internal/record.ts"
-import { formatPropertyKey, memoizeThunk, ownKeys } from "../internal/schema/util.ts"
+import { memoizeThunk, ownKeys } from "../internal/schema/util.ts"
 import * as RegEx from "../primitives/RegExp.ts"
 import type { Annotated } from "./Annotations.ts"
 import type * as Annotations from "./Annotations.ts"
@@ -389,6 +389,17 @@ export class Declaration extends Base {
       return requiredDefaultJsonAnnotation(ast)
     }
   }
+  /** @internal */
+  getExpected(getExpected: (ast: AST) => string): string {
+    const id = this.annotations?.id
+    if (Predicate.isString(id)) return id
+    const title = this.annotations?.title
+    if (Predicate.isString(title)) {
+      const tps = this.typeParameters.map(getExpected)
+      return `${title}${tps.length > 0 ? `<${tps.join(", ")}>` : ""}`
+    }
+    return "<Declaration>"
+  }
 }
 
 /**
@@ -409,6 +420,10 @@ export class NullKeyword extends AbstractParser {
   goStringLeafJson() {
     return coerceNull(this)
   }
+  /** @internal */
+  getExpected(): string {
+    return "null"
+  }
 }
 
 /**
@@ -425,6 +440,10 @@ export class UndefinedKeyword extends AbstractParser {
   /** @internal */
   parser() {
     return fromRefinement(this, Predicate.isUndefined)
+  }
+  /** @internal */
+  getExpected(): string {
+    return "undefined"
   }
 }
 
@@ -443,6 +462,10 @@ export class VoidKeyword extends AbstractParser {
   parser() {
     return fromRefinement(this, Predicate.isUndefined)
   }
+  /** @internal */
+  getExpected(): string {
+    return "void"
+  }
 }
 
 /**
@@ -459,6 +482,10 @@ export class NeverKeyword extends AbstractParser {
   /** @internal */
   parser() {
     return fromRefinement(this, Predicate.isNever)
+  }
+  /** @internal */
+  getExpected(): string {
+    return "never"
   }
 }
 
@@ -477,6 +504,10 @@ export class AnyKeyword extends AbstractParser {
   parser() {
     return fromRefinement(this, Predicate.isUnknown)
   }
+  /** @internal */
+  getExpected(): string {
+    return "any"
+  }
 }
 
 /**
@@ -494,6 +525,10 @@ export class UnknownKeyword extends AbstractParser {
   parser() {
     return fromRefinement(this, Predicate.isUnknown)
   }
+  /** @internal */
+  getExpected(): string {
+    return "unknown"
+  }
 }
 
 /**
@@ -510,6 +545,10 @@ export class ObjectKeyword extends AbstractParser {
   /** @internal */
   parser() {
     return fromRefinement(this, Predicate.isObject)
+  }
+  /** @internal */
+  getExpected(): string {
+    return "object | array | function"
   }
 }
 
@@ -558,6 +597,10 @@ export class Enums extends AbstractParser {
       return replaceEncoding(ast, [enumLink])
     }
     return ast
+  }
+  /** @internal */
+  getExpected(): string {
+    return this.enums.map(([_, value]) => JSON.stringify(value)).join(" | ")
   }
 }
 
@@ -639,6 +682,10 @@ export class TemplateLiteral extends AbstractParser {
     return this
   }
   /** @internal */
+  getExpected(): string {
+    return formatTemplateLiteral(this)
+  }
+  /** @internal */
   asTemplateLiteralParser(): TupleType {
     const tuple = goStringLeafJson(new TupleType(false, this.parts, [])) as TupleType
     const regex = getTemplateLiteralRegExp(this)
@@ -690,6 +737,10 @@ export class UniqueSymbol extends AbstractParser {
   /** @internal */
   goJson() {
     return coerceSymbol(this)
+  }
+  /** @internal */
+  getExpected(): string {
+    return String(this.symbol)
   }
 }
 
@@ -744,6 +795,10 @@ export class LiteralType extends AbstractParser {
   goStringLeafJson() {
     return Predicate.isString(this.literal) ? this : coerceLiteral(this)
   }
+  /** @internal */
+  getExpected(): string {
+    return Predicate.isString(this.literal) ? JSON.stringify(this.literal) : String(this.literal)
+  }
 }
 
 /**
@@ -763,6 +818,10 @@ export class StringKeyword extends AbstractParser {
   /** @internal */
   goStringLeafJson() {
     return this
+  }
+  /** @internal */
+  getExpected(): string {
+    return "string"
   }
 }
 
@@ -789,6 +848,10 @@ export class NumberKeyword extends AbstractParser {
   goStringLeafJson() {
     return coerceNumber(this)
   }
+  /** @internal */
+  getExpected(): string {
+    return "number"
+  }
 }
 
 /**
@@ -814,6 +877,10 @@ export class BooleanKeyword extends AbstractParser {
   goStringLeafJson() {
     return coerceBoolean(this)
   }
+  /** @internal */
+  getExpected(): string {
+    return "boolean"
+  }
 }
 
 /**
@@ -834,6 +901,10 @@ export class SymbolKeyword extends AbstractParser {
   /** @internal */
   goJson() {
     return coerceSymbol(this)
+  }
+  /** @internal */
+  getExpected(): string {
+    return "symbol"
   }
 }
 
@@ -858,6 +929,10 @@ export class BigIntKeyword extends AbstractParser {
   /** @internal */
   goStringLeafJson() {
     return coerceBigInt(this)
+  }
+  /** @internal */
+  getExpected(): string {
+    return "bigint"
   }
 }
 
@@ -1116,6 +1191,10 @@ export class TupleType extends Base {
     return elements === this.elements && rest === this.rest ?
       this :
       new TupleType(this.isMutable, elements, rest, this.annotations, this.checks, undefined, this.context)
+  }
+  /** @internal */
+  getExpected(): string {
+    return "array"
   }
 }
 
@@ -1376,10 +1455,16 @@ export class TypeLiteral extends Base {
   flip(go: (ast: AST) => AST): AST {
     return this.rebuild(go, true)
   }
-
   /** @internal */
   go(go: (ast: AST) => AST): AST {
     return this.rebuild(go, false)
+  }
+  /** @internal */
+  getExpected(): string {
+    if (this.propertySignatures.length === 0 && this.indexSignatures.length === 0) return "object | array"
+    const tag = this.propertySignatures.find((ps) => ps.name === "_tag")
+    if (tag) return `{ _tag: ${getExpected(tag.type)}, ... }`
+    return "object"
   }
 }
 
@@ -1476,7 +1561,8 @@ export type Sentinel = {
   readonly literal: Literal
 }
 
-function getCandidateTypes(ast: AST): ReadonlyArray<Type> {
+/** @internal */
+export function getCandidateTypes(ast: AST): ReadonlyArray<Type> {
   switch (ast._tag) {
     case "NullKeyword":
       return ["null"]
@@ -1694,10 +1780,8 @@ export class UnionType<A extends AST = AST> extends Base {
 
       if (tracking.out) {
         return tracking.out
-      } else if (Arr.isNonEmptyArray(issues)) {
-        return yield* Effect.fail(new Issue.AnyOf(ast, oinput, issues))
       } else {
-        return yield* Effect.fail(new Issue.InvalidType(ast, oinput))
+        return yield* Effect.fail(new Issue.AnyOf(ast, oinput, issues))
       }
     })
   }
@@ -1707,6 +1791,11 @@ export class UnionType<A extends AST = AST> extends Base {
     return types === this.types ?
       this :
       new UnionType(types, this.mode, this.annotations, this.checks, undefined, this.context)
+  }
+  /** @internal */
+  getExpected(getExpected: (ast: AST) => string): string {
+    if (this.types.length === 0) return "never"
+    return Array.from(new Set(this.types.map(getExpected))).join(" | ")
   }
 }
 
@@ -1737,6 +1826,10 @@ export class Suspend extends Base {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const ast = this
     return new Suspend(() => go(ast.thunk()), ast.annotations, ast.checks, undefined, ast.context)
+  }
+  /** @internal */
+  getExpected(getExpected: (ast: AST) => string): string {
+    return getExpected(this.thunk())
   }
 }
 
@@ -2060,28 +2153,6 @@ export const flip = memoize((ast: AST): AST => {
 })
 
 /** @internal */
-export function formatIsMutable(isMutable: boolean | undefined): string {
-  return isMutable === true ? "" : "readonly "
-}
-
-/** @internal */
-export function formatIsOptional(isOptional: boolean | undefined): string {
-  return isOptional === true ? "?" : ""
-}
-
-function formatPropertySignature(ps: PropertySignature): string {
-  return formatIsMutable(ps.type.context?.isMutable)
-    + formatPropertyKey(ps.name)
-    + formatIsOptional(ps.type.context?.isOptional)
-    + ": "
-    + format(ps.type)
-}
-
-function formatPropertySignatures(pss: ReadonlyArray<PropertySignature>): string {
-  return pss.map(formatPropertySignature).join("; ")
-}
-
-/** @internal */
 export function containsUndefined(ast: AST): boolean {
   switch (ast._tag) {
     case "UndefinedKeyword":
@@ -2093,144 +2164,42 @@ export function containsUndefined(ast: AST): boolean {
   }
 }
 
-function formatIndexSignature(is: IndexSignature): string {
-  return formatIsMutable(is.isMutable) + `[x: ${format(is.parameter)}]: ${format(is.type)}`
-}
-
-function formatIndexSignatures(iss: ReadonlyArray<IndexSignature>): string {
-  return iss.map(formatIndexSignature).join("; ")
-}
-
-function formatElements(es: ReadonlyArray<AST>): string {
-  return es.map((e) => format(e) + formatIsOptional(e.context?.isOptional)).join(", ")
-}
-
-function formatTail(tail: ReadonlyArray<AST>): string {
-  return tail.map(format).join(", ")
-}
-
-const formatTemplateLiteral = (ast: TemplateLiteral): string =>
-  "`" + ast.encodedParts.map((ast) => formatTemplateLiteralASTPart(ast)).join("") +
-  "`"
-
-function formatTemplateLiteralASTPart(part: TemplateLiteralPart): string {
-  switch (part._tag) {
-    case "LiteralType":
-      return String(part.literal)
-    case "StringKeyword":
-    case "NumberKeyword":
-    case "BigIntKeyword":
-    case "TemplateLiteral":
-      return "${" + format(part) + "}"
-    case "UnionType":
-      return "${" + part.types.map(formatTemplateLiteralASTWithinUnion).join(" | ") + "}"
+function formatTemplateLiteral(ast: TemplateLiteral): string {
+  const formatUnionPart = (part: TemplateLiteralPart): string => {
+    if (isUnionType(part)) {
+      return part.types.map(formatUnionPart).join(" | ")
+    }
+    switch (part._tag) {
+      case "LiteralType":
+        return getExpected(part)
+      case "StringKeyword":
+        return "string"
+      case "NumberKeyword":
+        return "number"
+      case "BigIntKeyword":
+        return "bigint"
+      case "TemplateLiteral":
+        return formatTemplateLiteral(part)
+    }
   }
+
+  return "`" + ast.encodedParts.map((part) => {
+    switch (part._tag) {
+      case "LiteralType":
+        return String(part.literal)
+      case "StringKeyword":
+        return "${string}"
+      case "NumberKeyword":
+        return "${number}"
+      case "BigIntKeyword":
+        return "${bigint}"
+      case "TemplateLiteral":
+        return "${" + formatTemplateLiteral(part) + "}"
+      case "UnionType":
+        return "${" + part.types.map(formatUnionPart).join(" | ") + "}"
+    }
+  }).join("") + "`"
 }
-
-const formatTemplateLiteralASTWithinUnion = (part: TemplateLiteralPart): string => {
-  if (isUnionType(part)) {
-    return part.types.map(formatTemplateLiteralASTWithinUnion).join(" | ")
-  }
-  return format(part)
-}
-
-/** @internal */
-export const format = memoize((ast: AST): string => {
-  switch (ast._tag) {
-    case "Declaration": {
-      const id = ast.annotations?.id
-      if (Predicate.isString(id)) {
-        return id
-      }
-      const title = ast.annotations?.title
-      if (Predicate.isString(title)) {
-        const tps = ast.typeParameters.map(format)
-        return `${title}${tps.length > 0 ? `<${tps.join(", ")}>` : ""}`
-      }
-      return "<Declaration>"
-    }
-    case "LiteralType":
-      return Predicate.isString(ast.literal) ? JSON.stringify(ast.literal) : String(ast.literal)
-    case "NeverKeyword":
-      return "never"
-    case "AnyKeyword":
-      return "any"
-    case "UnknownKeyword":
-      return "unknown"
-    case "NullKeyword":
-      return "null"
-    case "UndefinedKeyword":
-      return "undefined"
-    case "StringKeyword":
-      return "string"
-    case "NumberKeyword":
-      return "number"
-    case "BooleanKeyword":
-      return "boolean"
-    case "SymbolKeyword":
-      return "symbol"
-    case "BigIntKeyword":
-      return "bigint"
-    case "UniqueSymbol":
-      return ast.symbol.toString()
-    case "VoidKeyword":
-      return "void"
-    case "ObjectKeyword":
-      return "object"
-    case "Enums":
-      return `<enum ${ast.enums.length} value(s): ${ast.enums.map(([_, value]) => JSON.stringify(value)).join(" | ")}>`
-    case "TemplateLiteral":
-      return formatTemplateLiteral(ast)
-    case "TupleType": {
-      if (ast.rest.length === 0) {
-        return `${formatIsMutable(ast.isMutable)}[${formatElements(ast.elements)}]`
-      }
-      const [h, ...tail] = ast.rest
-      const head = format(h)
-
-      if (tail.length > 0) {
-        if (ast.elements.length > 0) {
-          return `${formatIsMutable(ast.isMutable)}[${formatElements(ast.elements)}, ...Array<${head}>, ${
-            formatTail(tail)
-          }]`
-        } else {
-          return `${formatIsMutable(ast.isMutable)}[...Array<${head}>, ${formatTail(tail)}]`
-        }
-      } else {
-        if (ast.elements.length > 0) {
-          return `${formatIsMutable(ast.isMutable)}[${formatElements(ast.elements)}, ...Array<${head}>]`
-        } else {
-          return `${ast.isMutable ? "Array<" : "ReadonlyArray<"}${head}>`
-        }
-      }
-    }
-    case "TypeLiteral": {
-      if (ast.propertySignatures.length > 0) {
-        const pss = formatPropertySignatures(ast.propertySignatures)
-        if (ast.indexSignatures.length > 0) {
-          return `{ ${pss}; ${formatIndexSignatures(ast.indexSignatures)} }`
-        } else {
-          return `{ ${pss} }`
-        }
-      } else {
-        if (ast.indexSignatures.length > 0) {
-          return `{ ${formatIndexSignatures(ast.indexSignatures)} }`
-        } else {
-          return "{}"
-        }
-      }
-    }
-    case "UnionType": {
-      if (ast.types.length === 0) {
-        return "never"
-      } else {
-        return ast.types.map(format).join(ast.mode === "oneOf" ? " ⊻ " : " | ")
-      }
-    }
-    case "Suspend":
-      return "#"
-  }
-})
 
 function getTemplateLiteralSource(ast: TemplateLiteral, top: boolean): string {
   return ast.encodedParts.map((part) =>
@@ -2248,11 +2217,11 @@ export const getTemplateLiteralRegExp = memoize((ast: TemplateLiteral): RegExp =
  */
 const STRING_KEYWORD_PATTERN = "[\\s\\S]*?"
 /**
- * floating point or integer, with optional exponent, no leading “+”
+ * floating point or integer, with optional exponent, no leading "+"
  */
 const NUMBER_KEYWORD_PATTERN = "[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?"
 /**
- * signed integer only (no leading “+”)
+ * signed integer only (no leading "+")
  */
 const BIGINT_KEYWORD_PATTERN = "-?\\d+"
 
@@ -2493,3 +2462,29 @@ const symbolLink = new Link(
 function coerceSymbol<A extends SymbolKeyword | UniqueSymbol>(ast: A): A {
   return replaceEncoding(ast, [symbolLink])
 }
+
+/** @internal */
+export const getExpected = memoize((ast: AST): string => {
+  return getIdAnnotation(ast) ?? ast.getExpected(getExpected)
+})
+
+/** @internal */
+export function getAnnotation<A>(
+  f: (annotations: Annotations.Annotations | undefined) => A | undefined
+) {
+  return (ast: AST): A | undefined => {
+    if (ast.checks) {
+      const last = ast.checks[ast.checks.length - 1]
+      const annotation = f(last.annotations)
+      if (annotation !== undefined) return annotation
+    } else {
+      return f(ast.annotations)
+    }
+  }
+}
+
+/** @internal */
+export const getIdAnnotation = getAnnotation((annotations) => {
+  const id = annotations?.id
+  if (Predicate.isString(id)) return id
+})
