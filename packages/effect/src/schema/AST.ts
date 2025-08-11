@@ -11,7 +11,7 @@ import * as internalRecord from "../internal/record.ts"
 import { memoizeThunk, ownKeys } from "../internal/schema/util.ts"
 import * as RegEx from "../primitives/RegExp.ts"
 import type { Annotated } from "./Annotations.ts"
-import type * as Annotations from "./Annotations.ts"
+import * as Annotations from "./Annotations.ts"
 import * as Check from "./Check.ts"
 import * as Getter from "./Getter.ts"
 import * as Issue from "./Issue.ts"
@@ -1968,17 +1968,20 @@ export function annotate<A extends AST>(ast: A, annotations: Annotations.Annotat
     return replaceChecks(ast, Arr.append(ast.checks.slice(0, -1), last.annotate(annotations)))
   }
   return modifyOwnPropertyDescriptors(ast, (d) => {
-    d.annotations.value = { ...ast.annotations, ...annotations }
+    d.annotations.value = Annotations.merge(d.annotations.value, annotations)
   })
 }
 
 /** @internal */
 export function annotateKey<A extends AST>(ast: A, annotations: Annotations.Documentation): A {
   const context = ast.context ?
-    new Context(ast.context.isOptional, ast.context.isMutable, ast.context.defaultValue, ast.context.make, {
-      ...ast.context.annotations,
-      ...annotations
-    }) :
+    new Context(
+      ast.context.isOptional,
+      ast.context.isMutable,
+      ast.context.defaultValue,
+      ast.context.make,
+      Annotations.merge(ast.context.annotations, annotations)
+    ) :
     new Context(false, false, undefined, undefined, annotations)
   return replaceContext(ast, context)
 }
