@@ -73,7 +73,7 @@ export const fromConfig: (
     (yield* Config.schema(Schema.String, "OTEL_SERVICE_NAME"))
   delete attributes["service.name"]
   const serviceVersion = options?.serviceVersion ?? attributes["service.version"] as string ??
-    (yield* Config.schema(Schema.String, "OTEL_SERVICE_VERSION"))
+    (yield* Config.schema(Schema.UndefinedOr(Schema.String), "OTEL_SERVICE_VERSION"))
   delete attributes["service.version"]
   return make({
     serviceName,
