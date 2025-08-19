@@ -38,7 +38,7 @@ export declare namespace Annotation {
 /**
  * @since 4.0.0
  */
-export type Target = "draft-07" | "draft-2020-12" | "openApi3.1"
+export type Target = "draft-07" | "draft-2020-12"
 
 /**
  * @since 4.0.0
@@ -54,7 +54,7 @@ export type TopLevelReferenceStrategy = "skip" | "keep"
  * @since 4.0.0
  */
 export interface BaseOptions {
-  readonly $defs?: Record<string, object> | undefined
+  readonly definitions?: Record<string, object> | undefined
   readonly getRef?: ((id: string) => string) | undefined
   readonly additionalPropertiesStrategy?: AdditionalPropertiesStrategy | undefined
   readonly topLevelReferenceStrategy?: TopLevelReferenceStrategy | undefined
@@ -63,40 +63,37 @@ export interface BaseOptions {
 /**
  * @since 4.0.0
  */
-export interface Draft07Options extends BaseOptions {}
+export interface Draft07_Options extends BaseOptions {}
 
 /**
+ * Returns a JSON Schema Draft 07 object.
+ *
  * @since 4.0.0
  */
-export function makeDraft07<S extends Schema.Top>(schema: S, options?: Draft07Options): object {
+export function makeDraft07<S extends Schema.Top>(schema: S, options?: Draft07_Options): object {
   return make(schema, { ...options, target: "draft-07" })
 }
 
 /**
  * @since 4.0.0
  */
-export interface Draft2020Options extends BaseOptions {}
+export interface Draft2020_12_Options extends BaseOptions {}
 
 /**
+ * Returns a JSON Schema Draft 2020-12 object.
+ *
+ * **OpenAPI 3.1**
+ *
+ * OpenAPI 3.1 schemas are fully compatible with JSON Schema Draft 2020-12 (see
+ * OpenAPI Initiative blog announcement, February 18 2021)
+ *
  * @since 4.0.0
  */
-export function makeDraft2020<S extends Schema.Top>(schema: S, options?: Draft2020Options): object {
+export function makeDraft2020_12<S extends Schema.Top>(schema: S, options?: Draft2020_12_Options): object {
   return make(schema, { ...options, target: "draft-2020-12" })
 }
 
-/**
- * @since 4.0.0
- */
-export interface OpenApi3_1Options extends BaseOptions {}
-
-/**
- * @since 4.0.0
- */
-export function makeOpenApi3_1<S extends Schema.Top>(schema: S, options?: OpenApi3_1Options): object {
-  return make(schema, { ...options, target: "openApi3.1" })
-}
-
-interface Options extends Draft07Options {
+interface Options extends Draft07_Options {
   readonly target?: Target | undefined
 }
 
@@ -105,13 +102,12 @@ function get$schema(target: Target) {
     case "draft-07":
       return "http://json-schema.org/draft-07/schema"
     case "draft-2020-12":
-    case "openApi3.1":
       return "https://json-schema.org/draft/2020-12/schema"
   }
 }
 
 function make<S extends Schema.Top>(schema: S, options?: Options): object {
-  const $defs = options?.$defs ?? {}
+  const definitions = options?.definitions ?? {}
   const getRef = options?.getRef ?? ((id: string) => "#/$defs/" + id)
   const target = options?.target ?? "draft-07"
   const additionalPropertiesStrategy = options?.additionalPropertiesStrategy ?? "strict"
@@ -120,19 +116,21 @@ function make<S extends Schema.Top>(schema: S, options?: Options): object {
   const out: Record<string, unknown> = {
     $schema: get$schema(target),
     ...go(schema.ast, [], {
-      $defs,
+      definitions,
       getRef,
       target,
       additionalPropertiesStrategy
     }, skipId)
   }
-  if (Object.keys($defs).length > 0) {
-    out.$defs = $defs
+  if (Object.keys(definitions).length > 0) {
+    out.$defs = definitions
   }
   return out
 }
 
-function getJsonSchemaAnnotations(annotations: Annotations.Annotations | undefined): object | undefined {
+function getJsonSchemaAnnotations(
+  annotations: Annotations.Annotations | undefined
+): Record<string, unknown> | undefined {
   if (annotations) {
     const out: Record<string, unknown> = {}
     if (hasOwn(annotations, "title") && Predicate.isString(annotations.title)) {
@@ -142,13 +140,24 @@ function getJsonSchemaAnnotations(annotations: Annotations.Annotations | undefin
       out.description = annotations.description
     }
     if (hasOwn(annotations, "default")) {
-      out.default = annotations.default
+      if (annotations.default !== undefined) {
+        out.default = annotations.default
+      }
     }
     if (hasOwn(annotations, "examples") && Array.isArray(annotations.examples)) {
-      out.examples = annotations.examples
+      const examples = annotations.examples.filter((example) => example !== undefined)
+      if (examples.length > 0) {
+        out.examples = examples
+      }
     }
-    return out
+    return Object.keys(out).length > 0 ? out : undefined
   }
+}
+
+function getRawAnnotation(
+  annotations: Annotations.Annotations | undefined
+): Annotation.Override | Annotation.Constraint | undefined {
+  return annotations?.jsonSchema as Annotation.Override | Annotation.Constraint | undefined
 }
 
 function getCheckConstraint(
@@ -156,8 +165,8 @@ function getCheckConstraint(
   target: Target,
   type?: Annotation.Type
 ): object | undefined {
-  const annotation = check.annotations?.jsonSchema
-  if (annotation) {
+  const annotation = getRawAnnotation(check.annotations)
+  if (annotation && annotation._tag === "Constraint") {
     return annotation.constraint(type, target)
   }
 }
@@ -173,7 +182,10 @@ function getChecksConstraint(
   }
   if (ast.checks) {
     function go(check: Check.Check<any>) {
-      const constraint = { ...getJsonSchemaAnnotations(check.annotations), ...getCheckConstraint(check, target, type) }
+      const constraint = {
+        ...getJsonSchemaAnnotations(check.annotations),
+        ...getCheckConstraint(check, target, type)
+      }
       if (hasOwn(constraint, "type")) {
         out.type = constraint.type
         delete constraint.type
@@ -190,17 +202,6 @@ function getChecksConstraint(
     delete (out as any).allOf
   }
   return out
-}
-
-function pruneUndefined(ast: AST.AST): Array<AST.AST> {
-  switch (ast._tag) {
-    case "UndefinedKeyword":
-      return []
-    case "UnionType":
-      return ast.types.flatMap(pruneUndefined)
-    default:
-      return [ast]
-  }
 }
 
 /** Either the AST is optional or it contains an undefined keyword */
@@ -230,7 +231,7 @@ function getPattern(
 }
 
 type GoOptions = {
-  readonly $defs: Record<string, object>
+  readonly definitions: Record<string, object>
   readonly getRef: (id: string) => string
   readonly target: Target
   readonly additionalPropertiesStrategy: AdditionalPropertiesStrategy
@@ -244,71 +245,106 @@ function getId(ast: AST.AST): string | undefined {
   }
 }
 
-function isNullTypeKeywordSupported(target: Target): boolean {
-  switch (target) {
-    case "draft-07":
-    case "draft-2020-12":
-      return true
-    case "openApi3.1":
-      return false
-  }
-}
-
-function getOverrideAnnotation(ast: AST.AST): Annotation.Override | undefined {
+/**
+ * If the AST has checks, we look for an override annotation in the checks. If
+ * not, we look for an override annotation or constraint annotation in the
+ * annotations.
+ */
+function getBottomJsonSchemaAnnotation(ast: AST.AST): Annotation.Override | Annotation.Constraint | undefined {
   if (ast.checks) {
     for (let i = ast.checks.length - 1; i >= 0; i--) {
       const check = ast.checks[i]
-      const annotation = check.annotations?.jsonSchema as Annotation.Override | Annotation.Constraint | undefined
+      const annotation = getRawAnnotation(check.annotations)
       if (annotation && annotation._tag === "Override") {
         return annotation
       }
     }
   }
-  const annotation = ast.annotations?.jsonSchema as Annotation.Override | Annotation.Constraint | undefined
-  if (annotation && annotation._tag === "Override") {
-    return annotation
+  return getRawAnnotation(ast.annotations)
+}
+
+function isCompactableLiteral(jsonSchema: object | undefined): boolean {
+  return Predicate.hasProperty(jsonSchema, "enum") && "type" in jsonSchema && Object.keys(jsonSchema).length === 2
+}
+
+function compactLiterals(members: Array<any>): Array<object> {
+  const out: Array<object> = []
+  for (const m of members) {
+    if (isCompactableLiteral(m) && out.length > 0) {
+      const last: any = out[out.length - 1]
+      if (isCompactableLiteral(last) && last.type === m.type) {
+        out[out.length - 1] = {
+          type: last.type,
+          enum: [...last.enum, ...m.enum]
+        }
+        continue
+      }
+    }
+    out.push(m)
   }
+  return out
 }
 
 function go(
   ast: AST.AST,
   path: ReadonlyArray<PropertyKey>,
   options: GoOptions,
-  ignoreId: boolean = false
+  ignoreId: boolean = false,
+  ignoreAnnotation: boolean = false
 ): object {
+  // ---------------------------------------------
+  // handle json schema annotations
+  // ---------------------------------------------
+  const target = options.target
+  if (!ignoreAnnotation) {
+    const annotation = getBottomJsonSchemaAnnotation(ast)
+    if (annotation) {
+      switch (annotation._tag) {
+        case "Override":
+          return annotation.override(target, (ast) => go(ast, path, options, ignoreId))
+        case "Constraint":
+          return {
+            ...go(ast, path, options, ignoreId, true),
+            ...annotation.constraint(undefined, target)
+          }
+      }
+    }
+  }
+  // ---------------------------------------------
+  // handle id annotation
+  // ---------------------------------------------
   if (!ignoreId) {
     const id = getId(ast)
     if (id !== undefined) {
-      if (Object.hasOwn(options.$defs, id)) {
-        return options.$defs[id]
+      if (Object.hasOwn(options.definitions, id)) {
+        return options.definitions[id]
       } else {
         const escapedId = id.replace(/~/ig, "~0").replace(/\//ig, "~1")
         const out = { $ref: options.getRef(escapedId) }
-        options.$defs[id] = out
-        options.$defs[id] = go(ast, path, options, true)
+        options.definitions[id] = out
+        options.definitions[id] = go(ast, path, options, true)
         return out
       }
     }
   }
   // ---------------------------------------------
-  // handle annotations
+  // handle encoding
   // ---------------------------------------------
-  const target = options.target
-  const annotation = getOverrideAnnotation(ast)
-  if (annotation) {
-    return annotation.override(target, (ast) => go(ast, path, options, ignoreId))
-  }
   if (ast.encoding) {
     return go(ast.encoding[ast.encoding.length - 1].to, path, options, ignoreId)
   }
+  // ---------------------------------------------
+  // handle base cases
+  // ---------------------------------------------
   switch (ast._tag) {
     case "Declaration":
-    case "VoidKeyword":
-    case "UndefinedKeyword":
     case "BigIntKeyword":
     case "SymbolKeyword":
     case "UniqueSymbol":
       throw new Error(`cannot generate JSON Schema for ${ast._tag} at ${formatPath(path) || "root"}`)
+    case "UndefinedKeyword":
+      return { not: {}, ...getChecksConstraint(ast, target) }
+    case "VoidKeyword":
     case "UnknownKeyword":
     case "AnyKeyword":
       return { ...getChecksConstraint(ast, target) }
@@ -316,15 +352,7 @@ function go(
       return { not: {}, ...getChecksConstraint(ast, target) }
     case "NullKeyword": {
       const constraint = getChecksConstraint(ast, target, "null")
-      if (isNullTypeKeywordSupported(options.target)) {
-        // https://json-schema.org/draft-07/draft-handrews-json-schema-validation-00.pdf
-        // Section 6.1.1
-        return { type: "null", ...constraint }
-      } else {
-        // OpenAPI 3.1 does not support the "null" type keyword
-        // https://swagger.io/docs/specification/v3_0/data-models/data-types/#null
-        return { enum: [null], ...constraint }
-      }
+      return { type: "null", ...constraint }
     }
     case "StringKeyword":
       return { type: "string", ...getChecksConstraint(ast, target, "string") }
@@ -378,7 +406,10 @@ function go(
       // ---------------------------------------------
       // handle elements
       // ---------------------------------------------
-      const items = ast.elements.map((e, i) => go(e, [...path, i], options))
+      const items = ast.elements.map((e, i) => ({
+        ...go(e, [...path, i], options),
+        ...getJsonSchemaAnnotations(e.context?.annotations)
+      }))
       const minItems = ast.elements.findIndex(isLooseOptional)
       if (minItems !== -1) {
         out.minItems = minItems
@@ -429,7 +460,10 @@ function go(
         if (Predicate.isSymbol(name)) {
           throw new Error(`cannot generate JSON Schema for ${ast._tag} at ${formatPath([...path, name]) || "root"}`)
         } else {
-          out.properties[name] = go(ps.type, [...path, name], options)
+          out.properties[name] = {
+            ...go(ps.type, [...path, name], options),
+            ...getJsonSchemaAnnotations(ps.type.context?.annotations)
+          }
           if (!isLooseOptional(ps.type)) {
             out.required.push(String(name))
           }
@@ -440,6 +474,8 @@ function go(
       // ---------------------------------------------
       if (options.additionalPropertiesStrategy === "strict") {
         out.additionalProperties = false
+      } else {
+        out.additionalProperties = true
       }
       const patternProperties: Record<string, object> = {}
       for (const is of ast.indexSignatures) {
@@ -458,12 +494,22 @@ function go(
       return out
     }
     case "UnionType": {
-      const members = pruneUndefined(ast).map((ast) => go(ast, path, options))
+      const members = compactLiterals(
+        ast.types
+          .filter((ast) => !AST.isUndefinedKeyword(ast)) // prune undefined
+          .map((ast) => {
+            const out = go(ast, path, options)
+            if (path.length > 0) {
+              return { ...out, ...getJsonSchemaAnnotations(ast.context?.annotations) }
+            }
+            return out
+          })
+      )
       switch (members.length) {
         case 0:
-          return { not: {} }
+          return { not: {}, ...getChecksConstraint(ast, target) }
         case 1:
-          return members[0]
+          return { ...members[0], ...getChecksConstraint(ast, target) }
         default:
           switch (ast.mode) {
             case "anyOf":
