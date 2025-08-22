@@ -468,6 +468,15 @@ export const failureInterrupt: (fiberId?: number | undefined) => Interrupt = eff
 export const isInterruptedOnly: <E>(self: Cause<E>) => boolean = effect.causeIsInterruptedOnly
 
 /**
+ * @category Mapping
+ * @since 4.0.0
+ */
+export const map: {
+  <E, E2>(f: (error: NoInfer<E>) => E2): (self: Cause<E>) => Cause<E2>
+  <E, E2>(self: Cause<E>, f: (error: NoInfer<E>) => E2): Cause<E2>
+} = effect.causeMap
+
+/**
  * Merges two causes into a single cause containing failures from both.
  *
  * @example
@@ -602,6 +611,12 @@ export const hasInterrupt: <E>(self: Cause<E>) => boolean = effect.causeHasInter
  * @since 4.0.0
  */
 export const filterInterrupt: <E>(self: Cause<E>) => Interrupt | Filter.fail<Cause<E>> = effect.causeFilterInterrupt
+
+/**
+ * @since 4.0.0
+ * @category Accessors
+ */
+export const interruptors: <E>(self: Cause<E>) => ReadonlySet<number> = effect.causeInterruptors
 
 /**
  * @since 4.0.0

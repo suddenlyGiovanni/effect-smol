@@ -41,7 +41,7 @@ import * as Filter from "./data/Filter.ts"
 import { hasProperty } from "./data/Predicate.ts"
 import type { Effect } from "./Effect.ts"
 import type { Exit, Failure } from "./Exit.ts"
-import { dual, identity } from "./Function.ts"
+import { constant, constTrue, dual, identity } from "./Function.ts"
 import type { Inspectable } from "./interfaces/Inspectable.ts"
 import * as core from "./internal/core.ts"
 import { PipeInspectableProto } from "./internal/core.ts"
@@ -1061,6 +1061,31 @@ export const takeAll = <A, E>(self: Dequeue<A, E>): Effect<Arr.NonEmptyArray<A>,
   takeBetween(self, 1, Number.POSITIVE_INFINITY) as any
 
 /**
+ * Take all messages from the queue, until the queue has errored or is done.
+ *
+ * @category taking
+ * @since 4.0.0
+ */
+export const collect = <A, E>(self: Dequeue<A, E | Done>): Effect<Array<A>, Exclude<E, Done>> =>
+  internalEffect.suspend(() => {
+    const out = Arr.empty<A>()
+    return internalEffect.as(
+      Pull.catchHalt(
+        internalEffect.whileLoop({
+          while: constTrue,
+          body: constant(takeAll(self)),
+          step(items: Arr.NonEmptyArray<A>) {
+            // eslint-disable-next-line no-restricted-syntax
+            out.push(...items)
+          }
+        }),
+        () => internalEffect.void
+      ),
+      out
+    )
+  }) as any
+
+/**
  * Take a specified number of messages from the queue. It will only take
  * up to the capacity of the queue.
  *
@@ -1536,7 +1561,7 @@ const unsafeTakeBetween = <A, E>(
     releaseCapacity(self)
     return core.exitSucceed(messages)
   }
-  min = Math.min(min, self.capacity)
+  min = Math.min(min, self.capacity || 1)
   if (min <= self.messages.length) {
     const messages = MutableList.takeN(self.messages, max)
     releaseCapacity(self)

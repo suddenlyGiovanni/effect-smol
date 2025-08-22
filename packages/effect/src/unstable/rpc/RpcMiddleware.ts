@@ -9,7 +9,7 @@ import * as ServiceMap from "../../ServiceMap.ts"
 import type { Mutable, unhandled } from "../../types/Types.ts"
 import type { Headers } from "../http/Headers.ts"
 import type * as Rpc from "./Rpc.ts"
-import type { Request } from "./RpcMessage.ts"
+import type { Request, RequestId } from "./RpcMessage.ts"
 
 /**
  * @since 4.0.0
@@ -32,11 +32,12 @@ export interface RpcMiddleware<Provides, E, Requires> {
     effect: Effect.Effect<SuccessValue, E | unhandled, Provides>,
     options: {
       readonly clientId: number
+      readonly requestId: RequestId
       readonly rpc: Rpc.AnyWithProps
       readonly payload: unknown
       readonly headers: Headers
     }
-  ): Effect.Effect<SuccessValue, unhandled, Requires>
+  ): Effect.Effect<SuccessValue, unhandled | E, Requires>
 }
 
 /**
@@ -53,10 +54,10 @@ export interface SuccessValue {
  */
 export interface RpcMiddlewareClient<R = never> {
   (
-    effect: Effect.Effect<SuccessValue, unhandled>,
     options: {
       readonly rpc: Rpc.AnyWithProps
       readonly request: Request<Rpc.Any>
+      readonly next: (request: Request<Rpc.Any>) => Effect.Effect<SuccessValue, unhandled>
     }
   ): Effect.Effect<SuccessValue, unhandled, R>
 }
@@ -79,6 +80,7 @@ export interface Any {
     effect: Effect.Effect<SuccessValue, any, any>,
     options: {
       readonly clientId: number
+      readonly requestId: RequestId
       readonly rpc: Rpc.AnyWithProps
       readonly payload: unknown
       readonly headers: Headers
@@ -137,7 +139,7 @@ export type Requires<A> = A extends { readonly [TypeId]: { readonly requires: in
  * @since 4.0.0
  * @category models
  */
-export type ApplyServices<A extends AnyId, R> = Exclude<R, Provides<A>> | Requires<A>
+export type ApplyServices<A, R> = Exclude<R, Provides<A>> | Requires<A>
 
 /**
  * @since 4.0.0
@@ -189,7 +191,7 @@ export interface AnyKeyWithProps extends ServiceMap.Key<any, RpcMiddleware<any, 
  * @since 4.0.0
  * @category tags
  */
-export const Tag = <
+export const Key = <
   Self,
   Config extends {
     requires?: any
@@ -225,19 +227,19 @@ export const Tag = <
   const creationError = new Err()
   Err.stackTraceLimit = limit
 
-  function TagClass() {}
-  const TagClass_ = TagClass as any as Mutable<AnyKey>
-  Object.setPrototypeOf(TagClass, Object.getPrototypeOf(ServiceMap.Key<Self, any>(id)))
-  TagClass.key = id
-  Object.defineProperty(TagClass, "stack", {
+  function KeyClass() {}
+  const KeyClass_ = KeyClass as any as Mutable<AnyKey>
+  Object.setPrototypeOf(KeyClass, Object.getPrototypeOf(ServiceMap.Key<Self, any>(id)))
+  KeyClass.key = id
+  Object.defineProperty(KeyClass, "stack", {
     get() {
       return creationError.stack
     }
   })
-  TagClass_[TypeId] = TypeId
-  TagClass_.error = options?.error ?? Schema.Never
-  TagClass_.requiredForClient = options?.requiredForClient ?? false
-  return TagClass as any
+  KeyClass_[TypeId] = TypeId
+  KeyClass_.error = options?.error ?? Schema.Never
+  KeyClass_.requiredForClient = options?.requiredForClient ?? false
+  return KeyClass as any
 }
 
 /**
@@ -256,9 +258,9 @@ export const layerClient = <Id, S, R, EX = never, RX = never>(
     return ServiceMap.unsafeMake(
       new Map([[
         `${tag.key}/Client`,
-        (effect: Effect.Effect<any, any>, options: any) =>
+        (options: any) =>
           Effect.updateServices(
-            middleware(effect, options),
+            middleware(options),
             (requestContext) => ServiceMap.merge(services, requestContext)
           )
       ]])
