@@ -2406,9 +2406,9 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
       await assertions.encoding.succeed(schema, { a_b: 1, aB: 2 }, { expected: { a_b: "2" } })
     })
 
-    it("Record(SnakeToCamel, Number, { key: ... })", async () => {
+    it("Record(SnakeToCamel, Number, { keyValueCombiner: ... })", async () => {
       const schema = Schema.Record(SnakeToCamel, NumberFromString, {
-        key: {
+        keyValueCombiner: {
           decode: {
             combine: ([_, v1], [k2, v2]) => [k2, v1 + v2]
           },

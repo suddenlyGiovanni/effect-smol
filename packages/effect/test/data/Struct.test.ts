@@ -1,10 +1,10 @@
 import { pipe } from "effect"
-import { Equivalence, Struct } from "effect/data"
-import { String as Str } from "effect/primitives"
+import { Equivalence, Struct, UndefinedOr } from "effect/data"
+import { Number, String, String as Str } from "effect/primitives"
 import { Schema } from "effect/schema"
 import { describe, it } from "vitest"
-import { assertFalse, assertTrue, deepStrictEqual, strictEqual } from "./utils/assert.ts"
-import { assertions } from "./utils/schema.ts"
+import { assertFalse, assertTrue, deepStrictEqual, strictEqual } from "../utils/assert.ts"
+import { assertions } from "../utils/schema.ts"
 
 describe("Struct", () => {
   it("get", () => {
@@ -131,5 +131,46 @@ describe("Struct", () => {
 
     assertTrue(PersonEquivalence({ a: "a", b: 1 }, { a: "a", b: 1 }))
     assertFalse(PersonEquivalence({ a: "a", b: 1 }, { a: "a", b: 2 }))
+  })
+
+  describe("getCombiner", () => {
+    it("default omitKeyWhen (never omit)", () => {
+      const C = Struct.getCombiner({
+        n: Number.ReducerSum,
+        s: String.ReducerConcat
+      })
+
+      deepStrictEqual(C.combine({ n: 1, s: "a" }, { n: 2, s: "b" }), { n: 3, s: "ab" })
+    })
+
+    it("custom omitKeyWhen", () => {
+      const C = Struct.getCombiner<{ n?: number | undefined; s?: string | undefined }>(
+        {
+          n: UndefinedOr.getReducer(Number.ReducerSum),
+          s: UndefinedOr.getReducer(String.ReducerConcat)
+        },
+        { omitKeyWhen: (v) => v === undefined }
+      )
+
+      // merged values equal to undefined should be omitted
+      deepStrictEqual(C.combine({ n: undefined, s: "a" }, { n: undefined, s: "b" }), { s: "ab" })
+      deepStrictEqual(C.combine({ s: undefined }, { s: "b" }), { s: "b" })
+      deepStrictEqual(C.combine({ s: "a" }, { s: undefined }), { s: "a" })
+      deepStrictEqual(C.combine({ s: "a" }, { s: "b" }), { s: "ab" })
+    })
+  })
+
+  describe("getReducer", () => {
+    it("custom omitKeyWhen", () => {
+      const R = Struct.getReducer<{ n: number; s?: string | undefined }>(
+        {
+          n: Number.ReducerSum,
+          s: UndefinedOr.getReducer(String.ReducerConcat)
+        },
+        { omitKeyWhen: (v) => v === undefined }
+      )
+
+      deepStrictEqual(R.initialValue, { n: 0 })
+    })
   })
 })

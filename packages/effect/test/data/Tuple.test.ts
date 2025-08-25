@@ -1,13 +1,18 @@
 import { pipe } from "effect"
 import { Tuple } from "effect/data"
+import { Number, String } from "effect/primitives"
 import { Schema } from "effect/schema"
 import { describe, it } from "vitest"
-import { deepStrictEqual, strictEqual } from "./utils/assert.ts"
-import { assertions } from "./utils/schema.ts"
+import { deepStrictEqual, strictEqual } from "../utils/assert.ts"
+import { assertions } from "../utils/schema.ts"
 
 const tuple = ["a", 2, true] as [string, number, boolean]
 
 describe("Tuple", () => {
+  it("make", () => {
+    deepStrictEqual(Tuple.make("a", 2, true), ["a", 2, true])
+  })
+
   it("get", () => {
     strictEqual(pipe(tuple, Tuple.get(0)), "a")
     strictEqual(pipe(tuple, Tuple.get(1)), 2)
@@ -103,5 +108,23 @@ describe("Tuple", () => {
       Schema.Number,
       Schema.NullOr(Schema.Boolean)
     ])
+  })
+
+  it("getCombiner", () => {
+    const C = Tuple.getCombiner([
+      Number.ReducerSum,
+      String.ReducerConcat
+    ])
+
+    deepStrictEqual(C.combine([1, "a"], [2, "b"]), [3, "ab"])
+  })
+
+  it("getReducer", () => {
+    const R = Tuple.getReducer([
+      Number.ReducerSum,
+      String.ReducerConcat
+    ])
+
+    deepStrictEqual(R.initialValue, [0, ""])
   })
 })
