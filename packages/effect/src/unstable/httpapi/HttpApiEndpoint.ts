@@ -1076,21 +1076,21 @@ export const make = <Method extends HttpMethod>(method: Method) =>
   Headers extends Schema.Struct.Fields ? Schema.Struct<Headers> : Headers,
   Success extends Schema.Struct.Fields ? Schema.Struct<Success> : Success,
   Error extends ReadonlyArray<Schema.Top> ? Error[number] : Error
-> =>
-  makeProto({
+> => {
+  return makeProto({
     name,
     path,
     method,
-    pathSchema: Option.fromNullable(options?.path).pipe(
+    pathSchema: Option.fromNullishOr(options?.path).pipe(
       Option.map(structToSchema)
     ),
-    urlParamsSchema: Option.fromNullable(options?.urlParams).pipe(
+    urlParamsSchema: Option.fromNullishOr(options?.urlParams).pipe(
       Option.map(structToSchema)
     ),
-    payloadSchema: Option.fromNullable(options?.payload).pipe(
+    payloadSchema: Option.fromNullishOr(options?.payload).pipe(
       Option.map(structToSchema)
     ),
-    headersSchema: Option.fromNullable(options?.headers).pipe(
+    headersSchema: Option.fromNullishOr(options?.headers).pipe(
       Option.map(structToSchema)
     ),
     successSchema: options?.success ? structToSchema(options.success) : HttpApiSchema.NoContent as any,
@@ -1103,6 +1103,7 @@ export const make = <Method extends HttpMethod>(method: Method) =>
     annotations: ServiceMap.empty(),
     middlewares: new Set()
   })
+}
 
 const structToSchema = <S>(
   schema: S

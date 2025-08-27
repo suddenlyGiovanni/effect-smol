@@ -809,7 +809,7 @@ export const fromOption: <A>(option: Option.Option<A>) => Effect.Effect<A, Cause
 export const fromResult: <A, E>(result: Result.Result<A, E>) => Effect.Effect<A, E> = fromYieldable
 
 /** @internal */
-export const fromNullable = <A>(value: A): Effect.Effect<NonNullable<A>, Cause.NoSuchElementError> =>
+export const fromNullishOr = <A>(value: A): Effect.Effect<NonNullable<A>, Cause.NoSuchElementError> =>
   value == null ? fail(new NoSuchElementError()) : succeed(value)
 
 /** @internal */
@@ -4216,7 +4216,7 @@ export const unsafeMakeSpan = <XA, XE>(
     ? Option.some(options.parent)
     : options.root
     ? Option.none()
-    : filterDisablePropagation(Option.fromNullable(fiber.currentSpan))
+    : filterDisablePropagation(Option.fromUndefinedOr(fiber.currentSpan))
 
   let span: Tracer.Span
 
