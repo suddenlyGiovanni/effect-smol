@@ -3637,6 +3637,28 @@ export const delay: {
  */
 export const sleep: (duration: Duration.DurationInput) => Effect<void> = internal.sleep
 
+/**
+ * Executes an effect and measures the time it takes to complete.
+ *
+ * **Details**
+ *
+ * This function wraps the provided effect and returns a new effect that, when
+ * executed, performs the original effect and calculates its execution duration.
+ *
+ * The result of the new effect includes both the execution time (as a
+ * `Duration`) and the original effect's result. This is useful for monitoring
+ * performance or gaining insights into the time taken by specific operations.
+ *
+ * The original effect's behavior (success, failure, or interruption) remains
+ * unchanged, and the timing information is provided alongside the result in a
+ * tuple.
+ *
+ * @since 2.0.0
+ * @category Delays & Timeouts
+ */
+export const timed: <A, E, R>(self: Effect<A, E, R>) => Effect<[duration: Duration.Duration, result: A], E, R> =
+  internal.timed
+
 // -----------------------------------------------------------------------------
 // Racing
 // -----------------------------------------------------------------------------
@@ -4291,6 +4313,60 @@ export const matchEffect: {
     }
   ): Effect<A2 | A3, E2 | E3, R2 | R3 | R>
 } = internal.matchEffect
+
+// -----------------------------------------------------------------------------
+// Condition checking
+// -----------------------------------------------------------------------------
+
+/**
+ * Checks if an effect has failed.
+ *
+ * **Details**
+ *
+ * This function evaluates whether an effect has resulted in a failure. It
+ * returns a boolean value wrapped in an effect, with `true` indicating the
+ * effect failed and `false` otherwise.
+ *
+ * The resulting effect cannot fail (`never` in the error channel) but retains
+ * the context of the original effect.
+ *
+ * **Example**
+ *
+ * ```ts
+ * import { Effect } from "effect"
+ *
+ * const failure = Effect.fail("Uh oh!")
+ *
+ * console.log(Effect.runSync(Effect.isFailure(failure)))
+ * // Output: true
+ *
+ * const defect = Effect.die("BOOM!")
+ *
+ * Effect.runSync(Effect.isFailure(defect))
+ * // throws: BOOM!
+ * ```
+ *
+ * @since 2.0.0
+ * @category Condition Checking
+ */
+export const isFailure: <A, E, R>(self: Effect<A, E, R>) => Effect<boolean, never, R> = internal.isFailure
+
+/**
+ * Checks if an effect has succeeded.
+ *
+ * **Details**
+ *
+ * This function evaluates whether an effect has resulted in a success. It
+ * returns a boolean value wrapped in an effect, with `true` indicating the
+ * effect succeeded and `false` otherwise.
+ *
+ * The resulting effect cannot fail (`never` in the error channel) but retains
+ * the context of the original effect.
+ *
+ * @since 2.0.0
+ * @category Condition Checking
+ */
+export const isSuccess: <A, E, R>(self: Effect<A, E, R>) => Effect<boolean, never, R> = internal.isSuccess
 
 // -----------------------------------------------------------------------------
 // Environment
@@ -5676,6 +5752,8 @@ export const interruptibleMask: <A, E, R>(
  * ```
  */
 export interface Semaphore {
+  /** when a permit is available, run the effect and release the permits when finished */
+  withPermit<A, E, R>(self: Effect<A, E, R>): Effect<A, E, R>
   /** when the given amount of permits are available, run the effect and release the permits when finished */
   withPermits(
     permits: number
@@ -6107,6 +6185,66 @@ export const repeatOrElse: {
     orElse: (error: E | E2, option: Option<B>) => Effect<B, E3, R3>
   ): Effect<B, E3, R | R2 | R3>
 } = internalSchedule.repeatOrElse
+
+/**
+ * Replicates the given effect `n` times.
+ *
+ * **Details**
+ *
+ * This function takes an effect and replicates it a specified number of times
+ * (`n`). The result is an array of `n` effects, each of which is identical to
+ * the original effect.
+ *
+ * @since 2.0.0
+ */
+export const replicate: {
+  (n: number): <A, E, R>(self: Effect<A, E, R>) => Array<Effect<A, E, R>>
+  <A, E, R>(self: Effect<A, E, R>, n: number): Array<Effect<A, E, R>>
+} = internal.replicate
+
+/**
+ * Performs this effect the specified number of times and collects the results.
+ *
+ * **Details**
+ *
+ * This function repeats an effect multiple times and collects the results into
+ * an array. You specify how many times to execute the effect, and it runs that
+ * many times, either in sequence or concurrently depending on the provided
+ * options.
+ *
+ * **Options**
+ *
+ * If the `discard` option is set to `true`, the intermediate results are not
+ * collected, and the final result of the operation is `void`.
+ *
+ * The function also allows you to customize how the effects are handled by
+ * specifying options such as concurrency, batching, and how finalizers behave.
+ * These options provide flexibility in running the effects concurrently or
+ * adjusting other execution details.
+ *
+ * @since 2.0.0
+ * @category Collecting
+ */
+export const replicateEffect: {
+  (
+    n: number,
+    options?: { readonly concurrency?: Concurrency | undefined; readonly discard?: false | undefined }
+  ): <A, E, R>(self: Effect<A, E, R>) => Effect<Array<A>, E, R>
+  (
+    n: number,
+    options: { readonly concurrency?: Concurrency | undefined; readonly discard: true }
+  ): <A, E, R>(self: Effect<A, E, R>) => Effect<void, E, R>
+  <A, E, R>(
+    self: Effect<A, E, R>,
+    n: number,
+    options?: { readonly concurrency?: Concurrency | undefined; readonly discard?: false | undefined }
+  ): Effect<Array<A>, E, R>
+  <A, E, R>(
+    self: Effect<A, E, R>,
+    n: number,
+    options: { readonly concurrency?: Concurrency | undefined; readonly discard: true }
+  ): Effect<void, E, R>
+} = internal.replicateEffect
 
 /**
  * Repeats an effect based on a specified schedule.

@@ -1137,10 +1137,19 @@ const unsafeFromIterator: (
   op: "Iterator",
   single: false,
   [contA](value, fiber) {
-    const state = this[args][0].next(value)
-    if (state.done) return succeed(state.value)
-    fiber._stack.push(this)
-    return state.value.asEffect()
+    const iter = this[args][0]
+    while (true) {
+      const state = iter.next(value)
+      if (state.done) return succeed(state.value)
+      const eff = state.value.asEffect()
+      if (!effectIsExit(eff)) {
+        fiber._stack.push(this)
+        return eff
+      } else if (eff._tag === "Failure") {
+        return eff
+      }
+      value = eff.value
+    }
   },
   [evaluate](this: any, fiber: FiberImpl) {
     return this[contA](this[args][1], fiber)
@@ -1920,7 +1929,10 @@ export const provideServices: {
   <A, E, R, XR>(
     self: Effect.Effect<A, E, R>,
     services: ServiceMap.ServiceMap<XR>
-  ): Effect.Effect<A, E, Exclude<R, XR>> => updateServices(self, ServiceMap.merge(services)) as any
+  ): Effect.Effect<A, E, Exclude<R, XR>> => {
+    if (effectIsExit(self)) return self as any
+    return updateServices(self, ServiceMap.merge(services)) as any
+  }
 )
 
 /** @internal */
@@ -2825,6 +2837,24 @@ export const matchCauseEager: {
 )
 
 // ----------------------------------------------------------------------------
+// Condition checking
+// ----------------------------------------------------------------------------
+
+/** @internal */
+export const isFailure = <A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<boolean, never, R> =>
+  matchEager(self, {
+    onFailure: () => true,
+    onSuccess: () => false
+  })
+
+/** @internal */
+export const isSuccess = <A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<boolean, never, R> =>
+  matchEager(self, {
+    onFailure: () => false,
+    onSuccess: () => true
+  })
+
+// ----------------------------------------------------------------------------
 // delays & timeouts
 // ----------------------------------------------------------------------------
 
@@ -2871,13 +2901,7 @@ export const timeoutOrElse: {
   ): Effect.Effect<A | A2, E | E2, R | R2> =>
     raceFirst(
       self,
-      flatMap(interruptible(sleep(options.duration)), options.onTimeout),
-      {
-        onWinner: ({ fiber, index, parentFiber }) => {
-          if (index !== 0) return
-          ;(parentFiber as FiberImpl).setServices(fiber.services)
-        }
-      }
+      flatMap(interruptible(sleep(options.duration)), options.onTimeout)
     )
 )
 
@@ -2923,6 +2947,15 @@ export const timeoutOption: {
   ): Effect.Effect<Option.Option<A>, E, R> => raceFirst(asSome(self), as(interruptible(sleep(duration)), Option.none()))
 )
 
+/** @internal */
+export const timed = <A, E, R>(
+  self: Effect.Effect<A, E, R>
+): Effect.Effect<[duration: Duration.Duration, result: A], E, R> =>
+  clockWith((clock) => {
+    const start = clock.unsafeCurrentTimeNanos()
+    return map(self, (a) => [Duration.nanos(clock.unsafeCurrentTimeNanos() - start), a])
+  })
+
 // ----------------------------------------------------------------------------
 // resources & finalization
 // ----------------------------------------------------------------------------
@@ -2953,7 +2986,9 @@ const ScopeProto = {
     }
     let exits: Array<Exit.Exit<any, never>> = []
     const fibers: Array<Fiber.Fiber<any, never>> = []
-    for (const finalizer of Array.from(finalizers.values()).reverse()) {
+    const arr = Array.from(finalizers.values())
+    for (let i = arr.length - 1; i >= 0; i--) {
+      const finalizer = arr[i]
       if (this.strategy === "sequential") {
         exits.push(yield* exit(finalizer(exit_)))
       } else {
@@ -4056,6 +4091,8 @@ class Semaphore {
     uninterruptibleMask((restore) =>
       flatMap(restore(this.take(n)), (permits) => ensuring(restore(self), this.release(permits)))
     )
+
+  readonly withPermit = this.withPermits(1)
 
   readonly withPermitsIfAvailable = (n: number) => <A, E, R>(self: Effect.Effect<A, E, R>) =>
     uninterruptibleMask((restore) =>

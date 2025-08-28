@@ -618,6 +618,12 @@ export const failSync = <E>(evaluate: LazyArg<E>): Stream<never, E> => fromChann
 export const failCause = <E>(cause: Cause.Cause<E>): Stream<never, E> => fromChannel(Channel.failCause(cause))
 
 /**
+ * @since 2.0.0
+ * @category constructors
+ */
+export const die = (defect: unknown): Stream<never> => fromChannel(Channel.die(defect))
+
+/**
  * The stream that always fails with the specified lazily evaluated `Cause`.
  *
  * @example
@@ -1218,6 +1224,23 @@ export const map: {
     self.channel,
     Arr.map(f)
   )))
+
+/**
+ * @since 2.0.0
+ * @category mapping
+ */
+export const mapArray: {
+  <A, B>(
+    f: (a: Arr.NonEmptyReadonlyArray<A>) => Arr.NonEmptyReadonlyArray<B>
+  ): <E, R>(self: Stream<A, E, R>) => Stream<B, E, R>
+  <A, E, R, B>(
+    self: Stream<A, E, R>,
+    f: (a: Arr.NonEmptyReadonlyArray<A>) => Arr.NonEmptyReadonlyArray<B>
+  ): Stream<B, E, R>
+} = dual(2, <A, E, R, B>(
+  self: Stream<A, E, R>,
+  f: (a: Arr.NonEmptyReadonlyArray<A>) => Arr.NonEmptyReadonlyArray<B>
+): Stream<B, E, R> => fromChannel(Channel.map(self.channel, f)))
 
 /**
  * Maps over elements of the stream with the specified effectful function.
