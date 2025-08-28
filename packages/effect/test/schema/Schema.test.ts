@@ -3,6 +3,7 @@ import { Option, Order, Predicate, Redacted, Struct, Tuple } from "effect/data"
 import { Equal } from "effect/interfaces"
 import { String as Str } from "effect/primitives"
 import { AST, Check, Getter, Issue, Schema, ToParser, Transformation } from "effect/schema"
+import { DateTime } from "effect/time"
 import { produce } from "immer"
 import { describe, it } from "vitest"
 import { assertFalse, assertInclude, assertTrue, deepStrictEqual, strictEqual, throws } from "../utils/assert.ts"
@@ -2815,6 +2816,34 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
     await assertions.decoding.fail(schema, 0, `Expected Date, got 0`)
   })
 
+  it("DateTimeUtc", async () => {
+    const schema = Schema.DateTimeUtc
+    await assertions.decoding.succeed(schema, DateTime.unsafeMake("2021-01-01T00:00:00.000Z"))
+    await assertions.encoding.succeed(schema, DateTime.unsafeMake("2021-01-01T00:00:00.000Z"))
+  })
+
+  it("DateTimeUtcFromValidDate", async () => {
+    const schema = Schema.DateTimeUtcFromValidDate
+    await assertions.decoding.succeed(schema, new Date("2021-01-01T00:00:00.000Z"), {
+      expected: DateTime.unsafeMake("2021-01-01T00:00:00.000Z")
+    })
+    await assertions.decoding.fail(schema, new Date("invalid date"), `Expected a valid date, got Invalid Date`)
+    await assertions.encoding.succeed(schema, DateTime.unsafeMake("2021-01-01T00:00:00.000Z"), {
+      expected: new Date("2021-01-01T00:00:00.000Z")
+    })
+  })
+
+  it("DateTimeUtcFromString", async () => {
+    const schema = Schema.DateTimeUtcFromString
+    await assertions.decoding.succeed(schema, "2021-01-01T00:00:00.000Z", {
+      expected: DateTime.unsafeMake("2021-01-01T00:00:00.000Z")
+    })
+    await assertions.decoding.fail(schema, null, `Expected string, got null`)
+    await assertions.encoding.succeed(schema, DateTime.unsafeMake("2021-01-01T00:00:00.000Z"), {
+      expected: "2021-01-01T00:00:00.000Z"
+    })
+  })
+
   it("Map", async () => {
     const schema = Schema.Map(Schema.String, Schema.Number)
 
@@ -4270,7 +4299,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
     it("Optional Property to Exact Optional Property", async () => {
       const schema = Schema.Struct({
         a: Schema.optional(Schema.FiniteFromString).pipe(Schema.decodeTo(Schema.optionalKey(Schema.Number), {
-          decode: Getter.mapOptional(Option.filter(Predicate.isNotUndefined)),
+          decode: Getter.transformOptional(Option.filter(Predicate.isNotUndefined)),
           encode: Getter.passthrough()
         }))
       })
@@ -4287,7 +4316,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
       const schema = Schema.Struct({
         a: Schema.optional(Schema.NullOr(Schema.FiniteFromString)).pipe(
           Schema.decodeTo(Schema.optional(Schema.Number), {
-            decode: Getter.mapOptional(Option.filter(Predicate.isNotNull)),
+            decode: Getter.transformOptional(Option.filter(Predicate.isNotNull)),
             encode: Getter.passthrough()
           })
         )

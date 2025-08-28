@@ -1322,6 +1322,7 @@ export interface Boolean
 {}
 
 /**
+ * @category Boolean
  * @since 4.0.0
  */
 export const Boolean: Boolean = make<Boolean>(AST.booleanKeyword)
@@ -3294,10 +3295,10 @@ export function Redacted<S extends Top>(value: S): Redacted<S> {
       defaultJsonSerializer: ([value]) =>
         link<Redacted_.Redacted<S["Encoded"]>>()(
           value,
-          new Transformation.Transformation(
-            Getter.map(Redacted_.make),
-            Getter.forbidden("Cannot serialize Redacted")
-          )
+          {
+            decode: Getter.transform(Redacted_.make),
+            encode: Getter.forbidden("Cannot serialize Redacted")
+          }
         ),
       arbitrary: {
         _tag: "Declaration",
@@ -3554,7 +3555,7 @@ export const Defect: Defect = Union([
     Unknown,
     {
       decode: Getter.passthrough(),
-      encode: Getter.map((a) => {
+      encode: Getter.transform((a) => {
         if (Predicate.isRecord(a)) return InternalEffect.causePrettyMessage(a)
         return stringifyCircular(a)
       })
@@ -3812,23 +3813,35 @@ export function instanceOf<C extends abstract new(...args: any) => any>(
 export function link<T>() { // TODO: better name
   return <To extends Top>(
     encodeTo: To,
-    transformation: Transformation.Transformation<T, To["Type"], never, never>
+    transformation: {
+      readonly decode: Getter.Getter<T, NoInfer<To["Type"]>>
+      readonly encode: Getter.Getter<NoInfer<To["Type"]>, T>
+    }
   ): AST.Link => {
-    return new AST.Link(encodeTo.ast, transformation)
+    return new AST.Link(encodeTo.ast, Transformation.make(transformation))
   }
+}
+
+/**
+ * @since 4.0.0
+ */
+export interface URL extends instanceOf<globalThis.URL> {
+  readonly "~rebuild.out": URL
 }
 
 /**
  * A schema for JavaScript `URL` objects.
  *
+ * The default JSON serializer encodes URL as a string.
+ *
  * @since 4.0.0
  */
-export const URL = instanceOf(
+export const URL: URL = instanceOf(
   globalThis.URL,
   {
     title: "URL",
     defaultJsonSerializer: () =>
-      link<URL>()(
+      link<globalThis.URL>()(
         String,
         Transformation.transformOrFail({
           decode: (s) =>
@@ -3901,50 +3914,41 @@ export interface ValidDate extends Date {
  */
 export const ValidDate = Date.check(Check.validDate())
 
-// TODO: add API interface
 /**
  * @since 4.0.0
  */
-export const DateTimeUtc = declare(
-  (u) => DateTime.isDateTime(u) && DateTime.isUtc(u),
-  {
-    title: "Date",
-    defaultJsonSerializer: () =>
-      link<DateTime.Utc>()(
-        String,
-        new Transformation.Transformation(
-          Getter.DateTimeUtc(),
-          Getter.map(DateTime.formatIso)
-        )
-      ),
-    // TODO: test arbitrary, pretty and equivalence annotations
-    arbitrary: {
-      _tag: "Declaration",
-      declaration: () => (fc, ctx) =>
-        fc.date({ noInvalidDate: true, ...ctx?.constraints?.DateConstraints }).map((date) =>
-          DateTime.unsafeFromDate(date)
-        )
-    },
-    pretty: {
-      _tag: "Declaration",
-      declaration: () => (utc) => utc.toString()
-    },
-    equivalence: {
-      _tag: "Declaration",
-      declaration: () => DateTime.Equivalence
-    }
-  }
-)
+export interface Duration extends declare<Duration_.Duration> {
+  readonly "~rebuild.out": Duration
+}
 
-// TODO: add API interface
 /**
  * @since 4.0.0
  */
-export const Duration = declare(
+export const Duration: Duration = declare(
   Duration_.isDuration,
   {
     title: "Duration",
-    // TODO: add defaultJsonSerializer
+    defaultJsonSerializer: () =>
+      link<Duration_.Duration>()(
+        Union([Number, BigInt, Literal("Infinity")]),
+        Transformation.transform({
+          decode: (value) => {
+            if (value === "Infinity") return Duration_.infinity
+            if (Predicate.isBigInt(value)) return Duration_.nanos(value)
+            return Duration_.millis(value)
+          },
+          encode: (duration) => {
+            switch (duration.value._tag) {
+              case "Infinity":
+                return "Infinity"
+              case "Nanos":
+                return duration.value.nanos
+              case "Millis":
+                return duration.value.millis
+            }
+          }
+        })
+      ),
     // TODO: test arbitrary, pretty and equivalence annotations
     arbitrary: {
       _tag: "Declaration",
@@ -4306,8 +4310,8 @@ const makeGetLink = (self: new(...args: ReadonlyArray<any>) => any) => (ast: AST
   new AST.Link(
     ast,
     new Transformation.Transformation(
-      Getter.map((input) => new self(input)),
-      Getter.mapOrFail((input) => {
+      Getter.transform((input) => new self(input)),
+      Getter.transformOrFail((input) => {
         if (!(input instanceof self)) {
           return Effect.fail(new Issue.InvalidType(ast, input))
         }
@@ -4498,6 +4502,167 @@ export const StandardSchemaV1FailureResult = Struct({
     path: optional(Array(Union([PropertyKey, Struct({ key: PropertyKey })])))
   }))
 })
+
+/**
+ * @since 4.0.0
+ */
+export interface BooleanFromBit extends decodeTo<Boolean, Literals<readonly [0, 1]>> {
+  readonly "~rebuild.out": BooleanFromBit
+}
+
+/**
+ * A boolean parsed from 0 or 1.
+ *
+ * @category Boolean
+ * @since 4.0.0
+ */
+export const BooleanFromBit: BooleanFromBit = Literals([0, 1]).pipe(
+  decodeTo(
+    Boolean,
+    Transformation.transform({
+      decode: (bit) => bit === 1,
+      encode: (bool) => bool ? 1 : 0
+    })
+  )
+)
+
+/**
+ * @since 4.0.0
+ */
+export interface Uint8Array extends instanceOf<globalThis.Uint8Array<ArrayBufferLike>> {
+  readonly "~rebuild.out": Uint8Array
+}
+
+/**
+ * A schema for JavaScript `Uint8Array` objects.
+ *
+ * The default JSON serializer encodes Uint8Array as a Base64 encoded string.
+ *
+ * @category Uint8Array
+ * @since 4.0.0
+ */
+export const Uint8Array: Uint8Array = instanceOf(globalThis.Uint8Array<ArrayBufferLike>, {
+  defaultJsonSerializer: () =>
+    link<globalThis.Uint8Array<ArrayBufferLike>>()(
+      String.annotate({ description: "Base64 encoded Uint8Array" }),
+      {
+        decode: Getter.decodeBase64(),
+        encode: Getter.encodeBase64()
+      }
+    )
+})
+
+/**
+ * @since 4.0.0
+ */
+export interface DateTimeUtc extends declare<DateTime.Utc> {
+  readonly "~rebuild.out": DateTimeUtc
+}
+
+/**
+ * A schema for `DateTime.Utc` objects.
+ *
+ * The default JSON serializer encodes to a UTC ISO string.
+ *
+ * @category DateTime
+ * @since 4.0.0
+ */
+export const DateTimeUtc: DateTimeUtc = declare(
+  (u) => DateTime.isDateTime(u) && DateTime.isUtc(u),
+  {
+    title: "DateTimeUtc",
+    defaultJsonSerializer: () =>
+      link<DateTime.Utc>()(
+        String,
+        {
+          decode: Getter.dateTimeUtcFromInput(),
+          encode: Getter.transform(DateTime.formatIso)
+        }
+      ),
+    // TODO: test arbitrary, pretty and equivalence annotations
+    arbitrary: {
+      _tag: "Declaration",
+      declaration: () => (fc, ctx) =>
+        fc.date({ noInvalidDate: true, ...ctx?.constraints?.DateConstraints }).map((date) =>
+          DateTime.unsafeFromDate(date)
+        )
+    },
+    pretty: {
+      _tag: "Declaration",
+      declaration: () => (utc) => utc.toString()
+    },
+    equivalence: {
+      _tag: "Declaration",
+      declaration: () => DateTime.Equivalence
+    }
+  }
+)
+
+/**
+ * @since 4.0.0
+ */
+export interface DateTimeUtcFromValidDate extends decodeTo<DateTimeUtc, Date> {
+  readonly "~rebuild.out": DateTimeUtcFromValidDate
+}
+
+/**
+ * Decoding:
+ * - A `Date` is decoded as a `DateTime.Utc`
+ *
+ * Encoding:
+ * - A `DateTime.Utc` is encoded as a `Date`
+ *
+ * @category DateTime
+ * @since 4.0.0
+ */
+export const DateTimeUtcFromValidDate: DateTimeUtcFromValidDate = ValidDate.pipe(
+  decodeTo(DateTimeUtc, {
+    decode: Getter.dateTimeUtcFromInput(),
+    encode: Getter.transform(DateTime.toDateUtc)
+  })
+)
+
+/**
+ * @since 4.0.0
+ */
+export interface DateTimeUtcFromString extends decodeTo<DateTimeUtc, String> {
+  readonly "~rebuild.out": DateTimeUtcFromString
+}
+
+/**
+ * Decoding:
+ * - A `string` that can be parsed by `Date.parse` is decoded as a `DateTime.Utc`
+ *
+ * Encoding:
+ * - A `DateTime.Utc` is encoded as a `string` in ISO 8601 format
+ *
+ * @category DateTime
+ * @since 4.0.0
+ */
+export const DateTimeUtcFromString: DateTimeUtcFromString = String.annotate({
+  description: "a string that will be decoded as a DateTime.Utc"
+}).pipe(
+  decodeTo(DateTimeUtc, {
+    decode: Getter.dateTimeUtcFromInput(),
+    encode: Getter.transform(DateTime.formatIso)
+  })
+)
+
+/**
+ * @since 4.0.0
+ */
+export interface DateTimeUtcFromNumber extends decodeTo<instanceOf<DateTime.Utc>, Number> {}
+
+/**
+ * @category DateTime
+ * @since 4.0.0
+ */
+export const DateTimeUtcFromNumber: DateTimeUtcFromNumber = Number.pipe(
+  decodeTo(DateTimeUtc, {
+    decode: Getter.dateTimeUtcFromInput(),
+    encode: Getter.transform(DateTime.toEpochMillis)
+  })
+)
 
 /**
  * @since 4.0.0

@@ -1,6 +1,7 @@
 import { Cause } from "effect"
 import { Option, Redacted } from "effect/data"
 import { Check, Formatter, Schema, Serializer, ToParser, Transformation } from "effect/schema"
+import { DateTime, Duration } from "effect/time"
 import { describe, it } from "vitest"
 import { assertTrue, strictEqual } from "../utils/assert.ts"
 import { assertions } from "../utils/schema.ts"
@@ -28,6 +29,14 @@ describe("Serializer", () => {
             Schema.declare((u): u is A => u instanceof A),
             new A(),
             `cannot serialize to JSON, required \`defaultJsonSerializer\` annotation for Declaration`
+          )
+        })
+
+        it("Unknown", async () => {
+          await assertions.serialization.json.typeCodec.fail(
+            Schema.Unknown,
+            "a",
+            `cannot serialize to JSON, required \`defaultJsonSerializer\` annotation for UnknownKeyword`
           )
         })
 
@@ -183,15 +192,8 @@ describe("Serializer", () => {
       it("Any", async () => {
         const schema = Schema.Any
 
-        await assertions.serialization.json.typeCodec.succeed(schema, {})
-        await assertions.deserialization.json.typeCodec.succeed(schema, {})
-      })
-
-      it("Unknown", async () => {
-        const schema = Schema.Unknown
-
-        await assertions.serialization.json.typeCodec.succeed(schema, {})
-        await assertions.deserialization.json.typeCodec.succeed(schema, {})
+        await assertions.serialization.json.typeCodec.succeed(schema, () => {})
+        await assertions.deserialization.json.typeCodec.succeed(schema, () => {})
       })
 
       it("Undefined", async () => {
@@ -692,6 +694,42 @@ describe("Serializer", () => {
         )
       })
 
+      it("Uint8Array", async () => {
+        const schema = Schema.Uint8Array
+        await assertions.serialization.json.typeCodec.succeed(schema, new Uint8Array([1, 2, 3]), "AQID")
+        await assertions.deserialization.json.typeCodec.succeed(schema, "AQID", new Uint8Array([1, 2, 3]))
+        await assertions.deserialization.json.typeCodec.fail(
+          schema,
+          "not a base64 string",
+          "Length must be a multiple of 4, but is 19"
+        )
+      })
+
+      it("Duration", async () => {
+        const schema = Schema.Duration
+        await assertions.serialization.json.typeCodec.succeed(schema, Duration.infinity, "Infinity")
+        await assertions.serialization.json.typeCodec.succeed(schema, Duration.nanos(1000n), "1000")
+        await assertions.serialization.json.typeCodec.succeed(schema, Duration.millis(1), 1)
+        await assertions.serialization.json.typeCodec.succeed(schema, Duration.zero, 0)
+        await assertions.deserialization.json.typeCodec.succeed(schema, "Infinity", Duration.infinity)
+        await assertions.deserialization.json.typeCodec.succeed(schema, 1, Duration.millis(1))
+        await assertions.deserialization.json.typeCodec.succeed(schema, "1000", Duration.nanos(1000n))
+      })
+
+      it("DateTimeUtc", async () => {
+        const schema = Schema.DateTimeUtc
+        await assertions.serialization.json.typeCodec.succeed(
+          schema,
+          DateTime.unsafeMake("2021-01-01T00:00:00.000Z"),
+          "2021-01-01T00:00:00.000Z"
+        )
+        await assertions.deserialization.json.typeCodec.succeed(
+          schema,
+          "2021-01-01T00:00:00.000Z",
+          DateTime.unsafeMake("2021-01-01T00:00:00.000Z")
+        )
+      })
+
       it("Option(Date)", async () => {
         const schema = Schema.Option(Schema.Date)
 
@@ -850,6 +888,20 @@ describe("Serializer", () => {
           fiberId: null
         }])
       })
+
+      it("DateTimeUtcFromValidDate", async () => {
+        const schema = Schema.DateTimeUtcFromValidDate
+        await assertions.serialization.json.codec.succeed(
+          schema,
+          DateTime.unsafeMake("2021-01-01T00:00:00.000Z"),
+          "2021-01-01T00:00:00.000Z"
+        )
+        await assertions.deserialization.json.codec.succeed(
+          schema,
+          "2021-01-01T00:00:00.000Z",
+          DateTime.unsafeMake("2021-01-01T00:00:00.000Z")
+        )
+      })
     })
 
     it("StandardSchemaV1FailureResult", async () => {
@@ -932,6 +984,14 @@ describe("Serializer", () => {
           )
         })
 
+        it("Unknown", async () => {
+          await assertions.serialization.stringLeafJson.typeCodec.fail(
+            Schema.Unknown,
+            "a",
+            `cannot serialize to JSON, required \`defaultJsonSerializer\` annotation for UnknownKeyword`
+          )
+        })
+
         it("Object", async () => {
           await assertions.serialization.stringLeafJson.typeCodec.fail(
             Schema.Object,
@@ -957,15 +1017,8 @@ describe("Serializer", () => {
       it("Any", async () => {
         const schema = Schema.Any
 
-        await assertions.serialization.stringLeafJson.typeCodec.succeed(schema, "a")
-        await assertions.deserialization.stringLeafJson.typeCodec.succeed(schema, "a")
-      })
-
-      it("Unknown", async () => {
-        const schema = Schema.Unknown
-
-        await assertions.serialization.stringLeafJson.typeCodec.succeed(schema, "a")
-        await assertions.deserialization.stringLeafJson.typeCodec.succeed(schema, "a")
+        await assertions.serialization.stringLeafJson.typeCodec.succeed(schema, (() => {}) as any)
+        await assertions.deserialization.stringLeafJson.typeCodec.succeed(schema, (() => {}) as any)
       })
 
       it("Undefined", async () => {
