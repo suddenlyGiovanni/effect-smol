@@ -154,6 +154,7 @@ export interface Handler<Tag extends string> {
     readonly clientId: number
     readonly requestId: RequestId
     readonly headers: Headers
+    readonly rpc: Any
   }) => Effect<any, any> | Stream<any, any>
   readonly services: ServiceMap.ServiceMap<never>
 }
@@ -172,7 +173,7 @@ export interface Any extends Pipeable {
  * @since 4.0.0
  * @category models
  */
-export interface AnyWithProps {
+export interface AnyWithProps extends Pipeable {
   readonly [TypeId]: TypeId
   readonly _tag: string
   readonly key: string
@@ -473,6 +474,7 @@ export type ToHandlerFn<Current extends Any, R = any> = (
     readonly clientId: number
     readonly requestId: RequestId
     readonly headers: Headers
+    readonly rpc: Current
   }
 ) => ResultFrom<Current, R> | Fork<ResultFrom<Current, R>>
 
