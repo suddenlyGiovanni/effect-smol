@@ -10,6 +10,10 @@ export {
   /**
    * @since 2.0.0
    */
+  coerceUnsafe,
+  /**
+   * @since 2.0.0
+   */
   flow,
   /**
    * @since 2.0.0
@@ -22,9 +26,5 @@ export {
   /**
    * @since 2.0.0
    */
-  pipe,
-  /**
-   * @since 2.0.0
-   */
-  coerceUnsafe
+  pipe
 } from "./Function.ts"
