@@ -10,7 +10,7 @@ import * as Tracer from "../../observability/Tracer.ts"
 import type * as Scope from "../../Scope.ts"
 import type * as ServiceMap from "../../ServiceMap.ts"
 import * as Duration from "../../time/Duration.ts"
-import type { ExtractTag } from "../../types/Types.ts"
+import type { ExtractTag, Mutable } from "../../types/Types.ts"
 import type * as Headers from "../http/Headers.ts"
 import type * as HttpClient from "../http/HttpClient.ts"
 import type { KeyValue, Resource } from "./OtlpResource.ts"
@@ -158,9 +158,9 @@ const makeSpan = (options: {
   readonly kind: Tracer.SpanKind
   readonly export: (span: SpanImpl) => void
 }): SpanImpl => {
-  const self = Object.assign(Object.create(SpanProto), options)
+  const self: Mutable<SpanImpl> = Object.assign(Object.create(SpanProto), options)
   if (self.parent) {
-    self.traceId = self.parent.value.traceId
+    self.traceId = self.parent.traceId
   } else {
     self.traceId = generateId(32)
   }
