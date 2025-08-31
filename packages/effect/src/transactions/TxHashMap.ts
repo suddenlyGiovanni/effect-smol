@@ -1612,19 +1612,19 @@ export const hasBy: {
  *     (task) => task.priority >= 2 && !task.completed
  *   )
  *
- *   if (Option.isSome(highPriorityTask)) {
- *     const [taskId, task] = highPriorityTask.value
+ *   if (highPriorityTask) {
+ *     const [taskId, task] = highPriorityTask
  *     console.log(`Found task: ${taskId}, priority: ${task.priority}`)
  *     // "Found task: task3, priority: 2"
  *   }
  *
  *   // Find first task assigned to specific user
  *   const aliceTask = yield* tasks.pipe(
- *     TxHashMap.findFirst((task, taskId) => task.assignee === "alice")
+ *     TxHashMap.findFirst((task) => task.assignee === "alice")
  *   )
  *
- *   if (Option.isSome(aliceTask)) {
- *     console.log(`Alice's task: ${aliceTask.value[0]}`)
+ *   if (aliceTask) {
+ *     console.log(`Alice's task: ${aliceTask[0]}`)
  *   }
  * })
  * ```
@@ -1633,11 +1633,11 @@ export const hasBy: {
  * @category combinators
  */
 export const findFirst: {
-  <K, V>(predicate: (value: V, key: K) => boolean): (self: TxHashMap<K, V>) => Effect.Effect<Option.Option<[K, V]>>
-  <K, V>(self: TxHashMap<K, V>, predicate: (value: V, key: K) => boolean): Effect.Effect<Option.Option<[K, V]>>
+  <K, V>(predicate: (value: V, key: K) => boolean): (self: TxHashMap<K, V>) => Effect.Effect<[K, V] | undefined>
+  <K, V>(self: TxHashMap<K, V>, predicate: (value: V, key: K) => boolean): Effect.Effect<[K, V] | undefined>
 } = dual(
   2,
-  <K, V>(self: TxHashMap<K, V>, predicate: (value: V, key: K) => boolean): Effect.Effect<Option.Option<[K, V]>> =>
+  <K, V>(self: TxHashMap<K, V>, predicate: (value: V, key: K) => boolean): Effect.Effect<[K, V] | undefined> =>
     TxRef.get(self.ref).pipe(Effect.map((map) => HashMap.findFirst(map, predicate)))
 )
 

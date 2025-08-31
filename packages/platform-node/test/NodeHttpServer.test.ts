@@ -1,7 +1,6 @@
 import { NodeHttpServer } from "@effect/platform-node"
 import { assert, describe, expect, it } from "@effect/vitest"
 import { Effect } from "effect"
-import * as Option from "effect/data/Option"
 import * as Fiber from "effect/Fiber"
 import * as Layer from "effect/Layer"
 import * as Tracer from "effect/observability/Tracer"
@@ -127,7 +126,7 @@ describe("HttpServer", () => {
       ).pipe(
         HttpRouter.serve,
         Layer.build,
-        Effect.provideService(Multipart.MaxFileSize, Option.some(100))
+        Effect.provideService(Multipart.MaxFileSize, 100)
       )
       const client = yield* HttpClient.HttpClient
       const formData = new FormData()
@@ -397,8 +396,8 @@ describe("HttpServer", () => {
             span(name, parent, _, __, ___, kind) {
               assert.strictEqual(name, "http.client GET")
               assert.strictEqual(kind, "client")
-              assert(parent._tag === "Some" && parent.value._tag === "Span")
-              assert.strictEqual(parent.value.name, "request parent")
+              assert(parent && parent._tag === "Span")
+              assert.strictEqual(parent.name, "request parent")
               return requestSpan
             }
           })
@@ -406,7 +405,7 @@ describe("HttpServer", () => {
         Effect.withSpan("request parent"),
         Effect.repeat({ times: 2 })
       )
-      expect((body as any).parent.value.spanId).toEqual(requestSpan.spanId)
+      expect((body as any).parent.spanId).toEqual(requestSpan.spanId)
     }).pipe(Effect.provide(NodeHttpServer.layerTest)))
 
   it.effect("html", () =>

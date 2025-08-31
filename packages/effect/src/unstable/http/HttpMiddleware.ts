@@ -1,9 +1,9 @@
 /**
  * @since 4.0.0
  */
-import * as Option from "../../data/Option.ts"
 import type { Predicate } from "../../data/Predicate.ts"
 import type { ReadonlyRecord } from "../../data/Record.ts"
+import * as UndefinedOr from "../../data/UndefinedOr.ts"
 import * as Effect from "../../Effect.ts"
 import { constFalse } from "../../Function.ts"
 import * as internalEffect from "../../internal/effect.ts"
@@ -107,7 +107,7 @@ export const logger: <E, R>(
         } else if (exit._tag === "Failure") {
           const [response, cause] = causeResponseStripped(exit.cause)
           return Effect.andThen(
-            Effect.annotateLogs(Effect.log(cause._tag === "Some" ? cause.value : "Sent HTTP Response"), {
+            Effect.annotateLogs(Effect.log(cause ?? "Sent HTTP Response"), {
               "http.method": request.method,
               "http.url": request.url,
               "http.status": response.status
@@ -144,14 +144,14 @@ export const tracer: <E, R>(
     }
     const nameGenerator = fiber.getRef(SpanNameGenerator)
     const span = internalEffect.makeSpanUnsafe(fiber, nameGenerator(request), {
-      parent: Option.getOrUndefined(TraceContext.fromHeaders(request.headers)),
+      parent: TraceContext.fromHeaders(request.headers),
       kind: "server",
       captureStackTrace: false
     })
     return Effect.onExitInterruptible(Effect.withParentSpan(httpApp, span), (exit) => {
       const endTime = fiber.getRef(Clock).currentTimeNanosUnsafe()
       return Effect.flatMap(Effect.yieldNow, () => {
-        const url = Option.getOrUndefined(Request.toURL(request))
+        const url = Request.toURL(request)
         if (url !== undefined && (url.username !== "" || url.password !== "")) {
           url.username = "REDACTED"
           url.password = "REDACTED"
@@ -174,8 +174,8 @@ export const tracer: <E, R>(
         for (const name in requestHeaders) {
           span.attribute(`http.request.header.${name}`, String(requestHeaders[name]))
         }
-        if (request.remoteAddress._tag === "Some") {
-          span.attribute("client.address", request.remoteAddress.value)
+        if (request.remoteAddress !== undefined) {
+          span.attribute("client.address", request.remoteAddress)
         }
         const response = exitResponse(exit)
         span.attribute("http.response.status_code", response.status)
@@ -344,19 +344,17 @@ export const cors = (options?: {
           headers: headersFromRequestOptions(request)
         }))
       }
-      const o = Option.match(fiber.getRef(PreResponseHandlers), {
-        onNone: () => Option.some(preResponseHandler),
-        onSome: (prev) =>
-          Option.some<PreResponseHandler>((request, response) =>
-            Effect.flatMap(prev(request, response), (response) => preResponseHandler(request, response))
-          )
+      const next = UndefinedOr.match(fiber.getRef(PreResponseHandlers), {
+        onUndefined: () => preResponseHandler,
+        onDefined: (prev) => (request, response) =>
+          Effect.flatMap(prev(request, response), (response) => preResponseHandler(request, response))
       })
-      fiber.setServices(ServiceMap.add(fiber.services, PreResponseHandlers, o))
+      fiber.setServices(ServiceMap.add(fiber.services, PreResponseHandlers, next))
       return httpApp
     })
 }
 
-const PreResponseHandlers = ServiceMap.Reference<Option.Option<PreResponseHandler>>(
+const PreResponseHandlers = ServiceMap.Reference<PreResponseHandler | undefined>(
   "effect/http/HttpEffect/PreResponseHandlers",
-  { defaultValue: Option.none }
+  { defaultValue: () => undefined }
 )

@@ -1225,7 +1225,7 @@ export {
   void_ as void
 }
 
-const undefined_: Effect<undefined> = succeed(undefined)
+const undefined_: Effect<undefined> = internal.undefined
 export {
   /**
    * @since 4.0.0
@@ -1690,7 +1690,7 @@ export const fromResult: <A, E>(result: Result.Result<A, E>) => Effect<A, E> = i
  * @example
  * ```ts
  * import { Effect } from "effect"
- * import * as Option from "effect/data/Option"
+ * import { Option } from "effect/data"
  *
  * const some = Option.some(42)
  * const none = Option.none()

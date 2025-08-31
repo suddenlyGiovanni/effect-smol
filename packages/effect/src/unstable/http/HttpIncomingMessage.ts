@@ -1,7 +1,6 @@
 /**
  * @since 4.0.0
  */
-import * as Option from "../../data/Option.ts"
 import { hasProperty } from "../../data/Predicate.ts"
 import * as Effect from "../../Effect.ts"
 import * as Inspectable from "../../interfaces/Inspectable.ts"
@@ -39,7 +38,7 @@ export const isHttpIncomingMessage = (u: unknown): u is HttpIncomingMessage => h
 export interface HttpIncomingMessage<E = unknown> extends Inspectable.Inspectable {
   readonly [TypeId]: TypeId
   readonly headers: Headers.Headers
-  readonly remoteAddress: Option.Option<string>
+  readonly remoteAddress: string | undefined
   readonly json: Effect.Effect<unknown, E>
   readonly text: Effect.Effect<string, E>
   readonly urlParamsBody: Effect.Effect<UrlParams.UrlParams, E>
@@ -96,9 +95,9 @@ export const schemaHeaders = <A, I extends Readonly<Record<string, string | unde
  * @since 4.0.0
  * @category References
  */
-export const MaxBodySize = ServiceMap.Reference<Option.Option<FileSystem.Size>>(
+export const MaxBodySize = ServiceMap.Reference<FileSystem.Size | undefined>(
   "effect/http/HttpIncomingMessage/MaxBodySize",
-  { defaultValue: Option.none }
+  { defaultValue: () => undefined }
 )
 
 /**
@@ -125,7 +124,7 @@ export const inspect = <E>(self: HttpIncomingMessage<E>, that: object): object =
   const obj: any = {
     ...that,
     headers: Inspectable.redact(self.headers),
-    remoteAddress: self.remoteAddress.toJSON()
+    remoteAddress: self.remoteAddress
   }
   if (body !== undefined) {
     obj.body = body

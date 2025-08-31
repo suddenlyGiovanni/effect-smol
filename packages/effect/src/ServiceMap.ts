@@ -199,7 +199,7 @@ const KeyProto: any = {
     }
   },
   asEffect(this: any) {
-    const fn = this.asEffect = constant(withFiber((fiber) => exitSucceed(getUnsafe(fiber.services, this))))
+    const fn = this.asEffect = constant(withFiber((fiber) => exitSucceed(get(fiber.services, this))))
     return fn()
   },
   of<Service>(self: Service): Service {
@@ -659,6 +659,37 @@ export const getUnsafe: {
 )
 
 /**
+ * Get a service from the context that corresponds to the given key.
+ *
+ * @param self - The `ServiceMap` to search for the service.
+ * @param key - The `Key` of the service to retrieve.
+ *
+ * @example
+ * ```ts
+ * import * as assert from "node:assert"
+ * import { pipe } from "effect"
+ * import { ServiceMap } from "effect"
+ *
+ * const Port = ServiceMap.Key<{ PORT: number }>("Port")
+ * const Timeout = ServiceMap.Key<{ TIMEOUT: number }>("Timeout")
+ *
+ * const Services = pipe(
+ *   ServiceMap.make(Port, { PORT: 8080 }),
+ *   ServiceMap.add(Timeout, { TIMEOUT: 5000 })
+ * )
+ *
+ * assert.deepStrictEqual(ServiceMap.get(Services, Timeout), { TIMEOUT: 5000 })
+ * ```
+ *
+ * @since 4.0.0
+ * @category Getters
+ */
+export const get: {
+  <Services, I extends Services, S>(key: Key<I, S>): (self: ServiceMap<Services>) => S
+  <Services, I extends Services, S>(self: ServiceMap<Services>, key: Key<I, S>): S
+} = getUnsafe
+
+/**
  * @example
  * ```ts
  * import * as assert from "node:assert"
@@ -712,37 +743,6 @@ const serviceNotFoundError = (key: Key<any, any>) => {
   }
   return error
 }
-
-/**
- * Get a service from the context that corresponds to the given key.
- *
- * @param self - The `ServiceMap` to search for the service.
- * @param key - The `Key` of the service to retrieve.
- *
- * @example
- * ```ts
- * import * as assert from "node:assert"
- * import { pipe } from "effect"
- * import { ServiceMap } from "effect"
- *
- * const Port = ServiceMap.Key<{ PORT: number }>("Port")
- * const Timeout = ServiceMap.Key<{ TIMEOUT: number }>("Timeout")
- *
- * const Services = pipe(
- *   ServiceMap.make(Port, { PORT: 8080 }),
- *   ServiceMap.add(Timeout, { TIMEOUT: 5000 })
- * )
- *
- * assert.deepStrictEqual(ServiceMap.get(Services, Timeout), { TIMEOUT: 5000 })
- * ```
- *
- * @since 4.0.0
- * @category Getters
- */
-export const get: {
-  <Services, I extends Services, S>(key: Key<I, S>): (self: ServiceMap<Services>) => S
-  <Services, I extends Services, S>(self: ServiceMap<Services>, key: Key<I, S>): S
-} = getUnsafe
 
 /**
  * Get the value associated with the specified key from the context wrapped in an `Option` object. If the key is not

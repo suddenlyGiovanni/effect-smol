@@ -7,6 +7,7 @@ import * as Option from "../../data/Option.ts"
 import type { ReadonlyRecord } from "../../data/Record.ts"
 import * as Redacted from "../../data/Redacted.ts"
 import * as Result from "../../data/Result.ts"
+import * as UndefinedOr from "../../data/UndefinedOr.ts"
 import * as Effect from "../../Effect.ts"
 import * as Encoding from "../../encoding/Encoding.ts"
 import * as Fiber from "../../Fiber.ts"
@@ -439,18 +440,17 @@ const handlerToRoute = (
   services: ServiceMap.ServiceMap<any>
 ): HttpRouter.Route<any, any> => {
   const endpoint = handler.endpoint
-  const isMultipartStream = endpoint.payloadSchema.pipe(
-    Option.map(({ ast }) => ast.annotations?.httpApiMultipartStream !== undefined),
-    Option.getOrElse(constFalse)
+  const isMultipartStream = endpoint.payloadSchema?.pipe(
+    ({ ast }) => ast.annotations?.httpApiMultipartStream !== undefined
+  ) ?? constFalse
+  const multipartLimits = endpoint.payloadSchema?.pipe(
+    ({ ast }) => ast.annotations?.httpApiMultipartStream ?? ast.annotations?.httpApiMultipart
   )
-  const multipartLimits = endpoint.payloadSchema.pipe(
-    Option.flatMapNullishOr(({ ast }) => ast.annotations?.httpApiMultipartStream ?? ast.annotations?.httpApiMultipart)
-  )
-  const decodePath = Option.map(endpoint.pathSchema, Schema.decodeUnknownEffect)
+  const decodePath = UndefinedOr.map(endpoint.pathSchema, Schema.decodeUnknownEffect)
   const decodePayload = handler.withFullRequest || isMultipartStream
-    ? Option.none()
-    : Option.map(endpoint.payloadSchema, Schema.decodeUnknownEffect)
-  const decodeHeaders = Option.map(endpoint.headersSchema, Schema.decodeUnknownEffect)
+    ? undefined
+    : UndefinedOr.map(endpoint.payloadSchema, Schema.decodeUnknownEffect)
+  const decodeHeaders = UndefinedOr.map(endpoint.headersSchema, Schema.decodeUnknownEffect)
   const encodeSuccess = Schema.encodeEffect(makeSuccessSchema(endpoint.successSchema))
   return HttpRouter.route(
     endpoint.method,
@@ -470,25 +470,25 @@ const handlerToRoute = (
           endpoint,
           group
         }
-        if (decodePath._tag === "Some") {
-          request.path = yield* decodePath.value(routeContext.params)
+        if (decodePath) {
+          request.path = yield* decodePath(routeContext.params)
         }
-        if (decodePayload._tag === "Some") {
+        if (decodePayload) {
           request.payload = yield* Effect.flatMap(
             requestPayload(httpRequest, urlParams, multipartLimits),
-            decodePayload.value
+            decodePayload
           )
         } else if (isMultipartStream) {
-          request.payload = Option.match(multipartLimits, {
-            onNone: () => httpRequest.multipartStream,
-            onSome: (limits) => Stream.provideServices(httpRequest.multipartStream, Multipart.limitsServices(limits))
+          request.payload = UndefinedOr.match(multipartLimits, {
+            onUndefined: () => httpRequest.multipartStream,
+            onDefined: (limits) => Stream.provideServices(httpRequest.multipartStream, Multipart.limitsServices(limits))
           })
         }
-        if (decodeHeaders._tag === "Some") {
-          request.headers = yield* decodeHeaders.value(httpRequest.headers)
+        if (decodeHeaders) {
+          request.headers = yield* decodeHeaders(httpRequest.headers)
         }
-        if (endpoint.urlParamsSchema._tag === "Some") {
-          const schema = endpoint.urlParamsSchema.value
+        if (endpoint.urlParamsSchema) {
+          const schema = endpoint.urlParamsSchema
           request.urlParams = yield* Schema.decodeUnknownEffect(schema)(normalizeUrlParams(urlParams, schema.ast))
         }
         const response = yield* handler.handler(request)
@@ -508,7 +508,7 @@ const filterIsSchemaError = Filter.instanceOf(Schema.SchemaError)
 const requestPayload = (
   request: HttpServerRequest,
   urlParams: ReadonlyRecord<string, string | Array<string>>,
-  multipartLimits: Option.Option<Multipart.withLimits.Options>
+  multipartLimits: Multipart.withLimits.Options | undefined
 ): Effect.Effect<
   unknown,
   never,
@@ -525,9 +525,9 @@ const requestPayload = (
   if (contentType.includes("application/json")) {
     return Effect.orDie(request.json)
   } else if (contentType.includes("multipart/form-data")) {
-    return Effect.orDie(Option.match(multipartLimits, {
-      onNone: () => request.multipart,
-      onSome: (limits) => Effect.provideServices(request.multipart, Multipart.limitsServices(limits))
+    return Effect.orDie(UndefinedOr.match(multipartLimits, {
+      onUndefined: () => request.multipart,
+      onDefined: (limits) => Effect.provideServices(request.multipart, Multipart.limitsServices(limits))
     }))
   } else if (contentType.includes("x-www-form-urlencoded")) {
     return Effect.map(Effect.orDie(request.urlParamsBody), UrlParams.toRecord)
