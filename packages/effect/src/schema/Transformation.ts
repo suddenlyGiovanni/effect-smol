@@ -310,3 +310,23 @@ export function optionFromNullOr<T>(): Transformation<Option.Option<Exclude<T, n
     encode: Option.getOrNull
   })
 }
+
+/**
+ * @since 4.0.0
+ */
+export function optionFromOptionalKey<T>(): Transformation<Option.Option<T>, T> {
+  return transformOptional({
+    decode: Option.some,
+    encode: Option.flatten
+  })
+}
+
+/**
+ * @since 4.0.0
+ */
+export function optionFromOptional<T>(): Transformation<Option.Option<T>, T | undefined> {
+  return transformOptional<Option.Option<T>, T | undefined>({
+    decode: (ot) => ot.pipe(Option.filter(Predicate.isNotUndefined), Option.some),
+    encode: Option.flatten
+  })
+}
