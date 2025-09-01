@@ -350,7 +350,7 @@ export function makeCookie(
       return Result.fail(new CookiesError({ reason: "InvalidPath" }))
     }
 
-    if (options.maxAge !== undefined && !Duration.isFinite(Duration.decodeUnsafe(options.maxAge))) {
+    if (options.maxAge !== undefined && !Duration.isFinite(Duration.fromDurationInputUnsafe(options.maxAge))) {
       return Result.fail(new CookiesError({ reason: "InfinityMaxAge" }))
     }
   }
@@ -605,7 +605,7 @@ export function serializeCookie(self: Cookie): string {
   const options = self.options
 
   if (options.maxAge !== undefined) {
-    const maxAge = Duration.toSeconds(options.maxAge)
+    const maxAge = Duration.toSeconds(Duration.fromDurationInputUnsafe(options.maxAge))
     str += "; Max-Age=" + Math.trunc(maxAge)
   }
 

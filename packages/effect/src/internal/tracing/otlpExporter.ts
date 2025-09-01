@@ -44,7 +44,7 @@ export const make: (
 > = Effect.fnUntraced(function*(options) {
   const clock = yield* Clock
   const scope = yield* Effect.scope
-  const exportInterval = Duration.decodeUnsafe(options.exportInterval)
+  const exportInterval = Duration.fromDurationInputUnsafe(options.exportInterval)
   let disabledUntil: number | undefined = undefined
 
   const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient).pipe(
@@ -82,7 +82,7 @@ export const make: (
   }).pipe(
     Effect.catchCause((cause) => {
       if (disabledUntil !== undefined) return Effect.void
-      disabledUntil = clock.currentTimeMillisUnsafe() + Duration.toMillis("60 seconds")
+      disabledUntil = clock.currentTimeMillisUnsafe() + 60_000
       buffer = []
       return Effect.logDebug("Disabling exporter for 60 seconds", cause)
     }),
