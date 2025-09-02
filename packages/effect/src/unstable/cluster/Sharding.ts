@@ -204,8 +204,7 @@ const make = Effect.gen(function*() {
   const events = yield* PubSub.unbounded<ShardingRegistrationEvent>()
   const getRegistrationEvents: Stream.Stream<ShardingRegistrationEvent> = Stream.fromPubSub(events)
 
-  const isLocalRunner = (address: RunnerAddress) =>
-    Option.isSome(config.runnerAddress) && Equal.equals(address, config.runnerAddress.value)
+  const isLocalRunner = (address: RunnerAddress) => config.runnerAddress && Equal.equals(address, config.runnerAddress)
 
   function getShardId(entityId: EntityId, group: string): ShardId {
     const id = Math.abs(hashString(entityId) % config.shardsPerGroup) + 1
@@ -218,8 +217,8 @@ const make = Effect.gen(function*() {
 
   // --- Shard acquisition ---
 
-  if (Option.isSome(config.runnerAddress)) {
-    const selfAddress = config.runnerAddress.value
+  if (config.runnerAddress) {
+    const selfAddress = config.runnerAddress
     yield* Scope.addFinalizerExit(shardingScope, () => {
       // the locks expire over time, so if this fails we ignore it
       return Effect.ignore(shardStorage.releaseAll(selfAddress))
@@ -421,8 +420,8 @@ const make = Effect.gen(function*() {
   const sentRequestIds = new Set<Snowflake.Snowflake>()
   const sentRequestIdSets = new Set<Set<Snowflake.Snowflake>>()
 
-  if (storageEnabled && Option.isSome(config.runnerAddress)) {
-    const selfAddress = config.runnerAddress.value
+  if (storageEnabled && config.runnerAddress) {
+    const selfAddress = config.runnerAddress
 
     yield* Effect.gen(function*() {
       yield* Effect.logDebug("Starting")
@@ -762,22 +761,22 @@ const make = Effect.gen(function*() {
     return Effect.catchFilter(
       Effect.suspend(() => {
         const address = message.envelope.address
-        const maybeRunner = MutableHashMap.get(shardAssignments, address.shardId)
         const isPersisted = ServiceMap.get(message.rpc.annotations, Persisted)
         if (isPersisted && !storageEnabled) {
           return Effect.die("Sharding.sendOutgoing: Persisted messages require MessageStorage")
         }
-        const runnerIsLocal = Option.isSome(maybeRunner) && isLocalRunner(maybeRunner.value)
+        const maybeRunner = Option.getOrUndefined(MutableHashMap.get(shardAssignments, address.shardId))
+        const runnerIsLocal = maybeRunner !== undefined && isLocalRunner(maybeRunner)
         if (isPersisted) {
           return runnerIsLocal
             ? notifyLocal(message, discard)
             : runners.notify({ address: maybeRunner, message, discard })
-        } else if (Option.isNone(maybeRunner)) {
+        } else if (maybeRunner === undefined) {
           return Effect.fail(new EntityNotAssignedToRunner({ address }))
         }
         return runnerIsLocal
           ? sendLocal(message)
-          : runners.send({ address: maybeRunner.value, message })
+          : runners.send({ address: maybeRunner, message })
       }),
       (error) =>
         error._tag === "EntityNotAssignedToRunner" || error._tag === "RunnerUnavailable" ? error : Filter.fail(error),
@@ -820,8 +819,8 @@ const make = Effect.gen(function*() {
   // and re-subscribe to sharding events
   yield* Effect.gen(function*() {
     yield* Effect.logDebug("Registering with shard manager")
-    if (Option.isSome(config.runnerAddress)) {
-      const machineId = yield* shardManager.register(config.runnerAddress.value, config.shardGroups)
+    if (config.runnerAddress) {
+      const machineId = yield* shardManager.register(config.runnerAddress, config.shardGroups)
       yield* snowflakeGen.setMachineId(machineId)
     }
 
@@ -912,15 +911,15 @@ const make = Effect.gen(function*() {
     yield* Effect.logDebug("Received shard assignments", assignments)
 
     for (const [shardId, runner] of assignments) {
-      if (Option.isNone(runner)) {
+      if (runner === undefined) {
         MutableHashMap.remove(shardAssignments, shardId)
         MutableHashSet.remove(selfShards, shardId)
         continue
       }
 
-      MutableHashMap.set(shardAssignments, shardId, runner.value)
+      MutableHashMap.set(shardAssignments, shardId, runner)
 
-      if (!isLocalRunner(runner.value)) {
+      if (!isLocalRunner(runner)) {
         MutableHashSet.remove(selfShards, shardId)
         continue
       }
@@ -989,7 +988,7 @@ const make = Effect.gen(function*() {
                   spanId: options.message.spanId,
                   sampled: options.message.sampled
                 }),
-                lastReceivedReply: Option.none(),
+                lastReceivedReply: undefined,
                 rpc,
                 services: fiber.services as ServiceMap.ServiceMap<any>,
                 respond
@@ -1129,12 +1128,12 @@ const make = Effect.gen(function*() {
   const reaper = yield* EntityReaper
   const registerEntity: Sharding["Service"]["registerEntity"] = Effect.fnUntraced(
     function*(entity, build, options) {
-      if (Option.isNone(config.runnerAddress) || entityManagers.has(entity.type)) return
+      if (config.runnerAddress === undefined || entityManagers.has(entity.type)) return
       const scope = yield* Scope.make()
       const manager = yield* EntityManager.make(entity, build, {
         ...options,
         storage,
-        runnerAddress: config.runnerAddress.value,
+        runnerAddress: config.runnerAddress,
         sharding
       }).pipe(
         Effect.provideServices(services.pipe(
@@ -1170,8 +1169,8 @@ const make = Effect.gen(function*() {
 
   // --- Finalization ---
 
-  if (Option.isSome(config.runnerAddress)) {
-    const selfAddress = config.runnerAddress.value
+  if (config.runnerAddress) {
+    const selfAddress = config.runnerAddress
     // Unregister runner from shard manager when scope is closed
     yield* Scope.addFinalizer(
       shardingScope,

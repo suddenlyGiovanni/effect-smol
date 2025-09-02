@@ -1,8 +1,6 @@
 /**
  * @since 4.0.0
  */
-import * as Arr from "../../collections/Array.ts"
-import * as Option from "../../data/Option.ts"
 import * as Record from "../../data/Record.ts"
 import * as Effect from "../../Effect.ts"
 import * as Exit from "../../Exit.ts"
@@ -146,10 +144,10 @@ export const make = Effect.gen(function*() {
 
   const replyForRequestId = Effect.fnUntraced(function*(requestId: Snowflake.Snowflake) {
     const replies = yield* storage.repliesForUnfiltered([requestId])
-    return Arr.last(replies).pipe(
-      Option.filter((reply) => reply._tag === "WithExit"),
-      Option.map((reply) => reply as WithExitEncoded<Workflow.ResultEncoded<any, any>>)
-    )
+    const last = replies.at(-1)
+    if (last && last._tag === "WithExit") {
+      return last as WithExitEncoded<Workflow.ResultEncoded<any, any>>
+    }
   })
 
   const requestReply = Effect.fnUntraced(function*(options: {
@@ -160,10 +158,10 @@ export const make = Effect.gen(function*() {
     readonly id: string
   }) {
     const requestId = yield* requestIdFor(options)
-    if (Option.isNone(requestId)) {
-      return Option.none()
+    if (requestId === undefined) {
+      return undefined
     }
-    return yield* replyForRequestId(requestId.value)
+    return yield* replyForRequestId(requestId)
   })
 
   const resetActivityAttempt = Effect.fnUntraced(
@@ -180,8 +178,8 @@ export const make = Effect.gen(function*() {
         tag: "activity",
         id: activityPrimaryKey(options.activity.name, options.attempt)
       })
-      if (Option.isNone(requestId)) return
-      yield* sharding.reset(requestId.value)
+      if (requestId === undefined) return
+      yield* sharding.reset(requestId)
     },
     Effect.retry({
       times: 3,
@@ -224,12 +222,14 @@ export const make = Effect.gen(function*() {
       tag: "run",
       id: ""
     })
-    const maybeSuspended = Option.filter(
-      maybeReply,
-      (reply) => reply.exit._tag === "Success" && reply.exit.value._tag === "Suspended"
-    )
-    if (Option.isNone(maybeSuspended)) return
-    yield* sharding.reset(Snowflake.Snowflake(maybeSuspended.value.requestId))
+
+    const maybeSuspended =
+      maybeReply && maybeReply.exit._tag === "Success" && maybeReply.exit.value._tag === "Suspended"
+        ? maybeReply
+        : undefined
+
+    if (maybeSuspended === undefined) return
+    yield* sharding.reset(Snowflake.Snowflake(maybeSuspended.requestId))
     yield* sharding.pollStorage
   })
 
@@ -270,7 +270,7 @@ export const make = Effect.gen(function*() {
                     }
                     return engine.deferredResult(InterruptSignal).pipe(
                       Effect.flatMap((maybeResult) => {
-                        if (Option.isNone(maybeResult)) {
+                        if (maybeResult === undefined) {
                           return Effect.void
                         }
                         instance.suspended = false
@@ -354,13 +354,13 @@ export const make = Effect.gen(function*() {
           tag: "run",
           id: ""
         })
-        const nonSuspendedReply = reply.pipe(
-          Option.filter((reply) => reply.exit._tag !== "Success" || reply.exit.value._tag !== "Suspended")
-        )
-        if (Option.isSome(nonSuspendedReply)) {
+
+        const nonSuspendedReply = reply && (reply.exit._tag !== "Success" || reply.exit.value._tag !== "Suspended")
+          ? reply
+          : undefined
+        if (nonSuspendedReply !== undefined) {
           return
         }
-
         yield* this.deferredDone({
           workflowName: workflow.name,
           executionId,
@@ -447,12 +447,15 @@ export const make = Effect.gen(function*() {
             id: deferred.name
           })
         ),
-        Effect.map(Option.map((reply) => {
+        Effect.map((reply) => {
+          if (reply === undefined) {
+            return undefined
+          }
           const decoded = decodeDeferredWithExit(reply)
           return decoded.exit._tag === "Success"
             ? decoded.exit.value
             : decoded.exit
-        })),
+        }),
         Effect.retry({
           while: (e) => e._tag === "PersistenceError",
           times: 3,
