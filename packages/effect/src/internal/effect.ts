@@ -5,7 +5,7 @@ import * as Option from "../data/Option.ts"
 import * as Order from "../data/Order.ts"
 import { hasProperty, isIterable, isString, isTagged } from "../data/Predicate.ts"
 import * as Result from "../data/Result.ts"
-import type * as Effect from "../Effect.ts"
+import * as Effect from "../Effect.js"
 import type * as Exit from "../Exit.ts"
 import type * as Fiber from "../Fiber.ts"
 import type { LazyArg } from "../Function.ts"
@@ -2966,21 +2966,29 @@ export const ScopeCloseableTypeId = "~effect/Scope/Closeable"
 export const scopeTag: ServiceMap.Key<Scope.Scope, Scope.Scope> = ServiceMap.Key<Scope.Scope>("effect/Scope")
 
 /** @internal */
-export const scopeClose = fnUntraced(function*<A, E>(self: Scope.Scope, exit_: Exit.Exit<A, E>) {
-  if (self.state._tag === "Closed") return
-  const closed: Scope.State.Closed = { _tag: "Closed", exit: exit_ }
-  if (self.state._tag === "Empty") {
+export const scopeClose = <A, E>(self: Scope.Scope, exit_: Exit.Exit<A, E>) =>
+  suspend(() => {
+    if (self.state._tag === "Closed") return Effect.void
+    const closed: Scope.State.Closed = { _tag: "Closed", exit: exit_ }
+    if (self.state._tag === "Empty") {
+      self.state = closed
+      return Effect.void
+    }
+    const { finalizers } = self.state
     self.state = closed
-    return
-  }
-  const { finalizers } = self.state
-  self.state = closed
-  if (finalizers.size === 0) {
-    return
-  } else if (finalizers.size === 1) {
-    yield* finalizers.values().next().value!(exit_)
-    return
-  }
+    if (finalizers.size === 0) {
+      return Effect.void
+    } else if (finalizers.size === 1) {
+      return finalizers.values().next().value!(exit_)
+    }
+    return scopeCloseFinalizers(self, finalizers, exit_)
+  })
+
+const scopeCloseFinalizers = fnUntraced(function*<A, E>(
+  self: Scope.Scope,
+  finalizers: Scope.State.Open["finalizers"],
+  exit_: Exit.Exit<A, E>
+) {
   let exits: Array<Exit.Exit<any, never>> = []
   const fibers: Array<Fiber.Fiber<any, never>> = []
   const arr = Array.from(finalizers.values())
