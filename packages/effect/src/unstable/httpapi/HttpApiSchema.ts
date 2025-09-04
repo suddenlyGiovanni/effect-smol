@@ -4,6 +4,7 @@
 import type { YieldableError } from "../../Cause.ts"
 import * as Iterable from "../../collections/Iterable.ts"
 import type { Brand } from "../../data/Brand.ts"
+import * as Predicate from "../../data/Predicate.ts"
 import { constant, constVoid, dual, type LazyArg } from "../../Function.ts"
 import type * as FileSystem from "../../platform/FileSystem.ts"
 import type * as Annotations from "../../schema/Annotations.ts"
@@ -46,17 +47,23 @@ export const isVoid = (ast: AST.AST): boolean => {
   }
 }
 
-/**
- * @since 4.0.0
- * @category reflection
- */
-export const getStatusSuccess = (self: AST.AST): number => self.annotations?.httpApiStatus ?? (isVoid(self) ? 204 : 200)
+const getHttpApiStatusAnnotation = AST.getAnnotation((annotations) => {
+  const status = annotations?.httpApiStatus
+  if (Predicate.isNumber(status)) return status
+})
 
 /**
  * @since 4.0.0
  * @category reflection
  */
-export const getStatusError = (self: AST.AST): number => self.annotations?.httpApiStatus ?? 500
+export const getStatusSuccess = (self: AST.AST): number =>
+  getHttpApiStatusAnnotation(self) ?? (isVoid(self) ? 204 : 200)
+
+/**
+ * @since 4.0.0
+ * @category reflection
+ */
+export const getStatusError = (self: AST.AST): number => getHttpApiStatusAnnotation(self) ?? 500
 
 /**
  * @since 4.0.0
@@ -98,7 +105,7 @@ const extractUnionTypes = (ast: AST.AST): ReadonlyArray<AST.AST> => {
   return out
 
   function process(ast: AST.AST): void {
-    if (AST.isUnionType(ast)) {
+    if (AST.isUnionType(ast) && shouldExtractUnion(ast)) {
       for (const type of ast.types) {
         process(type)
       }
@@ -107,6 +114,13 @@ const extractUnionTypes = (ast: AST.AST): ReadonlyArray<AST.AST> => {
     }
   }
 }
+
+const shouldExtractUnion = (ast: AST.UnionType): boolean =>
+  ast.annotations === undefined
+  || Object.keys(ast.annotations).every((key) => key.startsWith("httpApi"))
+  || ast.types.some((type) =>
+    type.annotations && Object.keys(type.annotations).some((key) => key.startsWith("httpApi"))
+  )
 
 /**
  * @since 4.0.0
