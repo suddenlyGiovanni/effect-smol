@@ -1855,6 +1855,11 @@ export function replaceEncoding<A extends AST>(ast: A, encoding: Encoding | unde
   })
 }
 
+/** @internal */
+export function replaceLastLink(encoding: Encoding, link: Link): Encoding {
+  return Arr.append(encoding.slice(0, encoding.length - 1), link)
+}
+
 function replaceContext<A extends AST>(ast: A, context: Context | undefined): A {
   if (ast.context === context) {
     return ast
@@ -1882,17 +1887,10 @@ export function appendChecks<A extends AST>(ast: A, checks: Checks): A {
 function applyEncoded<A extends AST>(ast: A, f: (ast: AST) => AST): A {
   if (ast.encoding) {
     const links = ast.encoding
-    const last = links[links.length - 1]
-    return replaceEncoding(
-      ast,
-      Arr.append(
-        links.slice(0, links.length - 1),
-        new Link(f(last.to), last.transformation)
-      )
-    )
-  } else {
-    return ast
+    const last = links.at(-1)!
+    return replaceEncoding(ast, replaceLastLink(links, new Link(f(last.to), last.transformation)))
   }
+  return ast
 }
 
 /** @internal */
@@ -1959,7 +1957,7 @@ export function memoize<A extends AST, O>(f: (ast: A) => O): (ast: A) => O {
 /** @internal */
 export function annotate<A extends AST>(ast: A, annotations: Annotations.Annotations): A {
   if (ast.checks) {
-    const last = ast.checks[ast.checks.length - 1]
+    const last = ast.checks.at(-1)!
     return replaceChecks(ast, Arr.append(ast.checks.slice(0, -1), last.annotate(annotations)))
   }
   return modifyOwnPropertyDescriptors(ast, (d) => {
@@ -2397,12 +2395,12 @@ export function coerceBigInt(ast: BigIntKeyword): BigIntKeyword {
 export const goStringLeafJson = memoize((ast: AST): AST => {
   if (ast.encoding) {
     const links = ast.encoding
-    const last = links[links.length - 1]
+    const last = links.at(-1)!
     const to = goStringLeafJson(last.to)
     if (to === last.to) {
       return ast
     }
-    return replaceEncoding(ast, Arr.append(links.slice(0, links.length - 1), new Link(to, last.transformation)))
+    return replaceEncoding(ast, replaceLastLink(links, new Link(to, last.transformation)))
   }
   const out = (ast as any).goStringLeafJson?.() ?? (ast as any).go?.(goStringLeafJson) ?? ast
   return isOptional(ast) ? optionalKey(out) : out
@@ -2476,7 +2474,7 @@ export function getAnnotation<A>(
 ) {
   return (ast: AST): A | undefined => {
     if (ast.checks) {
-      const last = ast.checks[ast.checks.length - 1]
+      const last = ast.checks.at(-1)!
       const annotation = f(last.annotations)
       if (annotation !== undefined) return annotation
     } else {
