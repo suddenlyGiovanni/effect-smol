@@ -3316,31 +3316,55 @@ export interface Redacted<S extends Top>
 }
 
 /**
- * Creates a schema for the Redacted type that provides secure handling of
+ * Creates a schema for the `Redacted` type, providing secure handling of
  * sensitive information.
  *
- * In case of failure of the wrapped schema, the issue will be redacted to prevent
- * the actual value and the associated schema from being exposed.
+ * If the wrapped schema fails, the issue will be redacted to prevent both
+ * the actual value and the schema details from being exposed.
  *
- * The default JSON serializer will fail to serialize a Redacted value, but it
- * will deserialize a value to a Redacted instance.
+ * **Options**
+ *
+ * - `label`: When provided, the schema will behave as follows:
+ *   - Values will be validated against the label in addition to the wrapped schema
+ *   - The default JSON serializer will deserialize into a `Redacted` instance with the label
+ *   - The arbitrary generator will produce a `Redacted` instance with the label
+ *   - The formatter will return the label
+ *
+ * **Default JSON serializer**
+ *
+ * The default JSON serializer will fail when attempting to serialize a `Redacted` value,
+ * but it will deserialize a value into a `Redacted` instance.
  *
  * @category Constructors
  * @since 4.0.0
  */
-export function Redacted<S extends Top>(value: S): Redacted<S> {
+export function Redacted<S extends Top>(value: S, options?: {
+  readonly label?: string | undefined
+}): Redacted<S> {
   return declareConstructor([value])<Redacted_.Redacted<S["Encoded"]>>()(
-    ([value]) => (input, ast, options) => {
+    ([value]) => (input, ast, poptions) => {
       if (Redacted_.isRedacted(input)) {
-        return ToParser.decodeUnknownEffect(value)(Redacted_.value(input), options).pipe(Effect.mapBothEager(
-          {
-            onSuccess: () => input,
-            onFailure: (/** ignore the actual issue because of security reasons */) => {
-              const oinput = O.some(input)
-              return new Issue.Composite(ast, oinput, [new Issue.Pointer(["value"], new Issue.InvalidValue(oinput))])
-            }
-          }
-        ))
+        const label: Effect.Effect<void, Issue.Issue, never> = Predicate.isString(options?.label)
+          ? Effect.mapErrorEager(
+            ToParser.decodeUnknownEffect(Literal(options.label))(input.label, poptions),
+            (issue) => new Issue.Pointer(["label"], issue)
+          )
+          : Effect.void
+        return Effect.flatMapEager(
+          label,
+          () =>
+            ToParser.decodeUnknownEffect(value)(Redacted_.value(input), poptions).pipe(Effect.mapBothEager(
+              {
+                onSuccess: () => input,
+                onFailure: (/** ignore the actual issue because of security reasons */) => {
+                  const oinput = O.some(input)
+                  return new Issue.Composite(ast, oinput, [
+                    new Issue.Pointer(["value"], new Issue.InvalidValue(oinput))
+                  ])
+                }
+              }
+            ))
+        )
       }
       return Effect.fail(new Issue.InvalidType(ast, O.some(input)))
     },
@@ -3350,13 +3374,16 @@ export function Redacted<S extends Top>(value: S): Redacted<S> {
         link<Redacted_.Redacted<S["Encoded"]>>()(
           value,
           {
-            decode: Getter.transform(Redacted_.make),
-            encode: Getter.forbidden("Cannot serialize Redacted")
+            decode: Getter.transform((e) => Redacted_.make(e, { label: options?.label })),
+            encode: Getter.forbidden((oe) =>
+              "Cannot serialize Redacted" +
+              (O.isSome(oe) && Predicate.isString(oe.value.label) ? ` with label: "${oe.value.label}"` : "")
+            )
           }
         ),
       arbitrary: {
         _tag: "Declaration",
-        declaration: ([value]) => () => value.map(Redacted_.make)
+        declaration: ([value]) => () => value.map((a) => Redacted_.make(a, { label: options?.label }))
       },
       format: {
         _tag: "Declaration",
