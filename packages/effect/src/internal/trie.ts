@@ -5,7 +5,7 @@ import { hasProperty } from "../data/Predicate.ts"
 import { dual, identity, pipe } from "../Function.ts"
 import * as Equal from "../interfaces/Equal.ts"
 import * as Hash from "../interfaces/Hash.ts"
-import { format, NodeInspectSymbol, toJSON } from "../interfaces/Inspectable.ts"
+import { format, NodeInspectSymbol, toJson } from "../interfaces/Inspectable.ts"
 import { pipeArguments } from "../interfaces/Pipeable.ts"
 import type { NoInfer } from "../types/Types.ts"
 
@@ -52,12 +52,12 @@ const TrieProto: TR.Trie<unknown> = {
     return false
   },
   toString() {
-    return format(this.toJSON())
+    return `Trie(${format(Array.from(this))})`
   },
   toJSON() {
     return {
       _id: "Trie",
-      values: Array.from(this).map(toJSON)
+      values: toJson(Array.from(this))
     }
   },
   [NodeInspectSymbol]() {

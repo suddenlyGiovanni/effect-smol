@@ -7,7 +7,7 @@ import * as Option from "../data/Option.ts"
 import * as Effect from "../Effect.ts"
 import { dual } from "../Function.ts"
 import type { Inspectable } from "../interfaces/Inspectable.ts"
-import { format, NodeInspectSymbol, toJSON } from "../interfaces/Inspectable.ts"
+import { format, NodeInspectSymbol, toJson } from "../interfaces/Inspectable.ts"
 import type { Pipeable } from "../interfaces/Pipeable.ts"
 import { pipeArguments } from "../interfaces/Pipeable.ts"
 import * as TxRef from "../transactions/TxRef.ts"
@@ -17,16 +17,16 @@ const TypeId = "~effect/transactions/TxHashMap"
 const TxHashMapProto = {
   [TypeId]: TypeId,
   [NodeInspectSymbol](this: TxHashMap<unknown, unknown>) {
-    return toJSON(this)
+    return toJson(this)
+  },
+  toString(this: TxHashMap<unknown, unknown>) {
+    return `TxHashMap(${format(toJson((this).ref))})`
   },
   toJSON(this: TxHashMap<unknown, unknown>) {
     return {
       _id: "TxHashMap",
-      ref: toJSON((this as any).ref)
+      ref: toJson((this).ref)
     }
-  },
-  toString(this: TxHashMap<unknown, unknown>) {
-    return format(this.toJSON())
   },
   pipe(this: TxHashMap<unknown, unknown>) {
     return pipeArguments(this, arguments)

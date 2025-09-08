@@ -906,19 +906,12 @@ Expected a string including "c", got "ab"`,
         await assertions.decoding.fail(
           schema,
           Option.some(""),
-          `Expected length > 0, got {
-  "_id": "Option",
-  "_tag": "Some",
-  "value": ""
-}`
+          `Expected length > 0, got some("")`
         )
         await assertions.decoding.fail(
           schema,
           Option.none(),
-          `Expected Option, got {
-  "_id": "Option",
-  "_tag": "None"
-}`
+          `Expected isSome, got none()`
         )
       })
 
@@ -1506,7 +1499,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
         await assertions.decoding.fail(
           schema,
           [{ a: "a", b: "b" }, { a: "a", b: "b" }],
-          `Expected unique, got [{"a":"a","b":"b"},{"a":"a","b":"b"}]`
+          `Expected an array with unique items, got [{"a":"a","b":"b"},{"a":"a","b":"b"}]`
         )
       })
     })

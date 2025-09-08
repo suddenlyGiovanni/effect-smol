@@ -36,7 +36,7 @@
  *
  * @since 2.0.0
  */
-import { hasProperty, isFunction } from "../data/Predicate.ts"
+import * as Predicate from "../data/Predicate.ts"
 import { pipeArguments } from "../interfaces/Pipeable.ts"
 import type * as ServiceMap from "../ServiceMap.ts"
 
@@ -161,33 +161,33 @@ export interface Inspectable {
  * }
  *
  * const person = new Person("Alice", 30)
- * const data = Inspectable.toJSON(person)
+ * const data = Inspectable.toJson(person)
  * console.log(data) // { name: "Alice", age: 30 }
  *
  * // Works with arrays
  * const people = [person, new Person("Bob", 25)]
- * const array = Inspectable.toJSON(people)
+ * const array = Inspectable.toJson(people)
  * console.log(array) // [{ name: "Alice", age: 30 }, { name: "Bob", age: 25 }]
  * ```
  *
  * @since 2.0.0
  * @category conversions
  */
-export const toJSON = (x: unknown): unknown => {
+export const toJson = (input: unknown): unknown => {
   try {
     if (
-      hasProperty(x, "toJSON") &&
-      isFunction(x["toJSON"]) &&
-      x["toJSON"].length === 0
+      Predicate.hasProperty(input, "toJSON") &&
+      Predicate.isFunction(input["toJSON"]) &&
+      input["toJSON"].length === 0
     ) {
-      return x.toJSON()
-    } else if (Array.isArray(x)) {
-      return x.map(toJSON)
+      return input.toJSON()
+    } else if (Array.isArray(input)) {
+      return input.map(toJson)
     }
   } catch {
-    return {}
+    return "[toJSON threw]"
   }
-  return redact(x)
+  return redact(input)
 }
 
 /**
@@ -224,7 +224,203 @@ export const toJSON = (x: unknown): unknown => {
  * @since 2.0.0
  * @category formatting
  */
-export const format = (x: unknown): string => JSON.stringify(x, null, 2)
+const CIRCULAR = "[Circular]"
+
+/** @internal */
+export function formatPropertyKey(name: PropertyKey): string {
+  return Predicate.isString(name) ? JSON.stringify(name) : String(name)
+}
+
+/** @internal */
+export function formatPath(path: ReadonlyArray<PropertyKey>): string {
+  return path.map((key) => `[${formatPropertyKey(key)}]`).join("")
+}
+
+function formatDate(date: Date): string {
+  try {
+    return date.toISOString()
+  } catch {
+    return String(date)
+  }
+}
+
+function safeToString(input: any): string {
+  try {
+    const s = input.toString()
+    return typeof s === "string" ? s : String(s)
+  } catch {
+    return "[toString threw]"
+  }
+}
+
+/**
+ * Converts any JavaScript value into a human-readable string.
+ *
+ * Unlike `JSON.stringify`, this formatter:
+ * - Handles circular references (printed as `"[Circular]"`).
+ * - Supports additional types like `BigInt`, `Symbol`, `Set`, `Map`, `Date`, `RegExp`, and
+ *   objects with custom `toString` methods.
+ * - Includes constructor names for class instances (e.g. `MyClass({"a":1})`).
+ * - Does not guarantee valid JSON output — the result is intended for debugging and inspection.
+ *
+ * Formatting rules:
+ * - Primitives are stringified naturally (`null`, `undefined`, `123`, `"abc"`, `true`).
+ * - Strings are JSON-quoted.
+ * - Arrays and objects with a single element/property are formatted inline.
+ * - Larger arrays/objects are pretty-printed with optional indentation.
+ * - Circular references are replaced with the literal `"[Circular]"`.
+ *
+ * **Options**:
+ * - `space`: Indentation used when pretty-printing:
+ *   - If a number, that many spaces will be used.
+ *   - If a string, the string is used as the indentation unit (e.g. `"\t"`).
+ *   - If `0`, empty string, or `undefined`, output is compact (no indentation).
+ *   Defaults to `0`.
+ * - `ignoreToString`: If `true`, the `toString` method is not called on the value.
+ *   Defaults to `false`.
+ *
+ * @internal
+ */
+export function format(
+  input: unknown,
+  options?: {
+    readonly space?: number | string | undefined
+    readonly ignoreToString?: boolean | undefined
+  }
+): string {
+  const space = options?.space ?? 0
+  const seen = new WeakSet<object>()
+  const gap = !space ? "" : (Predicate.isNumber(space) ? " ".repeat(space) : space)
+  const ind = (d: number) => gap.repeat(d)
+
+  const wrap = (v: unknown, body: string): string => {
+    const ctor = (v as any)?.constructor
+    return ctor && ctor !== Object.prototype.constructor && ctor.name ? `${ctor.name}(${body})` : body
+  }
+
+  const ownKeys = (o: object): Array<PropertyKey> => {
+    try {
+      return Reflect.ownKeys(o)
+    } catch {
+      return ["[ownKeys threw]"]
+    }
+  }
+
+  function go(v: unknown, d = 0): string {
+    if (Array.isArray(v)) {
+      if (seen.has(v)) return CIRCULAR
+      seen.add(v)
+      if (!gap || v.length <= 1) return `[${v.map((x) => go(x, d)).join(",")}]`
+      const inner = v.map((x) => go(x, d + 1)).join(",\n" + ind(d + 1))
+      return `[\n${ind(d + 1)}${inner}\n${ind(d)}]`
+    }
+
+    if (Predicate.isDate(v)) return formatDate(v)
+
+    if (
+      !options?.ignoreToString &&
+      Predicate.hasProperty(v, "toString") &&
+      Predicate.isFunction((v as any)["toString"]) &&
+      (v as any)["toString"] !== Object.prototype.toString
+    ) return safeToString(v)
+
+    if (Predicate.isString(v)) return JSON.stringify(v)
+
+    if (
+      Predicate.isNumber(v) ||
+      v == null ||
+      Predicate.isBoolean(v) ||
+      Predicate.isSymbol(v)
+    ) return String(v)
+
+    if (Predicate.isBigInt(v)) return String(v) + "n"
+
+    if (v instanceof Set || v instanceof Map) {
+      if (seen.has(v)) return CIRCULAR
+      seen.add(v)
+      return `${v.constructor.name}(${go(Array.from(v), d)})`
+    }
+
+    if (Predicate.isObject(v)) {
+      if (seen.has(v)) return CIRCULAR
+      seen.add(v)
+      const keys = ownKeys(v)
+      if (!gap || keys.length <= 1) {
+        const body = `{${keys.map((k) => `${formatPropertyKey(k)}:${go((v as any)[k], d)}`).join(",")}}`
+        return wrap(v, body)
+      }
+      const body = `{\n${
+        keys.map((k) => `${ind(d + 1)}${formatPropertyKey(k)}: ${go((v as any)[k], d + 1)}`).join(",\n")
+      }\n${ind(d)}}`
+      return wrap(v, body)
+    }
+
+    return String(v)
+  }
+
+  return go(input, 0)
+}
+
+/**
+ * Safely stringifies objects that may contain circular references.
+ *
+ * This function performs JSON.stringify with circular reference detection and handling.
+ * It also applies redaction to sensitive values and provides a safe fallback for
+ * any objects that can't be serialized normally.
+ *
+ * **Options**:
+ * - `space`: Indentation used when pretty-printing:
+ *   - If a number, that many spaces will be used.
+ *   - If a string, the string is used as the indentation unit (e.g. `"\t"`).
+ *   - If `0`, empty string, or `undefined`, output is compact (no indentation).
+ *   Defaults to `0`.
+ *
+ * @example
+ * ```ts
+ * import { Inspectable } from "effect/interfaces"
+ *
+ * // Normal object
+ * const simple = { name: "Alice", age: 30 }
+ * console.log(Inspectable.formatJson(simple))
+ * // {"name":"Alice","age":30}
+ *
+ * // Object with circular reference
+ * const circular: any = { name: "test" }
+ * circular.self = circular
+ * console.log(Inspectable.formatJson(circular))
+ * // {"name":"test"} (circular reference omitted)
+ *
+ * // With formatting
+ * console.log(Inspectable.formatJson(simple, { space: 2 }))
+ * // {
+ * //   "name": "Alice",
+ * //   "age": 30
+ * // }
+ * ```
+ *
+ * @since 2.0.0
+ * @category conversions
+ */
+export const formatJson = (
+  obj: unknown,
+  options?: {
+    readonly space?: number | string | undefined
+  }
+): string => {
+  let cache: Array<unknown> = []
+  const retVal = JSON.stringify(
+    obj,
+    (_key, value) =>
+      typeof value === "object" && value !== null
+        ? cache.includes(value)
+          ? undefined // circular reference
+          : cache.push(value) && (isRedactable(value) ? redact(value) : value)
+        : value,
+    options?.space
+  )
+  ;(cache as any) = undefined
+  return retVal
+}
 
 /**
  * A base prototype object that implements the Inspectable interface.
@@ -257,7 +453,7 @@ export const format = (x: unknown): string => JSON.stringify(x, null, 2)
  */
 export const BaseProto: Inspectable = {
   toJSON() {
-    return toJSON(this)
+    return toJson(this)
   },
   [NodeInspectSymbol]() {
     return this.toJSON()
@@ -331,108 +527,6 @@ export abstract class Class {
   toString() {
     return format(this.toJSON())
   }
-}
-
-/**
- * Safely converts any unknown value to a string representation.
- *
- * This function handles various types of values and provides safe string conversion
- * even for complex objects with circular references. It's designed to never throw
- * errors and always return a meaningful string representation.
- *
- * @param u - The value to convert to string
- * @param whitespace - Number of spaces or string to use for indentation (default: 2)
- *
- * @example
- * ```ts
- * import { Inspectable } from "effect/interfaces"
- *
- * // Simple values
- * console.log(Inspectable.toStringUnknown("hello"))    // "hello"
- * console.log(Inspectable.toStringUnknown(42))         // "42"
- * console.log(Inspectable.toStringUnknown(true))       // "true"
- *
- * // Objects with custom formatting
- * const obj = { name: "Alice", age: 30 }
- * console.log(Inspectable.toStringUnknown(obj))        // Pretty printed JSON
- * console.log(Inspectable.toStringUnknown(obj, 4))     // With 4-space indentation
- *
- * // Handles circular references safely
- * const circular: any = { name: "test" }
- * circular.self = circular
- * console.log(Inspectable.toStringUnknown(circular))   // Safe string representation
- * ```
- *
- * @since 2.0.0
- * @category conversions
- */
-export const toStringUnknown = ( // TODO: replace with schema formatUnknown?
-  u: unknown,
-  whitespace: number | string | undefined = 2
-): string => {
-  if (typeof u === "string") {
-    return u
-  }
-  try {
-    return typeof u === "object" ? stringifyCircular(u, whitespace) : String(u)
-  } catch {
-    return String(u)
-  }
-}
-
-/**
- * Safely stringifies objects that may contain circular references.
- *
- * This function performs JSON.stringify with circular reference detection and handling.
- * It also applies redaction to sensitive values and provides a safe fallback for
- * any objects that can't be serialized normally.
- *
- * @param obj - The object to stringify
- * @param whitespace - Number of spaces or string to use for indentation
- *
- * @example
- * ```ts
- * import { Inspectable } from "effect/interfaces"
- *
- * // Normal object
- * const simple = { name: "Alice", age: 30 }
- * console.log(Inspectable.stringifyCircular(simple))
- * // {"name":"Alice","age":30}
- *
- * // Object with circular reference
- * const circular: any = { name: "test" }
- * circular.self = circular
- * console.log(Inspectable.stringifyCircular(circular))
- * // {"name":"test"} (circular reference omitted)
- *
- * // With formatting
- * console.log(Inspectable.stringifyCircular(simple, 2))
- * // {
- * //   "name": "Alice",
- * //   "age": 30
- * // }
- * ```
- *
- * @since 2.0.0
- * @category conversions
- */
-export const stringifyCircular = (
-  obj: unknown,
-  whitespace?: number | string | undefined
-): string => {
-  let cache: Array<unknown> = []
-  const retVal = JSON.stringify(
-    obj,
-    (_key, value) =>
-      typeof value === "object" && value !== null
-        ? cache.includes(value)
-          ? undefined // circular reference
-          : cache.push(value) && (isRedactable(value) ? redact(value) : value)
-        : value,
-    whitespace
-  )
-  ;(cache as any) = undefined
-  return retVal
 }
 
 /**

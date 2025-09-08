@@ -13,7 +13,7 @@ import * as Chunk from "../collections/Chunk.ts"
 import * as Effect from "../Effect.ts"
 import { dual } from "../Function.ts"
 import type { Inspectable } from "../interfaces/Inspectable.ts"
-import { format, NodeInspectSymbol, toJSON } from "../interfaces/Inspectable.ts"
+import { format, NodeInspectSymbol, toJson } from "../interfaces/Inspectable.ts"
 import type { Pipeable } from "../interfaces/Pipeable.ts"
 import { pipeArguments } from "../interfaces/Pipeable.ts"
 import * as TxRef from "../transactions/TxRef.ts"
@@ -69,14 +69,14 @@ const TxChunkProto = {
   [NodeInspectSymbol](this: TxChunk<unknown>) {
     return this.toJSON()
   },
+  toString(this: TxChunk<unknown>) {
+    return `TxChunk(${format(toJson((this).ref))})`
+  },
   toJSON(this: TxChunk<unknown>) {
     return {
       _id: "TxChunk",
-      ref: toJSON((this as any).ref)
+      ref: toJson((this).ref)
     }
-  },
-  toString(this: TxChunk<unknown>) {
-    return format(this.toJSON())
   },
   pipe(this: TxChunk<unknown>) {
     return pipeArguments(this, arguments)

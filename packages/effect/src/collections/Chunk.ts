@@ -82,7 +82,7 @@ import * as UndefinedOr from "../data/UndefinedOr.ts"
 import { dual, identity, pipe } from "../Function.ts"
 import * as Equal from "../interfaces/Equal.ts"
 import * as Hash from "../interfaces/Hash.ts"
-import { format, type Inspectable, NodeInspectSymbol, toJSON } from "../interfaces/Inspectable.ts"
+import { format, type Inspectable, NodeInspectSymbol, toJson } from "../interfaces/Inspectable.ts"
 import type { Pipeable } from "../interfaces/Pipeable.ts"
 import { pipeArguments } from "../interfaces/Pipeable.ts"
 import type { TypeLambda } from "../types/HKT.ts"
@@ -238,12 +238,12 @@ const ChunkProto: Omit<Chunk<unknown>, "backing" | "depth" | "left" | "length" |
     _A: (_: never) => _
   },
   toString<A>(this: Chunk<A>) {
-    return format(this.toJSON())
+    return `Chunk(${format(toReadonlyArray(this))})`
   },
   toJSON<A>(this: Chunk<A>) {
     return {
       _id: "Chunk",
-      values: toReadonlyArray(this).map(toJSON)
+      values: toJson(toReadonlyArray(this))
     }
   },
   [NodeInspectSymbol]<A>(this: Chunk<A>) {

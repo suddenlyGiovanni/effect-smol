@@ -16,7 +16,7 @@ import { hasProperty } from "../data/Predicate.ts"
 import * as Effect from "../Effect.ts"
 import { dual } from "../Function.ts"
 import type { Inspectable } from "../interfaces/Inspectable.ts"
-import { format, NodeInspectSymbol, toJSON } from "../interfaces/Inspectable.ts"
+import { NodeInspectSymbol, toJson } from "../interfaces/Inspectable.ts"
 import * as TxChunk from "../transactions/TxChunk.ts"
 import * as TxRef from "../transactions/TxRef.ts"
 import type * as Types from "../types/Types.ts"
@@ -354,7 +354,10 @@ const TxQueueProto = {
   [DequeueTypeId]: { _A: (_: never) => _, _E: (_: never) => _ },
   [TypeId]: { _A: (_: never) => _, _E: (_: never) => _ },
   [NodeInspectSymbol](this: TxQueue<unknown, unknown>) {
-    return toJSON(this)
+    return toJson(this)
+  },
+  toString(this: TxQueue<unknown, unknown>) {
+    return `TxQueue(${this.strategy}, ${this.capacity})`
   },
   toJSON(this: TxQueue<unknown, unknown>) {
     return {
@@ -362,9 +365,6 @@ const TxQueueProto = {
       strategy: this.strategy,
       capacity: this.capacity
     }
-  },
-  toString(this: TxQueue<unknown, unknown>) {
-    return format(this.toJSON())
   }
 }
 

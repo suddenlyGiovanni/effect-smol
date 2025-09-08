@@ -29,7 +29,7 @@ import * as Option from "../data/Option.ts"
 import { dual } from "../Function.ts"
 import * as Equal from "../interfaces/Equal.ts"
 import * as Hash from "../interfaces/Hash.ts"
-import { format, type Inspectable, NodeInspectSymbol, toJSON } from "../interfaces/Inspectable.ts"
+import { format, type Inspectable, NodeInspectSymbol, toJson } from "../interfaces/Inspectable.ts"
 import type { Pipeable } from "../interfaces/Pipeable.ts"
 import { pipeArguments } from "../interfaces/Pipeable.ts"
 
@@ -75,12 +75,12 @@ const MutableHashMapProto: Omit<MutableHashMap<unknown, unknown>, "backing" | "b
     return this.backing[Symbol.iterator]()
   },
   toString() {
-    return format(this.toJSON())
+    return `MutableHashMap(${format(Array.from(this))})`
   },
   toJSON() {
     return {
       _id: "MutableHashMap",
-      values: Array.from(this).map(toJSON)
+      values: toJson(Array.from(this))
     }
   },
   [NodeInspectSymbol]() {
