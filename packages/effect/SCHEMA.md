@@ -73,7 +73,7 @@ Ultimately, the intent is to eliminate the need for two separate paths like in v
 
 ## Model
 
-A "schema" in is a strongly typed wrapper around an untyped AST (abstract syntax tree) node.
+A "schema" is a strongly typed wrapper around an untyped AST (abstract syntax tree) node.
 
 The base interface is `Bottom`, which sits at the bottom of the schema type hierarchy. In Schema v4, the number of tracked type parameters has increased to 14, allowing for more precise and flexible schema definitions.
 
