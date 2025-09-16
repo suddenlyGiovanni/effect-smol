@@ -535,3 +535,15 @@ export const asVoidAll: <I extends Iterable<Exit<any, any>>>(
  * @since 4.0.0
  */
 export const getSuccess: <A, E>(self: Exit<A, E>) => Option<A> = effect.exitGetSuccess
+
+/**
+ * @category Accessors
+ * @since 4.0.0
+ */
+export const getCause: <A, E>(self: Exit<A, E>) => Option<Cause.Cause<E>> = effect.exitGetCause
+
+/**
+ * @category Accessors
+ * @since 4.0.0
+ */
+export const getError: <A, E>(self: Exit<A, E>) => Option<E> = effect.exitGetError
