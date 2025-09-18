@@ -153,9 +153,7 @@ export class Chunk<R extends Rpc.Any> extends Data.TaggedClass("Chunk")<{
   /**
    * @since 4.0.0
    */
-  static readonly Any: Schema.Schema<Chunk<never>> = Schema.declare((u): u is Chunk<never> =>
-    isReply(u) && u._tag === "Chunk"
-  )
+  static readonly Any = Schema.declare((u): u is Chunk<never> => isReply(u) && u._tag === "Chunk")
 
   /**
    * @since 4.0.0
@@ -194,7 +192,7 @@ export class Chunk<R extends Rpc.Any> extends Data.TaggedClass("Chunk")<{
       })
     }, {
       title: "Chunk",
-      defaultIsoSerializer: ([success]) =>
+      defaultJsonSerializer: ([success]) =>
         Schema.link<Chunk<Rpc.Any>>()(
           Schema.Struct({
             _tag: Schema.Literal("Chunk"),
@@ -276,7 +274,7 @@ export class WithExit<R extends Rpc.Any> extends Data.TaggedClass("WithExit")<{
       })
     }, {
       title: "WithExit",
-      defaultIsoSerializer: ([exit]) =>
+      defaultJsonSerializer: ([exit]) =>
         Schema.link<WithExit<Rpc.Any>>()(
           Schema.Struct({
             _tag: Schema.Literal("WithExit"),
