@@ -1,6 +1,6 @@
 import { LibsqlClient } from "@effect/sql-libsql"
-import { assert, layer } from "@effect/vitest"
-import { Cause, Effect, Layer } from "effect"
+import { assert, describe, layer } from "@effect/vitest"
+import { Cause, Effect } from "effect"
 import { Iterable } from "effect/collections"
 import * as Schema from "effect/schema/Schema"
 import { SqlError, SqlResolver } from "effect/unstable/sql"
@@ -17,7 +17,7 @@ const seededClient = Effect.gen(function*() {
 })
 
 layer(LibsqlContainer.layerClient, { timeout: "30 seconds" })("Resolver", (it) => {
-  it.layer(Layer.empty)("ordered", (it) => {
+  describe.sequential("ordered", () => {
     it.effect("insert", () =>
       Effect.gen(function*() {
         const batches: Array<Array<string>> = []
@@ -72,7 +72,7 @@ layer(LibsqlContainer.layerClient, { timeout: "30 seconds" })("Resolver", (it) =
       }))
   })
 
-  it.layer(Layer.empty)("grouped", (it) => {
+  describe.sequential("grouped", () => {
     it.effect("find by name", () =>
       Effect.gen(function*() {
         const sql = yield* seededClient
@@ -126,7 +126,7 @@ layer(LibsqlContainer.layerClient, { timeout: "30 seconds" })("Resolver", (it) =
       }))
   })
 
-  it.layer(Layer.empty)("findById", (it) => {
+  describe.sequential("findById", () => {
     it.effect("find by id", () =>
       Effect.gen(function*() {
         const sql = yield* seededClient

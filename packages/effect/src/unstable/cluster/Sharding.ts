@@ -442,6 +442,86 @@ const make = Effect.gen(function*() {
         return !state.manager.isProcessingFor(message, { excludeReplies: true })
       }
 
+      let index = 0
+      let messages: Array<Message.Incoming<any>> = []
+      let currentSentRequestIds: Set<Snowflake.Snowflake> | undefined
+
+      const processMessages = Effect.whileLoop({
+        while: () => index < messages.length,
+        step: () => index++,
+        body: () => send
+      })
+
+      const send = Effect.catchCause(
+        Effect.suspend(() => {
+          const message = messages[index]
+          if (message._tag === "IncomingRequest") {
+            if (sentRequestIds.has(message.envelope.requestId)) {
+              return Effect.void
+            }
+            sentRequestIds.add(message.envelope.requestId)
+            currentSentRequestIds!.add(message.envelope.requestId)
+          }
+          const address = message.envelope.address
+          if (!MutableHashSet.has(acquiredShards, address.shardId)) {
+            return Effect.void
+          }
+          const state = entityManagers.get(address.entityType)
+          if (!state) {
+            if (message._tag === "IncomingRequest") {
+              return Effect.orDie(message.respond(Reply.ReplyWithContext.fromDefect({
+                id: snowflakeGen.nextUnsafe(),
+                requestId: message.envelope.requestId,
+                defect: new EntityNotManagedByRunner({ address })
+              })))
+            }
+            return Effect.void
+          }
+
+          const isProcessing = state.manager.isProcessingFor(message)
+
+          // If the message might affect a currently processing request, we
+          // send it to the entity manager to be processed.
+          if (message._tag === "IncomingEnvelope" && isProcessing) {
+            return state.manager.send(message)
+          } else if (isProcessing) {
+            return Effect.void
+          }
+
+          // If the entity was resuming in another fiber, we add the message
+          // id to the unprocessed set.
+          const resumptionState = MutableHashMap.get(entityResumptionState, address)
+          if (Option.isSome(resumptionState)) {
+            resumptionState.value.unprocessed.add(message.envelope.requestId)
+            if (message.envelope._tag === "Interrupt") {
+              resumptionState.value.interrupts.set(message.envelope.requestId, message as Message.IncomingEnvelope)
+            }
+            return Effect.void
+          }
+          return state.manager.send(message)
+        }),
+        (cause) => {
+          const message = messages[index]
+          const error = Cause.filterError(cause)
+          // if we get a defect, then update storage
+          if (Filter.isFail(error)) {
+            if (Cause.hasInterrupt(cause)) {
+              return Effect.void
+            }
+            return storage.saveReply(Reply.ReplyWithContext.fromDefect({
+              id: snowflakeGen.nextUnsafe(),
+              requestId: message.envelope.requestId,
+              defect: Cause.squash(cause)
+            }))
+          }
+          if (error._tag === "MailboxFull") {
+            // MailboxFull can only happen for requests, so this cast is safe
+            return resumeEntityFromStorage(message as Message.IncomingRequest<any>)
+          }
+          return Effect.void
+        }
+      )
+
       while (true) {
         // wait for the next poll interval, or if we get notified of a change
         yield* storageReadLatch.await
@@ -455,83 +535,11 @@ const make = Effect.gen(function*() {
         // acquired.
         yield* storageReadLock.take(1)
 
-        const messages = yield* storage.unprocessedMessages(acquiredShards)
-        const currentSentRequestIds = new Set<Snowflake.Snowflake>()
+        messages = yield* storage.unprocessedMessages(acquiredShards)
+        index = 0
+        currentSentRequestIds = new Set<Snowflake.Snowflake>()
         sentRequestIdSets.add(currentSentRequestIds)
-
-        const send = Effect.catchCause(
-          Effect.suspend(() => {
-            const message = messages[index]
-            if (message._tag === "IncomingRequest") {
-              if (sentRequestIds.has(message.envelope.requestId)) {
-                return Effect.void
-              }
-              sentRequestIds.add(message.envelope.requestId)
-              currentSentRequestIds.add(message.envelope.requestId)
-            }
-            const address = message.envelope.address
-            if (!MutableHashSet.has(acquiredShards, address.shardId)) {
-              return Effect.void
-            }
-            const state = entityManagers.get(address.entityType)
-            if (!state) {
-              if (message._tag === "IncomingRequest") {
-                return Effect.orDie(message.respond(Reply.ReplyWithContext.fromDefect({
-                  id: snowflakeGen.nextUnsafe(),
-                  requestId: message.envelope.requestId,
-                  defect: new EntityNotManagedByRunner({ address })
-                })))
-              }
-              return Effect.void
-            }
-
-            const isProcessing = state.manager.isProcessingFor(message)
-
-            // If the message might affect a currently processing request, we
-            // send it to the entity manager to be processed.
-            if (message._tag === "IncomingEnvelope" && isProcessing) {
-              return state.manager.send(message)
-            } else if (isProcessing) {
-              return Effect.void
-            }
-
-            // If the entity was resuming in another fiber, we add the message
-            // id to the unprocessed set.
-            const resumptionState = MutableHashMap.get(entityResumptionState, address)
-            if (Option.isSome(resumptionState)) {
-              resumptionState.value.unprocessed.add(message.envelope.requestId)
-              if (message.envelope._tag === "Interrupt") {
-                resumptionState.value.interrupts.set(message.envelope.requestId, message as Message.IncomingEnvelope)
-              }
-              return Effect.void
-            }
-            return state.manager.send(message)
-          }),
-          (cause) => {
-            const message = messages[index]
-            const error = Cause.filterError(cause)
-            // if we get a defect, then update storage
-            if (Filter.isFail(error)) {
-              return storage.saveReply(Reply.ReplyWithContext.fromDefect({
-                id: snowflakeGen.nextUnsafe(),
-                requestId: message.envelope.requestId,
-                defect: Cause.squash(cause)
-              }))
-            }
-            if (error._tag === "MailboxFull") {
-              // MailboxFull can only happen for requests, so this cast is safe
-              return resumeEntityFromStorage(message as Message.IncomingRequest<any>)
-            }
-            return Effect.void
-          }
-        )
-
-        let index = 0
-        yield* Effect.whileLoop({
-          while: () => index < messages.length,
-          step: () => index++,
-          body: constant(send)
-        })
+        yield* processMessages
 
         // let the resuming entities check if they are done
         yield* storageReadLock.release(1)
