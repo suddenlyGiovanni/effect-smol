@@ -6,11 +6,11 @@ import { DateTime } from "effect/time"
 import {
   ClusterWorkflowEngine,
   MessageStorage,
+  RunnerHealth,
   Runners,
+  RunnerStorage,
   Sharding,
-  ShardingConfig,
-  ShardManager,
-  ShardStorage
+  ShardingConfig
 } from "effect/unstable/cluster"
 import { Activity, DurableClock, DurableDeferred, Workflow } from "effect/unstable/workflow"
 import { WorkflowInstance } from "effect/unstable/workflow/WorkflowEngine"
@@ -237,13 +237,14 @@ const TestShardingConfig = ShardingConfig.layer({
   entityMailboxCapacity: 10,
   entityTerminationTimeout: 0,
   entityMessagePollInterval: 5000,
-  sendRetryInterval: 100
+  sendRetryInterval: 100,
+  refreshAssignmentsInterval: 0
 })
 
 const TestWorkflowEngine = ClusterWorkflowEngine.layer.pipe(
   Layer.provideMerge(Sharding.layer),
-  Layer.provide(ShardManager.layerClientLocal),
-  Layer.provide(ShardStorage.layerMemory),
+  Layer.provide(RunnerStorage.layerMemory),
+  Layer.provide(RunnerHealth.layerNoop),
   Layer.provide(Runners.layerNoop),
   Layer.provideMerge(MessageStorage.layerMemory),
   Layer.provide(TestShardingConfig)

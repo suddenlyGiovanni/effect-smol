@@ -14,7 +14,17 @@ const constDisableValidation = { disableValidation: true }
  * @since 4.0.0
  * @category Constructors
  */
-export const make = (group: string, id: number): ShardId => new ShardId({ group, id }, constDisableValidation)
+export const make = (group: string, id: number): ShardId => {
+  const key = `${group}:${id}`
+  let shardId = shardIdCache.get(key)
+  if (!shardId) {
+    shardId = new ShardId({ group, id }, constDisableValidation)
+    shardIdCache.set(key, shardId)
+  }
+  return shardId
+}
+
+const shardIdCache = new Map<string, ShardId>()
 
 /**
  * @since 4.0.0
@@ -24,6 +34,11 @@ export class ShardId extends S.Class<ShardId>(TypeId)({
   group: S.String,
   id: S.Int
 }) {
+  /**
+   * @since 4.0.0
+   */
+  static readonly make = make
+
   /**
    * @since 4.0.0
    */
@@ -90,6 +105,7 @@ export class ShardId extends S.Class<ShardId>(TypeId)({
    * @since 4.0.0
    */
   static fromString(s: string): ShardId {
-    return new ShardId(ShardId.fromStringEncoded(s), constDisableValidation)
+    const encoded = ShardId.fromStringEncoded(s)
+    return make(encoded.group, encoded.id)
   }
 }

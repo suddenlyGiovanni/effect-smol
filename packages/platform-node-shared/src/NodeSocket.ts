@@ -73,7 +73,10 @@ export const fromDuplex = <RO>(
     let currentSocket: Duplex | undefined
     const latch = Effect.makeLatchUnsafe(false)
     const openServices = fiber.services as ServiceMap.ServiceMap<RO>
-    const run = <R, E, _>(handler: (_: Uint8Array) => Effect.Effect<_, E, R> | void) =>
+
+    const run = <R, E, _>(handler: (_: Uint8Array) => Effect.Effect<_, E, R> | void, opts?: {
+      readonly onOpen?: Effect.Effect<void> | undefined
+    }) =>
       Effect.scopedWith(Effect.fnUntraced(function*(scope) {
         const fiberSet = yield* FiberSet.make<any, E | Socket.SocketError>().pipe(
           Scope.provide(scope)
@@ -117,15 +120,18 @@ export const fromDuplex = <RO>(
         conn.on("close", onClose)
 
         currentSocket = conn
-        yield* latch.open
+        latch.openUnsafe()
+        if (opts?.onOpen) {
+          yield* opts.onOpen
+        }
 
         return yield* FiberSet.join(fiberSet)
       })).pipe(
         Effect.updateServices((input: ServiceMap.ServiceMap<R>) => ServiceMap.merge(openServices, input)),
-        Effect.ensuring(Effect.sync(() => {
+        Effect.onExit(() => {
           latch.closeUnsafe()
           currentSocket = undefined
-        }))
+        })
       )
 
     const write = (chunk: Uint8Array | string | Socket.CloseEvent) =>

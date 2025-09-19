@@ -2,14 +2,17 @@
  * @since 4.0.0
  */
 import * as Effect from "../../Effect.ts"
+import { identity } from "../../Function.ts"
 import * as Layer from "../../Layer.ts"
-import * as RcMap from "../../RcMap.ts"
+import { FileSystem } from "../../platform/FileSystem.ts"
+import * as Schema from "../../schema/Schema.ts"
 import type * as Scope from "../../Scope.ts"
 import * as ServiceMap from "../../ServiceMap.ts"
-import * as MessageStorage from "./MessageStorage.ts"
+import * as HttpClient from "../http/HttpClient.ts"
+import * as HttpClientRequest from "../http/HttpClientRequest.ts"
+import * as HttpClientResponse from "../http/HttpClientResponse.ts"
 import type { RunnerAddress } from "./RunnerAddress.ts"
 import * as Runners from "./Runners.ts"
-import type { ShardingConfig } from "./ShardingConfig.ts"
 
 /**
  * Represents the service used to check if a Runner is healthy.
@@ -24,45 +27,9 @@ import type { ShardingConfig } from "./ShardingConfig.ts"
 export class RunnerHealth extends ServiceMap.Key<
   RunnerHealth,
   {
-    /**
-     * Used to indicate that a Runner is connected to this host and is healthy,
-     * while the Scope is active.
-     */
-    readonly onConnection: (address: RunnerAddress) => Effect.Effect<void, never, Scope.Scope>
     readonly isAlive: (address: RunnerAddress) => Effect.Effect<boolean>
   }
 >()("effect/cluster/RunnerHealth") {}
-
-/**
- * @since 4.0.0
- * @category Constructors
- */
-export const make: (
-  options: { readonly isAlive: (address: RunnerAddress) => Effect.Effect<boolean> }
-) => Effect.Effect<
-  RunnerHealth["Service"],
-  never,
-  Scope.Scope
-> = Effect.fnUntraced(function*(options: {
-  readonly isAlive: (address: RunnerAddress) => Effect.Effect<boolean>
-}) {
-  const connections = yield* RcMap.make({
-    lookup: (_address: RunnerAddress) => Effect.void
-  })
-
-  const onConnection = (address: RunnerAddress) => RcMap.get(connections, address)
-  const isAlive = Effect.fnUntraced(function*(address: RunnerAddress) {
-    if (yield* RcMap.has(connections, address)) {
-      return true
-    }
-    return yield* options.isAlive(address)
-  })
-
-  return RunnerHealth.of({
-    onConnection,
-    isAlive
-  })
-})
 
 /**
  * A layer which will **always** consider a Runner healthy.
@@ -72,9 +39,9 @@ export const make: (
  * @since 4.0.0
  * @category layers
  */
-export const layerNoop = Layer.effect(RunnerHealth)(make({
+export const layerNoop = Layer.succeed(RunnerHealth)({
   isAlive: () => Effect.succeed(true)
-}))
+})
 
 /**
  * @since 4.0.0
@@ -89,13 +56,13 @@ export const makePing: Effect.Effect<
 
   function isAlive(address: RunnerAddress): Effect.Effect<boolean> {
     return runners.ping(address).pipe(
-      Effect.timeout(3000),
+      Effect.timeout(10_000),
       Effect.retry({ times: 3 }),
       Effect.isSuccess
     )
   }
 
-  return yield* make({ isAlive })
+  return RunnerHealth.of({ isAlive })
 })
 
 /**
@@ -104,23 +71,123 @@ export const makePing: Effect.Effect<
  * @since 4.0.0
  * @category layers
  */
-export const layer: Layer.Layer<
+export const layerPing: Layer.Layer<
   RunnerHealth,
   never,
   Runners.Runners
 > = Layer.effect(RunnerHealth)(makePing)
 
 /**
- * A layer which will ping a Runner directly to check if it is healthy.
+ * @since 4.0.0
+ * @category Constructors
+ */
+export const makeK8s = Effect.fnUntraced(function*(options?: {
+  readonly namespace?: string | undefined
+  readonly labelSelector?: string | undefined
+}) {
+  const fs = yield* FileSystem
+  const token = yield* fs.readFileString("/var/run/secrets/kubernetes.io/serviceaccount/token").pipe(
+    Effect.option
+  )
+  const client = (yield* HttpClient.HttpClient).pipe(
+    HttpClient.filterStatusOk
+  )
+  const baseRequest = HttpClientRequest.get("https://kubernetes.default.svc/api").pipe(
+    token._tag === "Some" ? HttpClientRequest.bearerToken(token.value.trim()) : identity
+  )
+  const getPods = baseRequest.pipe(
+    HttpClientRequest.appendUrl(options?.namespace ? `/v1/namespaces/${options.namespace}/pods` : "/v1/pods"),
+    HttpClientRequest.setUrlParam("fieldSelector", "status.phase=Running"),
+    options?.labelSelector ? HttpClientRequest.setUrlParam("labelSelector", options.labelSelector) : identity
+  )
+  const readyPods = yield* client.execute(getPods).pipe(
+    Effect.flatMap(HttpClientResponse.schemaBodyJson(PodList)),
+    Effect.map((list) => {
+      const pods = new Map<string, Pod>()
+      for (let i = 0; i < list.items.length; i++) {
+        const pod = list.items[i]
+        pods.set(pod.status.podIP, pod)
+      }
+      return pods
+    }),
+    Effect.cachedWithTTL("10 seconds")
+  )
+
+  return RunnerHealth.of({
+    isAlive: (address) =>
+      readyPods.pipe(
+        Effect.map((pods) => pods.get(address.host)?.isReady ?? false),
+        Effect.catchCause((cause) =>
+          Effect.logWarning("Failed to check pod health", cause).pipe(
+            Effect.as(true)
+          )
+        )
+      )
+  })
+})
+
+class Pod extends Schema.Class<Pod>("effect/cluster/RunnerHealth/Pod")({
+  status: Schema.Struct({
+    phase: Schema.String,
+    conditions: Schema.Array(Schema.Struct({
+      type: Schema.String,
+      status: Schema.String,
+      lastTransitionTime: Schema.String
+    })),
+    podIP: Schema.String
+  })
+}) {
+  get isReady(): boolean {
+    let initializedAt: string | undefined
+    let readyAt: string | undefined
+    for (let i = 0; i < this.status.conditions.length; i++) {
+      const condition = this.status.conditions[i]
+      switch (condition.type) {
+        case "Initialized": {
+          if (condition.status !== "True") {
+            return true
+          }
+          initializedAt = condition.lastTransitionTime
+          break
+        }
+        case "Ready": {
+          if (condition.status === "True") {
+            return true
+          }
+          readyAt = condition.lastTransitionTime
+          break
+        }
+      }
+    }
+    // if the pod is still booting up, consider it ready as it would have
+    // already registered itself with RunnerStorage by now
+    return initializedAt === readyAt
+  }
+}
+
+const PodList = Schema.Struct({
+  items: Schema.Array(Pod)
+})
+
+/**
+ * A layer which will check the Kubernetes API to see if a Runner is healthy.
+ *
+ * The provided HttpClient will need to add the pod's CA certificate to its
+ * trusted root certificates in order to communicate with the Kubernetes API.
+ *
+ * The pod service account will also need to have permissions to list pods in
+ * order to use this layer.
  *
  * @since 4.0.0
  * @category layers
  */
-export const layerRpc: Layer.Layer<
+export const layerK8s: (
+  options?: {
+    readonly namespace?: string | undefined
+    readonly labelSelector?: string | undefined
+  } | undefined
+) => Layer.Layer<
   RunnerHealth,
   never,
-  Runners.RpcClientProtocol | ShardingConfig
-> = layer.pipe(
-  Layer.provide(Runners.layerRpc),
-  Layer.provide(MessageStorage.layerNoop)
-)
+  HttpClient.HttpClient | FileSystem
+> = Layer.effect(RunnerHealth)(makeK8s)

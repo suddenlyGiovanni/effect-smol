@@ -207,35 +207,37 @@ export const make = Effect.fnUntraced(function*(options: {
     message_id: string
   ) => Effect.Effect<ReadonlyArray<Row>, SqlError> = sql.onDialectOrElse({
     pg: () => (row, message_id) =>
-      sql`
-        WITH inserted AS (
+      Effect.flatMap(
+        sql`
           INSERT INTO ${messagesTableSql} ${sql.insert(row)}
           ON CONFLICT (message_id) DO NOTHING
           RETURNING id
-        ),
-        existing AS (
-          SELECT m.id, r.id as reply_id, r.kind as reply_kind, r.payload as reply_payload, r.sequence as reply_sequence
-          FROM ${messagesTableSql} m
-          LEFT JOIN ${repliesTableSql} r ON r.id = m.last_reply_id
-          WHERE m.message_id = ${message_id}
-          AND NOT EXISTS (SELECT 1 FROM inserted)
-        )
-        SELECT * FROM existing
-      `,
+        `,
+        (rows) => {
+          // inserted a new row
+          if (rows.length > 0) return Effect.succeed([])
+          return sql`
+            SELECT m.id, r.id as reply_id, r.kind as reply_kind, r.payload as reply_payload, r.sequence as reply_sequence
+            FROM ${messagesTableSql} m
+            LEFT JOIN ${repliesTableSql} r ON r.id = m.last_reply_id
+            WHERE m.message_id = ${message_id}
+          `
+        }
+      ),
     mysql: () => (row, message_id) =>
-      sql`
-        SELECT m.id, r.id as reply_id, r.kind as reply_kind, r.payload as reply_payload, r.sequence as reply_sequence
-        FROM ${messagesTableSql} m
-        LEFT JOIN ${repliesTableSql} r ON r.id = m.last_reply_id
-        WHERE m.message_id = ${message_id};
-        INSERT INTO ${messagesTableSql} ${sql.insert(row)}
-        ON DUPLICATE KEY UPDATE id = id;
-      `.unprepared.pipe(
-        // we need 2 queries for mysql, so we need to run them in a
-        // transaction with retries
-        sql.withTransaction,
-        Effect.retry({ times: 3 }),
-        Effect.map(([rows]) => rows as any as ReadonlyArray<Row>)
+      Effect.flatMap(
+        sql`INSERT IGNORE INTO ${messagesTableSql} ${sql.insert(row)}`.raw,
+        (row: any) => {
+          if (row.affectedRows > 0) {
+            return Effect.succeed([])
+          }
+          return sql`
+            SELECT m.id, r.id as reply_id, r.kind as reply_kind, r.payload as reply_payload, r.sequence as reply_sequence
+            FROM ${messagesTableSql} m
+            LEFT JOIN ${repliesTableSql} r ON r.id = m.last_reply_id
+            WHERE m.message_id = ${message_id}
+          `
+        }
       ),
     mssql: () => (row, message_id) =>
       sql`
@@ -306,6 +308,7 @@ export const make = Effect.fnUntraced(function*(options: {
     mssql: () => (s: string) => `N'${s}'`,
     orElse: () => (s: string) => `'${s}'`
   })
+  const wrapStringArr = (arr: ReadonlyArray<string>) => sql.literal(arr.map(wrapString).join(","))
 
   const getUnprocessedMessages = sql.onDialectOrElse({
     pg: () => (shardIds: ReadonlyArray<string>, now: number) =>
@@ -315,7 +318,7 @@ export const make = Effect.fnUntraced(function*(options: {
         FROM (
           SELECT m.*
           FROM ${messagesTableSql} m
-          WHERE m.shard_id IN (${sql.literal(shardIds.map(wrapString).join(","))})
+          WHERE m.shard_id IN (${wrapStringArr(shardIds)})
           AND NOT EXISTS (
             SELECT 1 FROM ${repliesTableSql}
             WHERE request_id = m.request_id
@@ -336,7 +339,7 @@ export const make = Effect.fnUntraced(function*(options: {
         SELECT m.*, r.id as reply_reply_id, r.kind as reply_kind, r.payload as reply_payload, r.sequence as reply_sequence
         FROM ${messagesTableSql} m
         LEFT JOIN ${repliesTableSql} r ON r.id = m.last_reply_id
-        WHERE m.shard_id IN (${sql.literal(shardIds.map(wrapString).join(","))})
+        WHERE m.shard_id IN (${wrapStringArr(shardIds)})
         AND NOT EXISTS (
           SELECT 1 FROM ${repliesTableSql}
           WHERE request_id = m.request_id
@@ -447,7 +450,7 @@ export const make = Effect.fnUntraced(function*(options: {
       sql<ReplyRow>`
         SELECT id, kind, request_id, payload, sequence
         FROM ${repliesTableSql}
-        WHERE request_id IN (${sql.literal(requestIds.join(","))})
+        WHERE request_id IN (${wrapStringArr(requestIds)})
         AND (
           kind = ${replyKindWithExit}
           OR (
@@ -467,7 +470,7 @@ export const make = Effect.fnUntraced(function*(options: {
       sql<ReplyRow>`
         SELECT id, kind, request_id, payload, sequence
         FROM ${repliesTableSql}
-        WHERE request_id IN (${sql.literal(requestIds.join(","))})
+        WHERE request_id IN (${wrapStringArr(requestIds)})
         ORDER BY rowid ASC
       `.unprepared.pipe(
         Effect.provideService(SqlClient.SafeIntegers, true),
@@ -478,10 +481,9 @@ export const make = Effect.fnUntraced(function*(options: {
 
     unprocessedMessages: Effect.fnUntraced(
       function*(shardIds, now) {
+        if (shardIds.length === 0) return []
         const rows = yield* getUnprocessedMessages(shardIds, now)
-        if (rows.length === 0) {
-          return []
-        }
+        if (rows.length === 0) return []
         const messages: Array<{
           readonly envelope: Envelope.Encoded
           readonly lastSentReply: Reply.Encoded | undefined
@@ -499,6 +501,7 @@ export const make = Effect.fnUntraced(function*(options: {
     ),
 
     unprocessedMessagesById(ids, now) {
+      if (ids.length === 0) return Effect.succeed([])
       const idArr = Array.from(ids, (id) => String(id))
       return sql<MessageRow & ReplyJoinRow>`
         SELECT m.*, r.id as reply_id, r.kind as reply_kind, r.payload as reply_payload, r.sequence as reply_sequence
@@ -562,7 +565,7 @@ export const make = Effect.fnUntraced(function*(options: {
         UPDATE ${messagesTableSql}
         SET last_read = NULL
         WHERE processed = ${sqlFalse}
-        AND shard_id IN (${sql.literal(shardIds.map(wrapString).join(","))})
+        AND shard_id IN (${wrapStringArr(shardIds)})
       `.pipe(
         Effect.asVoid,
         PersistenceError.refail,

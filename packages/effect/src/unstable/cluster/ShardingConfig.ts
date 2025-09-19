@@ -34,9 +34,15 @@ export class ShardingConfig extends ServiceMap.Key<ShardingConfig, {
    */
   readonly runnerListenAddress: RunnerAddress | undefined
   /**
-   * The version of the current runner.
+   * A number that determines how many shards this runner will be assigned
+   * relative to other runners.
+   *
+   * Defaults to `1`.
+   *
+   * A value of `2` means that this runner should be assigned twice as many
+   * shards as a runner with a weight of `1`.
    */
-  readonly serverVersion: number
+  readonly runnerShardWeight: number
   /**
    * The shard groups that are assigned to this runner.
    *
@@ -49,15 +55,6 @@ export class ShardingConfig extends ServiceMap.Key<ShardingConfig, {
    * **Note**: this value should be consistent across all runners.
    */
   readonly shardsPerGroup: number
-  /**
-   * The address of the shard manager.
-   */
-  readonly shardManagerAddress: RunnerAddress
-  /**
-   * If the shard manager is unavailable for this duration, all the shard
-   * assignments will be reset.
-   */
-  readonly shardManagerUnavailableTimeout: DurationInput
   /**
    * The default capacity of the mailbox for entities.
    */
@@ -81,11 +78,19 @@ export class ShardingConfig extends ServiceMap.Key<ShardingConfig, {
    * The interval at which to poll for client replies from storage.
    */
   readonly entityReplyPollInterval: DurationInput
+  /**
+   * The interval at which to poll for new runners and refresh shard
+   * assignments.
+   */
   readonly refreshAssignmentsInterval: DurationInput
   /**
    * The interval to retry a send if EntityNotAssignedToRunner is returned.
    */
   readonly sendRetryInterval: DurationInput
+  /**
+   * The interval at which to check for unhealthy runners and report them
+   */
+  readonly runnerHealthCheckInterval: DurationInput
   // readonly unhealthyRunnerReportInterval: Duration.Duration
   /**
    * Simulate serialization and deserialization to remote runners for local
@@ -103,10 +108,8 @@ const defaultRunnerAddress = RunnerAddress.makeSync({ host: "localhost", port: 3
 export const defaults: ShardingConfig["Service"] = {
   runnerAddress: defaultRunnerAddress,
   runnerListenAddress: undefined,
-  serverVersion: 1,
+  runnerShardWeight: 1,
   shardsPerGroup: 300,
-  shardManagerAddress: RunnerAddress.makeSync({ host: "localhost", port: 8080 }),
-  shardManagerUnavailableTimeout: Duration.minutes(10),
   shardGroups: ["default"],
   entityMailboxCapacity: 4096,
   entityMaxIdleTime: Duration.minutes(1),
@@ -114,7 +117,8 @@ export const defaults: ShardingConfig["Service"] = {
   entityMessagePollInterval: Duration.seconds(10),
   entityReplyPollInterval: Duration.millis(200),
   sendRetryInterval: Duration.millis(100),
-  refreshAssignmentsInterval: Duration.minutes(5),
+  refreshAssignmentsInterval: Duration.seconds(3),
+  runnerHealthCheckInterval: Duration.minutes(1),
   simulateRemoteSerialization: true
 }
 
@@ -154,9 +158,9 @@ export const config: Config.Config<ShardingConfig["Service"]> = Config.all({
       // Config.withDescription("The port to listen on.")
     )
   }).pipe(Config.map((options) => RunnerAddress.makeSync(options)), Config.option, Config.map(Option.getOrUndefined)),
-  serverVersion: Config.int("serverVersion").pipe(
-    Config.withDefault(() => defaults.serverVersion)
-    // Config.withDescription("The version of the current runner.")
+  runnerShardWeight: Config.int("runnerShardWeight").pipe(
+    Config.withDefault(() => defaults.runnerShardWeight)
+    // Config.withDescription("A number that determines how many shards this runner will be assigned relative to other runners.")
   ),
   shardGroups: Config.schema(Schema.Array(Schema.String), "shardGroups").pipe(
     Config.withDefault(() => ["default"])
@@ -165,22 +169,6 @@ export const config: Config.Config<ShardingConfig["Service"]> = Config.all({
   shardsPerGroup: Config.int("shardsPerGroup").pipe(
     Config.withDefault(() => defaults.shardsPerGroup)
     // Config.withDescription("The number of shards to allocate per shard group.")
-  ),
-  shardManagerAddress: Config.all({
-    host: Config.string("shardManagerHost").pipe(
-      Config.withDefault(() => defaults.shardManagerAddress.host)
-      // Config.withDescription("The host of the shard manager.")
-    ),
-    port: Config.int("shardManagerPort").pipe(
-      Config.withDefault(() => defaults.shardManagerAddress.port)
-      // Config.withDescription("The port of the shard manager.")
-    )
-  }).pipe(Config.map((options) => RunnerAddress.makeSync(options))),
-  shardManagerUnavailableTimeout: Config.duration("shardManagerUnavailableTimeout").pipe(
-    Config.withDefault(() => defaults.shardManagerUnavailableTimeout)
-    // Config.withDescription(
-    //   "If the shard is unavilable for this duration, all the shard assignments will be reset."
-    // )
   ),
   entityMailboxCapacity: Config.int("entityMailboxCapacity").pipe(
     Config.withDefault(() => defaults.entityMailboxCapacity)
@@ -212,6 +200,11 @@ export const config: Config.Config<ShardingConfig["Service"]> = Config.all({
     Config.withDefault(() => defaults.refreshAssignmentsInterval)
     // Config.withDescription("The interval at which to refresh shard assignments.")
   ),
+  runnerHealthCheckInterval: Config.duration("runnerHealthCheckInterval").pipe(
+    Config.withDefault(() => defaults.runnerHealthCheckInterval)
+    // Config.withDescription("The interval at which to check for unhealthy runners and report them.")
+  ),
+  // unhealthyRunnerReportInterval: Config.duration("unhealthyRunnerReportInterval").pipe(
   simulateRemoteSerialization: Config.boolean("simulateRemoteSerialization").pipe(
     Config.withDefault(() => defaults.simulateRemoteSerialization)
     // Config.withDescription("Simulate serialization and deserialization to remote runners for local entities.")

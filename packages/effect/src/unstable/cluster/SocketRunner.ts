@@ -7,11 +7,12 @@ import type * as RpcSerialization from "../rpc/RpcSerialization.ts"
 import * as RpcServer from "../rpc/RpcServer.ts"
 import { SocketServer } from "../socket/SocketServer.ts"
 import type { MessageStorage } from "./MessageStorage.ts"
+import type { RunnerHealth } from "./RunnerHealth.ts"
 import type * as Runners from "./Runners.ts"
 import * as RunnerServer from "./RunnerServer.ts"
+import type * as RunnerStorage from "./RunnerStorage.ts"
 import type * as Sharding from "./Sharding.ts"
 import type { ShardingConfig } from "./ShardingConfig.ts"
-import type * as ShardStorage from "./ShardStorage.ts"
 
 const withLogAddress = <A, E, R>(layer: Layer.Layer<A, E, R>): Layer.Layer<A, E, R | SocketServer> =>
   Layer.effectDiscard(Effect.gen(function*() {
@@ -37,7 +38,8 @@ export const layer: Layer.Layer<
   | RpcSerialization.RpcSerialization
   | SocketServer
   | MessageStorage
-  | ShardStorage.ShardStorage
+  | RunnerStorage.RunnerStorage
+  | RunnerHealth
 > = RunnerServer.layerWithClients.pipe(
   withLogAddress,
   Layer.provide(RpcServer.layerProtocolSocketServer)

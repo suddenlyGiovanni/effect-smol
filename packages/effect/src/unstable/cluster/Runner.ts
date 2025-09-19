@@ -26,7 +26,7 @@ const TypeId = "~effect/cluster/Runner"
 export class Runner extends Schema.Class<Runner>(TypeId)({
   address: RunnerAddress,
   groups: Schema.Array(Schema.String),
-  version: Schema.Int
+  weight: Schema.Number
 }) {
   /**
    * @since 4.0.0
@@ -46,7 +46,14 @@ export class Runner extends Schema.Class<Runner>(TypeId)({
   /**
    * @since 4.0.0
    */
-  static readonly encodeSync = Schema.encodeSync(Schema.fromJsonString(Runner));
+  static readonly encodeSync = Schema.encodeSync(Schema.fromJsonString(Runner))
+
+  /**
+   * @since 4.0.0
+   */
+  override toString(): string {
+    return Runner.format(this)
+  }
 
   /**
    * @since 4.0.0
@@ -59,14 +66,14 @@ export class Runner extends Schema.Class<Runner>(TypeId)({
    * @since 4.0.0
    */
   [Equal.symbol](that: Runner): boolean {
-    return Equal.equals(this.address, that.address) && this.version === that.version
+    return this.address[Equal.symbol](that.address) && this.weight === that.weight
   }
 
   /**
    * @since 4.0.0
    */
   [Hash.symbol](): number {
-    return Hash.string(`${this.address.toString()}:${this.version}`)
+    return Hash.string(`${this.address.toString()}:${this.weight}`)
   }
 }
 
@@ -86,5 +93,5 @@ export class Runner extends Schema.Class<Runner>(TypeId)({
 export const make = (props: {
   readonly address: RunnerAddress
   readonly groups: ReadonlyArray<string>
-  readonly version: number
+  readonly weight: number
 }): Runner => new Runner(props, { disableValidation: true })

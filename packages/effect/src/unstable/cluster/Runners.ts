@@ -197,26 +197,25 @@ export const make: (options: Omit<Runners["Service"], "sendLocal" | "notifyLocal
     readonly latch: Effect.Latch
     doneLatch: Effect.Latch | undefined
     replies: Array<Reply.Reply<any>>
-    messages: Array<Message.OutgoingRequest<any>>
+    messages: Set<Message.OutgoingRequest<any>>
   }
   const storageRequests = new Map<Snowflake.Snowflake, StorageRequestEntry>()
   const waitingStorageRequests = new Map<Snowflake.Snowflake, Message.OutgoingRequest<any>>()
   const replyFromStorage = Effect.fnUntraced(
     function*(message: Message.OutgoingRequest<any>) {
       let entry = storageRequests.get(message.envelope.requestId)
-      if (!entry) {
+      if (entry) {
+        entry.doneLatch ??= Effect.makeLatchUnsafe(false)
+        entry.messages.add(message)
+        return yield* entry.doneLatch.await
+      } else {
         entry = {
           latch: Effect.makeLatchUnsafe(false),
           doneLatch: undefined,
-          messages: [],
+          messages: new Set([message]),
           replies: []
         }
         storageRequests.set(message.envelope.requestId, entry)
-      }
-      entry.messages.push(message)
-      if (entry.messages.length > 1) {
-        entry.doneLatch ??= Effect.makeLatchUnsafe(false)
-        return yield* entry.doneLatch.await
       }
 
       while (true) {
@@ -231,16 +230,16 @@ export const make: (options: Omit<Runners["Service"], "sendLocal" | "notifyLocal
           const reply = entry.replies[i]
           // we have reached the end
           if (reply._tag === "WithExit") {
-            for (let j = 0; j < entry.messages.length; j++) {
-              yield* entry.messages[j].respond(reply)
+            for (const message of entry.messages) {
+              yield* message.respond(reply)
             }
             entry.doneLatch?.openUnsafe()
             return
           }
 
           entry.latch.closeUnsafe()
-          for (let j = 0; j < entry.messages.length; j++) {
-            yield* entry.messages[j].respond(reply)
+          for (const message of entry.messages) {
+            yield* message.respond(reply)
           }
           yield* entry.latch.await
         }
@@ -251,6 +250,11 @@ export const make: (options: Omit<Runners["Service"], "sendLocal" | "notifyLocal
       Effect.ensuring(
         effect,
         Effect.sync(() => {
+          const entry = storageRequests.get(message.envelope.requestId)
+          if (!entry || entry.messages.size > 1) {
+            entry?.messages.delete(message)
+            return
+          }
           storageRequests.delete(message.envelope.requestId)
           waitingStorageRequests.delete(message.envelope.requestId)
         })
@@ -492,11 +496,13 @@ export const makeRpc: Effect.Effect<
     idleTimeToLive: "3 minutes"
   })
 
+  const runnerUnavailable = (address: RunnerAddress) => Effect.fail(new RunnerUnavailable({ address }))
+
   return yield* make({
     ping(address) {
       return RcMap.get(clients, address).pipe(
         Effect.flatMap((client) => client.Ping()),
-        Effect.catchCause(() => Effect.fail(new RunnerUnavailable({ address }))),
+        Effect.catchCause(() => runnerUnavailable(address)),
         Effect.scoped
       )
     },
@@ -513,7 +519,7 @@ export const makeRpc: Effect.Effect<
           ),
           Effect.catchTag("RpcClientError", Effect.die),
           Effect.scoped,
-          Effect.catchDefect(() => Effect.fail(new RunnerUnavailable({ address })))
+          Effect.catchDefect(() => runnerUnavailable(address))
         )
       }
       const isStream = RpcSchema.isStreamSchema(rpc.successSchema)
@@ -536,7 +542,7 @@ export const makeRpc: Effect.Effect<
               ),
               Effect.flatMap(message.respond),
               Effect.scoped,
-              Effect.catchDefect(() => Effect.fail(new RunnerUnavailable({ address })))
+              Effect.catchDefect(() => runnerUnavailable(address))
             ),
           onFailure: (error) =>
             message.respond(
@@ -566,7 +572,7 @@ export const makeRpc: Effect.Effect<
                 Effect.catchTag("RpcClientError", Effect.die),
                 Effect.provideServices(message.services),
                 Effect.catchTag("Done", () => Effect.void),
-                Effect.catchDefect(() => Effect.fail(new RunnerUnavailable({ address })))
+                Effect.catchDefect(() => runnerUnavailable(address))
               )
             }),
             Effect.scoped

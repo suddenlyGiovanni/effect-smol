@@ -2,16 +2,14 @@ import { NodeFileSystem } from "@effect/platform-node"
 import { SqliteClient } from "@effect/sql-sqlite-node"
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Layer } from "effect"
-import { MutableHashSet } from "effect/collections"
-import { Equal } from "effect/interfaces"
 import { FileSystem } from "effect/platform"
-import { Runner, RunnerAddress, ShardId, ShardStorage, SqlShardStorage } from "effect/unstable/cluster"
+import { Runner, RunnerAddress, RunnerStorage, ShardId, SqlRunnerStorage } from "effect/unstable/cluster"
 import { MysqlContainer } from "../fixtures/mysql2-utils.ts"
 import { PgContainer } from "../fixtures/pg-utils.ts"
 
-const StorageLive = SqlShardStorage.layer
+const StorageLive = SqlRunnerStorage.layer
 
-describe("SqlMessageStorage", () => {
+describe("SqlRunnerStorage", () => {
   ;([
     ["pg", Layer.orDie(PgContainer.layerClient)],
     ["mysql", Layer.orDie(MysqlContainer.layerClient)],
@@ -20,48 +18,30 @@ describe("SqlMessageStorage", () => {
     it.layer(StorageLive.pipe(Layer.provideMerge(layer)), {
       timeout: 30000
     })(label, (it) => {
-      it.effect("saveRunners", () =>
+      it.effect("getRunners", () =>
         Effect.gen(function*() {
-          const storage = yield* ShardStorage.ShardStorage
+          const storage = yield* RunnerStorage.RunnerStorage
 
-          yield* storage.saveRunners([[
-            runnerAddress1,
-            Runner.make({
-              address: runnerAddress1,
-              groups: ["default"],
-              version: 1
-            })
-          ]])
-          expect(yield* storage.getRunners).toEqual([[
-            runnerAddress1,
-            Runner.make({
-              address: runnerAddress1,
-              groups: ["default"],
-              version: 1
-            })
-          ]])
-        }).pipe(Effect.repeat({ times: 2 })))
+          const runner = Runner.make({
+            address: runnerAddress1,
+            groups: ["default"],
+            weight: 1
+          })
+          const machineId = yield* storage.register(runner, true)
+          yield* storage.register(runner, true)
+          expect(machineId).toEqual(1)
+          expect(yield* storage.getRunners).toEqual([[runner, true]])
 
-      it.effect("saveAssignments", () =>
-        Effect.gen(function*() {
-          const storage = yield* ShardStorage.ShardStorage
+          yield* storage.setRunnerHealth(runnerAddress1, false)
+          expect(yield* storage.getRunners).toEqual([[runner, false]])
 
-          yield* storage.saveAssignments([
-            [ShardId.make("default", 1), runnerAddress1],
-            [ShardId.make("default", 2), undefined]
-          ])
-          expect(Equal.equals(
-            yield* storage.getAssignments,
-            MutableHashSet.fromIterable([
-              [ShardId.make("default", 1), runnerAddress1],
-              [ShardId.make("default", 2), undefined]
-            ])
-          ))
-        }).pipe(Effect.repeat({ times: 2 })))
+          yield* storage.unregister(runnerAddress1)
+          expect(yield* storage.getRunners).toEqual([])
+        }))
 
       it.effect("acquireShards", () =>
         Effect.gen(function*() {
-          const storage = yield* ShardStorage.ShardStorage
+          const storage = yield* RunnerStorage.RunnerStorage
 
           let acquired = yield* storage.acquire(runnerAddress1, [
             ShardId.make("default", 1),

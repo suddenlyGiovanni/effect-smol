@@ -251,14 +251,15 @@ export const makeNoSerialization: <Rpcs extends Rpc.Any>(
     let effect = Effect.onExit(withMiddleware, (exit) => {
       responded = true
       const close = Scope.closeUnsafe(scope, exit)
-      const write = exit._tag === "Failure" && !disableFatalDefects && Cause.hasDie(exit.cause) ?
-        sendDefect(client, Cause.squash(exit.cause)) :
-        options.onFromServer({
-          _tag: "Exit",
-          clientId: client.id,
-          requestId: request.id,
-          exit
-        })
+      const write =
+        exit._tag === "Failure" && !disableFatalDefects && Cause.hasDie(exit.cause) && !Cause.hasInterrupt(exit.cause) ?
+          sendDefect(client, Cause.squash(exit.cause)) :
+          options.onFromServer({
+            _tag: "Exit",
+            clientId: client.id,
+            requestId: request.id,
+            exit
+          })
       return close ? Effect.ensuring(write, close) : write
     })
     if (enableTracing) {
@@ -467,14 +468,14 @@ export const make: <Rpcs extends Rpc.Any>(
   }).pipe(Scope.provide(scope))
 
   // handle disconnects
-  yield* Effect.fork(Effect.interruptible(Effect.whileLoop({
+  yield* Effect.fork(Effect.whileLoop({
     while: constTrue,
     body: constant(Effect.flatMap(Queue.take(disconnects), (clientId) => {
       clients.delete(clientId)
       return server.disconnect(clientId)
     })),
     step: constVoid
-  })))
+  }))
 
   type Schemas = {
     readonly decode: (u: unknown) => Effect.Effect<Rpc.Payload<Rpcs>, Schema.SchemaError>
@@ -629,7 +630,6 @@ export const make: <Rpcs extends Rpc.Any>(
       }
     }
   }).pipe(
-    Effect.interruptible,
     Effect.tapCause((cause) => Effect.logFatal("BUG: RpcServer protocol crashed", cause)),
     Effect.onExit((exit) => Scope.close(scope, exit))
   )
@@ -654,7 +654,7 @@ export const layer = <Rpcs extends Rpc.Any>(
   | Protocol
   | Rpc.ToHandler<Rpcs>
   | Rpc.Middleware<Rpcs>
-> => Layer.effectDiscard(Effect.forkScoped(Effect.interruptible(make(group, options))))
+> => Layer.effectDiscard(Effect.forkScoped(make(group, options)))
 
 /**
  * Create a RPC server that registers a HTTP route with a `HttpRouter`.
@@ -723,9 +723,7 @@ export class Protocol extends ServiceMap.Key<Protocol, {
 export const makeProtocolSocketServer = Effect.gen(function*() {
   const server = yield* SocketServer.SocketServer
   const { onSocket, protocol } = yield* makeSocketProtocol
-  yield* Effect.forkScoped(Effect.interruptible(
-    server.run(Effect.fnUntraced(onSocket, Effect.scoped))
-  ))
+  yield* Effect.forkScoped(server.run(Effect.fnUntraced(onSocket, Effect.scoped)))
   return protocol
 })
 
@@ -918,7 +916,7 @@ export const makeProtocolWithHttpEffect: Effect.Effect<
       }),
       { contentType: serialization.contentType }
     )
-  }).pipe(Effect.interruptible)
+  })
 
   const protocol = yield* Protocol.make((writeRequest_) => {
     writeRequest = writeRequest_
@@ -1001,7 +999,6 @@ export const toHttpEffect: <Rpcs extends Rpc.Any>(
   const { httpEffect, protocol } = yield* makeProtocolWithHttpEffect
   yield* make(group, options).pipe(
     Effect.provideService(Protocol, protocol),
-    Effect.interruptible,
     Effect.forkScoped
   )
   return httpEffect
@@ -1036,7 +1033,6 @@ export const toHttpEffectWebsocket: <Rpcs extends Rpc.Any>(
   const { httpEffect, protocol } = yield* makeProtocolWithHttpEffectWebsocket
   yield* make(group, options).pipe(
     Effect.provideService(Protocol, protocol),
-    Effect.interruptible,
     Effect.forkScoped
   )
   return httpEffect
@@ -1074,15 +1070,13 @@ export const makeProtocolStdio = Effect.fnUntraced(function*<EIn, EOut, RIn, ROu
       Effect.tapError(Effect.logError),
       Effect.retry(Schedule.spaced(500)),
       Effect.ensuring(Effect.forkDaemon(Fiber.interrupt(fiber), { startImmediately: true })),
-      Effect.forkScoped,
-      Effect.interruptible
+      Effect.forkScoped
     )
 
     yield* Stream.fromQueue(queue).pipe(
       Stream.run(options.stdout),
       Effect.retry(Schedule.spaced(500)),
-      Effect.forkScoped,
-      Effect.interruptible
+      Effect.forkScoped
     )
 
     return {
@@ -1199,7 +1193,6 @@ const makeSocketProtocol: Effect.Effect<
         return writeRaw(parser.encode(ResponseDefectEncoded(cause))!)
       }
     }).pipe(
-      Effect.interruptible,
       Effect.catchFilter((error) => error.reason === "Close" ? error : Filter.fail(error), () => Effect.void),
       Effect.orDie
     )

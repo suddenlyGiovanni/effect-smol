@@ -3,23 +3,20 @@
  */
 import * as Cause from "../../Cause.ts"
 import * as Arr from "../../collections/Array.ts"
+import * as HashRing from "../../collections/HashRing.ts"
 import * as Iterable from "../../collections/Iterable.ts"
 import * as MutableHashMap from "../../collections/MutableHashMap.ts"
 import * as MutableHashSet from "../../collections/MutableHashSet.ts"
 import * as Filter from "../../data/Filter.ts"
 import * as Option from "../../data/Option.ts"
-import * as Deferred from "../../Deferred.ts"
 import * as Effect from "../../Effect.ts"
-import * as Exit from "../../Exit.ts"
 import * as Fiber from "../../Fiber.ts"
-import * as FiberHandle from "../../FiberHandle.ts"
 import * as FiberMap from "../../FiberMap.ts"
 import { constant } from "../../Function.ts"
 import * as Equal from "../../interfaces/Equal.ts"
 import * as Layer from "../../Layer.ts"
 import * as MutableRef from "../../MutableRef.ts"
 import * as PubSub from "../../PubSub.ts"
-import * as Queue from "../../Queue.ts"
 import { CurrentLogAnnotations } from "../../References.ts"
 import * as Schedule from "../../Schedule.ts"
 import * as Scope from "../../Scope.ts"
@@ -47,14 +44,15 @@ import { ResourceMap } from "./internal/resourceMap.ts"
 import * as Message from "./Message.ts"
 import * as MessageStorage from "./MessageStorage.ts"
 import * as Reply from "./Reply.ts"
+import { Runner } from "./Runner.ts"
 import type { RunnerAddress } from "./RunnerAddress.ts"
+import * as RunnerHealth from "./RunnerHealth.ts"
 import { Runners } from "./Runners.ts"
+import { RunnerStorage } from "./RunnerStorage.ts"
 import type { ShardId } from "./ShardId.ts"
 import { make as makeShardId } from "./ShardId.ts"
 import { ShardingConfig } from "./ShardingConfig.ts"
 import { EntityRegistered, type ShardingRegistrationEvent, SingletonRegistered } from "./ShardingRegistrationEvent.ts"
-import { ShardManagerClient } from "./ShardManager.ts"
-import { ShardStorage } from "./ShardStorage.ts"
 import { SingletonAddress } from "./SingletonAddress.ts"
 import * as Snowflake from "./Snowflake.ts"
 
@@ -183,14 +181,14 @@ const make = Effect.gen(function*() {
   const config = yield* ShardingConfig
 
   const runners = yield* Runners
-  const shardManager = yield* ShardManagerClient
+  const runnerHealth = yield* RunnerHealth.RunnerHealth
   const snowflakeGen = yield* Snowflake.Generator
   const shardingScope = yield* Effect.scope
   const isShutdown = MutableRef.make(false)
 
   const storage = yield* MessageStorage.MessageStorage
   const storageEnabled = storage !== MessageStorage.noop
-  const shardStorage = yield* ShardStorage
+  const runnerStorage = yield* RunnerStorage
 
   const entityManagers = new Map<string, EntityManagerState>()
 
@@ -221,13 +219,16 @@ const make = Effect.gen(function*() {
     const selfAddress = config.runnerAddress
     yield* Scope.addFinalizerExit(shardingScope, () => {
       // the locks expire over time, so if this fails we ignore it
-      return Effect.ignore(shardStorage.releaseAll(selfAddress))
+      return Effect.ignore(runnerStorage.releaseAll(selfAddress))
     })
 
     const releasingShards = MutableHashSet.empty<ShardId>()
     yield* Effect.gen(function*() {
+      activeShardsLatch.openUnsafe()
+
       while (true) {
         yield* activeShardsLatch.await
+        activeShardsLatch.closeUnsafe()
 
         // if a shard is no longer assigned to this runner, we release it
         for (const shardId of acquiredShards) {
@@ -248,11 +249,10 @@ const make = Effect.gen(function*() {
         }
 
         if (MutableHashSet.size(unacquiredShards) === 0) {
-          yield* activeShardsLatch.close
           continue
         }
 
-        const acquired = yield* shardStorage.acquire(selfAddress, unacquiredShards)
+        const acquired = yield* runnerStorage.acquire(selfAddress, unacquiredShards)
         yield* Effect.ignore(storage.resetShards(acquired))
         for (const shardId of acquired) {
           MutableHashSet.add(acquiredShards, shardId)
@@ -261,6 +261,8 @@ const make = Effect.gen(function*() {
           yield* storageReadLatch.open
           yield* Effect.forkIn(syncSingletons, shardingScope)
         }
+        yield* Effect.sleep(1000)
+        activeShardsLatch.openUnsafe()
       }
     }).pipe(
       Effect.catchCause((cause) => Effect.logWarning("Could not acquire/release shards", cause)),
@@ -271,20 +273,19 @@ const make = Effect.gen(function*() {
         fiber: "Shard acquisition loop",
         runner: selfAddress
       }),
-      Effect.interruptible,
       Effect.forkIn(shardingScope)
     )
 
     // refresh the shard locks every 4s
     yield* Effect.suspend(() =>
-      shardStorage.refresh(selfAddress, [
+      runnerStorage.refresh(selfAddress, [
         ...acquiredShards,
         ...releasingShards
       ])
     ).pipe(
       Effect.flatMap((acquired) => {
         for (const shardId of acquiredShards) {
-          if (!acquired.some((_) => Equal.equals(_, shardId))) {
+          if (!acquired.includes(shardId)) {
             MutableHashSet.remove(acquiredShards, shardId)
             MutableHashSet.add(releasingShards, shardId)
           }
@@ -305,9 +306,7 @@ const make = Effect.gen(function*() {
           Effect.andThen(clearSelfShards)
         )
       ),
-      Effect.delay("4 seconds"),
-      Effect.forever,
-      Effect.interruptible,
+      Effect.repeat(Schedule.fixed("4 seconds")),
       Effect.forkIn(shardingScope)
     )
 
@@ -322,17 +321,22 @@ const make = Effect.gen(function*() {
               (state) => state.manager.interruptShard(shardId),
               { concurrency: "unbounded", discard: true }
             ).pipe(
-              Effect.andThen(shardStorage.release(selfAddress, shardId)),
-              Effect.annotateLogs({
-                runner: selfAddress
-              }),
+              Effect.andThen(runnerStorage.release(selfAddress, shardId)),
+              Effect.annotateLogs({ runner: selfAddress }),
               Effect.andThen(() => {
                 MutableHashSet.remove(releasingShards, shardId)
               })
             ),
           { concurrency: "unbounded", discard: true }
         )
-      )
+      ).pipe(Effect.andThen(activeShardsLatch.open))
+    )
+
+    // open the shard latch every poll interval
+    yield* activeShardsLatch.open.pipe(
+      Effect.delay(config.entityMessagePollInterval),
+      Effect.forever,
+      Effect.forkIn(shardingScope)
     )
   }
 
@@ -370,8 +374,7 @@ const make = Effect.gen(function*() {
         Effect.andThen(Effect.never),
         Effect.scoped,
         Effect.provideServices(services),
-        Effect.orDie,
-        Effect.interruptible
+        Effect.orDie
       ) as Effect.Effect<never>
       MutableHashMap.set(map, address, wrappedRun)
 
@@ -545,14 +548,12 @@ const make = Effect.gen(function*() {
       Effect.scoped,
       Effect.ensuring(storageReadLock.releaseAll),
       Effect.catchCause((cause) => Effect.logWarning("Could not read messages from storage", cause)),
-      Effect.repeat(Schedule.spaced(config.entityMessagePollInterval)),
       Effect.annotateLogs({
         package: "@effect/cluster",
         module: "Sharding",
         fiber: "Storage read loop",
         runner: selfAddress
       }),
-      Effect.interruptible,
       Effect.forkIn(shardingScope)
     )
 
@@ -560,7 +561,6 @@ const make = Effect.gen(function*() {
     yield* storageReadLatch.open.pipe(
       Effect.delay(config.entityMessagePollInterval),
       Effect.forever,
-      Effect.interruptible,
       Effect.forkIn(shardingScope)
     )
 
@@ -680,7 +680,6 @@ const make = Effect.gen(function*() {
           effect,
           Effect.sync(() => MutableHashMap.remove(entityResumptionState, address))
         ),
-      Effect.interruptible,
       Effect.forkIn(shardingScope)
     )
   }
@@ -800,137 +799,159 @@ const make = Effect.gen(function*() {
     })
   )
 
-  // --- Shard Manager sync ---
+  // --- RunnerStorage sync ---
 
-  const shardManagerTimeoutFiber = yield* FiberHandle.make().pipe(
-    Scope.provide(shardingScope)
-  )
-  const startShardManagerTimeout = FiberHandle.run(
-    shardManagerTimeoutFiber,
-    Effect.flatMap(Effect.sleep(config.shardManagerUnavailableTimeout), () => {
-      MutableHashMap.clear(shardAssignments)
-      return clearSelfShards
-    }),
-    { onlyIfMissing: true }
-  )
-  const stopShardManagerTimeout = FiberHandle.clear(shardManagerTimeoutFiber)
+  const selfRunner = config.runnerAddress ?
+    new Runner({
+      address: config.runnerAddress,
+      groups: config.shardGroups,
+      weight: config.runnerShardWeight
+    }) :
+    undefined
 
-  // Every time the link to the shard manager is lost, we re-register the runner
-  // and re-subscribe to sharding events
+  let allRunners = MutableHashMap.empty<Runner, boolean>()
+  const healthyRunners = MutableHashSet.empty<Runner>()
+
   yield* Effect.gen(function*() {
-    yield* Effect.logDebug("Registering with shard manager")
-    if (config.runnerAddress) {
-      const machineId = yield* shardManager.register(config.runnerAddress, config.shardGroups)
-      yield* snowflakeGen.setMachineId(machineId)
-    }
+    const hashRings = new Map<string, HashRing.HashRing<RunnerAddress>>()
+    let nextRunners = MutableHashMap.empty<Runner, boolean>()
 
-    yield* stopShardManagerTimeout
+    while (true) {
+      // Ensure the current runner is registered
+      if (selfRunner && !isShutdown.current && !MutableHashMap.has(allRunners, selfRunner)) {
+        yield* Effect.logDebug("Registering runner", selfRunner)
+        const machineId = yield* runnerStorage.register(selfRunner, true)
+        yield* snowflakeGen.setMachineId(machineId)
+      }
 
-    yield* Effect.logDebug("Subscribing to sharding events")
-    const queue = yield* shardManager.shardingEvents(config.runnerAddress)
-    const startedLatch = yield* Deferred.make<void>()
+      const runners = yield* runnerStorage.getRunners
+      let changed = false
+      for (let i = 0; i < runners.length; i++) {
+        const [runner, healthy] = runners[i]
+        MutableHashMap.set(nextRunners, runner, healthy)
+        if (!healthy || MutableHashSet.has(healthyRunners, runner)) {
+          continue
+        }
+        changed = true
+        MutableHashSet.add(healthyRunners, runner)
+        for (let j = 0; j < runner.groups.length; j++) {
+          const group = runner.groups[j]
+          let ring = hashRings.get(group)
+          if (!ring) {
+            ring = HashRing.make()
+            hashRings.set(group, ring)
+          }
+          HashRing.add(ring, runner.address, { weight: runner.weight })
+        }
+      }
 
-    const eventsFiber = yield* Effect.gen(function*() {
-      while (true) {
-        const events = yield* Queue.takeAll(queue)
-        for (const event of events) {
-          yield* Effect.logDebug("Received sharding event", event)
+      // Remove runners that are no longer present or healthy
+      for (const [runner, prevHealthy] of allRunners) {
+        const ohealthy = MutableHashMap.get(nextRunners, runner)
+        if (
+          (ohealthy._tag === "Some" && ohealthy.value) ||
+          (ohealthy._tag === "Some" && !prevHealthy)
+        ) {
+          continue
+        }
+        changed = true
+        MutableHashSet.remove(healthyRunners, runner)
+        for (let i = 0; i < runner.groups.length; i++) {
+          HashRing.remove(hashRings.get(runner.groups[i])!, runner.address)
+        }
+      }
 
-          switch (event._tag) {
-            case "StreamStarted": {
-              yield* Deferred.done(startedLatch, Exit.void)
-              break
-            }
-            case "ShardsAssigned": {
-              for (const shard of event.shards) {
-                MutableHashMap.set(shardAssignments, shard, event.address)
+      // swap allRunners and nextRunners
+      const prevRunners = allRunners
+      allRunners = nextRunners
+      nextRunners = prevRunners
+      MutableHashMap.clear(nextRunners)
+
+      // Recompute shard assignments if the set of healthy runners has changed.
+      if (changed) {
+        MutableHashSet.clear(selfShards)
+        for (const [group, ring] of hashRings) {
+          const newAssignments = HashRing.getShards(ring, config.shardsPerGroup)
+          for (let i = 0; i < config.shardsPerGroup; i++) {
+            const shard = makeShardId(group, i + 1)
+            if (newAssignments) {
+              const runner = newAssignments[i]
+              MutableHashMap.set(shardAssignments, shard, runner)
+              if (isLocalRunner(runner)) {
+                MutableHashSet.add(selfShards, shard)
               }
-              if (!MutableRef.get(isShutdown) && isLocalRunner(event.address)) {
-                for (const shardId of event.shards) {
-                  if (MutableHashSet.has(selfShards, shardId)) continue
-                  MutableHashSet.add(selfShards, shardId)
-                }
-                activeShardsLatch.openUnsafe()
-              }
-              break
-            }
-            case "ShardsUnassigned": {
-              for (const shard of event.shards) {
-                MutableHashMap.remove(shardAssignments, shard)
-              }
-              if (isLocalRunner(event.address)) {
-                for (const shard of event.shards) {
-                  MutableHashSet.remove(selfShards, shard)
-                }
-                activeShardsLatch.openUnsafe()
-              }
-              break
+            } else {
+              MutableHashMap.remove(shardAssignments, shard)
             }
           }
         }
+        yield* Effect.logDebug("New shard assignments", selfShards)
+        activeShardsLatch.openUnsafe()
       }
-    }).pipe(
-      Deferred.into(startedLatch),
-      Effect.forkScoped({ startImmediately: true })
-    )
 
-    // Wait for the stream to be established
-    yield* Deferred.await(startedLatch)
-
-    // perform a full sync every config.refreshAssignmentsInterval
-    const syncFiber = yield* syncAssignments.pipe(
-      Effect.andThen(Effect.sleep(config.refreshAssignmentsInterval)),
-      Effect.forever,
-      Effect.forkScoped({ startImmediately: true })
-    )
-
-    yield* Fiber.awaitAll([eventsFiber, syncFiber]).pipe(
-      Effect.flatMap(Exit.asVoidAll)
-    )
+      // Ensure the current runner is registered
+      if (selfRunner && !isShutdown.current && !MutableHashMap.has(allRunners, selfRunner)) {
+        continue
+      } else if (selfRunner && MutableHashSet.size(healthyRunners) === 0) {
+        yield* Effect.logWarning("No healthy runners available")
+        // to prevent a deadlock, we will mark the current node as healthy to
+        // start the health check singleton again
+        yield* runnerStorage.setRunnerHealth(selfRunner.address, true)
+        continue
+      }
+      yield* Effect.sleep(config.refreshAssignmentsInterval)
+    }
   }).pipe(
-    Effect.scoped,
     Effect.catchCause((cause) => Effect.logDebug(cause)),
-    Effect.flatMap(() => startShardManagerTimeout),
-    Effect.repeat(
-      Schedule.exponential(1000).pipe(
-        Schedule.either(Schedule.spaced(10_000))
-      )
-    ),
+    Effect.repeat(Schedule.spaced(1000)),
     Effect.annotateLogs({
       package: "@effect/cluster",
       module: "Sharding",
-      fiber: "ShardManager sync",
+      fiber: "RunnerStorage sync",
       runner: config.runnerAddress
     }),
-    Effect.interruptible,
     Effect.forkIn(shardingScope)
   )
 
-  const syncAssignments = Effect.gen(function*() {
-    const assignments = yield* shardManager.getAssignments
-    yield* Effect.logDebug("Received shard assignments", assignments)
+  // --- Runner health checks ---
 
-    for (const [shardId, runner] of assignments) {
-      if (runner === undefined) {
-        MutableHashMap.remove(shardAssignments, shardId)
-        MutableHashSet.remove(selfShards, shardId)
-        continue
-      }
+  if (selfRunner) {
+    const checkRunner = ([runner, healthy]: [Runner, boolean]) =>
+      Effect.flatMap(runnerHealth.isAlive(runner.address), (isAlive) => {
+        if (healthy === isAlive) return Effect.void
+        if (!isAlive && MutableHashSet.size(healthyRunners) <= 1) {
+          // never mark the last healthy runner as unhealthy, to prevent a
+          // deadlock
+          return Effect.void
+        }
+        MutableHashMap.set(allRunners, runner, isAlive)
+        MutableHashSet.remove(healthyRunners, runner)
+        return Effect.logDebug(`Runner is ${isAlive ? "healthy" : "unheathy"}`, runner).pipe(
+          Effect.andThen(runnerStorage.setRunnerHealth(runner.address, isAlive))
+        )
+      })
 
-      MutableHashMap.set(shardAssignments, shardId, runner)
-
-      if (!isLocalRunner(runner)) {
-        MutableHashSet.remove(selfShards, shardId)
-        continue
-      }
-      if (MutableRef.get(isShutdown) || MutableHashSet.has(selfShards, shardId)) {
-        continue
-      }
-      MutableHashSet.add(selfShards, shardId)
-    }
-
-    activeShardsLatch.openUnsafe()
-  })
+    yield* registerSingleton(
+      "effect/cluster/Sharding/RunnerHealth",
+      Effect.gen(function*() {
+        while (true) {
+          // Skip health checks if we are the only runner
+          if (MutableHashMap.size(allRunners) > 1) {
+            yield* Effect.forEach(allRunners, checkRunner, { discard: true, concurrency: 10 })
+          }
+          yield* Effect.sleep(config.runnerHealthCheckInterval)
+        }
+      }).pipe(
+        Effect.catchCause((cause) => Effect.logDebug("Runner health check failed", cause)),
+        Effect.forever,
+        Effect.annotateLogs({
+          package: "@effect/cluster",
+          module: "Sharding",
+          fiber: "Runner health check"
+        })
+      )
+    )
+  }
 
   // --- Clients ---
 
@@ -1168,27 +1189,12 @@ const make = Effect.gen(function*() {
 
   // --- Finalization ---
 
-  if (config.runnerAddress) {
-    const selfAddress = config.runnerAddress
-    // Unregister runner from shard manager when scope is closed
-    yield* Scope.addFinalizer(
-      shardingScope,
-      Effect.gen(function*() {
-        yield* Effect.logDebug("Unregistering runner from shard manager", selfAddress)
-        yield* shardManager.unregister(selfAddress).pipe(
-          Effect.catchCause((cause) => Effect.logError("Error calling unregister with shard manager", cause))
-        )
-        yield* clearSelfShards
-      })
-    )
-  }
-
   yield* Scope.addFinalizer(
     shardingScope,
     Effect.withFiber((fiber) => {
       MutableRef.set(isShutdown, true)
       internalInterruptors.add(fiber.id)
-      return Effect.void
+      return selfRunner ? Effect.ignore(runnerStorage.unregister(selfRunner.address)) : Effect.void
     })
   )
 
@@ -1225,7 +1231,7 @@ const make = Effect.gen(function*() {
 export const layer: Layer.Layer<
   Sharding,
   never,
-  ShardingConfig | Runners | ShardManagerClient | MessageStorage.MessageStorage | ShardStorage
+  ShardingConfig | Runners | MessageStorage.MessageStorage | RunnerStorage | RunnerHealth.RunnerHealth
 > = Layer.effect(Sharding)(make).pipe(
   Layer.provide([Snowflake.layerGenerator, EntityReaper.layer])
 )

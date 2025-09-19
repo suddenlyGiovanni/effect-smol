@@ -8,11 +8,11 @@ import { Clock } from "effect/time"
 import {
   MessageStorage,
   RunnerAddress,
+  RunnerHealth,
   Runners,
+  RunnerStorage,
   Sharding,
   ShardingConfig,
-  ShardManager,
-  ShardStorage,
   Snowflake
 } from "effect/unstable/cluster"
 import { TestEntity, TestEntityNoState, TestEntityState, User } from "./TestEntity.ts"
@@ -115,7 +115,8 @@ describe.concurrent("Sharding", () => {
             entityMailboxCapacity: 10,
             entityTerminationTimeout: 30000,
             entityMessagePollInterval: 5000,
-            sendRetryInterval: 100
+            sendRetryInterval: 100,
+            refreshAssignmentsInterval: 100
           }))
         ))
       )
@@ -524,13 +525,14 @@ const TestShardingConfig = ShardingConfig.layer({
   entityMailboxCapacity: 10,
   entityTerminationTimeout: 0,
   entityMessagePollInterval: 5000,
-  sendRetryInterval: 100
+  sendRetryInterval: 100,
+  refreshAssignmentsInterval: 0
 })
 
 const TestShardingWithoutState = TestEntityNoState.pipe(
   Layer.provideMerge(Sharding.layer),
-  Layer.provide(ShardManager.layerClientLocal),
-  Layer.provide(ShardStorage.layerMemory)
+  Layer.provide(RunnerStorage.layerMemory),
+  Layer.provide(RunnerHealth.layerNoop)
   // Layer.provide(Logger.minimumLogLevel(LogLevel.All)),
   // Layer.provideMerge(Logger.pretty)
 )
@@ -550,8 +552,8 @@ const TestSharding = TestShardingWithoutStorage.pipe(
 )
 
 const TestShardingWithoutEntities = Sharding.layer.pipe(
-  Layer.provide(ShardManager.layerClientLocal),
-  Layer.provide(ShardStorage.layerMemory),
+  Layer.provide(RunnerStorage.layerMemory),
+  Layer.provide(RunnerHealth.layerNoop),
   Layer.provide(Runners.layerNoop),
   Layer.provideMerge(MessageStorage.layerMemory),
   Layer.provide(TestShardingConfig)
