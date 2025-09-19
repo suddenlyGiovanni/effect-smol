@@ -837,11 +837,17 @@ const make = Effect.gen(function*() {
       for (let i = 0; i < runners.length; i++) {
         const [runner, healthy] = runners[i]
         MutableHashMap.set(nextRunners, runner, healthy)
-        if (!healthy || MutableHashSet.has(healthyRunners, runner)) {
+        const wasHealthy = MutableHashSet.has(healthyRunners, runner)
+        if (!healthy || wasHealthy) {
+          if (healthy === wasHealthy || !wasHealthy) {
+            // no change
+            MutableHashMap.remove(allRunners, runner)
+          }
           continue
         }
         changed = true
         MutableHashSet.add(healthyRunners, runner)
+        MutableHashMap.remove(allRunners, runner)
         for (let j = 0; j < runner.groups.length; j++) {
           const group = runner.groups[j]
           let ring = hashRings.get(group)
@@ -854,31 +860,24 @@ const make = Effect.gen(function*() {
       }
 
       // Remove runners that are no longer present or healthy
-      for (const [runner, prevHealthy] of allRunners) {
-        const ohealthy = MutableHashMap.get(nextRunners, runner)
-        if (
-          (ohealthy._tag === "Some" && ohealthy.value) ||
-          (ohealthy._tag === "Some" && !prevHealthy)
-        ) {
-          continue
-        }
+      MutableHashMap.forEach(allRunners, (_, runner) => {
         changed = true
+        MutableHashMap.remove(allRunners, runner)
         MutableHashSet.remove(healthyRunners, runner)
         for (let i = 0; i < runner.groups.length; i++) {
           HashRing.remove(hashRings.get(runner.groups[i])!, runner.address)
         }
-      }
+      })
 
       // swap allRunners and nextRunners
       const prevRunners = allRunners
       allRunners = nextRunners
       nextRunners = prevRunners
-      MutableHashMap.clear(nextRunners)
 
       // Recompute shard assignments if the set of healthy runners has changed.
       if (changed) {
         MutableHashSet.clear(selfShards)
-        for (const [group, ring] of hashRings) {
+        hashRings.forEach((ring, group) => {
           const newAssignments = HashRing.getShards(ring, config.shardsPerGroup)
           for (let i = 0; i < config.shardsPerGroup; i++) {
             const shard = makeShardId(group, i + 1)
@@ -892,7 +891,7 @@ const make = Effect.gen(function*() {
               MutableHashMap.remove(shardAssignments, shard)
             }
           }
-        }
+        })
         yield* Effect.logDebug("New shard assignments", selfShards)
         activeShardsLatch.openUnsafe()
       }
