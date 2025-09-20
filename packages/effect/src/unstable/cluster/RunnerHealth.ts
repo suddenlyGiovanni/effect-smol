@@ -100,7 +100,7 @@ export const makeK8s = Effect.fnUntraced(function*(options?: {
     HttpClientRequest.setUrlParam("fieldSelector", "status.phase=Running"),
     options?.labelSelector ? HttpClientRequest.setUrlParam("labelSelector", options.labelSelector) : identity
   )
-  const readyPods = yield* client.execute(getPods).pipe(
+  const allPods = yield* client.execute(getPods).pipe(
     Effect.flatMap(HttpClientResponse.schemaBodyJson(PodList)),
     Effect.map((list) => {
       const pods = new Map<string, Pod>()
@@ -110,18 +110,15 @@ export const makeK8s = Effect.fnUntraced(function*(options?: {
       }
       return pods
     }),
+    Effect.tapCause((cause) => Effect.logWarning("Failed to fetch pods from Kubernetes API", cause)),
     Effect.cachedWithTTL("10 seconds")
   )
 
   return RunnerHealth.of({
     isAlive: (address) =>
-      readyPods.pipe(
+      allPods.pipe(
         Effect.map((pods) => pods.get(address.host)?.isReady ?? false),
-        Effect.catchCause((cause) =>
-          Effect.logWarning("Failed to check pod health", cause).pipe(
-            Effect.as(true)
-          )
-        )
+        Effect.catchCause(() => Effect.succeed(true))
       )
   })
 })
