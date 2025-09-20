@@ -28,6 +28,7 @@ import * as RpcClient from "../rpc/RpcClient.ts"
 import { type FromServer, RequestId } from "../rpc/RpcMessage.ts"
 import type { MailboxFull, PersistenceError } from "./ClusterError.ts"
 import { AlreadyProcessingMessage, EntityNotAssignedToRunner, EntityNotManagedByRunner } from "./ClusterError.ts"
+import * as ClusterMetrics from "./ClusterMetrics.ts"
 import { Persisted, Uninterruptible } from "./ClusterSchema.ts"
 import * as ClusterSchema from "./ClusterSchema.ts"
 import type { CurrentAddress, CurrentRunnerAddress, Entity, HandlersFrom } from "./Entity.ts"
@@ -264,6 +265,9 @@ const make = Effect.gen(function*() {
         if (acquired.length > 0) {
           yield* storageReadLatch.open
           yield* Effect.forkIn(syncSingletons, shardingScope)
+
+          // update metrics
+          ClusterMetrics.shards.updateUnsafe(BigInt(MutableHashSet.size(acquiredShards)), ServiceMap.empty())
         }
         yield* Effect.sleep(1000)
         activeShardsLatch.openUnsafe()
@@ -408,6 +412,10 @@ const make = Effect.gen(function*() {
         }
       }
     }
+    ClusterMetrics.singletons.updateUnsafe(
+      BigInt(yield* FiberMap.size(singletonFibers)),
+      ServiceMap.empty()
+    )
   }))
 
   // --- Storage inbox ---
@@ -824,6 +832,12 @@ const make = Effect.gen(function*() {
   let allRunners = MutableHashMap.empty<Runner, boolean>()
   let healthyRunnerCount = 0
 
+  // update metrics
+  if (selfRunner) {
+    ClusterMetrics.runners.updateUnsafe(BigInt(1), ServiceMap.empty())
+    ClusterMetrics.runnersHealthy.updateUnsafe(BigInt(1), ServiceMap.empty())
+  }
+
   yield* Effect.gen(function*() {
     const hashRings = new Map<string, HashRing.HashRing<RunnerAddress>>()
     let nextRunners = MutableHashMap.empty<Runner, boolean>()
@@ -901,6 +915,14 @@ const make = Effect.gen(function*() {
         })
         yield* Effect.logDebug("New shard assignments", selfShards)
         activeShardsLatch.openUnsafe()
+
+        // update metrics
+        if (selfRunner) {
+          ClusterMetrics.runnersHealthy.updateUnsafe(
+            BigInt(MutableHashSet.has(healthyRunners, selfRunner) ? 1 : 0),
+            ServiceMap.empty()
+          )
+        }
       }
 
       // Ensure the current runner is registered
@@ -939,8 +961,7 @@ const make = Effect.gen(function*() {
           )
         }
         if (healthyRunnerCount <= 1) {
-          // never mark the last healthy runner as unhealthy, to prevent a
-          // deadlock
+          // never mark the last runner as unhealthy, to prevent a deadlock
           return Effect.void
         }
         healthyRunnerCount--
