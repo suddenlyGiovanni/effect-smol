@@ -15,7 +15,7 @@ Releases are snapshot only
 ## Beta
 
 Pre-releases to npm from smol repo
-
+- [ ] Comprehensive JSDoc on every exported function
 - [ ] Codemod CLI for v3 migration
 
 ## RC's
