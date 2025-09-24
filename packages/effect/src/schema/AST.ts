@@ -15,7 +15,6 @@ import { memoize } from "../Function.ts"
 import { effectIsExit } from "../internal/effect.ts"
 import * as internalRecord from "../internal/record.ts"
 import * as RegEx from "../primitives/RegExp.ts"
-import type { Annotated } from "./Annotations.ts"
 import * as Annotations from "./Annotations.ts"
 import * as Check from "./Check.ts"
 import * as Getter from "./Getter.ts"
@@ -308,7 +307,7 @@ export type Checks = readonly [Check.Check<any>, ...Array<Check.Check<any>>]
  * @category model
  * @since 4.0.0
  */
-export abstract class Base implements Annotated {
+export abstract class Base {
   readonly annotations: Annotations.Annotations | undefined
   readonly checks: Checks | undefined
   readonly encoding: Encoding | undefined
@@ -382,6 +381,7 @@ export class Declaration extends Base {
   }
   /** @internal */
   getExpected(): string {
+    // Annotations on checks are ignored internally
     const expected = this.annotations?.identifier ?? this.annotations?.title
     if (Predicate.isString(expected)) return expected
     return "<Declaration>"
@@ -2070,14 +2070,16 @@ export function record(key: AST, value: AST, keyValueCombiner: KeyValueCombiner 
   return new TypeLiteral([], [new IndexSignature(false, key, value, keyValueCombiner)])
 }
 
-/** @internal */
-export function isOptional(ast: AST): boolean {
-  return ast.context?.isOptional ?? false
-}
-
 // -------------------------------------------------------------------------------------
 // Public APIs
 // -------------------------------------------------------------------------------------
+
+/**
+ * @since 4.0.0
+ */
+export function isOptional(ast: AST): boolean {
+  return ast.context?.isOptional ?? false
+}
 
 /**
  * @since 4.0.0

@@ -2,6 +2,7 @@
  * @since 4.0.0
  */
 import * as Option from "../../data/Option.ts"
+import * as Predicate from "../../data/Predicate.ts"
 import type * as Effect from "../../Effect.ts"
 import { constFalse, constTrue } from "../../Function.ts"
 import * as Check from "../../schema/Check.ts"
@@ -18,14 +19,14 @@ import * as RpcMiddleware from "../rpc/RpcMiddleware.ts"
 /**
  * @since 4.0.0
  */
-export interface optionalWithDefault<S extends Schema.Top & { readonly "~type.constructor.default": "no-default" }>
+export interface optionalWithDefault<S extends Schema.Top & Schema.WithoutConstructorDefault>
   extends Schema.withConstructorDefault<Schema.decodeTo<Schema.typeCodec<Schema.optionalKey<S>>, Schema.optionalKey<S>>>
 {}
 
 /**
  * @since 4.0.0
  */
-export const optionalWithDefault = <S extends Schema.Top & { readonly "~type.constructor.default": "no-default" }>(
+export const optionalWithDefault = <S extends Schema.Top & Schema.WithoutConstructorDefault>(
   schema: S,
   defaultValue: () => Schema.optionalKey<S>["Type"]
 ): optionalWithDefault<S> =>
@@ -2027,11 +2028,15 @@ export type FromClientEncoded = ClientRequestEncoded | ClientNotificationEncoded
  */
 export type FromServerEncoded = ServerResultEncoded | ServerNotificationEncoded
 
+const ParamSchemaTypeId = "~effect/ai/McpSchema/ParamSchema"
+
 /**
  * @since 4.0.0
  * @category Parameters
  */
-export const ParamAnnotation: unique symbol = Symbol.for("effect/ai/McpSchema/ParamNameId")
+export function isParam(schema: Schema.Top): schema is Param<string, Schema.Top> {
+  return Predicate.hasProperty(schema, ParamSchemaTypeId)
+}
 
 /**
  * @since 4.0.0
@@ -2044,7 +2049,7 @@ export interface Param<Name extends string, S extends Schema.Top> extends
     S["DecodingServices"],
     S["EncodingServices"],
     S["ast"],
-    S["~rebuild.out"],
+    Param<Name, S>,
     S["~annotate.in"],
     S["~type.make.in"],
     S["Iso"],
@@ -2056,10 +2061,10 @@ export interface Param<Name extends string, S extends Schema.Top> extends
     S["~encoded.optionality"]
   >
 {
-  readonly "~effect/ai/McpSchema/Param": {
-    readonly name: Name
-    readonly schema: S
-  }
+  readonly "~rebuild.out": this
+  readonly [ParamSchemaTypeId]: typeof ParamSchemaTypeId
+  readonly name: Name
+  readonly schema: S
 }
 
 /**
@@ -2068,5 +2073,9 @@ export interface Param<Name extends string, S extends Schema.Top> extends
  * @since 4.0.0
  * @category Parameters
  */
-export const param = <const Id extends string, S extends Schema.Top>(id: Id, schema: S): Param<Id, S> =>
-  schema.annotate({ mcpServerParam: id }) as any
+export function param<const Name extends string, S extends Schema.Top>(
+  name: Name,
+  schema: S
+): Param<Name, S> {
+  return Schema.makeProto(schema.ast, { [ParamSchemaTypeId]: ParamSchemaTypeId, name, schema })
+}

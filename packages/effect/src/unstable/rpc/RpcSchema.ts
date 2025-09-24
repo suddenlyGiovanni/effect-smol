@@ -1,35 +1,33 @@
 /**
  * @since 4.0.0
  */
-import type { Annotations } from "../../schema/Annotations.ts"
+import * as Predicate from "../../data/Predicate.ts"
+import type * as Annotations from "../../schema/Annotations.ts"
 import type * as AST from "../../schema/AST.ts"
 import * as Schema from "../../schema/Schema.ts"
 import * as Stream_ from "../../stream/Stream.ts"
 
-/**
- * @since 4.0.0
- * @category Stream
- */
-export const StreamSchemaTypeId = "~effect/rpc/RpcSchema/StreamSchema"
+const StreamSchemaTypeId = "~effect/rpc/RpcSchema/StreamSchema"
 
 /**
  * @since 4.0.0
  * @category Stream
  */
-export const isStreamSchema = (schema: Schema.Top): schema is Stream<any, any> =>
-  schema.ast.annotations !== undefined && StreamSchemaTypeId in schema.ast.annotations
+export function isStreamSchema(schema: Schema.Top): schema is Stream<Schema.Top, Schema.Top> {
+  return Predicate.hasProperty(schema, StreamSchemaTypeId)
+}
 
-/**
- * @since 4.0.0
- * @category Stream
- */
-export function getStreamSchemas(
-  ast: AST.AST
-): {
+/** @internal */
+export function getStreamSchemas(schema: Schema.Top): {
   readonly success: Schema.Top
   readonly error: Schema.Top
 } | undefined {
-  return ast.annotations?.[StreamSchemaTypeId] as any
+  return isStreamSchema(schema) ?
+    {
+      success: schema.success,
+      error: schema.error
+    } :
+    undefined
 }
 
 /**
@@ -42,28 +40,23 @@ export interface Stream<A extends Schema.Top, E extends Schema.Top> extends
     Stream_.Stream<A["Encoded"], E["Encoded"]>,
     A["DecodingServices"] | E["DecodingServices"],
     A["EncodingServices"] | E["EncodingServices"],
-    AST.AST,
+    AST.Declaration,
     Stream<A, E>,
-    Annotations
+    Annotations.Declaration<Stream<A, E>, readonly []>
   >
 {
+  readonly "~rebuild.out": this
+  readonly [StreamSchemaTypeId]: typeof StreamSchemaTypeId
   readonly success: A
   readonly error: E
 }
+
+const schema = Schema.declare(Stream_.isStream)
 
 /**
  * @since 4.0.0
  * @category Stream
  */
-export const Stream = <A extends Schema.Top, E extends Schema.Top>(
-  options: {
-    readonly error: E
-    readonly success: A
-  }
-): Stream<A, E> => {
-  const schema = Schema.declare(Stream_.isStream, { [StreamSchemaTypeId]: options })
-  return Object.assign(
-    schema,
-    options
-  ) as any as Stream<A, E>
+export function Stream<A extends Schema.Top, E extends Schema.Top>(success: A, error: E): Stream<A, E> {
+  return Schema.makeProto(schema.ast, { [StreamSchemaTypeId]: StreamSchemaTypeId, success, error })
 }

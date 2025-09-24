@@ -119,7 +119,7 @@ export interface Bottom<
   readonly "EncodingServices": RE
 
   readonly "~type.make.in": TypeMakeIn
-  readonly "~type.make": TypeMake
+  readonly "~type.make": TypeMake // useful to type the `refine` interface
   readonly "~type.constructor.default": TypeConstructorDefault
   readonly "Iso": Iso
 
@@ -145,84 +145,33 @@ export interface Bottom<
 
 const TypeId = "~effect/schema/Schema"
 
-abstract class BottomImpl<
-  T,
-  E,
-  RD,
-  RE,
-  Ast extends AST.AST,
-  RebuildOut extends Top,
-  AnnotateIn extends Annotations.Annotations,
-  TypeMakeIn = T,
-  Iso = T,
-  TypeMake = TypeMakeIn,
-  TypeMutability extends Mutability = "readonly",
-  TypeOptionality extends Optionality = "required",
-  TypeConstructorDefault extends ConstructorDefault = "no-default",
-  EncodedMutability extends Mutability = "readonly",
-  EncodedOptionality extends Optionality = "required"
-> extends Pipeable.Class implements
-  Bottom<
-    T,
-    E,
-    RD,
-    RE,
-    Ast,
-    RebuildOut,
-    AnnotateIn,
-    TypeMakeIn,
-    Iso,
-    TypeMake,
-    TypeMutability,
-    TypeOptionality,
-    TypeConstructorDefault,
-    EncodedMutability,
-    EncodedOptionality
-  >
-{
-  readonly [TypeId] = TypeId
-
-  declare readonly "Type": T
-  declare readonly "Encoded": E
-  declare readonly "DecodingServices": RD
-  declare readonly "EncodingServices": RE
-
-  declare readonly "~rebuild.out": RebuildOut
-  declare readonly "~annotate.in": AnnotateIn
-
-  declare readonly "~type.make.in": TypeMakeIn
-  declare readonly "~type.make": TypeMake
-  declare readonly "~type.constructor.default": TypeConstructorDefault
-  declare readonly "Iso": Iso
-
-  declare readonly "~type.mutability": TypeMutability
-  declare readonly "~type.optionality": TypeOptionality
-  declare readonly "~encoded.mutability": EncodedMutability
-  declare readonly "~encoded.optionality": EncodedOptionality
-
-  readonly ast: Ast
-  readonly makeSync: (input: this["~type.make.in"], options?: MakeOptions) => this["Type"]
-
-  constructor(ast: Ast) {
-    super()
-    this.ast = ast
-    this.makeSync = ToParser.makeSync(this)
-  }
-  abstract rebuild(ast: this["ast"]): this["~rebuild.out"]
-  annotate(annotations: this["~annotate.in"]): this["~rebuild.out"] {
+const Proto = {
+  [TypeId]: TypeId,
+  pipe() {
+    return Pipeable.pipeArguments(this, arguments)
+  },
+  annotate(this: Top, annotations: Annotations.Annotations) {
     return this.rebuild(AST.annotate(this.ast, annotations))
-  }
-  annotateKey(annotations: Annotations.Key<this["Type"]>): this["~rebuild.out"] {
+  },
+  annotateKey(this: Top, annotations: Annotations.Key<unknown>) {
     return this.rebuild(AST.annotateKey(this.ast, annotations))
-  }
+  },
   check(
-    ...checks: readonly [
-      Check.Check<this["Type"]>,
-      ...Array<Check.Check<this["Type"]>>
-    ]
-  ): this["~rebuild.out"] {
+    this: Top,
+    ...checks: readonly [Check.Check<unknown>, ...Array<Check.Check<unknown>>]
+  ) {
     return this.rebuild(AST.appendChecks(this.ast, checks))
   }
+}
+
+/** @internal */
+export function makeProto<S extends Top>(ast: AST.AST, options: object): S {
+  const self = Object.create(Proto)
+  Object.assign(self, options)
+  self.ast = ast
+  self.rebuild = (ast: AST.AST) => makeProto(ast, options)
+  self.makeSync = ToParser.makeSync(self)
+  return self
 }
 
 /**
@@ -737,34 +686,6 @@ export const encodeUnknownSync = ToParser.encodeUnknownSync
  */
 export const encodeSync = ToParser.encodeSync
 
-class make$<S extends Top> extends BottomImpl<
-  S["Type"],
-  S["Encoded"],
-  S["DecodingServices"],
-  S["EncodingServices"],
-  S["ast"],
-  S["~rebuild.out"],
-  S["~annotate.in"],
-  S["~type.make.in"],
-  S["Iso"],
-  S["~type.make"],
-  S["~type.mutability"],
-  S["~type.optionality"],
-  S["~type.constructor.default"],
-  S["~encoded.mutability"],
-  S["~encoded.optionality"]
-> {
-  readonly rebuild: (ast: S["ast"]) => S["~rebuild.out"]
-
-  constructor(
-    ast: S["ast"],
-    rebuild: (ast: S["ast"]) => S["~rebuild.out"]
-  ) {
-    super(ast)
-    this.rebuild = rebuild
-  }
-}
-
 /**
  * Creates a schema from an AST (Abstract Syntax Tree) node.
  *
@@ -780,25 +701,8 @@ class make$<S extends Top> extends BottomImpl<
  * @category Constructors
  * @since 4.0.0
  */
-export function make<S extends Top>(ast: S["ast"]): Bottom<
-  S["Type"],
-  S["Encoded"],
-  S["DecodingServices"],
-  S["EncodingServices"],
-  S["ast"],
-  S["~rebuild.out"],
-  S["~annotate.in"],
-  S["~type.make.in"],
-  S["Iso"],
-  S["~type.make"],
-  S["~type.mutability"],
-  S["~type.optionality"],
-  S["~type.constructor.default"],
-  S["~encoded.mutability"],
-  S["~encoded.optionality"]
-> {
-  const rebuild = (ast: AST.AST) => new make$<S>(ast, rebuild)
-  return rebuild(ast)
+export function make<S extends Top>(ast: S["ast"]): S {
+  return makeProto(ast, {})
 }
 
 /**
@@ -842,15 +746,6 @@ interface optionalKeyLambda extends Lambda {
   readonly "~lambda.out": this["~lambda.in"] extends Top ? optionalKey<this["~lambda.in"]> : never
 }
 
-class makeWithSchema$<S extends Top, Result extends Top> extends make$<Result> {
-  readonly schema: S
-
-  constructor(ast: AST.AST, schema: S) {
-    super(ast, (ast) => new makeWithSchema$(ast, schema))
-    this.schema = schema
-  }
-}
-
 /**
  * Creates an exact optional key schema for struct fields. Unlike `optional`,
  * this creates exact optional properties (not `| undefined`) that can be
@@ -872,8 +767,8 @@ class makeWithSchema$<S extends Top, Result extends Top> extends make$<Result> {
  *
  * @since 4.0.0
  */
-export const optionalKey = lambda<optionalKeyLambda>(function optionalKey<S extends Top>(self: S): optionalKey<S> {
-  return new makeWithSchema$<S, optionalKey<S>>(AST.optionalKey(self.ast), self)
+export const optionalKey = lambda<optionalKeyLambda>(function optionalKey<S extends Top>(schema: S): optionalKey<S> {
+  return makeProto(AST.optionalKey(schema.ast), { schema })
 })
 
 /**
@@ -950,8 +845,8 @@ interface mutableKeyLambda extends Lambda {
 /**
  * @since 4.0.0
  */
-export const mutableKey = lambda<mutableKeyLambda>(function mutableKey<S extends Top>(self: S): mutableKey<S> {
-  return new makeWithSchema$<S, mutableKey<S>>(AST.mutableKey(self.ast), self)
+export const mutableKey = lambda<mutableKeyLambda>(function mutableKey<S extends Top>(schema: S): mutableKey<S> {
+  return makeProto(AST.mutableKey(schema.ast), { schema })
 })
 
 /**
@@ -987,8 +882,8 @@ interface typeCodecLambda extends Lambda {
 /**
  * @since 4.0.0
  */
-export const typeCodec = lambda<typeCodecLambda>(function typeCodec<S extends Top>(self: S): typeCodec<S> {
-  return new makeWithSchema$<S, typeCodec<S>>(AST.typeAST(self.ast), self)
+export const typeCodec = lambda<typeCodecLambda>(function typeCodec<S extends Top>(schema: S): typeCodec<S> {
+  return makeProto(AST.typeAST(schema.ast), { schema })
 })
 
 /**
@@ -1024,9 +919,13 @@ interface encodedCodecLambda extends Lambda {
 /**
  * @since 4.0.0
  */
-export const encodedCodec = lambda<encodedCodecLambda>(function encodedCodec<S extends Top>(self: S): encodedCodec<S> {
-  return new makeWithSchema$<S, encodedCodec<S>>(AST.encodedAST(self.ast), self)
-})
+export const encodedCodec = lambda<encodedCodecLambda>(
+  function encodedCodec<S extends Top>(schema: S): encodedCodec<S> {
+    return makeProto(AST.encodedAST(schema.ast), { schema })
+  }
+)
+
+const FlipTypeId = "~effect/schema/Schema/flip"
 
 /**
  * @since 4.0.0
@@ -1050,13 +949,9 @@ export interface flip<S extends Top> extends
     S["~type.optionality"]
   >
 {
+  readonly "~rebuild.out": this
+  readonly [FlipTypeId]: typeof FlipTypeId
   readonly schema: S
-}
-
-const FlipTypeId = "~effect/schema/Schema/flip$"
-
-class flip$<S extends Top> extends makeWithSchema$<S, flip<S>> implements flip<S> {
-  readonly [FlipTypeId] = FlipTypeId
 }
 
 function isFlip$(schema: Top): schema is flip<any> {
@@ -1071,7 +966,7 @@ export function flip<S extends Top>(schema: S): flip<S> {
   if (isFlip$(schema)) {
     return schema.schema.rebuild(AST.flip(schema.ast))
   }
-  return new flip$(AST.flip(schema.ast), schema)
+  return makeProto(AST.flip(schema.ast), { [FlipTypeId]: FlipTypeId, schema })
 }
 
 /**
@@ -1084,16 +979,6 @@ export interface Literal<L extends AST.Literal>
   readonly literal: L
 }
 
-class Literal$<L extends AST.Literal> extends make$<Literal<L>> implements Literal<L> {
-  declare readonly "~rebuild.out": this
-  readonly literal: L
-
-  constructor(ast: AST.LiteralType, literal: L) {
-    super(ast, (ast) => new Literal$(ast, literal))
-    this.literal = literal
-  }
-}
-
 /**
  * @see {@link Literals} for a schema that represents a union of literals.
  * @see {@link tag} for a schema that represents a literal value that can be
@@ -1101,7 +986,7 @@ class Literal$<L extends AST.Literal> extends make$<Literal<L>> implements Liter
  * @since 4.0.0
  */
 export function Literal<L extends AST.Literal>(literal: L): Literal<L> {
-  return new Literal$(new AST.LiteralType(literal), literal)
+  return makeProto(new AST.LiteralType(literal), { literal })
 }
 
 /**
@@ -1162,18 +1047,6 @@ export interface TemplateLiteral<Parts extends TemplateLiteral.Parts> extends
   readonly parts: Parts
 }
 
-class TemplateLiteral$<Parts extends TemplateLiteral.Parts> extends make$<TemplateLiteral<Parts>>
-  implements TemplateLiteral<Parts>
-{
-  declare readonly "~rebuild.out": this
-  readonly parts: Parts
-
-  constructor(ast: AST.TemplateLiteral, parts: Parts) {
-    super(ast, (ast) => new TemplateLiteral$(ast, parts))
-    this.parts = parts
-  }
-}
-
 function templateLiteralFromParts<Parts extends TemplateLiteral.Parts>(parts: Parts) {
   return new AST.TemplateLiteral(parts.map((part) => isSchema(part) ? part.ast : new AST.LiteralType(part)))
 }
@@ -1182,7 +1055,7 @@ function templateLiteralFromParts<Parts extends TemplateLiteral.Parts>(parts: Pa
  * @since 4.0.0
  */
 export function TemplateLiteral<const Parts extends TemplateLiteral.Parts>(parts: Parts): TemplateLiteral<Parts> {
-  return new TemplateLiteral$(templateLiteralFromParts(parts), [...parts] as Parts)
+  return makeProto(templateLiteralFromParts(parts), { parts })
 }
 
 /**
@@ -1215,18 +1088,8 @@ export interface TemplateLiteralParser<Parts extends TemplateLiteral.Parts> exte
     Annotations.Annotations
   >
 {
+  readonly "~rebuild.out": this
   readonly parts: Parts
-}
-
-class TemplateLiteralParser$<Parts extends TemplateLiteral.Parts> extends make$<TemplateLiteralParser<Parts>>
-  implements TemplateLiteralParser<Parts>
-{
-  readonly parts: Parts
-
-  constructor(ast: AST.TupleType, parts: Parts) {
-    super(ast, (ast) => new TemplateLiteralParser$(ast, parts))
-    this.parts = parts
-  }
 }
 
 /**
@@ -1235,7 +1098,7 @@ class TemplateLiteralParser$<Parts extends TemplateLiteral.Parts> extends make$<
 export function TemplateLiteralParser<const Parts extends TemplateLiteral.Parts>(
   parts: Parts
 ): TemplateLiteralParser<Parts> {
-  return new TemplateLiteralParser$(templateLiteralFromParts(parts).asTemplateLiteralParser(), [...parts] as Parts)
+  return makeProto(templateLiteralFromParts(parts).asTemplateLiteralParser(), { parts: [...parts] })
 }
 
 /**
@@ -1248,27 +1111,17 @@ export interface Enums<A extends { [x: string]: string | number }>
   readonly enums: A
 }
 
-class Enums$<A extends { [x: string]: string | number }> extends make$<Enums<A>> implements Enums<A> {
-  declare readonly "~rebuild.out": this
-  readonly enums: A
-
-  constructor(ast: AST.Enums, enums: A) {
-    super(ast, (ast) => new Enums$(ast, enums))
-    this.enums = enums
-  }
-}
-
 /**
  * @since 4.0.0
  */
 export function Enums<A extends { [x: string]: string | number }>(enums: A): Enums<A> {
-  return new Enums$(
+  return makeProto(
     new AST.Enums(
       Object.keys(enums).filter(
         (key) => typeof enums[enums[key]] !== "number"
       ).map((key) => [key, enums[key]])
     ),
-    enums
+    { enums }
   )
 }
 
@@ -1612,30 +1465,27 @@ export interface Struct<Fields extends Struct.Fields> extends
   ): Struct<Simplify<Readonly<To>>>
 }
 
-class Struct$<Fields extends Struct.Fields> extends make$<Struct<Fields>> implements Struct<Fields> {
-  declare readonly "~rebuild.out": this
-  readonly fields: Fields
-  constructor(ast: AST.TypeLiteral, fields: Fields) {
-    super(ast, (ast) => new Struct$(ast, fields))
-    // clone to avoid accidental external mutation
-    this.fields = { ...fields }
-  }
-  mapFields<To extends Struct.Fields>(
-    f: (fields: Fields) => To,
-    options?: {
-      readonly preserveChecks?: boolean | undefined
-    } | undefined
-  ): Struct<To> {
-    const fields = f(this.fields)
-    return new Struct$(AST.struct(fields, options?.preserveChecks ? this.ast.checks : undefined), fields)
-  }
+function makeStruct<const Fields extends Struct.Fields>(ast: AST.TypeLiteral, fields: Fields): Struct<Fields> {
+  return makeProto(ast, {
+    fields,
+    mapFields<To extends Struct.Fields>(
+      this: Struct<Fields>,
+      f: (fields: Fields) => To,
+      options?: {
+        readonly preserveChecks?: boolean | undefined
+      } | undefined
+    ): Struct<To> {
+      const fields = f(this.fields)
+      return makeStruct(AST.struct(fields, options?.preserveChecks ? this.ast.checks : undefined), fields)
+    }
+  })
 }
 
 /**
  * @since 4.0.0
  */
 export function Struct<const Fields extends Struct.Fields>(fields: Fields): Struct<Fields> {
-  return new Struct$(AST.struct(fields, undefined), fields)
+  return makeStruct(AST.struct(fields, undefined), fields)
 }
 
 /**
@@ -1816,20 +1666,6 @@ export interface Record$<Key extends Record.Key, Value extends Top> extends
   readonly value: Value
 }
 
-class Record$$<Key extends Record.Key, Value extends Top> extends make$<Record$<Key, Value>>
-  implements Record$<Key, Value>
-{
-  declare readonly "~rebuild.out": this
-  readonly key: Key
-  readonly value: Value
-
-  constructor(ast: AST.TypeLiteral, key: Key, value: Value) {
-    super(ast, (ast) => new Record$$(ast, key, value))
-    this.key = key
-    this.value = value
-  }
-}
-
 /**
  * @since 4.0.0
  */
@@ -1846,7 +1682,7 @@ export function Record<Key extends Record.Key, Value extends Top>(
   const keyValueCombiner = options?.keyValueCombiner?.decode || options?.keyValueCombiner?.encode
     ? new AST.KeyValueCombiner(options.keyValueCombiner.decode, options.keyValueCombiner.encode)
     : undefined
-  return new Record$$(AST.record(key.ast, value.ast, keyValueCombiner), key, value)
+  return makeProto(AST.record(key.ast, value.ast, keyValueCombiner), { key, value })
 }
 
 /**
@@ -1934,22 +1770,6 @@ export interface StructWithRest<
   readonly records: Records
 }
 
-class StructWithRest$$<S extends StructWithRest.TypeLiteral, Records extends StructWithRest.Records>
-  extends make$<StructWithRest<S, Records>>
-  implements StructWithRest<S, Records>
-{
-  declare readonly "~rebuild.out": this
-  readonly schema: S
-  readonly records: Records
-
-  constructor(ast: AST.TypeLiteral, schema: S, records: Records) {
-    super(ast, (ast) => new StructWithRest$$(ast, this.schema, this.records))
-    this.schema = schema
-    // clone to avoid accidental external mutation
-    this.records = [...records] as any
-  }
-}
-
 /**
  * @since 4.0.0
  */
@@ -1958,9 +1778,9 @@ export function StructWithRest<
   const Records extends StructWithRest.Records
 >(
   schema: S,
-  rest: Records
+  records: Records
 ): StructWithRest<S, Records> {
-  return new StructWithRest$$(AST.structWithRest(schema.ast, rest.map(AST.getAST)), schema, rest)
+  return makeProto(AST.structWithRest(schema.ast, records.map(AST.getAST)), { schema, records })
 }
 
 /**
@@ -2079,24 +1899,20 @@ export interface Tuple<Elements extends Tuple.Elements> extends
   ): Tuple<Simplify<Readonly<To>>>
 }
 
-class Tuple$<Elements extends Tuple.Elements> extends make$<Tuple<Elements>> implements Tuple<Elements> {
-  declare readonly "~rebuild.out": this
-  readonly elements: Elements
-  constructor(ast: AST.TupleType, elements: Elements) {
-    super(ast, (ast) => new Tuple$(ast, elements))
-    // clone to avoid accidental external mutation
-    this.elements = [...elements] as any
-  }
-
-  mapElements<To extends Tuple.Elements>(
-    f: (elements: Elements) => To,
-    options?: {
-      readonly preserveChecks?: boolean | undefined
-    } | undefined
-  ): Tuple<Simplify<Readonly<To>>> {
-    const elements = f(this.elements)
-    return new Tuple$(AST.tuple(elements, options?.preserveChecks ? this.ast.checks : undefined), elements)
-  }
+function makeTuple<Elements extends Tuple.Elements>(ast: AST.TupleType, elements: Elements): Tuple<Elements> {
+  return makeProto(ast, {
+    elements,
+    mapElements<To extends Tuple.Elements>(
+      this: Tuple<Elements>,
+      f: (elements: Elements) => To,
+      options?: {
+        readonly preserveChecks?: boolean | undefined
+      } | undefined
+    ): Tuple<Simplify<Readonly<To>>> {
+      const elements = f(this.elements)
+      return makeTuple(AST.tuple(elements, options?.preserveChecks ? this.ast.checks : undefined), elements)
+    }
+  })
 }
 
 /**
@@ -2104,7 +1920,7 @@ class Tuple$<Elements extends Tuple.Elements> extends make$<Tuple<Elements>> imp
  * @since 4.0.0
  */
 export function Tuple<const Elements extends ReadonlyArray<Top>>(elements: Elements): Tuple<Elements> {
-  return new Tuple$(AST.tuple(elements), elements)
+  return makeTuple(AST.tuple(elements), elements)
 }
 
 /**
@@ -2196,20 +2012,6 @@ export interface TupleWithRest<
   readonly rest: Rest
 }
 
-class TupleWithRest$<S extends Tuple<Tuple.Elements> | mutable<Tuple<Tuple.Elements>>, Rest extends TupleWithRest.Rest>
-  extends make$<TupleWithRest<S, Rest>>
-{
-  readonly schema: S
-  readonly rest: Rest
-
-  constructor(ast: AST.TupleType, schema: S, rest: Rest) {
-    super(ast, (ast) => new TupleWithRest$(ast, this.schema, this.rest))
-    this.schema = schema
-    // clone to avoid accidental external mutation
-    this.rest = [...rest]
-  }
-}
-
 /**
  * @category Constructors
  * @since 4.0.0
@@ -2217,11 +2019,8 @@ class TupleWithRest$<S extends Tuple<Tuple.Elements> | mutable<Tuple<Tuple.Eleme
 export function TupleWithRest<
   S extends Tuple<Tuple.Elements> | mutable<Tuple<Tuple.Elements>>,
   const Rest extends TupleWithRest.Rest
->(
-  schema: S,
-  rest: Rest
-): TupleWithRest<S, Rest> {
-  return new TupleWithRest$(AST.tupleWithRest(schema.ast, rest.map(AST.getAST)), schema, rest)
+>(schema: S, rest: Rest): TupleWithRest<S, Rest> {
+  return makeProto(AST.tupleWithRest(schema.ast, rest.map(AST.getAST)), { schema, rest })
 }
 
 /**
@@ -2253,11 +2052,8 @@ interface ArrayLambda extends Lambda {
  * @category Constructors
  * @since 4.0.0
  */
-export const Array = lambda<ArrayLambda>(function Array<S extends Top>(item: S): Array$<S> {
-  return new makeWithSchema$<S, Array$<S>>(
-    new AST.TupleType(false, [], [item.ast]),
-    item
-  )
+export const Array = lambda<ArrayLambda>(function Array<S extends Top>(schema: S): Array$<S> {
+  return makeProto(new AST.TupleType(false, [], [schema.ast]), { schema })
 })
 
 /**
@@ -2290,11 +2086,8 @@ interface NonEmptyArrayLambda extends Lambda {
  * @since 4.0.0
  */
 export const NonEmptyArray = lambda<NonEmptyArrayLambda>(
-  function NonEmptyArray<S extends Top>(item: S): NonEmptyArray<S> {
-    return new makeWithSchema$<S, NonEmptyArray<S>>(
-      new AST.TupleType(false, [item.ast], [item.ast]),
-      item
-    )
+  function NonEmptyArray<S extends Top>(schema: S): NonEmptyArray<S> {
+    return makeProto(new AST.TupleType(false, [schema.ast], [schema.ast]), { schema })
   }
 )
 
@@ -2351,8 +2144,8 @@ interface mutableLambda extends Lambda {
 /**
  * @since 4.0.0
  */
-export const mutable = lambda<mutableLambda>(function mutable<S extends Top>(self: S): mutable<S> {
-  return new makeWithSchema$<S, mutable<S>>(AST.mutable(self.ast), self)
+export const mutable = lambda<mutableLambda>(function mutable<S extends Top>(schema: S): mutable<S> {
+  return makeProto(AST.mutable(schema.ast), { schema })
 })
 
 /**
@@ -2366,7 +2159,6 @@ export interface readonly$<S extends Top> extends
     S["EncodingServices"],
     S["ast"],
     readonly$<S>,
-    // we keep "~annotate.in", "~type.make" and "~type.make.in" as they are because they are contravariant
     S["~annotate.in"],
     S["~type.make.in"],
     S["Iso"],
@@ -2390,8 +2182,8 @@ interface readonlyLambda extends Lambda {
 /**
  * @since 4.0.0
  */
-export const readonly = lambda<readonlyLambda>(function readonly<S extends Top>(self: S): readonly$<S> {
-  return new makeWithSchema$<S, readonly$<S>>(AST.mutable(self.ast), self)
+export const readonly = lambda<readonlyLambda>(function readonly<S extends Top>(schema: S): readonly$<S> {
+  return makeProto(AST.readonly(schema.ast), { schema })
 })
 
 /**
@@ -2428,29 +2220,26 @@ export interface Union<Members extends ReadonlyArray<Top>> extends
   ): Union<Simplify<Readonly<To>>>
 }
 
-class Union$<Members extends ReadonlyArray<Top>> extends make$<Union<Members>> implements Union<Members> {
-  declare readonly "~rebuild.out": this
-  override readonly ast: AST.UnionType<Members[number]["ast"]>
-  readonly members: Members
-
-  constructor(ast: AST.UnionType<Members[number]["ast"]>, members: Members) {
-    super(ast, (ast) => new Union$(ast, members))
-    this.ast = ast
-    this.members = members
-  }
-
-  mapMembers<To extends ReadonlyArray<Top>>(
-    f: (members: Members) => To,
-    options?: {
-      readonly preserveChecks?: boolean | undefined
-    } | undefined
-  ): Union<Simplify<Readonly<To>>> {
-    const members = f(this.members)
-    return new Union$(
-      AST.union(members, this.ast.mode, options?.preserveChecks ? this.ast.checks : undefined),
-      members
-    )
-  }
+function makeUnion<Members extends ReadonlyArray<Top>>(
+  ast: AST.UnionType<Members[number]["ast"]>,
+  members: Members
+): Union<Members> {
+  return makeProto(ast, {
+    members,
+    mapMembers<To extends ReadonlyArray<Top>>(
+      this: Union<Members>,
+      f: (members: Members) => To,
+      options?: {
+        readonly preserveChecks?: boolean | undefined
+      } | undefined
+    ): Union<Simplify<Readonly<To>>> {
+      const members = f(this.members)
+      return makeUnion(
+        AST.union(members, this.ast.mode, options?.preserveChecks ? this.ast.checks : undefined),
+        members
+      )
+    }
+  })
 }
 
 /**
@@ -2468,7 +2257,7 @@ export function Union<const Members extends ReadonlyArray<Top>>(
   members: Members,
   options?: { mode?: "anyOf" | "oneOf" }
 ): Union<Members> {
-  return new Union$(AST.union(members, options?.mode ?? "anyOf", undefined), members)
+  return makeUnion(AST.union(members, options?.mode ?? "anyOf", undefined), members)
 }
 
 /**
@@ -2496,30 +2285,6 @@ export interface Literals<L extends ReadonlyArray<AST.Literal>> extends
   pick<const L2 extends ReadonlyArray<L[number]>>(literals: L2): Literals<L2>
 }
 
-class Literals$<L extends ReadonlyArray<AST.Literal>> extends make$<Literals<L>> implements Literals<L> {
-  declare readonly "~rebuild.out": this
-  readonly literals: L
-  readonly members: { readonly [K in keyof L]: Literal<L[K]> }
-
-  constructor(
-    ast: AST.UnionType<AST.LiteralType>,
-    literals: L,
-    members: { readonly [K in keyof L]: Literal<L[K]> }
-  ) {
-    super(ast, (ast) => new Literals$(ast, literals, members))
-    this.literals = literals
-    this.members = members
-  }
-
-  mapMembers<To extends ReadonlyArray<Top>>(f: (members: this["members"]) => To): Union<Simplify<Readonly<To>>> {
-    return Union(f(this.members))
-  }
-
-  pick<const L2 extends ReadonlyArray<L[number]>>(literals: L2): Literals<L2> {
-    return Literals(literals)
-  }
-}
-
 /**
  * @see {@link Literal} for a schema that represents a single literal.
  * @category Constructors
@@ -2527,7 +2292,19 @@ class Literals$<L extends ReadonlyArray<AST.Literal>> extends make$<Literals<L>>
  */
 export function Literals<const L extends ReadonlyArray<AST.Literal>>(literals: L): Literals<L> {
   const members = literals.map(Literal) as { readonly [K in keyof L]: Literal<L[K]> }
-  return new Literals$(AST.union(members, "anyOf", undefined), [...literals] as L, members)
+  return makeProto(AST.union(members, "anyOf", undefined), {
+    literals,
+    members,
+    mapMembers<To extends ReadonlyArray<Top>>(
+      this: Literals<L>,
+      f: (members: Literals<L>["members"]) => To
+    ): Union<Simplify<Readonly<To>>> {
+      return Union(f(this.members))
+    },
+    pick<const L2 extends ReadonlyArray<L[number]>>(literals: L2): Literals<L2> {
+      return Literals(literals)
+    }
+  })
 }
 
 /**
@@ -2645,7 +2422,7 @@ export interface refine<T extends S["Type"], S extends Top> extends
     S["DecodingServices"],
     S["EncodingServices"],
     S["ast"],
-    refine<T, S["~rebuild.out"]>,
+    refine<T, S>,
     Annotations.Bottom<T>,
     S["~type.make.in"],
     T,
@@ -2656,7 +2433,9 @@ export interface refine<T extends S["Type"], S extends Top> extends
     S["~encoded.mutability"],
     S["~encoded.optionality"]
   >
-{}
+{
+  readonly "~rebuild.out": this
+}
 
 /**
  * @category Filtering
@@ -2727,11 +2506,10 @@ export function decodingMiddleware<S extends Top, RD>(
     options: AST.ParseOptions
   ) => Effect.Effect<O.Option<S["Type"]>, Issue.Issue, RD>
 ) {
-  return (self: S): decodingMiddleware<S, RD> => {
-    return new makeWithSchema$<S, decodingMiddleware<S, RD>>(
-      AST.decodingMiddleware(self.ast, new Transformation.Middleware(decode, identity)),
-      self
-    )
+  return (schema: S): decodingMiddleware<S, RD> => {
+    return makeProto(AST.decodingMiddleware(schema.ast, new Transformation.Middleware(decode, identity)), {
+      schema
+    })
   }
 }
 
@@ -2770,11 +2548,8 @@ export function encodingMiddleware<S extends Top, RE>(
     options: AST.ParseOptions
   ) => Effect.Effect<O.Option<S["Type"]>, Issue.Issue, RE>
 ) {
-  return (self: S): encodingMiddleware<S, RE> => {
-    return new makeWithSchema$<S, encodingMiddleware<S, RE>>(
-      AST.encodingMiddleware(self.ast, new Transformation.Middleware(identity, encode)),
-      self
-    )
+  return (schema: S): encodingMiddleware<S, RE> => {
+    return makeProto(AST.encodingMiddleware(schema.ast, new Transformation.Middleware(identity, encode)), { schema })
   }
 }
 
@@ -2850,26 +2625,6 @@ export interface decodeTo<To extends Top, From extends Top, RD = never, RE = nev
  */
 export interface compose<To extends Top, From extends Top> extends decodeTo<To, From> {}
 
-class decodeTo$<To extends Top, From extends Top, RD, RE> extends make$<decodeTo<To, From, RD, RE>>
-  implements decodeTo<To, From, RD, RE>
-{
-  declare readonly "~rebuild.out": this
-  override readonly ast: From["ast"]
-  readonly from: From
-  readonly to: To
-
-  constructor(
-    ast: From["ast"],
-    from: From,
-    to: To
-  ) {
-    super(ast, (ast) => new decodeTo$<To, From, RD, RE>(ast, from, to))
-    this.ast = ast
-    this.from = from
-    this.to = to
-  }
-}
-
 /**
  * @since 4.0.0
  */
@@ -2889,14 +2644,16 @@ export function decodeTo<To extends Top, From extends Top, RD = never, RE = neve
   } | undefined
 ) {
   return (from: From) => {
-    return new decodeTo$(
+    return makeProto(
       AST.decodeTo(
         from.ast,
         to.ast,
         transformation ? Transformation.make(transformation) : Transformation.passthrough()
       ),
-      from,
-      to
+      {
+        from,
+        to
+      }
     )
   }
 }
@@ -2953,25 +2710,31 @@ export function encode<S extends Top, RD = never, RE = never>(transformation: {
 /**
  * @since 4.0.0
  */
-export interface withConstructorDefault<S extends Top & { readonly "~type.constructor.default": "no-default" }>
-  extends
-    Bottom<
-      S["Type"],
-      S["Encoded"],
-      S["DecodingServices"],
-      S["EncodingServices"],
-      S["ast"],
-      withConstructorDefault<S>,
-      S["~annotate.in"],
-      S["~type.make.in"],
-      S["Iso"],
-      S["~type.make"],
-      S["~type.mutability"],
-      S["~type.optionality"],
-      "with-default",
-      S["~encoded.mutability"],
-      S["~encoded.optionality"]
-    >
+export interface WithoutConstructorDefault {
+  readonly "~type.constructor.default": "no-default"
+}
+
+/**
+ * @since 4.0.0
+ */
+export interface withConstructorDefault<S extends Top & WithoutConstructorDefault> extends
+  Bottom<
+    S["Type"],
+    S["Encoded"],
+    S["DecodingServices"],
+    S["EncodingServices"],
+    S["ast"],
+    withConstructorDefault<S>,
+    S["~annotate.in"],
+    S["~type.make.in"],
+    S["Iso"],
+    S["~type.make"],
+    S["~type.mutability"],
+    S["~type.optionality"],
+    "with-default",
+    S["~encoded.mutability"],
+    S["~encoded.optionality"]
+  >
 {
   readonly "~rebuild.out": this
   readonly schema: S
@@ -2980,15 +2743,15 @@ export interface withConstructorDefault<S extends Top & { readonly "~type.constr
 /**
  * @since 4.0.0
  */
-export function withConstructorDefault<S extends Top & { readonly "~type.constructor.default": "no-default" }>(
+export function withConstructorDefault<S extends Top & WithoutConstructorDefault>(
   defaultValue: (
     input: O.Option<undefined>
     // `S["~type.make.in"]` instead of `S["Type"]` is intentional here because
     // it makes easier to define the default value if there are nested defaults
   ) => O.Option<S["~type.make.in"]> | Effect.Effect<O.Option<S["~type.make.in"]>>
 ) {
-  return (self: S): withConstructorDefault<S> => {
-    return new makeWithSchema$<S, withConstructorDefault<S>>(AST.withConstructorDefault(self.ast, defaultValue), self)
+  return (schema: S): withConstructorDefault<S> => {
+    return makeProto(AST.withConstructorDefault(schema.ast, defaultValue), { schema })
   }
 }
 
@@ -3260,50 +3023,6 @@ export interface TaggedUnion<Cases extends Record<string, Top>> extends
   }
 }
 
-class TaggedUnion$<Cases extends Record<string, Top>> extends make$<TaggedUnion<Cases>> implements TaggedUnion<Cases> {
-  declare readonly "~rebuild.out": this
-  override readonly ast: AST.UnionType<AST.TypeLiteral>
-  readonly cases: Cases
-  readonly isAnyOf: <const Keys>(
-    keys: ReadonlyArray<Keys>
-  ) => (value: Cases[keyof Cases]["Type"]) => value is Extract<Cases[keyof Cases]["Type"], { _tag: Keys }>
-  readonly guards: { [K in keyof Cases]: (u: unknown) => u is Cases[K]["Type"] }
-  readonly match: {
-    <Output>(
-      value: Cases[keyof Cases]["Type"],
-      cases: { [K in keyof Cases]: (value: Cases[K]["Type"]) => Output }
-    ): Output
-    <Output>(
-      cases: { [K in keyof Cases]: (value: Cases[K]["Type"]) => Output }
-    ): (value: Cases[keyof Cases]["Type"]) => Output
-  }
-
-  constructor(
-    ast: AST.UnionType<AST.TypeLiteral>,
-    cases: Cases,
-    isAnyOf: <const Keys>(
-      keys: ReadonlyArray<Keys>
-    ) => (value: Cases[keyof Cases]["Type"]) => value is Extract<Cases[keyof Cases]["Type"], { _tag: Keys }>,
-    guards: { [K in keyof Cases]: (u: unknown) => u is Cases[K]["Type"] },
-    match: {
-      <Output>(
-        value: Cases[keyof Cases]["Type"],
-        cases: { [K in keyof Cases]: (value: Cases[K]["Type"]) => Output }
-      ): Output
-      <Output>(
-        cases: { [K in keyof Cases]: (value: Cases[K]["Type"]) => Output }
-      ): (value: Cases[keyof Cases]["Type"]) => Output
-    }
-  ) {
-    super(ast, (ast) => new TaggedUnion$(ast, cases, isAnyOf, guards, match))
-    this.ast = ast
-    this.cases = cases
-    this.isAnyOf = isAnyOf
-    this.guards = guards
-    this.match = match
-  }
-}
-
 /**
  * @since 4.0.0
  * @experimental
@@ -3318,7 +3037,7 @@ export function TaggedUnion<const CasesByTag extends Record<string, Struct.Field
   }
   const union = Union(members)
   const { guards, isAnyOf, match } = asTaggedUnion("_tag")(union)
-  return new TaggedUnion$(union.ast, cases, isAnyOf, guards, match) as any
+  return makeProto(union.ast, { cases, isAnyOf, guards, match })
 }
 
 /**
@@ -4073,6 +3792,7 @@ export interface Opaque<Self, S extends Top, Brand> extends
     S["~encoded.optionality"]
   >
 {
+  // intentionally left without `readonly "~rebuild.out": this`
   new(_: never): S["Type"] & Brand
 }
 
@@ -4485,6 +4205,7 @@ export interface Class<Self, S extends Top & { readonly fields: Struct.Fields },
     S["~encoded.optionality"]
   >
 {
+  // intentionally left without `readonly "~rebuild.out": this`
   new(props: S["~type.make.in"], options?: MakeOptions): S["Type"] & Inherited
   readonly identifier: string
   readonly fields: S["fields"]
@@ -4586,7 +4307,7 @@ function makeClass<
     ) => Class<Extended, Struct<Simplify<Merge<S["fields"], NewFields>>>, Self> {
       return (newFields, annotations) => {
         const fields = { ...schema.fields, ...newFields }
-        const struct: any = new Struct$(AST.struct(fields, schema.ast.checks), fields)
+        const struct: any = makeStruct(AST.struct(fields, schema.ast.checks), fields)
         return makeClass(this, identifier, struct, annotations)
       }
     }

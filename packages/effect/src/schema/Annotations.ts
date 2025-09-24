@@ -24,14 +24,6 @@ export interface Annotations {
  * @category Model
  * @since 4.0.0
  */
-export interface Annotated {
-  readonly annotations: Annotations | undefined
-}
-
-/**
- * @category Model
- * @since 4.0.0
- */
 export interface Documentation extends Annotations {
   readonly title?: string | undefined
   readonly description?: string | undefined
@@ -98,6 +90,9 @@ export interface Declaration<T, TypeParameters extends ReadonlyArray<Schema.Top>
   readonly "~sentinels"?: ReadonlyArray<AST.Sentinel> | undefined
 }
 
+/** @internal */
+export const STRUCTURAL_ANNOTATION_KEY = "~structural"
+
 /**
  * @category Model
  * @since 4.0.0
@@ -162,39 +157,50 @@ export function combine<A extends Annotations>(existing: A | undefined, incoming
   return out
 }
 
-/** @internal */
-export function getAnnotations(ast: AST.AST): Annotations | undefined {
+/**
+ * Get all annotations from the AST.
+ * If the AST has checks, it will return the annotations from the last check.
+ *
+ * @since 4.0.0
+ */
+export function get(ast: AST.AST): Annotations | undefined {
   return ast.checks ? ast.checks[ast.checks.length - 1].annotations : ast.annotations
 }
 
-/** @internal */
-export function getAnnotation<A>(f: (annotations: Annotations | undefined) => A | undefined) {
-  return (ast: AST.AST): A | undefined => f(getAnnotations(ast))
+/**
+ * Get an annotation from the AST.
+ * If the AST has checks, it will return the annotations from the last check.
+ *
+ * @since 4.0.0
+ */
+export function getAt<A>(key: string, parser: (u: unknown) => u is A) {
+  return (ast: AST.AST): A | undefined => {
+    const value = get(ast)?.[key]
+    if (parser(value)) return value
+  }
 }
 
-/** @internal */
-export const getIdentifierAnnotation = getAnnotation((annotations) => {
-  const identifier = annotations?.identifier
-  if (Predicate.isString(identifier)) return identifier
-})
+/**
+ * @since 4.0.0
+ */
+export const getIdentifier = getAt("identifier", Predicate.isString)
 
-/** @internal */
-export const getDescriptionAnnotation = getAnnotation((annotations) => {
-  const description = annotations?.description
-  if (Predicate.isString(description)) return description
-})
+/**
+ * @since 4.0.0
+ */
+export const getDescription = getAt("description", Predicate.isString)
 
 /** @internal */
 export const getExpected = memoize((ast: AST.AST): string => {
-  return getIdentifierAnnotation(ast) ?? ast.getExpected(getExpected)
+  return getIdentifier(ast) ?? ast.getExpected(getExpected)
 })
 
 /** @internal */
-export const BRAND_KEY = "~effect/schema/Check/brand"
+export const BRAND_ANNOTATION_KEY = "~effect/schema/Check/brand"
 
 /** @internal */
 export function getBrand<T>(check: Check.Check<T>): string | symbol | undefined {
-  const brand = check.annotations?.[BRAND_KEY]
+  const brand = check.annotations?.[BRAND_ANNOTATION_KEY]
   if (Predicate.isString(brand) || Predicate.isSymbol(brand)) {
     return brand
   }

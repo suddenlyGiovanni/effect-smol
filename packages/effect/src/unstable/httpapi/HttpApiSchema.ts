@@ -20,50 +20,51 @@ declare module "../../schema/Annotations.ts" {
     readonly httpApiIsEmpty?: true | undefined
     readonly httpApiMultipart?: Multipart_.withLimits.Options | undefined
     readonly httpApiMultipartStream?: Multipart_.withLimits.Options | undefined
-    readonly httpApiParam?: {
-      readonly name: string
-      readonly schema: Schema.Top
-    } | undefined
     readonly httpApiStatus?: number | undefined
   }
 }
 
-/**
- * @since 4.0.0
- * @category reflection
- */
-export const isVoid = (ast: AST.AST): boolean => {
+function isEncoding(u: unknown): u is Encoding {
+  return Predicate.isObject(u) // TODO: Add more checks?
+}
+
+function isMultipartWithLimitsOptions(u: unknown): u is Multipart_.withLimits.Options {
+  return Predicate.isObject(u) // TODO: Add more checks?
+}
+
+/** @internal */
+export const getHttpApiIsEmpty = Annotations.getAt("httpApiIsEmpty", Predicate.isBoolean)
+const getHttpApiEncoding = Annotations.getAt("httpApiEncoding", isEncoding)
+/** @internal */
+export const getHttpApiMultipart = Annotations.getAt("httpApiMultipart", isMultipartWithLimitsOptions)
+/** @internal */
+export const getHttpApiMultipartStream = Annotations.getAt("httpApiMultipartStream", isMultipartWithLimitsOptions)
+const getHttpApiStatus = Annotations.getAt("httpApiStatus", Predicate.isNumber)
+
+/** @internal */
+export function isVoidEncoded(ast: AST.AST): boolean {
   ast = AST.encodedAST(ast)
   switch (ast._tag) {
-    case "VoidKeyword": {
+    case "VoidKeyword":
       return true
-    }
-    case "Suspend": {
-      return isVoid(ast.thunk())
-    }
-    default: {
+    case "Suspend":
+      return isVoidEncoded(ast.thunk())
+    default:
       return false
-    }
   }
 }
 
-const getHttpApiStatusAnnotation = Annotations.getAnnotation((annotations) => {
-  const status = annotations?.httpApiStatus
-  if (Predicate.isNumber(status)) return status
-})
+/**
+ * @since 4.0.0
+ * @category reflection
+ */
+export const getStatusSuccess = (self: AST.AST): number => getHttpApiStatus(self) ?? (isVoidEncoded(self) ? 204 : 200)
 
 /**
  * @since 4.0.0
  * @category reflection
  */
-export const getStatusSuccess = (self: AST.AST): number =>
-  getHttpApiStatusAnnotation(self) ?? (isVoid(self) ? 204 : 200)
-
-/**
- * @since 4.0.0
- * @category reflection
- */
-export const getStatusError = (self: AST.AST): number => getHttpApiStatusAnnotation(self) ?? 500
+export const getStatusError = (self: AST.AST): number => getHttpApiStatus(self) ?? 500
 
 function isHttpApiAnnotationKey(key: string): boolean {
   return key.startsWith("httpApi")
@@ -78,7 +79,7 @@ export const getHttpApiAnnotations = (self: Annotations.Annotations | undefined)
   if (!self) return out
 
   for (const [key, value] of Object.entries(self)) {
-    if (isHttpApiAnnotationKey(key)) {
+    if (isHttpApiAnnotationKey(key) && value !== undefined) {
       out[key] = value
     }
   }
@@ -123,13 +124,13 @@ function shouldExtractUnion(ast: AST.UnionType): boolean {
   if (ast.encoding) return false
   if (
     ast.types.some((ast) => {
-      const annotations = Annotations.getAnnotations(ast)
+      const annotations = Annotations.get(ast)
       return annotations && Object.keys(annotations).some(isHttpApiAnnotationKey)
     })
   ) {
     return true
   }
-  return Annotations.getAnnotations(ast) === undefined
+  return Annotations.get(ast) === undefined
 }
 
 /**
@@ -151,7 +152,7 @@ export interface Param<Name extends string, S extends Schema.Top> extends
     S["DecodingServices"],
     S["EncodingServices"],
     S["ast"],
-    S["~rebuild.out"],
+    Param<Name, S>,
     S["~annotate.in"],
     S["~type.make.in"],
     S["Iso"],
@@ -163,36 +164,27 @@ export interface Param<Name extends string, S extends Schema.Top> extends
     S["~encoded.optionality"]
   >
 {
-  readonly "~effect/httpapi/HttpApiSchema/Param": {
-    readonly name: Name
-    readonly schema: S
-  }
+  readonly "~rebuild.out": this
+  readonly name: Name
+  readonly schema: S
 }
 
 /**
  * @since 4.0.0
  * @category path params
  */
-export const param: {
-  <Name extends string>(
-    name: Name
-  ): <S extends Schema.Codec<any, string, any, any>>(
-    schema: S
-  ) => Param<Name, S>
-  <Name extends string, S extends Schema.Codec<any, string, any, any>>(
-    name: Name,
-    schema: S
-  ): Param<Name, S>
-} = function(name: string) {
+export function param<Name extends string>(
+  name: Name
+): <S extends Schema.Top & { readonly "Encoded": string }>(schema: S) => Param<Name, S>
+export function param<Name extends string, S extends Schema.Top & { readonly "Encoded": string }>(
+  name: Name,
+  schema: S
+): Param<Name, S>
+export function param(name: string): any {
   if (arguments.length === 1) {
-    return (schema: Schema.Top) =>
-      schema.annotate({
-        httpApiParam: { name, schema }
-      })
+    return (schema: Schema.Top) => Schema.makeProto(schema.ast, { name, schema })
   }
-  return arguments[1].annotate({
-    httpApiParam: { name, schema: arguments[1] }
-  })
+  return Schema.makeProto(arguments[1].ast, { name, schema: arguments[1] })
 }
 
 /**
@@ -290,31 +282,24 @@ export interface NoContent extends Schema.Void {
  */
 export const NoContent: NoContent = Empty(204) as any
 
-/** @internal */
-export type MultipartTypeId = "~effect/httpapi/HttpApiSchema/Multipart"
+/**
+ * @since 4.0.0
+ * @category multipart
+ */
+export const MultipartTypeId = "~effect/httpapi/HttpApiSchema/Multipart"
 
 /**
  * @since 4.0.0
  * @category multipart
  */
-export interface Multipart<S extends Schema.Top> extends
-  Schema.Bottom<
-    S["Type"] & Brand<MultipartTypeId>,
-    S["Encoded"],
-    S["DecodingServices"],
-    S["EncodingServices"],
-    S["ast"],
-    S["~rebuild.out"],
-    S["~annotate.in"],
-    S["~type.make.in"],
-    S["Iso"],
-    S["~type.make"],
-    S["~type.mutability"],
-    S["~type.optionality"],
-    S["~type.constructor.default"],
-    S["~encoded.mutability"],
-    S["~encoded.optionality"]
-  >
+export type MultipartTypeId = typeof MultipartTypeId
+
+/**
+ * @since 4.0.0
+ * @category multipart
+ */
+export interface Multipart<S extends Schema.Top>
+  extends Schema.refine<S["Type"] & Brand<"~effect/httpapi/HttpApiSchema/Multipart">, S["~rebuild.out"]>
 {}
 
 /**
@@ -328,35 +313,28 @@ export const Multipart = <S extends Schema.Top>(self: S, options?: {
   readonly maxTotalSize?: FileSystem.SizeInput | undefined
   readonly fieldMimeTypes?: ReadonlyArray<string> | undefined
 }): Multipart<S> =>
-  self.annotate({
+  self.pipe(Schema.brand(MultipartTypeId, {
     httpApiMultipart: options ?? {}
-  }) as Multipart<S>
-
-/** @internal */
-export type MultipartStreamTypeId = "~effect/httpapi/HttpApiSchema/MultipartStream"
+  }))
 
 /**
  * @since 4.0.0
  * @category multipart
  */
-export interface MultipartStream<S extends Schema.Top> extends
-  Schema.Bottom<
-    S["Type"] & Brand<MultipartStreamTypeId>,
-    S["Encoded"],
-    S["DecodingServices"],
-    S["EncodingServices"],
-    S["ast"],
-    S["~rebuild.out"],
-    S["~annotate.in"],
-    S["~type.make.in"],
-    S["Iso"],
-    S["~type.make"],
-    S["~type.mutability"],
-    S["~type.optionality"],
-    S["~type.constructor.default"],
-    S["~encoded.mutability"],
-    S["~encoded.optionality"]
-  >
+export const MultipartStreamTypeId = "~effect/httpapi/HttpApiSchema/MultipartStream"
+
+/**
+ * @since 4.0.0
+ * @category multipart
+ */
+export type MultipartStreamTypeId = typeof MultipartStreamTypeId
+
+/**
+ * @since 4.0.0
+ * @category multipart
+ */
+export interface MultipartStream<S extends Schema.Top>
+  extends Schema.refine<S["Type"] & Brand<"~effect/httpapi/HttpApiSchema/MultipartStream">, S["~rebuild.out"]>
 {}
 
 /**
@@ -370,9 +348,9 @@ export const MultipartStream = <S extends Schema.Top>(self: S, options?: {
   readonly maxTotalSize?: FileSystem.SizeInput | undefined
   readonly fieldMimeTypes?: ReadonlyArray<string> | undefined
 }): MultipartStream<S> =>
-  self.annotate({
+  self.pipe(Schema.brand(MultipartStreamTypeId, {
     httpApiMultipartStream: options ?? {}
-  }) as MultipartStream<S>
+  }))
 
 /**
  * @since 4.0.0
@@ -467,8 +445,9 @@ const encodingJson: Encoding = {
  * @since 4.0.0
  * @category annotations
  */
-export const getEncoding = (ast: AST.AST, fallback = encodingJson): Encoding =>
-  ast.annotations?.httpApiEncoding ?? fallback
+export function getEncoding(ast: AST.AST, fallback = encodingJson): Encoding {
+  return getHttpApiEncoding(ast) ?? fallback
+}
 
 /**
  * @since 4.0.0
@@ -538,7 +517,7 @@ export interface EmptyErrorClass<Self, Tag> extends
     never,
     never,
     AST.Declaration,
-    EmptyErrorClass<Self, Tag>,
+    EmptyErrorClass<Self, Tag>, // TODO: Fix this
     Annotations.Annotations
   >
 {
