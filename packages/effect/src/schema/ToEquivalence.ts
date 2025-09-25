@@ -41,6 +41,11 @@ export function make<T>(schema: Schema.Schema<T>): Equivalence.Equivalence<T> {
 }
 
 /**
+ * **Technical Note**
+ *
+ * This annotation cannot be added to the standard annotations because it would
+ * make the schema invariant.
+ *
  * @since 4.0.0
  */
 export function override<S extends Schema.Top>(override: () => Equivalence.Equivalence<S["Type"]>) {
@@ -49,10 +54,11 @@ export function override<S extends Schema.Top>(override: () => Equivalence.Equiv
   }
 }
 
-const getAnnotation = Annotations.getAt(
-  "equivalence",
-  (u: unknown): u is Annotation.Declaration<any, ReadonlyArray<any>> | Annotation.Override<any> => Predicate.isObject(u)
-)
+function getAnnotation(
+  ast: AST.AST
+): Annotation.Declaration<any, ReadonlyArray<any>> | Annotation.Override<any> | undefined {
+  return Annotations.get(ast)?.["equivalence"] as any
+}
 
 const go = memoize((ast: AST.AST): Equivalence.Equivalence<any> => {
   // ---------------------------------------------
