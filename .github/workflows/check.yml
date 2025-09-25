@@ -85,15 +85,20 @@ jobs:
         id: bundle
         shell: bash
         run: |
-          function compute_bundle_size() {
-            local filename="${1}"
-            pnpm rollup -c rollup.config.js "${filename}" | gzip | wc -c
-          }
+          mkdir -p bundle-out
+          mkdir -p bundle-base
+
+          for filename in bundle/*.ts; do
+            pnpm rollup -c rollup.config.js "${filename}" | gzip | wc -c > bundle-out/$(basename "${filename}") &
+            pnpm rollup -c rollup.config.js "base/${filename}" | gzip | wc -c > bundle-buse/$(basename "${filename}") &
+          end
+          wait
+
           output="| File Name | Current Size | Previous Size | Difference |"
           output+="\n|:----------|:------------:|:-------------:|:----------:|"
           for filename in bundle/*.ts; do
-            current=$(compute_bundle_size "${filename}")
-            previous=$([[ -f "base/${filename}" ]] && compute_bundle_size "base/${filename}" || echo "0")
+            current=$(cat "bundle-out/$(basename "${filename}")")
+            previous=$([[ -f "base/${filename}" ]] && cat "bundle-base/$(basename "${filename}")" || echo 0)
             line="$(awk -v filename=${filename} -v current="${current}" -v previous="${previous}" '
               BEGIN {
                 if (previous == 0) previous = current
