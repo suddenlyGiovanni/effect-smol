@@ -1205,6 +1205,14 @@ export const unwrap = <A, E2, R2, E, R>(
 ): Stream<A, E | E2, R2 | Exclude<R, Scope.Scope>> => fromChannel(Channel.unwrap(Effect.map(effect, toChannel)))
 
 /**
+ * @since 2.0.0
+ * @category utils
+ */
+export const scoped = <A, E, R>(
+  self: Stream<A, E, R>
+): Stream<A, E, Exclude<R, Scope.Scope>> => fromChannel(Channel.scoped(self.channel))
+
+/**
  * Transforms the elements of this stream using the supplied function.
  *
  * @example
@@ -1374,11 +1382,22 @@ export const tap: {
   options?: {
     readonly concurrency?: number | "unbounded" | undefined
   } | undefined
-): Stream<A, E | E2, R | R2> =>
-  self.channel.pipe(
-    Channel.tap(Effect.forEach(f, { discard: true }), options),
-    fromChannel
-  ))
+): Stream<A, E | E2, R | R2> => {
+  const concurrency = options?.concurrency ?? 1
+  if (concurrency === 1 || concurrency === "unbounded") {
+    return self.channel.pipe(
+      Channel.tap(Effect.forEach(f, { discard: true, concurrency }), options),
+      fromChannel
+    )
+  }
+  return suspend(() => {
+    const withPermit = Effect.makeSemaphoreUnsafe(concurrency).withPermit
+    return self.channel.pipe(
+      Channel.tap(Effect.forEach((a) => withPermit(f(a)), { discard: true, concurrency }), options),
+      fromChannel
+    )
+  })
+})
 
 /**
  * Returns a stream made of the concatenation in strict order of all the
