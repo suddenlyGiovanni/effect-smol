@@ -35,7 +35,7 @@ export const makeNet = (
   options: Net.NetConnectOpts & {
     readonly openTimeout?: Duration.DurationInput | undefined
   }
-): Effect.Effect<Socket.Socket, Socket.SocketError> =>
+): Effect.Effect<Socket.Socket> =>
   fromDuplex(
     Effect.servicesWith((services: ServiceMap.ServiceMap<Scope.Scope>) => {
       const conn = Net.createConnection(options)
