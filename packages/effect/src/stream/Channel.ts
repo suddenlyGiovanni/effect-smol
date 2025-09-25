@@ -2006,7 +2006,7 @@ export const mapInputError: {
  * ```ts
  * import { Effect } from "effect"
  * import { Channel } from "effect/stream"
- * import { Console } from "effect/logging"
+ * import { Console } from "effect"
  * import { Data } from "effect/data"
  *
  * class LogError extends Data.TaggedError("LogError")<{
@@ -2742,6 +2742,7 @@ export const filter: {
  * )
  * const filteredOddChannel = Channel.filterArray(oddChannel, (n) => n % 2 === 0)
  * // Outputs: [2, 4] (the arrays [1,3,5] and [7,9] are discarded)
+ * ```
  *
  * @since 2.0.0
  * @category Filtering
@@ -4387,7 +4388,7 @@ export const interruptWhen: {
  * ```ts
  * import { Effect, Exit } from "effect"
  * import { Channel } from "effect/stream"
- * import { Console } from "effect/logging"
+ * import { Console } from "effect"
  * import { Data } from "effect/data"
  *
  * class ExitError extends Data.TaggedError("ExitError")<{
@@ -4439,7 +4440,7 @@ export const onExit: {
  * ```ts
  * import { Effect } from "effect"
  * import { Channel } from "effect/stream"
- * import { Console } from "effect/logging"
+ * import { Console } from "effect"
  * import { Data } from "effect/data"
  *
  * class EnsureError extends Data.TaggedError("EnsureError")<{
@@ -4909,7 +4910,7 @@ export const runDrain = <OutElem, OutErr, OutDone, Env>(
  * ```ts
  * import { Effect } from "effect"
  * import { Channel } from "effect/stream"
- * import { Console } from "effect/logging"
+ * import { Console } from "effect"
  * import { Data } from "effect/data"
  *
  * class ForEachError extends Data.TaggedError("ForEachError")<{
