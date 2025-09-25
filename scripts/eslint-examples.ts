@@ -55,18 +55,22 @@ const run = Effect.fnUntraced(function*(files: Array<string>) {
     Stream.mapEffect(({ contents, examples, file }) =>
       Stream.fromArray(examples).pipe(
         Stream.bindEffect("newCode", ({ outFile }) => fs.readFileString(outFile), { concurrency: 10 }),
-        Stream.runFold(() => contents, (acc, { endPos, leading, newCode, startPos }) => {
-          const before = acc.slice(0, startPos)
-          const after = acc.slice(endPos)
-          return before
-            + newCode
+        Stream.runFold(
+          () => ["", contents.length] as [string, number],
+          (acc, { endPos, leading, newCode, startPos }) => {
+            const after = contents.slice(endPos, acc[1])
+            acc[0] = newCode
               .trim()
               .split("\n")
               .map((line) => (leading + "* " + line).trimEnd())
               .join("\n")
-            + after
-        }),
-        Effect.flatMap((newContents) => fs.writeFileString(file, newContents))
+              + after
+              + acc[0]
+            acc[1] = startPos
+            return acc
+          }
+        ),
+        Effect.flatMap(([newContents, pos]) => fs.writeFileString(file, contents.slice(0, pos) + newContents))
       ), { concurrency: 3 }),
     Stream.runDrain
   )
