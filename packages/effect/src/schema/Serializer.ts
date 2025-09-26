@@ -3,7 +3,9 @@
  */
 
 import * as Predicate from "../data/Predicate.ts"
+import * as Effect from "../Effect.ts"
 import { memoize } from "../Function.ts"
+import * as Annotations from "./Annotations.ts"
 import * as AST from "./AST.ts"
 import * as Getter from "./Getter.ts"
 import * as Schema from "./Schema.ts"
@@ -259,3 +261,114 @@ export const goEnsureArray = memoize((ast: AST.AST): AST.AST => {
   }
   return out
 })
+
+type XmlEncoderOptions = {
+  /** Root element name for the returned XML string. Default: "root" */
+  readonly rootName?: string | undefined
+  /** When an array doesn't have a natural item name, use this. Default: "item" */
+  readonly arrayItemName?: string | undefined
+  /** Pretty-print output. Default: true */
+  readonly pretty?: boolean | undefined
+  /** Indentation used when pretty-printing. Default: "  " (two spaces) */
+  readonly indent?: string | undefined
+  /** Sort object keys for stable output. Default: true */
+  readonly sortKeys?: boolean | undefined
+}
+
+/**
+ * @since 4.0.0
+ */
+export function xmlEncoder<T, E, RD, RE>(
+  codec: Schema.Codec<T, E, RD, RE>,
+  options?: XmlEncoderOptions
+) {
+  const rootName = Annotations.getIdentifier(codec.ast) ?? Annotations.getTitle(codec.ast)
+  const serialize = Schema.encodeEffect(stringPojo(codec))
+  return (t: T) => serialize(t).pipe(Effect.map((pojo) => stringPojoToXml(pojo, { rootName, ...options })))
+}
+
+/**
+ * Convert a StringPojo to XML text.
+ */
+function stringPojoToXml(value: StringPojo, options: XmlEncoderOptions): string {
+  const opts: { [P in keyof XmlEncoderOptions]-?: Exclude<XmlEncoderOptions[P], undefined> } = {
+    rootName: options.rootName ?? "root",
+    arrayItemName: options.arrayItemName ?? "item",
+    pretty: options.pretty ?? true,
+    indent: options.indent ?? "  ",
+    sortKeys: options.sortKeys ?? true
+  }
+
+  const seen = new Set<{ [x: string]: StringPojo } | Array<StringPojo>>()
+  const lines: Array<string> = []
+  const push = (depth: number, text: string) => lines.push(opts.pretty ? opts.indent.repeat(depth) + text : text)
+
+  const tagInfo = (name: string, original?: string) => {
+    const { changed, safe } = parseTagName(name)
+    const needsMeta = changed || (original && original !== name)
+    const attrs = needsMeta ? ` data-name="${escapeAttribute(original ?? name)}"` : ""
+    return { safe, attrs }
+  }
+
+  const render = (tagName: string, node: StringPojo, depth: number, originalNameForMeta?: string): void => {
+    if (node === undefined) {
+      const { attrs, safe } = tagInfo(tagName, originalNameForMeta)
+      push(depth, `<${safe}${attrs}/>`)
+      return
+    }
+
+    if (typeof node === "string") {
+      const { attrs, safe } = tagInfo(tagName, originalNameForMeta)
+      push(depth, `<${safe}${attrs}>${escapeText(node)}</${safe}>`)
+      return
+    }
+
+    if (seen.has(node)) throw new Error("Cycle detected while serializing to XML.")
+    seen.add(node)
+    try {
+      if (Array.isArray(node)) {
+        const { attrs, safe: safeParent } = tagInfo(tagName, originalNameForMeta)
+        if (node.length === 0) {
+          push(depth, `<${safeParent}${attrs}/>`)
+        } else {
+          push(depth, `<${safeParent}${attrs}>`)
+          for (const item of node) render(opts.arrayItemName, item, depth + 1)
+          push(depth, `</${safeParent}>`)
+        }
+      } else {
+        const { attrs, safe } = tagInfo(tagName, originalNameForMeta)
+        const keys = Object.keys(node)
+        if (opts.sortKeys) keys.sort()
+        if (keys.length === 0) {
+          push(depth, `<${safe}${attrs}/>`)
+          return
+        }
+        push(depth, `<${safe}${attrs}>`)
+        for (const k of keys) {
+          const { safe: childSafe } = parseTagName(k)
+          render(childSafe, node[k], depth + 1, k)
+        }
+        push(depth, `</${safe}>`)
+      }
+    } finally {
+      seen.delete(node)
+    }
+  }
+
+  render(opts.rootName, value, 0)
+  return opts.pretty ? lines.join("\n") : lines.join("")
+}
+
+const escapeText = (s: string): string => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+
+const escapeAttribute = (s: string): string =>
+  s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+
+const parseTagName = (name: string): { safe: string; changed: boolean } => {
+  const original = name
+  let safe = name
+  if (!/^[A-Za-z_]/.test(safe)) safe = "_" + safe
+  safe = safe.replace(/[^A-Za-z0-9._-]/g, "_")
+  if (/^xml/i.test(safe)) safe = "_" + safe
+  return { safe, changed: safe !== original }
+}
