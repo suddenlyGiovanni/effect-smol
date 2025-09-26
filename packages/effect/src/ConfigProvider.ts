@@ -12,10 +12,10 @@ import * as Layer from "./Layer.ts"
 import * as FileSystem from "./platform/FileSystem.ts"
 import * as Path_ from "./platform/Path.ts"
 import type { PlatformError } from "./platform/PlatformError.ts"
-import * as Str from "./primitives/String.ts"
 import type { StringPojo } from "./schema/Serializer.ts"
 import type { Scope } from "./Scope.ts"
 import * as ServiceMap from "./ServiceMap.ts"
+import * as Str from "./String.ts"
 
 /**
  * @category Models
@@ -111,7 +111,7 @@ export interface ConfigProvider extends Pipeable {
  * @since 4.0.0
  */
 export const ConfigProvider: ServiceMap.Reference<ConfigProvider> = ServiceMap.Reference<ConfigProvider>(
-  "effect/config/ConfigProvider",
+  "effect/ConfigProvider",
   { defaultValue: () => fromEnv() }
 )
 
