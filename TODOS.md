@@ -11,7 +11,7 @@ Releases are snapshot only
 - [ ] Add opentelemetry package
 - [ ] Port SubscriptionRef
 - [ ] RateLimiter with persistence
-- [ ] Reduce nesting of modules
+- [x] Reduce nesting of modules
 
 ## Beta
 
