@@ -27,14 +27,14 @@ const TypeId = "~effect/transactions/TxRef"
  * @example
  * ```ts
  * import { Effect } from "effect"
- * import { TxRef } from "effect/transactions"
+ * import { TxRef } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   // Create a transactional reference
  *   const ref: TxRef.TxRef<number> = yield* TxRef.make(0)
  *
  *   // Use within a transaction
- *   yield* Effect.atomic(Effect.gen(function* () {
+ *   yield* Effect.atomic(Effect.gen(function*() {
  *     const current = yield* TxRef.get(ref)
  *     yield* TxRef.set(ref, current + 1)
  *   }))
@@ -60,15 +60,15 @@ export interface TxRef<in out A> {
  * @example
  * ```ts
  * import { Effect } from "effect"
- * import { TxRef } from "effect/transactions"
+ * import { TxRef } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   // Create a transactional reference with initial value
  *   const counter = yield* TxRef.make(0)
  *   const name = yield* TxRef.make("Alice")
  *
  *   // Use in transactions
- *   yield* Effect.atomic(Effect.gen(function* () {
+ *   yield* Effect.atomic(Effect.gen(function*() {
  *     yield* TxRef.set(counter, 42)
  *     yield* TxRef.set(name, "Bob")
  *   }))
@@ -87,7 +87,7 @@ export const make = <A>(initial: A) => Effect.sync(() => makeUnsafe(initial))
  * @category Constructors
  * @example
  * ```ts
- * import { TxRef } from "effect/transactions"
+ * import { TxRef } from "effect/stm"
  *
  * // Create a TxRef synchronously (unsafe - use make instead in Effect contexts)
  * const counter = TxRef.makeUnsafe(0)
@@ -113,9 +113,9 @@ export const makeUnsafe = <A>(initial: A): TxRef<A> => ({
  * @example
  * ```ts
  * import { Effect } from "effect"
- * import { TxRef } from "effect/transactions"
+ * import { TxRef } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   const counter = yield* TxRef.make(0)
  *
  *   // Modify and return both old and new value
@@ -155,9 +155,9 @@ export const modify: {
  * @example
  * ```ts
  * import { Effect } from "effect"
- * import { TxRef } from "effect/transactions"
+ * import { TxRef } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   const counter = yield* TxRef.make(10)
  *
  *   // Update the value using a function
@@ -185,9 +185,9 @@ export const update: {
  * @example
  * ```ts
  * import { Effect } from "effect"
- * import { TxRef } from "effect/transactions"
+ * import { TxRef } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   const counter = yield* TxRef.make(42)
  *
  *   // Read the value within a transaction
@@ -209,9 +209,9 @@ export const get = <A>(self: TxRef<A>): Effect.Effect<A> => modify(self, (curren
  * @example
  * ```ts
  * import { Effect } from "effect"
- * import { TxRef } from "effect/transactions"
+ * import { TxRef } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   const counter = yield* TxRef.make(0)
  *
  *   // Set a new value within a transaction

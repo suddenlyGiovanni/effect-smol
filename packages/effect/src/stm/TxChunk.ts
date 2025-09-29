@@ -16,7 +16,7 @@ import type { Inspectable } from "../interfaces/Inspectable.ts"
 import { format, NodeInspectSymbol, toJson } from "../interfaces/Inspectable.ts"
 import type { Pipeable } from "../interfaces/Pipeable.ts"
 import { pipeArguments } from "../interfaces/Pipeable.ts"
-import * as TxRef from "../transactions/TxRef.ts"
+import * as TxRef from "../stm/TxRef.ts"
 import type { NoInfer } from "../types/Types.ts"
 
 const TypeId = "~effect/transactions/TxChunk"
@@ -33,11 +33,15 @@ const TypeId = "~effect/transactions/TxChunk"
  * ```ts
  * import { Effect } from "effect"
  * import { Chunk } from "effect/collections"
- * import { TxChunk } from "effect/transactions"
+ * import { TxChunk } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   // Create a transactional chunk
- *   const txChunk: TxChunk.TxChunk<number> = yield* TxChunk.fromIterable([1, 2, 3])
+ *   const txChunk: TxChunk.TxChunk<number> = yield* TxChunk.fromIterable([
+ *     1,
+ *     2,
+ *     3
+ *   ])
  *
  *   // Single operations - no explicit transaction needed
  *   yield* TxChunk.append(txChunk, 4)
@@ -46,7 +50,7 @@ const TypeId = "~effect/transactions/TxChunk"
  *
  *   // Multi-step atomic operation - use explicit transaction
  *   yield* Effect.atomic(
- *     Effect.gen(function* () {
+ *     Effect.gen(function*() {
  *       yield* TxChunk.prepend(txChunk, 0)
  *       yield* TxChunk.append(txChunk, 5)
  *     })
@@ -95,9 +99,9 @@ const TxChunkProto = {
  * ```ts
  * import { Effect } from "effect"
  * import { Chunk } from "effect/collections"
- * import { TxChunk } from "effect/transactions"
+ * import { TxChunk } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   // Create a TxChunk with initial values
  *   const initialChunk = Chunk.fromIterable([1, 2, 3])
  *   const txChunk = yield* TxChunk.make(initialChunk)
@@ -122,9 +126,9 @@ export const make = <A>(initial: Chunk.Chunk<A>): Effect.Effect<TxChunk<A>> =>
  * @example
  * ```ts
  * import { Effect } from "effect"
- * import { TxChunk } from "effect/transactions"
+ * import { TxChunk } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   // Create an empty TxChunk
  *   const txChunk = yield* TxChunk.empty<number>()
  *
@@ -155,9 +159,9 @@ export const empty = <A = never>(): Effect.Effect<TxChunk<A>> =>
  * ```ts
  * import { Effect } from "effect"
  * import { Chunk } from "effect/collections"
- * import { TxChunk } from "effect/transactions"
+ * import { TxChunk } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   // Create TxChunk from array
  *   const txChunk = yield* TxChunk.fromIterable([1, 2, 3, 4, 5])
  *
@@ -167,7 +171,7 @@ export const empty = <A = never>(): Effect.Effect<TxChunk<A>> =>
  *
  *   // Multi-step atomic modification - use explicit transaction
  *   yield* Effect.atomic(
- *     Effect.gen(function* () {
+ *     Effect.gen(function*() {
  *       yield* TxChunk.append(txChunk, 6)
  *       yield* TxChunk.prepend(txChunk, 0)
  *     })
@@ -190,7 +194,7 @@ export const fromIterable = <A>(iterable: Iterable<A>): Effect.Effect<TxChunk<A>
  * @example
  * ```ts
  * import { Chunk } from "effect/collections"
- * import { TxChunk, TxRef } from "effect/transactions"
+ * import { TxChunk, TxRef } from "effect/stm"
  *
  * // Create a TxChunk from an existing TxRef (advanced usage)
  * const ref = TxRef.makeUnsafe(Chunk.fromIterable([1, 2, 3]))
@@ -219,15 +223,15 @@ export const makeUnsafe = <A>(ref: TxRef.TxRef<Chunk.Chunk<A>>): TxChunk<A> => {
  * ```ts
  * import { Effect } from "effect"
  * import { Chunk } from "effect/collections"
- * import { TxChunk } from "effect/transactions"
+ * import { TxChunk } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   const txChunk = yield* TxChunk.fromIterable([1, 2, 3])
  *
  *   // Modify and return both old size and new chunk
  *   const oldSize = yield* TxChunk.modify(txChunk, (chunk) => [
- *     Chunk.size(chunk),                    // return value (old size)
- *     Chunk.append(chunk, 4)                // new value
+ *     Chunk.size(chunk), // return value (old size)
+ *     Chunk.append(chunk, 4) // new value
  *   ])
  *
  *   console.log(oldSize) // 3
@@ -263,9 +267,9 @@ export const modify: {
  * ```ts
  * import { Effect } from "effect"
  * import { Chunk } from "effect/collections"
- * import { TxChunk } from "effect/transactions"
+ * import { TxChunk } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   const txChunk = yield* TxChunk.fromIterable([1, 2, 3])
  *
  *   // Update the chunk by reversing it
@@ -296,9 +300,9 @@ export const update: {
  * ```ts
  * import { Effect } from "effect"
  * import { Chunk } from "effect/collections"
- * import { TxChunk } from "effect/transactions"
+ * import { TxChunk } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   const txChunk = yield* TxChunk.fromIterable([1, 2, 3])
  *
  *   // Read the current value within a transaction
@@ -326,9 +330,9 @@ export const get = <A>(self: TxChunk<A>): Effect.Effect<Chunk.Chunk<A>> => TxRef
  * ```ts
  * import { Effect } from "effect"
  * import { Chunk } from "effect/collections"
- * import { TxChunk } from "effect/transactions"
+ * import { TxChunk } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   const txChunk = yield* TxChunk.fromIterable([1, 2, 3])
  *
  *   // Replace the entire chunk content
@@ -358,9 +362,9 @@ export const set: {
  * ```ts
  * import { Effect } from "effect"
  * import { Chunk } from "effect/collections"
- * import { TxChunk } from "effect/transactions"
+ * import { TxChunk } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   const txChunk = yield* TxChunk.fromIterable([1, 2, 3])
  *
  *   // Add element to the end atomically
@@ -392,9 +396,9 @@ export const append: {
  * ```ts
  * import { Effect } from "effect"
  * import { Chunk } from "effect/collections"
- * import { TxChunk } from "effect/transactions"
+ * import { TxChunk } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   const txChunk = yield* TxChunk.fromIterable([2, 3, 4])
  *
  *   // Add element to the beginning atomically
@@ -422,9 +426,9 @@ export const prepend: {
  * @example
  * ```ts
  * import { Effect } from "effect"
- * import { TxChunk } from "effect/transactions"
+ * import { TxChunk } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   const txChunk = yield* TxChunk.fromIterable([1, 2, 3, 4, 5])
  *
  *   // Get the current size - automatically transactional
@@ -450,9 +454,9 @@ export const size = <A>(self: TxChunk<A>): Effect.Effect<number> =>
  * @example
  * ```ts
  * import { Effect } from "effect"
- * import { TxChunk } from "effect/transactions"
+ * import { TxChunk } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   const emptyChunk = yield* TxChunk.empty<number>()
  *   const nonEmptyChunk = yield* TxChunk.fromIterable([1, 2, 3])
  *
@@ -477,9 +481,9 @@ export const isEmpty = <A>(self: TxChunk<A>): Effect.Effect<boolean> =>
  * @example
  * ```ts
  * import { Effect } from "effect"
- * import { TxChunk } from "effect/transactions"
+ * import { TxChunk } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   const emptyChunk = yield* TxChunk.empty<number>()
  *   const nonEmptyChunk = yield* TxChunk.fromIterable([1, 2, 3])
  *
@@ -508,9 +512,9 @@ export const isNonEmpty = <A>(self: TxChunk<A>): Effect.Effect<boolean> =>
  * ```ts
  * import { Effect } from "effect"
  * import { Chunk } from "effect/collections"
- * import { TxChunk } from "effect/transactions"
+ * import { TxChunk } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   const txChunk = yield* TxChunk.fromIterable([1, 2, 3, 4, 5])
  *
  *   // Take only the first 3 elements - automatically transactional
@@ -539,9 +543,9 @@ export const take: {
  * ```ts
  * import { Effect } from "effect"
  * import { Chunk } from "effect/collections"
- * import { TxChunk } from "effect/transactions"
+ * import { TxChunk } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   const txChunk = yield* TxChunk.fromIterable([1, 2, 3, 4, 5])
  *
  *   // Drop the first 2 elements - automatically transactional
@@ -570,9 +574,9 @@ export const drop: {
  * ```ts
  * import { Effect } from "effect"
  * import { Chunk } from "effect/collections"
- * import { TxChunk } from "effect/transactions"
+ * import { TxChunk } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   const txChunk = yield* TxChunk.fromIterable([1, 2, 3, 4, 5, 6, 7])
  *
  *   // Take elements from index 2 to 5 (exclusive) - automatically transactional
@@ -606,9 +610,9 @@ export const slice: {
  * ```ts
  * import { Effect } from "effect"
  * import { Chunk } from "effect/collections"
- * import { TxChunk } from "effect/transactions"
+ * import { TxChunk } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   const txChunk = yield* TxChunk.fromIterable([1, 2, 3, 4])
  *
  *   // Transform each element (must maintain same type)
@@ -641,9 +645,9 @@ export const map: {
  * ```ts
  * import { Effect } from "effect"
  * import { Chunk } from "effect/collections"
- * import { TxChunk } from "effect/transactions"
+ * import { TxChunk } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   const txChunk = yield* TxChunk.fromIterable([1, 2, 3, 4, 5, 6])
  *
  *   // Keep only even numbers
@@ -679,9 +683,9 @@ export const filter: {
  * ```ts
  * import { Effect } from "effect"
  * import { Chunk } from "effect/collections"
- * import { TxChunk } from "effect/transactions"
+ * import { TxChunk } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   const txChunk = yield* TxChunk.fromIterable([1, 2, 3])
  *   const otherChunk = Chunk.fromIterable([4, 5, 6])
  *
@@ -716,9 +720,9 @@ export const appendAll: {
  * ```ts
  * import { Effect } from "effect"
  * import { Chunk } from "effect/collections"
- * import { TxChunk } from "effect/transactions"
+ * import { TxChunk } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   const txChunk = yield* TxChunk.fromIterable([4, 5, 6])
  *   const otherChunk = Chunk.fromIterable([1, 2, 3])
  *
@@ -755,9 +759,9 @@ export const prependAll: {
  * ```ts
  * import { Effect } from "effect"
  * import { Chunk } from "effect/collections"
- * import { TxChunk } from "effect/transactions"
+ * import { TxChunk } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   const txChunk1 = yield* TxChunk.fromIterable([1, 2, 3])
  *   const txChunk2 = yield* TxChunk.fromIterable([4, 5, 6])
  *

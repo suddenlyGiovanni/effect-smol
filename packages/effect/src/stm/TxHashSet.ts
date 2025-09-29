@@ -10,7 +10,7 @@ import type { Inspectable } from "../interfaces/Inspectable.ts"
 import { format, NodeInspectSymbol, toJson } from "../interfaces/Inspectable.ts"
 import type { Pipeable } from "../interfaces/Pipeable.ts"
 import { pipeArguments } from "../interfaces/Pipeable.ts"
-import * as TxRef from "../transactions/TxRef.ts"
+import * as TxRef from "../stm/TxRef.ts"
 import type { NoInfer } from "../types/Types.ts"
 
 const TypeId = "~effect/transactions/TxHashSet"
@@ -54,9 +54,9 @@ const TxHashSetProto = {
  * @example
  * ```ts
  * import { Effect } from "effect"
- * import { TxHashSet } from "effect/transactions"
+ * import { TxHashSet } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   // Create a transactional hash set
  *   const txSet = yield* TxHashSet.make("apple", "banana", "cherry")
  *
@@ -67,7 +67,7 @@ const TxHashSetProto = {
  *
  *   // Multi-step atomic operations
  *   yield* Effect.atomic(
- *     Effect.gen(function* () {
+ *     Effect.gen(function*() {
  *       const hasCherry = yield* TxHashSet.has(txSet, "cherry")
  *       if (hasCherry) {
  *         yield* TxHashSet.remove(txSet, "cherry")
@@ -96,10 +96,9 @@ export interface TxHashSet<in out V> extends Inspectable, Pipeable {
  * @example
  * ```ts
  * import { Effect } from "effect"
- * import { HashSet } from "effect/collections/HashSet"
- * import { TxHashSet } from "effect/transactions"
+ * import { TxHashSet } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   // Create a transactional color set
  *   const colors = yield* TxHashSet.make("red", "green", "blue")
  *
@@ -107,8 +106,7 @@ export interface TxHashSet<in out V> extends Inspectable, Pipeable {
  *   type Color = TxHashSet.TxHashSet.Value<typeof colors> // string
  *
  *   // Use extracted type in functions
- *   const addColor = (color: Color) =>
- *     TxHashSet.add(colors, color)
+ *   const addColor = (color: Color) => TxHashSet.add(colors, color)
  *
  *   yield* addColor("yellow")
  * })
@@ -121,7 +119,7 @@ export declare namespace TxHashSet {
   /**
    * @example
    * ```ts
-   * import { TxHashSet } from "effect/transactions"
+   * import { TxHashSet } from "effect/stm"
    *
    * const fruits = TxHashSet.make("apple", "banana", "cherry")
    *
@@ -151,9 +149,9 @@ const makeTxHashSet = <V>(ref: TxRef.TxRef<HashSet.HashSet<V>>): TxHashSet<V> =>
  * @example
  * ```ts
  * import { Effect } from "effect"
- * import { TxHashSet } from "effect/transactions"
+ * import { TxHashSet } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   const txSet = yield* TxHashSet.empty<string>()
  *
  *   console.log(yield* TxHashSet.size(txSet)) // 0
@@ -181,9 +179,9 @@ export const empty = <V = never>(): Effect.Effect<TxHashSet<V>> =>
  * @example
  * ```ts
  * import { Effect } from "effect"
- * import { TxHashSet } from "effect/transactions"
+ * import { TxHashSet } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   const fruits = yield* TxHashSet.make("apple", "banana", "cherry")
  *   console.log(yield* TxHashSet.size(fruits)) // 3
  *
@@ -213,9 +211,9 @@ export const make = <Values extends ReadonlyArray<any>>(
  * @example
  * ```ts
  * import { Effect } from "effect"
- * import { TxHashSet } from "effect/transactions"
+ * import { TxHashSet } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   const fromArray = yield* TxHashSet.fromIterable(["a", "b", "c", "b", "a"])
  *   console.log(yield* TxHashSet.size(fromArray)) // 3
  *
@@ -245,9 +243,9 @@ export const fromIterable = <V>(values: Iterable<V>): Effect.Effect<TxHashSet<V>
  * ```ts
  * import { Effect } from "effect"
  * import * as HashSet from "effect/collections/HashSet"
- * import { TxHashSet } from "effect/transactions"
+ * import { TxHashSet } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   const hashSet = HashSet.make("x", "y", "z")
  *   const txSet = yield* TxHashSet.fromHashSet(hashSet)
  *
@@ -277,9 +275,9 @@ export const fromHashSet = <V>(hashSet: HashSet.HashSet<V>): Effect.Effect<TxHas
  * ```ts
  * import { Effect } from "effect"
  * import * as HashSet from "effect/collections/HashSet"
- * import { TxHashSet } from "effect/transactions"
+ * import { TxHashSet } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   const txSet = yield* TxHashSet.make(1, 2, 3)
  *   const hashSet = HashSet.make(1, 2, 3)
  *   const array = [1, 2, 3]
@@ -305,9 +303,9 @@ export const isTxHashSet = (u: unknown): u is TxHashSet<unknown> => typeof u ===
  * @example
  * ```ts
  * import { Effect } from "effect"
- * import { TxHashSet } from "effect/transactions"
+ * import { TxHashSet } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   const txSet = yield* TxHashSet.make("a", "b")
  *
  *   yield* TxHashSet.add(txSet, "c")
@@ -340,9 +338,9 @@ export const add: {
  * @example
  * ```ts
  * import { Effect } from "effect"
- * import { TxHashSet } from "effect/transactions"
+ * import { TxHashSet } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   const txSet = yield* TxHashSet.make("a", "b", "c")
  *
  *   const removed = yield* TxHashSet.remove(txSet, "b")
@@ -383,10 +381,10 @@ export const remove: {
  * @example
  * ```ts
  * import { Effect } from "effect"
- * import { TxHashSet } from "effect/transactions"
  * import { Equal, Hash } from "effect/interfaces"
+ * import { TxHashSet } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   const txSet = yield* TxHashSet.make("apple", "banana", "cherry")
  *
  *   console.log(yield* TxHashSet.has(txSet, "apple")) // true
@@ -431,9 +429,9 @@ export const has: {
  * @example
  * ```ts
  * import { Effect } from "effect"
- * import { TxHashSet } from "effect/transactions"
+ * import { TxHashSet } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   const empty = yield* TxHashSet.empty<string>()
  *   console.log(yield* TxHashSet.size(empty)) // 0
  *
@@ -460,9 +458,9 @@ export const size = <V>(self: TxHashSet<V>): Effect.Effect<number> =>
  * @example
  * ```ts
  * import { Effect } from "effect"
- * import { TxHashSet } from "effect/transactions"
+ * import { TxHashSet } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   const empty = yield* TxHashSet.empty<string>()
  *   console.log(yield* TxHashSet.isEmpty(empty)) // true
  *
@@ -489,9 +487,9 @@ export const isEmpty = <V>(self: TxHashSet<V>): Effect.Effect<boolean> =>
  * @example
  * ```ts
  * import { Effect } from "effect"
- * import { TxHashSet } from "effect/transactions"
+ * import { TxHashSet } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   const txSet = yield* TxHashSet.make("a", "b", "c")
  *   console.log(yield* TxHashSet.size(txSet)) // 3
  *
@@ -512,9 +510,9 @@ export const clear = <V>(self: TxHashSet<V>): Effect.Effect<void> => TxRef.set(s
  * @example
  * ```ts
  * import { Effect } from "effect"
- * import { TxHashSet } from "effect/transactions"
+ * import { TxHashSet } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   const set1 = yield* TxHashSet.make("a", "b")
  *   const set2 = yield* TxHashSet.make("b", "c")
  *   const combined = yield* TxHashSet.union(set1, set2)
@@ -550,9 +548,9 @@ export const union: {
  * @example
  * ```ts
  * import { Effect } from "effect"
- * import { TxHashSet } from "effect/transactions"
+ * import { TxHashSet } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   const set1 = yield* TxHashSet.make("a", "b", "c")
  *   const set2 = yield* TxHashSet.make("b", "c", "d")
  *   const common = yield* TxHashSet.intersection(set1, set2)
@@ -588,9 +586,9 @@ export const intersection: {
  * @example
  * ```ts
  * import { Effect } from "effect"
- * import { TxHashSet } from "effect/transactions"
+ * import { TxHashSet } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   const set1 = yield* TxHashSet.make("a", "b", "c")
  *   const set2 = yield* TxHashSet.make("b", "d")
  *   const diff = yield* TxHashSet.difference(set1, set2)
@@ -626,9 +624,9 @@ export const difference: {
  * @example
  * ```ts
  * import { Effect } from "effect"
- * import { TxHashSet } from "effect/transactions"
+ * import { TxHashSet } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   const small = yield* TxHashSet.make("a", "b")
  *   const large = yield* TxHashSet.make("a", "b", "c", "d")
  *   const other = yield* TxHashSet.make("x", "y")
@@ -664,16 +662,16 @@ export const isSubset: {
  * @example
  * ```ts
  * import { Effect } from "effect"
- * import { TxHashSet } from "effect/transactions"
+ * import { TxHashSet } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   const numbers = yield* TxHashSet.make(1, 2, 3, 4, 5)
  *
- *   console.log(yield* TxHashSet.some(numbers, n => n > 3)) // true
- *   console.log(yield* TxHashSet.some(numbers, n => n > 10)) // false
+ *   console.log(yield* TxHashSet.some(numbers, (n) => n > 3)) // true
+ *   console.log(yield* TxHashSet.some(numbers, (n) => n > 10)) // false
  *
  *   const empty = yield* TxHashSet.empty<number>()
- *   console.log(yield* TxHashSet.some(empty, n => n > 0)) // false
+ *   console.log(yield* TxHashSet.some(empty, (n) => n > 0)) // false
  * })
  * ```
  *
@@ -698,16 +696,16 @@ export const some: {
  * @example
  * ```ts
  * import { Effect } from "effect"
- * import { TxHashSet } from "effect/transactions"
+ * import { TxHashSet } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   const numbers = yield* TxHashSet.make(2, 4, 6, 8)
  *
- *   console.log(yield* TxHashSet.every(numbers, n => n % 2 === 0)) // true
- *   console.log(yield* TxHashSet.every(numbers, n => n > 5)) // false
+ *   console.log(yield* TxHashSet.every(numbers, (n) => n % 2 === 0)) // true
+ *   console.log(yield* TxHashSet.every(numbers, (n) => n > 5)) // false
  *
  *   const empty = yield* TxHashSet.empty<number>()
- *   console.log(yield* TxHashSet.every(empty, n => n > 0)) // true (vacuously true)
+ *   console.log(yield* TxHashSet.every(empty, (n) => n > 0)) // true (vacuously true)
  * })
  * ```
  *
@@ -732,11 +730,11 @@ export const every: {
  * @example
  * ```ts
  * import { Effect } from "effect"
- * import { TxHashSet } from "effect/transactions"
+ * import { TxHashSet } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   const numbers = yield* TxHashSet.make(1, 2, 3)
- *   const doubled = yield* TxHashSet.map(numbers, n => n * 2)
+ *   const doubled = yield* TxHashSet.map(numbers, (n) => n * 2)
  *
  *   const values = yield* TxHashSet.toHashSet(doubled)
  *   console.log(Array.from(values).sort()) // [2, 4, 6]
@@ -744,7 +742,7 @@ export const every: {
  *
  *   // Mapping can reduce size if function produces duplicates
  *   const strings = yield* TxHashSet.make("apple", "banana", "cherry")
- *   const lengths = yield* TxHashSet.map(strings, s => s.length)
+ *   const lengths = yield* TxHashSet.map(strings, (s) => s.length)
  *   const lengthValues = yield* TxHashSet.toHashSet(lengths)
  *   console.log(Array.from(lengthValues).sort()) // [5, 6] (apple=5, banana=6, cherry=6)
  * })
@@ -774,11 +772,11 @@ export const map: {
  * @example
  * ```ts
  * import { Effect } from "effect"
- * import { TxHashSet } from "effect/transactions"
+ * import { TxHashSet } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   const numbers = yield* TxHashSet.make(1, 2, 3, 4, 5, 6)
- *   const evens = yield* TxHashSet.filter(numbers, n => n % 2 === 0)
+ *   const evens = yield* TxHashSet.filter(numbers, (n) => n % 2 === 0)
  *
  *   const values = yield* TxHashSet.toHashSet(evens)
  *   console.log(Array.from(values).sort()) // [2, 4, 6]
@@ -818,9 +816,9 @@ export const filter: {
  * @example
  * ```ts
  * import { Effect } from "effect"
- * import { TxHashSet } from "effect/transactions"
+ * import { TxHashSet } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   const numbers = yield* TxHashSet.make(1, 2, 3, 4, 5)
  *   const sum = yield* TxHashSet.reduce(numbers, 0, (acc, n) => acc + n)
  *
@@ -854,9 +852,9 @@ export const reduce: {
  * ```ts
  * import { Effect } from "effect"
  * import * as HashSet from "effect/collections/HashSet"
- * import { TxHashSet } from "effect/transactions"
+ * import { TxHashSet } from "effect/stm"
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   const txSet = yield* TxHashSet.make("x", "y", "z")
  *   const hashSet = yield* TxHashSet.toHashSet(txSet)
  *

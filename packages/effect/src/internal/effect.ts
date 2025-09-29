@@ -1,4 +1,5 @@
 import type * as Cause from "../Cause.ts"
+import type * as Clock from "../Clock.ts"
 import * as Arr from "../collections/Array.ts"
 import type * as Console from "../Console.ts"
 import * as Filter from "../data/Filter.ts"
@@ -6,6 +7,7 @@ import * as Option from "../data/Option.ts"
 import * as Order from "../data/Order.ts"
 import { hasProperty, isIterable, isString, isTagged } from "../data/Predicate.ts"
 import * as Result from "../data/Result.ts"
+import * as Duration from "../Duration.ts"
 import type * as Effect from "../Effect.ts"
 import type * as Exit from "../Exit.ts"
 import type * as Fiber from "../Fiber.ts"
@@ -17,8 +19,7 @@ import { currentFiberTypeId, formatJson, redact, toJson } from "../interfaces/In
 import { pipeArguments } from "../interfaces/Pipeable.ts"
 import type * as Logger from "../Logger.ts"
 import type * as LogLevel from "../LogLevel.ts"
-import type * as Metric from "../observability/Metric.ts"
-import * as Tracer from "../observability/Tracer.ts"
+import type * as Metric from "../Metric.ts"
 import {
   CurrentConcurrency,
   CurrentLogAnnotations,
@@ -32,8 +33,7 @@ import {
 import * as Scheduler from "../Scheduler.ts"
 import type * as Scope from "../Scope.ts"
 import * as ServiceMap from "../ServiceMap.ts"
-import type * as Clock from "../time/Clock.ts"
-import * as Duration from "../time/Duration.ts"
+import * as Tracer from "../Tracer.ts"
 import type { Concurrency, ExcludeTag, ExtractTag, NoInfer, NotFunction, Simplify, Tags } from "../types/Types.ts"
 import { internalCall } from "../Utils.ts"
 import type { Primitive } from "./core.ts"

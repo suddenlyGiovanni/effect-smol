@@ -68,11 +68,13 @@
  * @since 2.0.0
  */
 import type * as Cause from "./Cause.ts"
+import type { Clock } from "./Clock.ts"
 import type * as Arr from "./collections/Array.ts"
 import type * as Filter from "./data/Filter.ts"
 import type { Option } from "./data/Option.ts"
 import type * as Predicate from "./data/Predicate.ts"
 import type * as Result from "./data/Result.ts"
+import * as Duration from "./Duration.ts"
 import * as Exit from "./Exit.ts"
 import type { Fiber } from "./Fiber.ts"
 import { constant, dual, type LazyArg } from "./Function.ts"
@@ -85,7 +87,15 @@ import * as internalSchedule from "./internal/schedule.ts"
 import type * as Layer from "./Layer.ts"
 import type { Logger } from "./Logger.ts"
 import type { LogLevel } from "./LogLevel.ts"
-import * as Metric from "./observability/Metric.ts"
+import * as Metric from "./Metric.ts"
+import { CurrentLogAnnotations, CurrentLogSpans } from "./References.ts"
+import type * as Request from "./Request.ts"
+import type { RequestResolver } from "./RequestResolver.ts"
+import type { Schedule } from "./Schedule.ts"
+import type { Scheduler } from "./Scheduler.ts"
+import type { Scope } from "./Scope.ts"
+import * as ServiceMap from "./ServiceMap.ts"
+import type { TxRef } from "./stm/TxRef.ts"
 import type {
   AnySpan,
   ParentSpan,
@@ -95,17 +105,7 @@ import type {
   SpanOptionsNoTrace,
   TraceOptions,
   Tracer
-} from "./observability/Tracer.ts"
-import { CurrentLogAnnotations, CurrentLogSpans } from "./References.ts"
-import type * as Request from "./Request.ts"
-import type { RequestResolver } from "./RequestResolver.ts"
-import type { Schedule } from "./Schedule.ts"
-import type { Scheduler } from "./Scheduler.ts"
-import type { Scope } from "./Scope.ts"
-import * as ServiceMap from "./ServiceMap.ts"
-import type { Clock } from "./time/Clock.ts"
-import * as Duration from "./time/Duration.ts"
-import type { TxRef } from "./transactions/TxRef.ts"
+} from "./Tracer.ts"
 import type { TypeLambda } from "./types/HKT.ts"
 import type {
   Concurrency,
@@ -3642,7 +3642,7 @@ export const timed: <A, E, R>(self: Effect<A, E, R>) => Effect<[duration: Durati
  * @example
  * ```ts
  * import { Effect } from "effect"
- * import { Duration } from "effect/time"
+ * import { Duration } from "effect"
  *
  * // Multiple effects with different delays
  * const effect1 = Effect.delay(Effect.succeed("Fast"), Duration.millis(100))
@@ -3681,7 +3681,7 @@ export const raceAll: <Eff extends Effect<any, any, any>>(
  * @example
  * ```ts
  * import { Effect } from "effect"
- * import { Duration } from "effect/time"
+ * import { Duration } from "effect"
  *
  * // Multiple effects with different delays and potential failures
  * const effect1 = Effect.delay(Effect.succeed("First"), Duration.millis(200))
@@ -10319,7 +10319,7 @@ export const withLogSpan = dual<
  * @example
  * ```ts
  * import { Effect } from "effect"
- * import { Metric } from "effect/observability"
+ * import { Metric } from "effect"
  *
  * const counter = Metric.counter("effect_executions", {
  *   description: "Counts effect executions"
@@ -10339,7 +10339,7 @@ export const withLogSpan = dual<
  * @example
  * ```ts
  * import { Effect, Exit } from "effect"
- * import { Metric } from "effect/observability"
+ * import { Metric } from "effect"
  *
  * // Track different exit types with custom mapping
  * const exitTracker = Metric.frequency("exit_types", {
@@ -10400,7 +10400,7 @@ export const track: {
  * @example
  * ```ts
  * import { Effect } from "effect"
- * import { Metric } from "effect/observability"
+ * import { Metric } from "effect"
  *
  * const successCounter = Metric.counter("successes").pipe(
  *   Metric.withConstantInput(1)
@@ -10419,7 +10419,7 @@ export const track: {
  * @example
  * ```ts
  * import { Effect } from "effect"
- * import { Metric } from "effect/observability"
+ * import { Metric } from "effect"
  *
  * // Track successful request sizes
  * const requestSizeGauge = Metric.gauge("request_size_bytes")
@@ -10477,7 +10477,7 @@ export const trackSuccesses: {
  * @example
  * ```ts
  * import { Effect } from "effect"
- * import { Metric } from "effect/observability"
+ * import { Metric } from "effect"
  *
  * const errorCounter = Metric.counter("errors").pipe(
  *   Metric.withConstantInput(1)
@@ -10496,7 +10496,7 @@ export const trackSuccesses: {
  * @example
  * ```ts
  * import { Effect } from "effect"
- * import { Metric } from "effect/observability"
+ * import { Metric } from "effect"
  *
  * // Track error types using frequency metric
  * const errorTypeFrequency = Metric.frequency("error_types")
@@ -10554,7 +10554,7 @@ export const trackErrors: {
  * @example
  * ```ts
  * import { Effect } from "effect"
- * import { Metric } from "effect/observability"
+ * import { Metric } from "effect"
  *
  * const defectCounter = Metric.counter("defects").pipe(
  *   Metric.withConstantInput(1)
@@ -10573,7 +10573,7 @@ export const trackErrors: {
  * @example
  * ```ts
  * import { Effect } from "effect"
- * import { Metric } from "effect/observability"
+ * import { Metric } from "effect"
  *
  * // Track defect types using frequency metric
  * const defectTypeFrequency = Metric.frequency("defect_types")
@@ -10631,8 +10631,8 @@ export const trackDefects: {
  * @example
  * ```ts
  * import { Effect } from "effect"
- * import { Metric } from "effect/observability"
- * import { Duration } from "effect/time"
+ * import { Metric } from "effect"
+ * import { Duration } from "effect"
  *
  * const executionTimer = Metric.timer("execution_time")
  *
@@ -10649,8 +10649,8 @@ export const trackDefects: {
  * @example
  * ```ts
  * import { Effect } from "effect"
- * import { Metric } from "effect/observability"
- * import { Duration } from "effect/time"
+ * import { Metric } from "effect"
+ * import { Duration } from "effect"
  *
  * // Track execution time in milliseconds using custom mapping
  * const durationGauge = Metric.gauge("execution_millis")
@@ -10762,7 +10762,7 @@ export class Transaction extends ServiceMap.Key<
  * @example
  * ```ts
  * import { Effect } from "effect"
- * import { TxRef } from "effect/transactions"
+ * import { TxRef } from "effect/stm"
  *
  * const program = Effect.gen(function* () {
  *   const ref1 = yield* TxRef.make(0)
@@ -10794,7 +10794,7 @@ export const atomic = <A, E, R>(
  * @example
  * ```ts
  * import { Effect } from "effect"
- * import { TxRef } from "effect/transactions"
+ * import { TxRef } from "effect/stm"
  *
  * const program = Effect.atomicWith((txState) =>
  *   Effect.gen(function* () {
@@ -10854,7 +10854,7 @@ export const atomicWith = <A, E, R>(
  * @example
  * ```ts
  * import { Effect } from "effect"
- * import { TxRef } from "effect/transactions"
+ * import { TxRef } from "effect/stm"
  *
  * const program = Effect.gen(function* () {
  *   const ref1 = yield* TxRef.make(0)
@@ -10897,7 +10897,7 @@ export const transaction = <A, E, R>(
  * @example
  * ```ts
  * import { Effect } from "effect"
- * import { TxRef } from "effect/transactions"
+ * import { TxRef } from "effect/stm"
  *
  * const program = Effect.transactionWith((txState) =>
  *   Effect.gen(function* () {
@@ -11022,7 +11022,7 @@ function clearTransaction(state: Transaction["Service"]) {
  *
  * ```ts
  * import { Effect } from "effect"
- * import * as TxRef from "effect/transactions/TxRef"
+ * import * as TxRef from "effect/stm/TxRef"
  *
  * const program = Effect.gen(function*() {
  *   // create a transactional reference
