@@ -2467,14 +2467,15 @@ export interface decodingMiddleware<S extends Top, RD> extends
  */
 export function decodingMiddleware<S extends Top, RD>(
   decode: (
-    sr: Effect.Effect<Option_.Option<S["Type"]>, Issue.Issue, S["DecodingServices"]>,
+    effect: Effect.Effect<Option_.Option<S["Type"]>, Issue.Issue, S["DecodingServices"]>,
     options: AST.ParseOptions
   ) => Effect.Effect<Option_.Option<S["Type"]>, Issue.Issue, RD>
 ) {
   return (schema: S): decodingMiddleware<S, RD> => {
-    return makeProto(AST.decodingMiddleware(schema.ast, new Transformation.Middleware(decode, identity)), {
-      schema
-    })
+    return makeProto(
+      AST.decodingMiddleware(schema.ast, new Transformation.Middleware(decode, identity)),
+      { schema }
+    )
   }
 }
 
@@ -2514,7 +2515,10 @@ export function encodingMiddleware<S extends Top, RE>(
   ) => Effect.Effect<Option_.Option<S["Type"]>, Issue.Issue, RE>
 ) {
   return (schema: S): encodingMiddleware<S, RE> => {
-    return makeProto(AST.encodingMiddleware(schema.ast, new Transformation.Middleware(identity, encode)), { schema })
+    return makeProto(
+      AST.encodingMiddleware(schema.ast, new Transformation.Middleware(identity, encode)),
+      { schema }
+    )
   }
 }
 
@@ -2656,7 +2660,9 @@ export function encodeTo<To extends Top, From extends Top, RD = never, RE = neve
   }
 ) {
   return (from: From): decodeTo<From, To, RD, RE> => {
-    return transformation ? to.pipe(decodeTo(from, transformation)) : to.pipe(decodeTo(from))
+    return transformation ?
+      to.pipe(decodeTo(from, transformation)) :
+      to.pipe(decodeTo(from))
   }
 }
 
@@ -2716,7 +2722,10 @@ export function withConstructorDefault<S extends Top & WithoutConstructorDefault
   ) => Option_.Option<S["~type.make.in"]> | Effect.Effect<Option_.Option<S["~type.make.in"]>>
 ) {
   return (schema: S): withConstructorDefault<S> => {
-    return makeProto(AST.withConstructorDefault(schema.ast, defaultValue), { schema })
+    return makeProto(
+      AST.withConstructorDefault(schema.ast, defaultValue),
+      { schema }
+    )
   }
 }
 
@@ -3590,7 +3599,11 @@ export const Error: Error = instanceOf(globalThis.Error, {
     link<globalThis.Error>()(
       ErrorJsonEncoded,
       Transformation.error()
-    )
+    ),
+  arbitrary: {
+    _tag: "Declaration",
+    declaration: () => (fc) => fc.string().map((message) => new globalThis.Error(message))
+  }
 })
 
 /**
@@ -4438,6 +4451,7 @@ function getClassSchemaFactory<S extends Top>(
     self: Self
   ): decodeTo<declareConstructor<Self, S["Encoded"], readonly [S]>, S> => {
     if (memo === undefined) {
+      const transformation = getClassTransformation(self)
       const to = make<declareConstructor<Self, S["Encoded"], readonly [S]>>(
         new AST.Declaration(
           [from.ast],
@@ -4447,8 +4461,8 @@ function getClassSchemaFactory<S extends Top>(
               Effect.fail(new Issue.InvalidType(ast, Option_.some(input)))
           },
           Annotations.combine({
-            defaultIsoSerializer: ([from]: readonly [Schema<S["Type"]>]) =>
-              new AST.Link(from.ast, getClassTransformation(self)),
+            [AST.ClassTypeId]: ([from]: readonly [AST.AST]) => new AST.Link(from, transformation),
+            defaultIsoSerializer: ([from]: readonly [Schema<S["Type"]>]) => new AST.Link(from.ast, transformation),
             arbitrary: {
               _tag: "Declaration",
               declaration: ([from]: readonly [FastCheck.Arbitrary<S["Type"]>]) => () =>
@@ -4576,7 +4590,7 @@ export const RequestClass =
 /**
  * @since 4.0.0
  */
-export const PropertyKey = Union([Symbol, String, Finite])
+export const PropertyKey = Union([Finite, Symbol, String])
 
 /**
  * @since 4.0.0
@@ -4630,7 +4644,11 @@ export const Uint8Array: Uint8Array = instanceOf(globalThis.Uint8Array<ArrayBuff
         decode: Getter.decodeBase64(),
         encode: Getter.encodeBase64()
       }
-    )
+    ),
+  arbitrary: {
+    _tag: "Declaration",
+    declaration: () => (fc) => fc.uint8Array()
+  }
 })
 
 /**
