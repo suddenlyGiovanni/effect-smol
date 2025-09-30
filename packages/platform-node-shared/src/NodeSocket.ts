@@ -91,6 +91,15 @@ export const fromDuplex = <RO>(
         const fiberSet = yield* FiberSet.make<any, E | Socket.SocketError>().pipe(
           Scope.provide(scope)
         )
+        yield* Scope.addFinalizer(
+          scope,
+          Effect.sync(() => {
+            conn.off("data", onData)
+            conn.off("end", onEnd)
+            conn.off("error", onError)
+            conn.off("close", onClose)
+          })
+        )
         const conn = yield* Scope.provide(open, scope).pipe(
           options?.openTimeout ?
             Effect.timeoutOrElse({
@@ -110,20 +119,6 @@ export const fromDuplex = <RO>(
         conn.on("close", onClose)
         const run = yield* Effect.provideService(FiberSet.runtime(fiberSet)<R>(), NetSocket, conn as Net.Socket)
         conn.on("data", onData)
-
-        yield* Scope.addFinalizer(
-          scope,
-          Effect.sync(() => {
-            conn.off("data", onData)
-            conn.off("end", onEnd)
-            conn.off("error", onError)
-            conn.off("close", onClose)
-          })
-        )
-
-        if (conn.closed) {
-          return
-        }
 
         currentSocket = conn
         latch.openUnsafe()
