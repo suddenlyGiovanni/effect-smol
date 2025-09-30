@@ -121,7 +121,7 @@ export const fromDuplex = <RO>(
           })
         )
 
-        if (conn.readableEnded) {
+        if (conn.closed) {
           return
         }
 
