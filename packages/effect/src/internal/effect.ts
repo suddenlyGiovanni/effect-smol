@@ -501,6 +501,7 @@ const keepAlive = (() => {
   })
 })()
 
+/** @internal */
 export class FiberImpl<A = any, E = any> implements Fiber.Fiber<A, E> {
   constructor(
     services: ServiceMap.ServiceMap<never>,
@@ -877,12 +878,12 @@ export const die = (defect: unknown): Effect.Effect<never> => exitDie(defect)
 /** @internal */
 export const failSync = <E>(error: LazyArg<E>): Effect.Effect<never, E> => suspend(() => fail(internalCall(error)))
 
+/** @internal */
 const void_: Effect.Effect<void> = succeed(void 0)
-export {
-  /** @internal */
-  void_ as void
-}
+/** @internal */
+export { void_ as void }
 
+/** @internal */
 const try_ = <A, E>(options: {
   try: LazyArg<A>
   catch: (error: unknown) => E
@@ -894,10 +895,8 @@ const try_ = <A, E>(options: {
       return fail(internalCall(() => options.catch(err)))
     }
   })
-export {
-  /** @internal */
-  try_ as try
-}
+/** @internal */
+export { try_ as try }
 
 /** @internal */
 export const promise = <A>(
@@ -3834,6 +3833,7 @@ export const bind: {
   ): Effect.Effect<Simplify<Omit<A, N> & Record<N, B>>, E | E2, R | R2>
 } = doNotation.bind<Effect.EffectTypeLambda>(map, flatMap)
 
+/** @internal */
 const let_: {
   <N extends string, A extends Record<string, any>, B>(
     name: N,
@@ -3848,10 +3848,8 @@ const let_: {
   ): Effect.Effect<Simplify<Omit<A, N> & Record<N, B>>, E, R>
 } = doNotation.let_<Effect.EffectTypeLambda>(map)
 
-export {
-  /** @internal */
-  let_ as let
-}
+/** @internal */
+export { let_ as let }
 
 // ----------------------------------------------------------------------------
 // fibers & forking
@@ -5148,9 +5146,8 @@ export function interruptChildrenPatch() {
   fiberMiddleware.interruptChildren ??= fiberInterruptChildren
 }
 
+/** @internal */
 const undefined_ = succeed(undefined)
 
-export {
-  /** @internal */
-  undefined_ as undefined
-}
+/** @internal */
+export { undefined_ as undefined }
