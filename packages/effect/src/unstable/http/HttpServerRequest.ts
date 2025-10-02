@@ -30,7 +30,10 @@ export {
   MaxBodySize
 } from "./HttpIncomingMessage.ts"
 
-/** @internal */
+/**
+ * @since 4.0.0
+ * @category Type IDs
+ */
 export const TypeId = "~effect/http/HttpServerRequest"
 
 /**
@@ -179,8 +182,6 @@ const isMultipart = (request: HttpServerRequest) =>
  * @since 4.0.0
  * @category schema
  */
-
-/** @internal */
 export const schemaBodyForm = <A, I extends Partial<Multipart.Persisted>, RD, RE>(
   schema: Schema.Codec<A, I, RD, RE>,
   options?: ParseOptions | undefined
