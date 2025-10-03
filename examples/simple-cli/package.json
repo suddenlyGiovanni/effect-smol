@@ -1,0 +1,28 @@
+{
+  "name": "simple-cli-example",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Simple CLI example demonstrating Effect CLI features",
+  "type": "module",
+  "main": "dist/cli.js",
+  "bin": {
+    "myapp": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/cli.js",
+    "dev": "tsx src/cli.ts",
+    "cli": "tsx src/cli.ts",
+    "generate-visuals": "tsx scripts/generate-visuals.ts",
+    "generate-gallery": "tsx scripts/generate-gallery.ts"
+  },
+  "dependencies": {
+    "effect": "workspace:*",
+    "@effect/platform-node": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3",
+    "ansi-to-svg": "^1.4.3"
+  }
+}
