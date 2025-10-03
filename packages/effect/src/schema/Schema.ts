@@ -23,10 +23,9 @@ import * as Effect from "../Effect.ts"
 import * as Exit_ from "../Exit.ts"
 import { identity } from "../Function.ts"
 import * as Equal from "../interfaces/Equal.ts"
-import { formatJson } from "../interfaces/Inspectable.ts"
+import { format, formatDate } from "../interfaces/Inspectable.ts"
 import * as Pipeable from "../interfaces/Pipeable.ts"
 import * as core from "../internal/core.ts"
-import * as InternalEffect from "../internal/effect.ts"
 import * as Request from "../Request.ts"
 import * as Scheduler from "../Scheduler.ts"
 import type * as FastCheck from "../testing/FastCheck.ts"
@@ -1182,6 +1181,11 @@ export interface Number extends Bottom<number, number, never, never, AST.NumberK
 
 /**
  * A schema for all numbers, including `NaN`, `Infinity`, and `-Infinity`.
+ *
+ * **Default Json Serializer**
+ *
+ * - If the number is finite, it is serialized as a number.
+ * - Otherwise, it is serialized as a string ("NaN", "Infinity", or "-Infinity").
  *
  * @since 4.0.0
  */
@@ -3580,11 +3584,7 @@ const ErrorJsonEncoded = Struct({
  */
 export const Error: Error = instanceOf(globalThis.Error, {
   title: "Error",
-  defaultJsonSerializer: () =>
-    link<globalThis.Error>()(
-      ErrorJsonEncoded,
-      Transformation.error()
-    ),
+  defaultJsonSerializer: () => link<globalThis.Error>()(ErrorJsonEncoded, Transformation.error()),
   arbitrary: {
     _tag: "Declaration",
     declaration: () => (fc) => fc.string().map((message) => new globalThis.Error(message))
@@ -3597,7 +3597,6 @@ export const Error: Error = instanceOf(globalThis.Error, {
 export interface Defect extends
   Union<
     readonly [
-      String,
       decodeTo<
         Error,
         Struct<{
@@ -3606,44 +3605,39 @@ export interface Defect extends
           readonly stack: optionalKey<String>
         }>
       >,
-      decodeTo<Unknown, String>
+      decodeTo<Unknown, Any>
     ]
   >
 {}
 
+const defectTransformation = new Transformation.Transformation(
+  Getter.passthrough(),
+  Getter.transform((u) => {
+    try {
+      return JSON.parse(JSON.stringify(u))
+    } catch {
+      return format(u)
+    }
+  })
+)
+
 /**
  * A schema that represents defects.
- *
- * This schema can handle both string-based error messages and structured Error objects.
- *
- * When encoding:
- * - A string returns the string as-is
- * - An Error object returns a struct with `name` and `message` properties (stack is omitted for security)
- * - Other values are converted to their string representation:
- *   - if the value has a custom `toString` method, it will be called
- *   - otherwise, the value will be converted to a string using `JSON.stringify`
- *
- * When decoding:
- * - A string input returns the string as-is
- * - A struct with `message`, `name`, and `stack` properties is converted to an Error object
  *
  * @category Constructors
  * @since 4.0.0
  */
 export const Defect: Defect = Union([
-  String,
-  // error from struct
   ErrorJsonEncoded.pipe(decodeTo(Error, Transformation.error())),
-  // unknown from string
-  String.pipe(decodeTo(
-    Unknown,
-    {
-      decode: Getter.passthrough(),
-      encode: Getter.transform((a) => {
-        if (Predicate.isRecord(a)) return InternalEffect.causePrettyMessage(a)
-        return formatJson(a)
-      })
-    }
+  Any.pipe(decodeTo(
+    Unknown.annotate({
+      defaultJsonSerializer: () => link<unknown>()(Any, defectTransformation),
+      arbitrary: {
+        _tag: "Override",
+        override: (fc) => fc.json()
+      }
+    }),
+    defectTransformation
   ))
 ])
 
@@ -4013,7 +4007,7 @@ export const Date: Date = instanceOf(
         String,
         Transformation.transform({
           decode: (s) => new globalThis.Date(s),
-          encode: (date) => date.toISOString()
+          encode: formatDate
         })
       ),
     arbitrary: {

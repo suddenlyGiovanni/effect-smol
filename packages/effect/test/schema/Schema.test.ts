@@ -2260,13 +2260,13 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
 
     const decoding = asserts.decoding()
     // Error: message only
-    await decoding.succeed({ message: "a" }, new Error("a", { cause: { message: "a" } }))
-    await decoding.succeed(noPrototypeObject, new Error("a", { cause: { message: "a" } }))
+    await decoding.succeed({ message: "a" }, new Error("a"))
+    await decoding.succeed(noPrototypeObject, new Error("a"))
     // Error: message and name
     await decoding.succeed(
       { message: "a", name: "b" },
       (() => {
-        const err = new Error("a", { cause: { message: "a", name: "b" } })
+        const err = new Error("a")
         err.name = "b"
         return err
       })()
@@ -2275,25 +2275,23 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
     await decoding.succeed(
       { message: "a", name: "b", stack: "c" },
       (() => {
-        const err = new Error("a", { cause: { message: "a", name: "b", stack: "c" } })
+        const err = new Error("a")
         err.name = "b"
         err.stack = "c"
         return err
       })()
     )
-    // string
-    await decoding.succeed("a", "a")
+    // anything else
+    await decoding.succeed("a")
+    await decoding.succeed({ a: 1 })
 
     const encoding = asserts.encoding()
     // Error
     await encoding.succeed(new Error("a"), { name: "Error", message: "a" })
-    // string
-    await encoding.succeed("a")
-    // a value with a custom toString method
-    await encoding.succeed({ toString: () => "a" }, "a")
     // anything else
-    await encoding.succeed({ a: 1 }, `{"a":1}`)
-    await encoding.succeed(noPrototypeObject, "a")
+    await encoding.succeed("a")
+    await encoding.succeed({ a: 1 })
+    await encoding.succeed(noPrototypeObject, { message: "a" })
   })
 
   describe("CauseFailure", () => {
@@ -2422,12 +2420,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
       const asserts = new TestSchema.Asserts(schema)
 
       const decoding = asserts.decoding()
-      const boomError = new Error("boom message", {
-        cause: {
-          name: "boom",
-          message: "boom message"
-        }
-      })
+      const boomError = new Error("boom message")
       boomError.name = "boom"
 
       await decoding.succeed(

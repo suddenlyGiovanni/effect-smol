@@ -236,11 +236,12 @@ export function formatPath(path: ReadonlyArray<PropertyKey>): string {
   return path.map((key) => `[${formatPropertyKey(key)}]`).join("")
 }
 
-function formatDate(date: Date): string {
+/** @internal */
+export function formatDate(date: Date): string {
   try {
     return date.toISOString()
   } catch {
-    return String(date)
+    return "Invalid Date"
   }
 }
 
@@ -320,8 +321,9 @@ export function format(
     if (
       !options?.ignoreToString &&
       Predicate.hasProperty(v, "toString") &&
-      Predicate.isFunction((v as any)["toString"]) &&
-      (v as any)["toString"] !== Object.prototype.toString
+      Predicate.isFunction(v["toString"]) &&
+      v["toString"] !== Object.prototype.toString &&
+      v["toString"] !== Array.prototype.toString
     ) return safeToString(v)
 
     if (Predicate.isString(v)) return JSON.stringify(v)
