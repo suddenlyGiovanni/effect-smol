@@ -91,27 +91,28 @@ export interface MakeOptions {
  * @since 4.0.0
  */
 export interface Bottom<
-  T,
-  E,
-  RD,
-  RE,
-  Ast extends AST.AST,
-  RebuildOut extends Top,
-  AnnotateIn extends Annotations.Annotations = Annotations.Bottom<T>,
-  TypeMakeIn = T,
-  Iso = T,
-  TypeMake = TypeMakeIn,
-  TypeMutability extends Mutability = "readonly",
-  TypeOptionality extends Optionality = "required",
-  TypeConstructorDefault extends ConstructorDefault = "no-default",
-  EncodedMutability extends Mutability = "readonly",
-  EncodedOptionality extends Optionality = "required"
+  out T,
+  out E,
+  out RD,
+  out RE,
+  out Ast extends AST.AST,
+  out RebuildOut extends Top,
+  out TypeMakeIn = T,
+  out Iso = T,
+  in out TypeParameters extends ReadonlyArray<Top> = readonly [],
+  out TypeMake = TypeMakeIn,
+  out TypeMutability extends Mutability = "readonly",
+  out TypeOptionality extends Optionality = "required",
+  out TypeConstructorDefault extends ConstructorDefault = "no-default",
+  out EncodedMutability extends Mutability = "readonly",
+  out EncodedOptionality extends Optionality = "required"
 > extends Pipeable.Pipeable {
   readonly [TypeId]: typeof TypeId
 
   readonly ast: Ast
   readonly "~rebuild.out": RebuildOut
-  readonly "~annotate.in": AnnotateIn
+  readonly "~type.parameters": TypeParameters
+  readonly "~annotate.in": Annotations.Bottom<T, TypeParameters>
 
   readonly "Type": T
   readonly "Encoded": E
@@ -181,9 +182,9 @@ export function revealBottom<S extends Top>(
   S["EncodingServices"],
   S["ast"],
   S["~rebuild.out"],
-  S["~annotate.in"],
   S["~type.make.in"],
   S["Iso"],
+  S["~type.parameters"],
   S["~type.make"],
   S["~type.mutability"],
   S["~type.optionality"],
@@ -233,9 +234,9 @@ export interface Top extends
     unknown,
     AST.AST,
     Top,
-    Annotations.Annotations,
     unknown,
     unknown,
+    any, // this is because TypeParameters is invariant
     unknown,
     Mutability,
     Optionality,
@@ -703,9 +704,9 @@ export interface optionalKey<S extends Top> extends
     S["EncodingServices"],
     S["ast"],
     optionalKey<S>,
-    S["~annotate.in"],
     S["~type.make.in"],
     S["Iso"],
+    S["~type.parameters"],
     S["~type.make"],
     S["~type.mutability"],
     "optional",
@@ -799,9 +800,9 @@ export interface mutableKey<S extends Top> extends
     S["EncodingServices"],
     S["ast"],
     mutableKey<S>,
-    S["~annotate.in"],
     S["~type.make.in"],
     S["Iso"],
+    S["~type.parameters"],
     S["~type.make"],
     "mutable",
     S["~type.optionality"],
@@ -837,9 +838,9 @@ export interface typeCodec<S extends Top> extends
     never,
     S["ast"],
     typeCodec<S>,
-    S["~annotate.in"],
     S["~type.make.in"],
     S["Iso"],
+    S["~type.parameters"],
     S["~type.make"],
     S["~type.mutability"],
     S["~type.optionality"],
@@ -874,9 +875,9 @@ export interface encodedCodec<S extends Top> extends
     never,
     AST.AST,
     encodedCodec<S>,
-    Annotations.Bottom<S["Encoded"], ReadonlyArray<Top>>,
     S["Encoded"],
     S["Encoded"],
+    ReadonlyArray<Top>,
     S["Encoded"],
     S["~type.mutability"],
     S["~type.optionality"],
@@ -915,9 +916,9 @@ export interface flip<S extends Top> extends
     S["DecodingServices"],
     AST.AST,
     flip<S>,
-    Annotations.Bottom<S["Encoded"], ReadonlyArray<Top>>,
     S["Encoded"],
     S["Encoded"],
+    ReadonlyArray<Top>,
     S["Encoded"],
     S["~encoded.mutability"],
     S["~encoded.optionality"],
@@ -1404,7 +1405,6 @@ export interface Struct<Fields extends Struct.Fields> extends
     Struct.EncodingServices<Fields>,
     AST.TypeLiteral,
     Struct<Fields>,
-    Annotations.Struct<Simplify<Struct.Type<Fields>>>,
     Simplify<Struct.MakeIn<Fields>>,
     Simplify<Struct.Iso<Fields>>
   >
@@ -1618,7 +1618,6 @@ export interface Record$<Key extends Record.Key, Value extends Top> extends
     Record.EncodingServices<Key, Value>,
     AST.TypeLiteral,
     Record$<Key, Value>,
-    Annotations.Bottom<Record.Type<Key, Value>>,
     Simplify<Record.MakeIn<Key, Value>>,
     Record.Iso<Key, Value>
   >
@@ -1722,7 +1721,6 @@ export interface StructWithRest<
     StructWithRest.EncodingServices<S, Records>,
     AST.TypeLiteral,
     StructWithRest<S, Records>,
-    Annotations.Bottom<Simplify<StructWithRest.Type<S, Records>>>,
     Simplify<StructWithRest.MakeIn<S, Records>>,
     Simplify<StructWithRest.Iso<S, Records>>
   >
@@ -1838,7 +1836,6 @@ export interface Tuple<Elements extends Tuple.Elements> extends
     Tuple.EncodingServices<Elements>,
     AST.TupleType,
     Tuple<Elements>,
-    Annotations.Bottom<Tuple.Type<Elements>>,
     Tuple.MakeIn<Elements>,
     Tuple.Iso<Elements>
   >
@@ -1964,7 +1961,6 @@ export interface TupleWithRest<
     S["EncodingServices"] | Rest[number]["EncodingServices"],
     AST.TupleType,
     TupleWithRest<S, Rest>,
-    Annotations.Bottom<TupleWithRest.Type<S["Type"], Rest>>,
     TupleWithRest.MakeIn<S["~type.make"], Rest>,
     TupleWithRest.Iso<S["Iso"], Rest>
   >
@@ -1996,7 +1992,6 @@ export interface Array$<S extends Top> extends
     S["EncodingServices"],
     AST.TupleType,
     Array$<S>,
-    Annotations.Bottom<ReadonlyArray<S["Type"]>>,
     ReadonlyArray<S["~type.make"]>,
     ReadonlyArray<S["Iso"]>
   >
@@ -2029,7 +2024,6 @@ export interface NonEmptyArray<S extends Top> extends
     S["EncodingServices"],
     AST.TupleType,
     NonEmptyArray<S>,
-    Annotations.Bottom<readonly [S["Type"], ...Array<S["Type"]>]>,
     readonly [S["~type.make"], ...Array<S["~type.make"]>],
     readonly [S["Iso"], ...Array<S["Iso"]>]
   >
@@ -2082,10 +2076,10 @@ export interface mutable<S extends Top> extends
     S["EncodingServices"],
     S["ast"],
     mutable<S>,
-    // we keep "~annotate.in", "~type.make" and "~type.make.in" as they are because they are contravariant
-    S["~annotate.in"],
+    // "~type.make" and "~type.make.in" as they are because they are contravariant
     S["~type.make.in"],
     S["Iso"],
+    S["~type.parameters"],
     S["~type.make"],
     S["~type.mutability"],
     S["~type.optionality"],
@@ -2121,9 +2115,9 @@ export interface readonly$<S extends Top> extends
     S["EncodingServices"],
     S["ast"],
     readonly$<S>,
-    S["~annotate.in"],
     S["~type.make.in"],
     S["Iso"],
+    S["~type.parameters"],
     S["~type.make"],
     S["~type.mutability"],
     S["~type.optionality"],
@@ -2159,7 +2153,6 @@ export interface Union<Members extends ReadonlyArray<Top>> extends
     Members[number]["EncodingServices"],
     AST.UnionType<Members[number]["ast"]>,
     Union<Members>,
-    Annotations.Bottom<Members[number]["Type"]>,
     Members[number]["~type.make"],
     Members[number]["Iso"]
   >
@@ -2332,9 +2325,9 @@ export interface suspend<S extends Top> extends
     S["EncodingServices"],
     AST.Suspend,
     suspend<S>,
-    S["~annotate.in"],
     S["~type.make.in"],
     S["Iso"],
+    S["~type.parameters"],
     S["~type.make"],
     S["~type.mutability"],
     S["~type.optionality"],
@@ -2377,9 +2370,9 @@ export interface refine<T extends S["Type"], S extends Top> extends
     S["EncodingServices"],
     S["ast"],
     refine<T, S>,
-    Annotations.Bottom<T, ReadonlyArray<Top>>,
     S["~type.make.in"],
     T,
+    S["~type.parameters"],
     T,
     S["~type.mutability"],
     S["~type.optionality"],
@@ -2436,9 +2429,9 @@ export interface decodingMiddleware<S extends Top, RD> extends
     S["EncodingServices"],
     S["ast"],
     decodingMiddleware<S, RD>,
-    S["~annotate.in"],
     S["~type.make.in"],
     S["Iso"],
+    S["~type.parameters"],
     S["~type.make"],
     S["~type.mutability"],
     S["~type.optionality"],
@@ -2479,9 +2472,9 @@ export interface encodingMiddleware<S extends Top, RE> extends
     RE,
     S["ast"],
     encodingMiddleware<S, RE>,
-    S["~annotate.in"],
     S["~type.make.in"],
     S["Iso"],
+    S["~type.parameters"],
     S["~type.make"],
     S["~type.mutability"],
     S["~type.optionality"],
@@ -2562,9 +2555,9 @@ export interface decodeTo<To extends Top, From extends Top, RD = never, RE = nev
     To["EncodingServices"] | From["EncodingServices"] | RE,
     To["ast"],
     decodeTo<To, From, RD, RE>,
-    To["~annotate.in"],
     To["~type.make.in"],
     To["Iso"],
+    To["~type.parameters"],
     To["~type.make"],
     To["~type.mutability"],
     To["~type.optionality"],
@@ -2685,9 +2678,9 @@ export interface withConstructorDefault<S extends Top & WithoutConstructorDefaul
     S["EncodingServices"],
     S["ast"],
     withConstructorDefault<S>,
-    S["~annotate.in"],
     S["~type.make.in"],
     S["Iso"],
+    S["~type.parameters"],
     S["~type.make"],
     S["~type.mutability"],
     S["~type.optionality"],
@@ -2965,7 +2958,6 @@ export interface TaggedUnion<Cases extends Record<string, Top>> extends
     { [K in keyof Cases]: Cases[K]["EncodingServices"] }[keyof Cases],
     AST.UnionType<AST.TypeLiteral>,
     TaggedUnion<Cases>,
-    Annotations.Bottom<{ [K in keyof Cases]: Cases[K]["Type"] }[keyof Cases]>,
     { [K in keyof Cases]: Cases[K]["~type.make"] }[keyof Cases]
   >
 {
@@ -3063,8 +3055,8 @@ export function Option<A extends Top>(value: A): Option<A> {
           })
         ),
       arbitrary: {
-        _tag: "Declaration",
-        declaration: ([value]) => (fc, ctx) => {
+        _tag: "Override",
+        override: ([value]) => (fc, ctx) => {
           return fc.oneof(
             ctx?.isSuspend ? { maxDepth: 2, depthIdentifier: "Option" } : {},
             fc.constant(Option_.none()),
@@ -3073,12 +3065,12 @@ export function Option<A extends Top>(value: A): Option<A> {
         }
       },
       equivalence: {
-        _tag: "Declaration",
-        declaration: ([value]) => Option_.getEquivalence(value)
+        _tag: "Override",
+        override: ([value]) => Option_.getEquivalence(value)
       },
       format: {
-        _tag: "Declaration",
-        declaration: ([value]) =>
+        _tag: "Override",
+        override: ([value]) =>
           Option_.match({
             onNone: () => "none()",
             onSome: (t) => `some(${value(t)})`
@@ -3241,8 +3233,8 @@ export function Result<A extends Top, E extends Top>(
           })
         ),
       arbitrary: {
-        _tag: "Declaration",
-        declaration: ([success, failure]) => (fc, ctx) => {
+        _tag: "Override",
+        override: ([success, failure]) => (fc, ctx) => {
           return fc.oneof(
             ctx?.isSuspend ? { maxDepth: 2, depthIdentifier: "Result" } : {},
             success.map(Result_.succeed),
@@ -3251,12 +3243,12 @@ export function Result<A extends Top, E extends Top>(
         }
       },
       equivalence: {
-        _tag: "Declaration",
-        declaration: ([success, failure]) => Result_.getEquivalence(success, failure)
+        _tag: "Override",
+        override: ([success, failure]) => Result_.getEquivalence(success, failure)
       },
       format: {
-        _tag: "Declaration",
-        declaration: ([success, failure]) =>
+        _tag: "Override",
+        override: ([success, failure]) =>
           Result_.match({
             onSuccess: (t) => `success(${success(t)})`,
             onFailure: (t) => `failure(${failure(t)})`
@@ -3350,16 +3342,16 @@ export function Redacted<S extends Top>(value: S, options?: {
           }
         ),
       arbitrary: {
-        _tag: "Declaration",
-        declaration: ([value]) => () => value.map((a) => Redacted_.make(a, { label: options?.label }))
+        _tag: "Override",
+        override: ([value]) => () => value.map((a) => Redacted_.make(a, { label: options?.label }))
       },
       format: {
-        _tag: "Declaration",
-        declaration: () => globalThis.String
+        _tag: "Override",
+        override: () => globalThis.String
       },
       equivalence: {
-        _tag: "Declaration",
-        declaration: ([value]) => Redacted_.getEquivalence(value)
+        _tag: "Override",
+        override: ([value]) => Redacted_.getEquivalence(value)
       }
     }
   )
@@ -3454,8 +3446,8 @@ export function CauseFailure<E extends Top, D extends Top>(error: E, defect: D):
           })
         ),
       arbitrary: {
-        _tag: "Declaration",
-        declaration: ([error, defect]) => (fc, ctx) => {
+        _tag: "Override",
+        override: ([error, defect]) => (fc, ctx) => {
           return fc.oneof(
             ctx?.isSuspend ? { maxDepth: 2, depthIdentifier: "Cause.Failure" } : {},
             fc.constant(Cause_.failureInterrupt()),
@@ -3466,8 +3458,8 @@ export function CauseFailure<E extends Top, D extends Top>(error: E, defect: D):
         }
       },
       equivalence: {
-        _tag: "Declaration",
-        declaration: ([error, defect]) => (a, b) => {
+        _tag: "Override",
+        override: ([error, defect]) => (a, b) => {
           if (a._tag !== b._tag) return false
           switch (a._tag) {
             case "Fail":
@@ -3480,8 +3472,8 @@ export function CauseFailure<E extends Top, D extends Top>(error: E, defect: D):
         }
       },
       format: {
-        _tag: "Declaration",
-        declaration: ([error, defect]) => (t) => {
+        _tag: "Override",
+        override: ([error, defect]) => (t) => {
           switch (t._tag) {
             case "Fail":
               return `Fail(${error(t.error)})`
@@ -3546,16 +3538,16 @@ export function Cause<E extends Top, D extends Top>(error: E, defect: D): Cause<
           })
         ),
       arbitrary: {
-        _tag: "Declaration",
-        declaration: ([failures]) => () => failures.map(Cause_.fromFailures)
+        _tag: "Override",
+        override: ([failures]) => () => failures.map(Cause_.fromFailures)
       },
       equivalence: {
-        _tag: "Declaration",
-        declaration: ([failures]) => (a, b) => failures(a.failures, b.failures)
+        _tag: "Override",
+        override: ([failures]) => (a, b) => failures(a.failures, b.failures)
       },
       format: {
-        _tag: "Declaration",
-        declaration: ([failures]) => (t) => `Cause(${failures(t.failures)})`
+        _tag: "Override",
+        override: ([failures]) => (t) => `Cause(${failures(t.failures)})`
       }
     }
   )
@@ -3586,8 +3578,8 @@ export const Error: Error = instanceOf(globalThis.Error, {
   title: "Error",
   defaultJsonSerializer: () => link<globalThis.Error>()(ErrorJsonEncoded, Transformation.error()),
   arbitrary: {
-    _tag: "Declaration",
-    declaration: () => (fc) => fc.string().map((message) => new globalThis.Error(message))
+    _tag: "Override",
+    override: () => (fc) => fc.string().map((message) => new globalThis.Error(message))
   }
 })
 
@@ -3634,7 +3626,7 @@ export const Defect: Defect = Union([
       defaultJsonSerializer: () => link<unknown>()(Any, defectTransformation),
       arbitrary: {
         _tag: "Override",
-        override: (fc) => fc.json()
+        override: () => (fc) => fc.json()
       }
     }),
     defectTransformation
@@ -3722,8 +3714,8 @@ export function Exit<A extends Top, E extends Top, D extends Top>(value: A, erro
           })
         ),
       arbitrary: {
-        _tag: "Declaration",
-        declaration: ([value, cause]) => (fc, ctx) =>
+        _tag: "Override",
+        override: ([value, cause]) => (fc, ctx) =>
           fc.oneof(
             ctx?.isSuspend ? { maxDepth: 2, depthIdentifier: "Exit" } : {},
             value.map((v) => Exit_.succeed(v)),
@@ -3731,8 +3723,8 @@ export function Exit<A extends Top, E extends Top, D extends Top>(value: A, erro
           )
       },
       equivalence: {
-        _tag: "Declaration",
-        declaration: ([value, cause]) => (a, b) => {
+        _tag: "Override",
+        override: ([value, cause]) => (a, b) => {
           if (a._tag !== b._tag) return false
           switch (a._tag) {
             case "Success":
@@ -3743,8 +3735,8 @@ export function Exit<A extends Top, E extends Top, D extends Top>(value: A, erro
         }
       },
       format: {
-        _tag: "Declaration",
-        declaration: ([value, cause]) => (t) => {
+        _tag: "Override",
+        override: ([value, cause]) => (t) => {
           switch (t._tag) {
             case "Success":
               return `Exit.Success(${value(t.value)})`
@@ -3833,8 +3825,8 @@ export function Map<Key extends Top, Value extends Top>(key: Key, value: Value):
           })
         ),
       arbitrary: {
-        _tag: "Declaration",
-        declaration: ([key, value]) => (fc, ctx) => {
+        _tag: "Override",
+        override: ([key, value]) => (fc, ctx) => {
           return fc.oneof(
             ctx?.isSuspend ? { maxDepth: 2, depthIdentifier: "Map" } : {},
             fc.constant([]),
@@ -3843,8 +3835,8 @@ export function Map<Key extends Top, Value extends Top>(key: Key, value: Value):
         }
       },
       equivalence: {
-        _tag: "Declaration",
-        declaration: ([key, value]) => {
+        _tag: "Override",
+        override: ([key, value]) => {
           const entries = Arr.getEquivalence(
             Equivalence.make<[Key["Type"], Value["Type"]]>(([ka, va], [kb, vb]) => key(ka, kb) && value(va, vb))
           )
@@ -3854,8 +3846,8 @@ export function Map<Key extends Top, Value extends Top>(key: Key, value: Value):
         }
       },
       format: {
-        _tag: "Declaration",
-        declaration: ([key, value]) => (t) => {
+        _tag: "Override",
+        override: ([key, value]) => (t) => {
           const size = t.size
           if (size === 0) {
             return "Map(0) {}"
@@ -3880,9 +3872,9 @@ export interface Opaque<Self, S extends Top, Brand> extends
     S["EncodingServices"],
     S["ast"],
     S["~rebuild.out"],
-    S["~annotate.in"],
     S["~type.make.in"],
     S["Iso"],
+    S["~type.parameters"],
     S["~type.make"],
     S["~type.mutability"],
     S["~type.optionality"],
@@ -3910,7 +3902,7 @@ export function Opaque<Self, Brand = {}>() {
 /**
  * @since 4.0.0
  */
-export interface instanceOf<T, Iso = T> extends declareConstructor<T, T, readonly [], Iso> {
+export interface instanceOf<T, Iso = T> extends declare<T, Iso> {
   readonly "~rebuild.out": this
 }
 
@@ -3975,12 +3967,12 @@ export const URL: URL = instanceOf(
         })
       ),
     arbitrary: {
-      _tag: "Declaration",
-      declaration: () => (fc) => fc.webUrl().map((s) => new globalThis.URL(s))
+      _tag: "Override",
+      override: () => (fc) => fc.webUrl().map((s) => new globalThis.URL(s))
     },
     equivalence: {
-      _tag: "Declaration",
-      declaration: () => (a, b) => a.toString() === b.toString()
+      _tag: "Override",
+      override: () => (a, b) => a.toString() === b.toString()
     }
   }
 )
@@ -4011,8 +4003,8 @@ export const Date: Date = instanceOf(
         })
       ),
     arbitrary: {
-      _tag: "Declaration",
-      declaration: () => (fc, ctx) => fc.date(ctx?.constraints?.DateConstraints)
+      _tag: "Override",
+      override: () => (fc, ctx) => fc.date(ctx?.constraints?.DateConstraints)
     }
   }
 )
@@ -4071,8 +4063,8 @@ export const Duration: Duration = declare(
         })
       ),
     arbitrary: {
-      _tag: "Declaration",
-      declaration: () => (fc) =>
+      _tag: "Override",
+      override: () => (fc) =>
         fc.oneof(
           fc.constant(Duration_.infinity),
           fc.bigInt({ min: 0n }).map(Duration_.nanos),
@@ -4080,12 +4072,12 @@ export const Duration: Duration = declare(
         )
     },
     format: {
-      _tag: "Declaration",
-      declaration: () => globalThis.String
+      _tag: "Override",
+      override: () => globalThis.String
     },
     equivalence: {
-      _tag: "Declaration",
-      declaration: () => Duration_.Equivalence
+      _tag: "Override",
+      override: () => Duration_.Equivalence
     }
   }
 )
@@ -4201,6 +4193,7 @@ export function fromJsonString<S extends Top>(schema: S): fromJsonString<S> {
               "description": "a string that will be decoded as JSON"
             }
           case "draft-2020-12":
+          case "openApi3.1":
             return {
               "type": "string",
               "description": "a string that will be decoded as JSON",
@@ -4293,9 +4286,9 @@ export interface Class<Self, S extends Top & { readonly fields: Struct.Fields },
     S["EncodingServices"],
     AST.Declaration,
     decodeTo<declareConstructor<Self, S["Encoded"], readonly [S], S["Iso"]>, S>,
-    Annotations.Bottom<Self, readonly [S]>,
     S["~type.make.in"],
     S["Iso"],
+    readonly [S],
     Self,
     S["~type.mutability"],
     S["~type.optionality"],
@@ -4389,7 +4382,7 @@ function makeClass<
     static makeUnsafe(input: S["~type.make.in"], options?: MakeOptions): Self {
       return new this(input, options)
     }
-    static annotate(annotations: Annotations.Bottom<Self, readonly [S]>) {
+    static annotate(annotations: Annotations.Declaration<Self, readonly [S]>) {
       return this.rebuild(AST.annotate(this.ast, annotations))
     }
     static annotateKey(annotations: Annotations.Key<Self>) {
@@ -4443,13 +4436,12 @@ function getClassSchemaFactory<S extends Top>(
             [AST.ClassTypeId]: ([from]: readonly [AST.AST]) => new AST.Link(from, transformation),
             defaultIsoSerializer: ([from]: readonly [Schema<S["Type"]>]) => new AST.Link(from.ast, transformation),
             arbitrary: {
-              _tag: "Declaration",
-              declaration: ([from]: readonly [FastCheck.Arbitrary<S["Type"]>]) => () =>
-                from.map((args) => new self(args))
+              _tag: "Override",
+              override: ([from]: readonly [FastCheck.Arbitrary<S["Type"]>]) => () => from.map((args) => new self(args))
             },
             format: {
-              _tag: "Declaration",
-              declaration: ([from]: readonly [Format<S["Type"]>]) => (t: Self) => `${self.identifier}(${from(t)})`
+              _tag: "Override",
+              override: ([from]: readonly [Format<S["Type"]>]) => (t: Self) => `${self.identifier}(${from(t)})`
             }
           }, annotations)
         )
@@ -4463,6 +4455,10 @@ function getClassSchemaFactory<S extends Top>(
     }
     return memo
   }
+}
+
+function isStruct(schema: Struct.Fields | Struct<Struct.Fields>): schema is Struct<Struct.Fields> {
+  return isSchema(schema)
 }
 
 /**
@@ -4485,7 +4481,7 @@ export const Class: {
   schema: Struct.Fields | Struct<Struct.Fields>,
   annotations?: Annotations.Declaration<Self, readonly [Struct<Struct.Fields>]>
 ): ExtendableClass<Self, Struct<Struct.Fields>, Brand> => {
-  const struct = isSchema(schema) ? schema : Struct(schema)
+  const struct = isStruct(schema) ? schema : Struct(schema)
   return makeClass(Data.Class, id, struct, annotations)
 }
 
@@ -4516,7 +4512,7 @@ export const ErrorClass: {
   schema: Struct.Fields | Struct<Struct.Fields>,
   annotations?: Annotations.Declaration<Self, readonly [Struct<Struct.Fields>]>
 ): ErrorClass<Self, Struct<Struct.Fields>, Cause_.YieldableError & Brand> => {
-  const struct = isSchema(schema) ? schema : Struct(schema)
+  const struct = isStruct(schema) ? schema : Struct(schema)
   return makeClass(core.Error, id, struct, annotations)
 }
 
@@ -4625,8 +4621,8 @@ export const Uint8Array: Uint8Array = instanceOf(globalThis.Uint8Array<ArrayBuff
       }
     ),
   arbitrary: {
-    _tag: "Declaration",
-    declaration: () => (fc) => fc.uint8Array()
+    _tag: "Override",
+    override: () => (fc) => fc.uint8Array()
   }
 })
 
@@ -4657,19 +4653,19 @@ export const DateTimeUtc: DateTimeUtc = declare(
         }
       ),
     arbitrary: {
-      _tag: "Declaration",
-      declaration: () => (fc, ctx) =>
+      _tag: "Override",
+      override: () => (fc, ctx) =>
         fc.date({ noInvalidDate: true, ...ctx?.constraints?.DateConstraints }).map((date) =>
           DateTime.fromDateUnsafe(date)
         )
     },
     format: {
-      _tag: "Declaration",
-      declaration: () => (utc) => utc.toString()
+      _tag: "Override",
+      override: () => (utc) => utc.toString()
     },
     equivalence: {
-      _tag: "Declaration",
-      declaration: () => DateTime.Equivalence
+      _tag: "Override",
+      override: () => DateTime.Equivalence
     }
   }
 )
@@ -4766,9 +4762,9 @@ export interface declareConstructor<T, E, TypeParameters extends ReadonlyArray<T
     TypeParameters[number]["EncodingServices"],
     AST.Declaration,
     declareConstructor<T, E, TypeParameters, Iso>,
-    Annotations.Bottom<T, TypeParameters>,
     T,
-    Iso
+    Iso,
+    TypeParameters
   >
 {
   readonly "~rebuild.out": this

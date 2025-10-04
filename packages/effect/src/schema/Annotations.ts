@@ -80,12 +80,16 @@ export interface Key<T> extends Documentation<T> {
  * @category Model
  * @since 4.0.0
  */
-export interface Bottom<T, TypeParameters extends ReadonlyArray<Schema.Top> = readonly []> extends Documentation<T> {
+export interface Bottom<T, TypeParameters extends ReadonlyArray<Schema.Top>> extends Documentation<T> {
   readonly contentEncoding?: string | undefined
   /**
    * The message to use when the value is invalid.
    */
   readonly message?: string | undefined
+  /**
+   * The message to use when a key is unexpected.
+   */
+  readonly messageUnexpectedKey?: string | undefined
   readonly identifier?: string | undefined
   readonly parseOptions?: AST.ParseOptions | undefined
   readonly jsonSchema?:
@@ -93,8 +97,7 @@ export interface Bottom<T, TypeParameters extends ReadonlyArray<Schema.Top> = re
     | ToJsonSchema.Annotation.Constraint
     | undefined
   readonly arbitrary?:
-    | ToArbitrary.Annotation.Declaration<T, TypeParameters>
-    | ToArbitrary.Annotation.Override<T>
+    | ToArbitrary.Annotation.Override<T, TypeParameters>
     | ToArbitrary.Annotation.Constraint
     | ToArbitrary.Annotation.Constraints
     | undefined
@@ -104,36 +107,18 @@ export interface Bottom<T, TypeParameters extends ReadonlyArray<Schema.Top> = re
  * @category Model
  * @since 4.0.0
  */
-export interface Struct<T> extends Bottom<T> {
-  /**
-   * The message to use when a key is unexpected.
-   */
-  readonly messageUnexpectedKey?: string | undefined
-}
-
-/**
- * @category Model
- * @since 4.0.0
- */
 export interface Declaration<T, TypeParameters extends ReadonlyArray<Schema.Top> = readonly []>
-  extends Documentation<T>
+  extends Bottom<T, TypeParameters>
 {
-  readonly contentEncoding?: string | undefined
-  /**
-   * The message to use when the value is invalid.
-   */
-  readonly message?: string | undefined
-  readonly identifier?: string | undefined
-  readonly parseOptions?: AST.ParseOptions | undefined
   readonly defaultJsonSerializer?:
     | ((
       typeParameters: { readonly [K in keyof TypeParameters]: Schema.Schema<TypeParameters[K]["Encoded"]> }
     ) => AST.Link)
     | undefined
   readonly jsonSchema?: ToJsonSchema.Annotation.Override | undefined
-  readonly arbitrary?: ToArbitrary.Annotation.Declaration<T, TypeParameters> | undefined
-  readonly equivalence?: ToEquivalence.Annotation.Declaration<T, TypeParameters> | undefined
-  readonly format?: ToFormat.Annotation.Declaration<T, TypeParameters> | undefined
+  readonly arbitrary?: ToArbitrary.Annotation.Override<T, TypeParameters> | undefined
+  readonly equivalence?: ToEquivalence.Annotation.Override<T, TypeParameters> | undefined
+  readonly format?: ToFormat.Annotation.Override<T, TypeParameters> | undefined
   /** @internal */
   readonly "~sentinels"?: ReadonlyArray<AST.Sentinel> | undefined
 }
@@ -265,8 +250,8 @@ export function getBrand<T>(check: Check.Check<T>): string | symbol | undefined 
 /**
  * Return all the typed annotations from the schema.
  *
- * This function is unsafe because it returns the annotations as they are stored
- * in the AST, without any validation.
+ * This function is potentially unsafe because it returns the annotations as
+ * they are stored in the AST, without any validation.
  *
  * @since 4.0.0
  */
