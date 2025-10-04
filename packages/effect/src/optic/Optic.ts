@@ -368,11 +368,18 @@ function make(ast: AST.AST): any {
   }
 }
 
-/** @internal */
-export function cloneShallow<T>(x: T): T {
-  if (Array.isArray(x)) return x.slice() as T
-  if (typeof x === "object" && x !== null) return { ...x } as T
-  return x
+function cloneShallow<T>(pojo: T): T {
+  if (Array.isArray(pojo)) return pojo.slice() as T
+  if (typeof pojo === "object" && pojo !== null) {
+    if (process.env.NODE_ENV !== "production") {
+      const proto = Object.getPrototypeOf(pojo)
+      if (proto !== Object.prototype && proto !== null) {
+        throw new Error("Cannot clone object with non-Object constructor or null prototype")
+      }
+    }
+    return { ...pojo } as T
+  }
+  return pojo
 }
 
 type Op = {

@@ -3,11 +3,33 @@ import { Optic } from "effect/optic"
 import * as AST from "effect/optic/AST"
 import { Check } from "effect/schema"
 import { describe, it } from "vitest"
-import { assertFailure, assertSuccess, assertTrue, deepStrictEqual, strictEqual } from "../utils/assert.ts"
+import { assertFailure, assertSuccess, assertTrue, deepStrictEqual, strictEqual, throws } from "../utils/assert.ts"
 
 const addOne = (n: number) => n + 1
 
 describe("Optic", () => {
+  it("replace should throw an error if the object has a non-Object constructor or null prototype", () => {
+    {
+      class A {
+        readonly x: number
+        constructor(x: number) {
+          this.x = x
+        }
+      }
+      const optic = Optic.id<A>().key("x")
+      throws(() => optic.replace(2, new A(1)), "Cannot clone object with non-Object constructor or null prototype")
+    }
+
+    // null prototype is allowed
+    {
+      type S = { readonly a: number }
+      const obj = Object.create(null)
+      obj.a = 1
+      const optic = Optic.id<S>().key("a")
+      deepStrictEqual(optic.replace(2, obj), { a: 2 })
+    }
+  })
+
   describe("AST", () => {
     const iso = new AST.Iso<1, 2>(() => 2, () => 1)
 
