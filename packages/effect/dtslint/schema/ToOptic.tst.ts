@@ -285,12 +285,12 @@ describe("ToOptic", () => {
     >()
   })
 
-  it("Map", () => {
-    const schema = Schema.Map(Schema.String, Value)
+  it("ReadonlyMap", () => {
+    const schema = Schema.ReadonlyMap(Schema.String, Value)
     const optic = ToOptic.makeIso(schema)
 
     expect(optic).type.toBe<
-      Optic.Iso<Map<string, Value>, ReadonlyArray<readonly [string, { readonly a: Date }]>>
+      Optic.Iso<ReadonlyMap<string, Value>, ReadonlyArray<readonly [string, { readonly a: Date }]>>
     >()
   })
 

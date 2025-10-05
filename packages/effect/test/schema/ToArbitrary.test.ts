@@ -382,9 +382,15 @@ describe("ToArbitrary", () => {
       verifyGeneration(schema)
     })
 
-    it("Map", () => {
+    it("ReadonlySet", () => {
       const Rec = Schema.suspend((): Schema.Codec<any> => schema)
-      const schema = Schema.Map(Schema.String, Rec)
+      const schema = Schema.ReadonlySet(Rec)
+      verifyGeneration(schema)
+    })
+
+    it("ReadonlyMap", () => {
+      const Rec = Schema.suspend((): Schema.Codec<any> => schema)
+      const schema = Schema.ReadonlyMap(Schema.String, Rec)
       verifyGeneration(schema)
     })
   })
@@ -521,32 +527,38 @@ describe("ToArbitrary", () => {
     verifyGeneration(Schema.Result(Schema.Number, Schema.String))
   })
 
-  describe("Map", () => {
-    it("Map(String, Number)", () => {
-      verifyGeneration(Schema.Map(Schema.String, Schema.Number))
+  describe("ReadonlySet", () => {
+    it("ReadonlySet(Number)", () => {
+      verifyGeneration(Schema.ReadonlySet(Schema.Number))
+    })
+  })
+
+  describe("ReadonlyMap", () => {
+    it("ReadonlyMap(String, Number)", () => {
+      verifyGeneration(Schema.ReadonlyMap(Schema.String, Schema.Number))
     })
 
     it("minSize(2)", () => {
       verifyGeneration(
-        Schema.Map(Schema.String, Schema.Number).check(Check.minSize(2))
+        Schema.ReadonlyMap(Schema.String, Schema.Number).check(Check.minSize(2))
       )
     })
 
     it("maxSize(4)", () => {
       verifyGeneration(
-        Schema.Map(Schema.String, Schema.Number).check(Check.maxSize(4))
+        Schema.ReadonlyMap(Schema.String, Schema.Number).check(Check.maxSize(4))
       )
     })
 
     it("minSize(2) & maxSize(4)", () => {
       verifyGeneration(
-        Schema.Map(Schema.String, Schema.Number).check(Check.minSize(2), Check.maxSize(4))
+        Schema.ReadonlyMap(Schema.String, Schema.Number).check(Check.minSize(2), Check.maxSize(4))
       )
     })
 
     it("size(2)", () => {
       verifyGeneration(
-        Schema.Map(Schema.String, Schema.Number).check(Check.size(2))
+        Schema.ReadonlyMap(Schema.String, Schema.Number).check(Check.size(2))
       )
     })
   })

@@ -954,8 +954,25 @@ describe("Serializer", () => {
         })
       })
 
-      it("Map", async () => {
-        const schema = Schema.Map(Schema.Option(Schema.Date), FiniteFromDate)
+      it("ReadonlySet", async () => {
+        const schema = Schema.ReadonlySet(Schema.Option(Schema.Date))
+        const asserts = new TestSchema.Asserts(Serializer.json(Schema.typeCodec(schema)))
+
+        const encoding = asserts.encoding()
+        await encoding.succeed(new Set([Option.some(new Date("2021-01-01"))]), [{
+          _tag: "Some",
+          value: "2021-01-01T00:00:00.000Z"
+        }])
+
+        const decoding = asserts.decoding()
+        await decoding.succeed(
+          [{ _tag: "Some", value: "2021-01-01T00:00:00.000Z" }],
+          new Set([Option.some(new Date("2021-01-01"))])
+        )
+      })
+
+      it("ReadonlyMap", async () => {
+        const schema = Schema.ReadonlyMap(Schema.Option(Schema.Date), FiniteFromDate)
         const asserts = new TestSchema.Asserts(Serializer.json(Schema.typeCodec(schema)))
 
         const encoding = asserts.encoding()
@@ -1065,8 +1082,8 @@ describe("Serializer", () => {
         })
       })
 
-      it("Map(Option(Symbol), Date)", async () => {
-        const schema = Schema.Map(Schema.Option(Schema.Symbol), Schema.Date)
+      it("ReadonlyMap(Option(Symbol), Date)", async () => {
+        const schema = Schema.ReadonlyMap(Schema.Option(Schema.Symbol), Schema.Date)
         const asserts = new TestSchema.Asserts(Serializer.json(schema))
 
         const encoding = asserts.encoding()
@@ -1955,8 +1972,25 @@ describe("Serializer", () => {
         )
       })
 
-      it("Map", async () => {
-        const schema = Schema.Map(Schema.Option(Schema.Date), FiniteFromDate)
+      it("ReadonlySet", async () => {
+        const schema = Schema.ReadonlySet(Schema.Option(Schema.Date))
+        const asserts = new TestSchema.Asserts(Serializer.json(Schema.typeCodec(schema)))
+
+        const encoding = asserts.encoding()
+        await encoding.succeed(new Set([Option.some(new Date("2021-01-01"))]), [{
+          _tag: "Some",
+          value: "2021-01-01T00:00:00.000Z"
+        }])
+
+        const decoding = asserts.decoding()
+        await decoding.succeed(
+          [{ _tag: "Some", value: "2021-01-01T00:00:00.000Z" }],
+          new Set([Option.some(new Date("2021-01-01"))])
+        )
+      })
+
+      it("ReadonlyMap", async () => {
+        const schema = Schema.ReadonlyMap(Schema.Option(Schema.Date), FiniteFromDate)
         const asserts = new TestSchema.Asserts(Serializer.stringPojo(Schema.typeCodec(schema)))
 
         const encoding = asserts.encoding()
