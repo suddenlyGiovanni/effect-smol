@@ -56,8 +56,8 @@ export const pullIntoWritable = <A, IE, E>(options: {
     Effect.flatMap((chunk) => {
       let i = 0
       return Effect.callback<void, E>(function loop(resume) {
-        for (; i < chunk.length; i++) {
-          const success = options.writable.write(chunk[i], options.encoding as any)
+        for (; i < chunk.length;) {
+          const success = options.writable.write(chunk[i++], options.encoding as any)
           if (!success) {
             options.writable.once("drain", () => (loop as any)(resume))
             return
