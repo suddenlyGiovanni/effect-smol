@@ -577,14 +577,13 @@ export const registerToolkit: <Tools extends AiTool.Any>(toolkit: AiToolkit.AiTo
       handle(payload) {
         return built.handle(tool.name as any, payload).pipe(
           Effect.provideServices(services as ServiceMap.ServiceMap<any>),
-          Effect.match({
-            onFailure: (error) =>
+          Effect.matchCause({
+            onFailure: (cause) =>
               new CallToolResult({
                 isError: true,
-                structuredContent: typeof error === "object" ? error : undefined,
                 content: [{
                   type: "text",
-                  text: JSON.stringify(error)
+                  text: Cause.pretty(cause)
                 }]
               }),
             onSuccess: (result: any) =>

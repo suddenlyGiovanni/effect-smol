@@ -161,7 +161,7 @@ const Proto = {
               new AiError({
                 module: "AiToolkit",
                 method: `${toolName}.handle`,
-                description: `Failed to decode tool call parameters for tool '${toolName}' from '${toolParams}'`,
+                description: `Failed to decode tool call parameters for tool '${toolName}'`,
                 cause
               })
           )
