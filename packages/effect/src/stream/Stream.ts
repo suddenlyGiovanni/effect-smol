@@ -15,6 +15,7 @@ import * as Fiber from "../Fiber.ts"
 import type { LazyArg } from "../Function.ts"
 import { constant, constTrue, constVoid, dual, identity } from "../Function.ts"
 import { type Pipeable, pipeArguments } from "../interfaces/Pipeable.ts"
+import type * as Layer from "../Layer.ts"
 import type * as PubSub from "../PubSub.ts"
 import * as Queue from "../Queue.ts"
 import * as RcMap from "../RcMap.ts"
@@ -305,6 +306,51 @@ export const fromChannel = <Arr extends Arr.NonEmptyReadonlyArray<any>, E, R>(
  */
 export const fromEffect = <A, E, R>(effect: Effect.Effect<A, E, R>): Stream<A, E, R> =>
   fromChannel(Channel.fromEffect(Effect.map(effect, Arr.of)))
+
+/**
+ * @since 4.0.0
+ * @category constructors
+ */
+export const fromEffectDrain = <A, E, R>(effect: Effect.Effect<A, E, R>): Stream<never, E, R> =>
+  drain(fromEffect(effect))
+
+/**
+ * @since 4.0.0
+ * @category constructors
+ */
+export const fromEffectRepeat = <A, E, R>(effect: Effect.Effect<A, E, R>): Stream<A, Pull.ExcludeHalt<E>, R> =>
+  fromPull(Effect.succeed(Effect.map(effect, Arr.of)))
+
+/**
+ * Creates a stream from an effect producing a value of type `A`, which is
+ * repeated using the specified schedule.
+ *
+ * @since 2.0.0
+ * @category constructors
+ */
+export const fromEffectSchedule = <A, E, R, X, AS extends A, ES, RS>(
+  effect: Effect.Effect<A, E, R>,
+  schedule: Schedule.Schedule<X, AS, ES, RS>
+): Stream<A, E | ES, R | RS> =>
+  fromPull(Effect.gen(function*() {
+    const step = yield* Schedule.toStepWithSleep(schedule)
+    let s = yield* effect
+    let initial = true
+    const pull = Effect.suspend(() => step(s as AS)).pipe(
+      Effect.flatMap(() => effect),
+      Effect.map((next) => {
+        s = next
+        return Arr.of(next)
+      })
+    ) as Pull.Pull<Arr.NonEmptyReadonlyArray<A>, E | ES, void, R | RS>
+    return Effect.suspend(() => {
+      if (initial) {
+        initial = false
+        return Effect.succeed(Arr.of(s))
+      }
+      return pull
+    })
+  }))
 
 /**
  * Creates a stream from a pull effect.
@@ -702,7 +748,10 @@ export const fromIteratorSucceed = <A>(iterator: IterableIterator<A>, maxChunkSi
  * @since 2.0.0
  * @category constructors
  */
-export const fromIterable = <A>(iterable: Iterable<A>): Stream<A> => fromChannel(Channel.fromIterableArray(iterable))
+export const fromIterable = <A>(iterable: Iterable<A>): Stream<A> =>
+  Array.isArray(iterable)
+    ? fromArray(iterable)
+    : fromChannel(Channel.fromIterableArray(iterable))
 
 /**
  * Creates a new `Stream` from an effect that produces an iterable collection of
@@ -713,6 +762,17 @@ export const fromIterable = <A>(iterable: Iterable<A>): Stream<A> => fromChannel
  */
 export const fromIterableEffect = <A, E, R>(iterable: Effect.Effect<Iterable<A>, E, R>): Stream<A, E, R> =>
   unwrap(Effect.map(iterable, fromIterable))
+
+/**
+ * Creates a new `Stream` from an effect that produces an iterable collection of
+ * values.
+ *
+ * @since 4.0.0
+ * @category constructors
+ */
+export const fromIterableEffectRepeat = <A, E, R>(
+  iterable: Effect.Effect<Iterable<A>, E, R>
+): Stream<A, Pull.ExcludeHalt<E>, R> => flatMap(fromEffectRepeat(iterable), fromIterable)
 
 /**
  * Creates a stream from an array.
@@ -899,6 +959,38 @@ export const fromSchedule = <O, E, R>(schedule: Schedule.Schedule<O, unknown, E,
   )
 
 /**
+ * A stream that emits void values spaced by the specified duration.
+ *
+ * @example
+ * ```ts
+ * import { Effect } from "effect"
+ * import { Stream } from "effect/stream"
+ *
+ * let last = Date.now()
+ * const log = (message: string) =>
+ *   Effect.sync(() => {
+ *     const end = Date.now()
+ *     console.log(`${message} after ${end - last}ms`)
+ *     last = end
+ *   })
+ *
+ * const stream = Stream.tick("1 seconds").pipe(Stream.tap(() => log("tick")))
+ *
+ * Effect.runPromise(Stream.runCollect(stream.pipe(Stream.take(5)))).then(console.log)
+ * // tick after 4ms
+ * // tick after 1003ms
+ * // tick after 1001ms
+ * // tick after 1002ms
+ * // tick after 1002ms
+ * // [ undefined, undefined, undefined, undefined, undefined ]
+ * ```
+ *
+ * @since 2.0.0
+ * @category constructors
+ */
+export const tick = (interval: Duration.DurationInput): Stream<void> => fromEffectRepeat(Effect.sleep(interval))
+
+/**
  * Creates a stream from a PubSub subscription.
  *
  * @example
@@ -1003,60 +1095,56 @@ export const fromEventListener = <A = unknown>(
   }, { bufferSize: typeof options === "object" ? options.bufferSize : undefined })
 
 /**
- * Like `Stream.unfold`, but allows the emission of values to end one step further
- * than the unfolding of the state. This is useful for embedding paginated
- * APIs, hence the name.
+ * Creates a stream by peeling off the "layers" of a value of type `S`.
  *
  * @example
  * ```ts
- * import { Stream } from "effect/stream"
  * import { Effect } from "effect"
- * import * as Option from "effect/data/Option"
+ * import { Stream } from "effect/stream"
  *
- * const stream = Stream.paginate(0, (n) => [
- *   n,
- *   n < 3 ? Option.some(n + 1) : Option.none()
- * ])
+ * const stream = Stream.unfold(1, (n) => Effect.succeed([n, n + 1]))
  *
- * // Effect.runPromise(Stream.runCollect(stream)).then(console.log)
- * // { _id: 'Chunk', values: [ 0, 1, 2, 3 ] }
+ * Effect.runPromise(Stream.runCollect(stream.pipe(Stream.take(5)))).then(console.log)
+ * // [ 1, 2, 3, 4, 5 ]
  * ```
  *
  * @since 2.0.0
  * @category constructors
  */
-export const paginate = <S, A>(s: S, f: (s: S) => readonly [A, Option.Option<S>]): Stream<A> =>
-  paginateArray(s, (s) => {
-    const [a, s2] = f(s)
-    return [[a], s2]
-  })
+export const unfold = <S, A, E, R>(
+  s: S,
+  f: (s: S) => Effect.Effect<readonly [A, S] | undefined, E, R>
+): Stream<A, E, R> =>
+  fromPull(Effect.sync(() => {
+    let state = s
+    return Effect.flatMap(Effect.suspend(() => f(state)), (next) => {
+      if (next === undefined) return Pull.haltVoid
+      state = next[1]
+      return Effect.succeed(Arr.of(next[0]))
+    })
+  }))
 
 /**
- * Like `Stream.unfoldChunk`, but allows the emission of values to end one step
- * further than the unfolding of the state. This is useful for embedding
- * paginated APIs, hence the name.
+ * Creates a stream by peeling off the "layers" of a value of type `S`.
  *
- * @example
- * ```ts
- * import { Stream } from "effect/stream"
- * import { Effect } from "effect"
- * import * as Option from "effect/data/Option"
- *
- * const stream = Stream.paginateArray(0, (n) => [
- *   [n], // emit single element as chunk
- *   n < 3 ? Option.some(n + 1) : Option.none()
- * ])
- *
- * Effect.runPromise(Stream.runCollect(stream)).then(console.log)
- * ```
- *
- * @since 2.0.0
+ * @since 4.0.0
  * @category constructors
  */
-export const paginateArray = <S, A>(
+export const unfoldArray = <S, A, E, R>(
   s: S,
-  f: (s: S) => readonly [ReadonlyArray<A>, Option.Option<S>]
-): Stream<A> => paginateArrayEffect(s, (s) => Effect.succeed(f(s)))
+  f: (s: S) => Effect.Effect<readonly [ReadonlyArray<A>, S] | undefined, E, R>
+): Stream<A, E, R> =>
+  fromPull(Effect.sync(() => {
+    let state = s
+    return Effect.flatMap(
+      Effect.suspend(() => f(state)),
+      function loop(next): Pull.Pull<Arr.NonEmptyReadonlyArray<A>, E, void, R> {
+        if (next === undefined) return Pull.haltVoid
+        state = next[1]
+        return Arr.isReadonlyArrayNonEmpty(next[0]) ? Effect.succeed(next[0]) : Effect.flatMap(f(state), loop)
+      }
+    )
+  }))
 
 /**
  * Like `Stream.unfoldChunkEffect`, but allows the emission of values to end one step
@@ -1069,7 +1157,7 @@ export const paginateArray = <S, A>(
  * import { Effect } from "effect"
  * import * as Option from "effect/data/Option"
  *
- * const stream = Stream.paginateArrayEffect(0, (n: number) =>
+ * const stream = Stream.paginateArray(0, (n: number) =>
  *   Effect.succeed([
  *     [n],
  *     n < 3 ? Option.some(n + 1) : Option.none<number>()
@@ -1082,16 +1170,21 @@ export const paginateArray = <S, A>(
  * @since 2.0.0
  * @category constructors
  */
-export const paginateArrayEffect = <S, A, E, R>(
+export const paginateArray = <S, A, E = never, R = never>(
   s: S,
-  f: (s: S) => Effect.Effect<readonly [ReadonlyArray<A>, Option.Option<S>], E, R>
+  f: (
+    s: S
+  ) =>
+    | Effect.Effect<readonly [ReadonlyArray<A>, Option.Option<S>], E, R>
+    | readonly [ReadonlyArray<A>, Option.Option<S>]
 ): Stream<A, E, R> =>
   fromPull(Effect.sync(() => {
     let state = s
     let done = false
     return Effect.suspend(function loop(): Pull.Pull<Arr.NonEmptyReadonlyArray<A>, E, void, R> {
       if (done) return Pull.haltVoid
-      return Effect.flatMap(f(state), ([a, s]) => {
+      const result = f(state)
+      return Effect.flatMap(Effect.isEffect(result) ? result : Effect.succeed(result), ([a, s]) => {
         if (Option.isNone(s)) {
           done = true
         } else {
@@ -1114,7 +1207,7 @@ export const paginateArrayEffect = <S, A, E, R>(
  * import { Effect } from "effect"
  * import * as Option from "effect/data/Option"
  *
- * const stream = Stream.paginateEffect(0, (n: number) =>
+ * const stream = Stream.paginate(0, (n: number) =>
  *   Effect.succeed([
  *     n, // emit single value
  *     n < 3 ? Option.some(n + 1) : Option.none<number>()
@@ -1127,15 +1220,39 @@ export const paginateArrayEffect = <S, A, E, R>(
  * @since 2.0.0
  * @category constructors
  */
-export const paginateEffect = <S, A, E, R>(
+export const paginate = <S, A, E = never, R = never>(
   s: S,
-  f: (s: S) => Effect.Effect<readonly [A, Option.Option<S>], E, R>
+  f: (s: S) => Effect.Effect<readonly [A, Option.Option<S>], E, R> | readonly [A, Option.Option<S>]
 ): Stream<A, E, R> =>
-  paginateArrayEffect(s, (s) =>
-    Effect.map(
-      f(s),
+  paginateArray(s, (s) => {
+    const result = f(s)
+    return Effect.map(
+      Effect.isEffect(result) ? result : Effect.succeed(result),
       ([a, s]) => [[a], s]
-    ))
+    )
+  })
+
+/**
+ * The infinite stream of iterative function application: a, f(a), f(f(a)),
+ * f(f(f(a))), ...
+ *
+ * @example
+ * ```ts
+ * import { Effect } from "effect"
+ * import { Stream } from "effect/stream"
+ *
+ * // An infinite Stream of numbers starting from 1 and incrementing
+ * const stream = Stream.iterate(1, (n) => n + 1)
+ *
+ * Effect.runPromise(Stream.runCollect(stream.pipe(Stream.take(10)))).then(console.log)
+ * // [ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 ]
+ * ```
+ *
+ * @since 2.0.0
+ * @category constructors
+ */
+export const iterate = <A>(value: A, next: (value: A) => A): Stream<A> =>
+  unfold(value, (a) => Effect.succeed([a, next(a)]))
 
 /**
  * Creates a new `Stream` which will emit all numeric values from `min` to `max`
@@ -1747,6 +1864,26 @@ export {
    */
   catch_ as catch
 }
+
+/**
+ * @since 4.0.0
+ * @category Error handling
+ */
+export const catchFilter: {
+  <E, EB, X, A2, E2, R2>(
+    filter: Filter.Filter<E, EB, X>,
+    f: (failure: EB) => Stream<A2, E2, R2>
+  ): <A, R>(self: Stream<A, E, R>) => Stream<A | A2, X | E2, R | R2>
+  <A, E, R, EB, X, A2, E2, R2>(
+    self: Stream<A, E, R>,
+    filter: Filter.Filter<E, EB, X>,
+    f: (failure: EB) => Stream<A2, E2, R2>
+  ): Stream<A | A2, X | E2, R | R2>
+} = dual(3, <A, E, R, EB, X, A2, E2, R2>(
+  self: Stream<A, E, R>,
+  filter: Filter.Filter<E, EB, X>,
+  f: (failure: EB) => Stream<A2, E2, R2>
+): Stream<A | A2, X | E2, R | R2> => fromChannel(Channel.catchFilter(toChannel(self), filter, (e) => f(e).channel)))
 
 /**
  * Transforms the errors emitted by this stream using `f`.
@@ -2868,6 +3005,25 @@ export const ensuring: {
 )
 
 /**
+ * @since 4.0.0
+ * @category Services
+ */
+export const provide: {
+  <AL, EL = never, RL = never>(
+    layer: Layer.Layer<AL, EL, RL> | ServiceMap.ServiceMap<AL>
+  ): <A, E, R>(
+    self: Stream<A, E, R>
+  ) => Stream<A, E | EL, Exclude<R, AL> | RL>
+  <A, E, R, AL, EL = never, RL = never>(
+    self: Stream<A, E, R>,
+    layer: Layer.Layer<AL, EL, RL> | ServiceMap.ServiceMap<AL>
+  ): Stream<A, E | EL, Exclude<R, AL> | RL>
+} = dual(2, <A, E, R, AL, EL = never, RL = never>(
+  self: Stream<A, E, R>,
+  layer: Layer.Layer<AL, EL, RL> | ServiceMap.ServiceMap<AL>
+): Stream<A, E | EL, Exclude<R, AL> | RL> => fromChannel(Channel.provide(self.channel, layer)))
+
+/**
  * Provides the stream with some of its required services, which eliminates its
  * dependency on `R`.
  *
@@ -2882,6 +3038,75 @@ export const provideServices: {
   <A, E, R, R2>(self: Stream<A, E, R>, services: ServiceMap.ServiceMap<R2>): Stream<A, E, Exclude<R, R2>> =>
     fromChannel(Channel.provideServices(self.channel, services))
 )
+
+/**
+ * @since 4.0.0
+ * @category Services
+ */
+export const provideServiceEffect: {
+  <I, S, ES, RS>(
+    key: ServiceMap.Key<I, S>,
+    service: Effect.Effect<NoInfer<S>, ES, RS>
+  ): <A, E, R>(
+    self: Stream<A, E, R>
+  ) => Stream<A, E | ES, Exclude<R, I> | RS>
+  <A, E, R, I, S, ES, RS>(
+    self: Stream<A, E, R>,
+    key: ServiceMap.Key<I, S>,
+    service: Effect.Effect<NoInfer<S>, ES, RS>
+  ): Stream<A, E | ES, Exclude<R, I> | RS>
+} = dual(3, <A, E, R, I, S, ES, RS>(
+  self: Stream<A, E, R>,
+  key: ServiceMap.Key<I, S>,
+  service: Effect.Effect<NoInfer<S>, ES, RS>
+): Stream<A, E | ES, Exclude<R, I> | RS> => fromChannel(Channel.provideServiceEffect(self.channel, key, service)))
+
+/**
+ * @since 2.0.0
+ * @category Services
+ */
+export const updateServices: {
+  <R, R2>(
+    f: (services: ServiceMap.ServiceMap<R2>) => ServiceMap.ServiceMap<R>
+  ): <A, E>(
+    self: Stream<A, E, R>
+  ) => Stream<A, E, R2>
+  <A, E, R, R2>(
+    self: Stream<A, E, R>,
+    f: (services: ServiceMap.ServiceMap<R2>) => ServiceMap.ServiceMap<R>
+  ): Stream<A, E, R2>
+} = dual(2, <A, E, R, R2>(
+  self: Stream<A, E, R>,
+  f: (services: ServiceMap.ServiceMap<R2>) => ServiceMap.ServiceMap<R>
+): Stream<A, E, R2> => fromChannel(Channel.updateServices(self.channel, f)))
+
+/**
+ * @since 2.0.0
+ * @category Services
+ */
+export const updateService: {
+  <I, S>(
+    key: ServiceMap.Key<I, S>,
+    f: (service: NoInfer<S>) => S
+  ): <A, E, R>(
+    self: Stream<A, E, R>
+  ) => Stream<A, E, R | I>
+  <A, E, R, I, S>(
+    self: Stream<A, E, R>,
+    key: ServiceMap.Key<I, S>,
+    f: (service: NoInfer<S>) => S
+  ): Stream<A, E, R | I>
+} = dual(3, <A, E, R, I, S>(
+  self: Stream<A, E, R>,
+  key: ServiceMap.Key<I, S>,
+  f: (service: NoInfer<S>) => S
+): Stream<A, E, R | I> =>
+  updateServices(self, (services) =>
+    ServiceMap.add(
+      services,
+      key,
+      f(ServiceMap.get(services, key))
+    )))
 
 /**
  * @since 4.0.0
