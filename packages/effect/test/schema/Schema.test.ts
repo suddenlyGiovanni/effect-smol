@@ -8,6 +8,8 @@ import { deepStrictEqual, fail, ok, strictEqual } from "node:assert"
 import { describe, it } from "vitest"
 import { assertFalse, assertInclude, assertTrue, throws } from "../utils/assert.ts"
 
+const isDeno = "Deno" in globalThis
+
 const verifyGeneration = true
 
 const equals = TestSchema.Asserts.ast.fields.equals
@@ -3688,6 +3690,26 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
       const arbitrary = asserts.arbitrary()
       arbitrary.verifyGeneration()
     }
+  })
+
+  it("URLFromString", async () => {
+    const schema = Schema.URLFromString
+    const asserts = new TestSchema.Asserts(schema)
+
+    if (verifyGeneration) {
+      const arbitrary = asserts.arbitrary()
+      arbitrary.verifyGeneration()
+    }
+
+    const decoding = asserts.decoding()
+    await decoding.succeed("https://effect.website", new URL("https://effect.website"))
+    await decoding.fail(
+      "123",
+      isDeno ? `TypeError: Invalid URL: '123'` : `TypeError: Invalid URL`
+    )
+
+    const encoding = asserts.encoding()
+    await encoding.succeed(new URL("https://effect.website"), "https://effect.website/")
   })
 
   describe("UnknownFromJsonString / fromJsonString", () => {
