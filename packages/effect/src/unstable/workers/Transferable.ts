@@ -11,8 +11,10 @@ import * as ServiceMap from "../../ServiceMap.ts"
  * @since 1.0.0
  * @category models
  */
-export class Collector extends ServiceMap.Key<Collector, {
-  readonly addAll: (_: Iterable<globalThis.Transferable>) => Effect.Effect<void>
+export class Collector extends ServiceMap.Service<Collector, {
+  readonly addAll: (
+    _: Iterable<globalThis.Transferable>
+  ) => Effect.Effect<void>
   readonly addAllUnsafe: (_: Iterable<globalThis.Transferable>) => void
   readonly read: Effect.Effect<Array<globalThis.Transferable>>
   readonly readUnsafe: () => Array<globalThis.Transferable>
@@ -56,7 +58,9 @@ export const makeCollector: Effect.Effect<Collector["Service"]> = Effect.sync(ma
  * @since 1.0.0
  * @category accessors
  */
-export const addAll = (tranferables: Iterable<globalThis.Transferable>): Effect.Effect<void> =>
+export const addAll = (
+  tranferables: Iterable<globalThis.Transferable>
+): Effect.Effect<void> =>
   Effect.servicesWith((services) => {
     const collector = ServiceMap.getOrUndefined(services, Collector)
     if (!collector) return Effect.void
@@ -68,7 +72,9 @@ export const addAll = (tranferables: Iterable<globalThis.Transferable>): Effect.
  * @since 1.0.0
  * @category Getter
  */
-export const getterAddAll = <A>(f: (_: A) => Iterable<globalThis.Transferable>): Getter.Getter<A, A> =>
+export const getterAddAll = <A>(
+  f: (_: A) => Iterable<globalThis.Transferable>
+): Getter.Getter<A, A> =>
   Getter.transformOrFail((e: A) =>
     Effect.servicesWith((services) => {
       const collector = ServiceMap.getOrUndefined(services, Collector)
@@ -82,8 +88,11 @@ export const getterAddAll = <A>(f: (_: A) => Iterable<globalThis.Transferable>):
  * @since 1.0.0
  * @category schema
  */
-export interface Transferable<S extends Schema.Top>
-  extends Schema.decodeTo<Schema.typeCodec<S["~rebuild.out"]>, S["~rebuild.out"]>
+export interface Transferable<S extends Schema.Top> extends
+  Schema.decodeTo<
+    Schema.typeCodec<S["~rebuild.out"]>,
+    S["~rebuild.out"]
+  >
 {}
 
 /**
@@ -98,26 +107,28 @@ export const schema: {
     self: S,
     f: (_: S["Encoded"]) => Iterable<globalThis.Transferable>
   ): Transferable<S>
-} = dual(2, <S extends Schema.Top>(
-  self: S,
-  f: (_: S["Encoded"]) => Iterable<globalThis.Transferable>
-): Transferable<S> =>
-  self.annotate({
-    defaultJsonSerializer: () => passthroughLink
-  }).pipe(
-    Schema.decode({
-      decode: Getter.passthrough(),
-      encode: getterAddAll(f)
-    })
-  ))
-
-const passthroughLink = Schema.link()(
-  Schema.Any,
-  {
-    decode: Getter.passthrough(),
-    encode: Getter.passthrough()
-  }
+} = dual(
+  2,
+  <S extends Schema.Top>(
+    self: S,
+    f: (_: S["Encoded"]) => Iterable<globalThis.Transferable>
+  ): Transferable<S> =>
+    self
+      .annotate({
+        defaultJsonSerializer: () => passthroughLink
+      })
+      .pipe(
+        Schema.decode({
+          decode: Getter.passthrough(),
+          encode: getterAddAll(f)
+        })
+      )
 )
+
+const passthroughLink = Schema.link()(Schema.Any, {
+  decode: Getter.passthrough(),
+  encode: Getter.passthrough()
+})
 
 /**
  * @since 1.0.0

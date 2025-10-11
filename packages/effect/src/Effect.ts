@@ -4356,13 +4356,15 @@ export const isSuccess: <A, E, R>(self: Effect<A, E, R>) => Effect<boolean, neve
  *
  * @example
  * ```ts
- * import { Effect } from "effect"
- * import * as Option from "effect/data/Option"
- * import { Console } from "effect"
- * import { ServiceMap } from "effect"
+ * import { Console, Effect, ServiceMap } from "effect"
+ * import { Option } from "effect/data"
  *
- * const Logger = ServiceMap.Key<{ log: (msg: string) => void }>("Logger")
- * const Database = ServiceMap.Key<{ query: (sql: string) => string }>("Database")
+ * const Logger = ServiceMap.Service<{
+ *   log: (msg: string) => void
+ * }>("Logger")
+ * const Database = ServiceMap.Service<{
+ *   query: (sql: string) => string
+ * }>("Database")
  *
  * const program = Effect.gen(function* () {
  *   const allServices = yield* Effect.services()
@@ -4395,13 +4397,15 @@ export const services: <R>() => Effect<ServiceMap.ServiceMap<R>, never, R> = int
  *
  * @example
  * ```ts
- * import { Effect } from "effect"
- * import * as Option from "effect/data/Option"
- * import { Console } from "effect"
- * import { ServiceMap } from "effect"
+ * import { Console, Effect, ServiceMap } from "effect"
+ * import { Option } from "effect/data"
  *
- * const Logger = ServiceMap.Key<{ log: (msg: string) => void }>("Logger")
- * const Cache = ServiceMap.Key<{ get: (key: string) => string | null }>("Cache")
+ * const Logger = ServiceMap.Service<{
+ *   log: (msg: string) => void
+ * }>("Logger")
+ * const Cache = ServiceMap.Service<{
+ *   get: (key: string) => string | null
+ * }>("Cache")
  *
  * const program = Effect.servicesWith((services) => {
  *   const cacheOption = ServiceMap.getOption(services, Cache)
@@ -4438,15 +4442,13 @@ export const servicesWith: <R, A, E, R2>(
  *
  * @example
  * ```ts
- * import { Effect } from "effect"
- * import { ServiceMap } from "effect"
- * import { Layer } from "effect"
+ * import { Effect, Layer, ServiceMap } from "effect"
  *
  * interface Database {
  *   readonly query: (sql: string) => Effect.Effect<string>
  * }
  *
- * const Database = ServiceMap.Key<Database>("Database")
+ * const Database = ServiceMap.Service<Database>("Database")
  *
  * const DatabaseLive = Layer.succeed(Database)({
  *   query: (sql: string) => Effect.succeed(`Result for: ${sql}`)
@@ -4513,12 +4515,15 @@ export const provide: {
  *
  * @example
  * ```ts
- * import { Effect } from "effect"
- * import { ServiceMap } from "effect"
+ * import { Effect, ServiceMap } from "effect"
  *
  * // Define service keys
- * const Logger = ServiceMap.Key<{ log: (msg: string) => void }>("Logger")
- * const Database = ServiceMap.Key<{ query: (sql: string) => string }>("Database")
+ * const Logger = ServiceMap.Service<{
+ *   log: (msg: string) => void
+ * }>("Logger")
+ * const Database = ServiceMap.Service<{
+ *   query: (sql: string) => string
+ * }>("Database")
  *
  * // Create service map with multiple services
  * const serviceMap = ServiceMap.make(Logger, { log: console.log })
@@ -4553,14 +4558,13 @@ export const provideServices: {
  *
  * @example
  * ```ts
- * import { Effect } from "effect"
- * import { ServiceMap } from "effect"
+ * import { Effect, ServiceMap } from "effect"
  *
  * interface Database {
  *   readonly query: (sql: string) => Effect.Effect<string>
  * }
  *
- * const Database = ServiceMap.Key<Database>("Database")
+ * const Database = ServiceMap.Service<Database>("Database")
  *
  * const program = Effect.gen(function* () {
  *   const db = yield* Effect.service(Database)
@@ -4571,7 +4575,7 @@ export const provideServices: {
  * @since 4.0.0
  * @category ServiceMap
  */
-export const service: <I, S>(key: ServiceMap.Key<I, S>) => Effect<S, never, I> = internal.service
+export const service: <I, S>(service: ServiceMap.Service<I, S>) => Effect<S, never, I> = internal.service
 
 /**
  * Optionally accesses a service from the environment.
@@ -4585,12 +4589,13 @@ export const service: <I, S>(key: ServiceMap.Key<I, S>) => Effect<S, never, I> =
  *
  * @example
  * ```ts
- * import { Effect } from "effect"
- * import { ServiceMap } from "effect"
- * import * as Option from "effect/data/Option"
+ * import { Effect, ServiceMap } from "effect"
+ * import { Option } from "effect/data"
  *
  * // Define a service key
- * const Logger = ServiceMap.Key<{ log: (msg: string) => void }>("Logger")
+ * const Logger = ServiceMap.Service<{
+ *   log: (msg: string) => void
+ * }>("Logger")
  *
  * // Use serviceOption to optionally access the logger
  * const program = Effect.gen(function* () {
@@ -4607,7 +4612,7 @@ export const service: <I, S>(key: ServiceMap.Key<I, S>) => Effect<S, never, I> =
  * @since 2.0.0
  * @category ServiceMap
  */
-export const serviceOption: <I, S>(key: ServiceMap.Key<I, S>) => Effect<Option<S>> = internal.serviceOption
+export const serviceOption: <I, S>(key: ServiceMap.Service<I, S>) => Effect<Option<S>> = internal.serviceOption
 
 /**
  * Provides part of the required context while leaving the rest unchanged.
@@ -4619,12 +4624,15 @@ export const serviceOption: <I, S>(key: ServiceMap.Key<I, S>) => Effect<Option<S
  *
  * @example
  * ```ts
- * import { Effect } from "effect"
- * import { ServiceMap } from "effect"
+ * import { Effect, ServiceMap } from "effect"
  *
  * // Define services
- * const Logger = ServiceMap.Key<{ log: (msg: string) => void }>("Logger")
- * const Config = ServiceMap.Key<{ name: string }>("Config")
+ * const Logger = ServiceMap.Service<{
+ *   log: (msg: string) => void
+ * }>("Logger")
+ * const Config = ServiceMap.Service<{
+ *   name: string
+ * }>("Config")
  *
  * const program = Effect.service(Config).pipe(
  *   Effect.map((config) => `Hello ${config.name}!`)
@@ -4661,12 +4669,10 @@ export const updateServices: {
  *
  * @example
  * ```ts
- * import { Effect } from "effect"
- * import { Console } from "effect"
- * import { ServiceMap } from "effect"
+ * import { Console, Effect, ServiceMap } from "effect"
  *
  * // Define a counter service
- * const Counter = ServiceMap.Key<{ count: number }>("Counter")
+ * const Counter = ServiceMap.Service<{ count: number }>("Counter")
  *
  * const program = Effect.gen(function* () {
  *   const updatedCounter = yield* Effect.service(Counter)
@@ -4687,8 +4693,15 @@ export const updateServices: {
  * @category ServiceMap
  */
 export const updateService: {
-  <I, A>(key: ServiceMap.Key<I, A>, f: (value: A) => A): <XA, E, R>(self: Effect<XA, E, R>) => Effect<XA, E, R | I>
-  <XA, E, R, I, A>(self: Effect<XA, E, R>, key: ServiceMap.Key<I, A>, f: (value: A) => A): Effect<XA, E, R | I>
+  <I, A>(
+    service: ServiceMap.Service<I, A>,
+    f: (value: A) => A
+  ): <XA, E, R>(self: Effect<XA, E, R>) => Effect<XA, E, R | I>
+  <XA, E, R, I, A>(
+    self: Effect<XA, E, R>,
+    service: ServiceMap.Service<I, A>,
+    f: (value: A) => A
+  ): Effect<XA, E, R | I>
 } = internal.updateService
 
 /**
@@ -4705,12 +4718,12 @@ export const updateService: {
  *
  * @example
  * ```ts
- * import { Effect } from "effect"
- * import { Console } from "effect"
- * import { ServiceMap } from "effect"
+ * import { Console, Effect, ServiceMap } from "effect"
  *
  * // Define a service for configuration
- * const Config = ServiceMap.Key<{ apiUrl: string; timeout: number }>("Config")
+ * const Config = ServiceMap.Service<{
+ *   apiUrl: string; timeout: number
+ * }>("Config")
  *
  * const fetchData = Effect.gen(function* () {
  *   const config = yield* Effect.service(Config)
@@ -4737,13 +4750,20 @@ export const updateService: {
  */
 export const provideService: {
   <I, S>(
-    key: ServiceMap.Key<I, S>
+    service: ServiceMap.Service<I, S>
   ): {
-    (service: S): <A, E, R>(self: Effect<A, E, R>) => Effect<A, E, Exclude<R, I>>
-    <A, E, R>(self: Effect<A, E, R>, service: S): Effect<A, E, Exclude<R, I>>
+    (implementation: S): <A, E, R>(self: Effect<A, E, R>) => Effect<A, E, Exclude<R, I>>
+    <A, E, R>(self: Effect<A, E, R>, implementation: S): Effect<A, E, Exclude<R, I>>
   }
-  <I, S>(key: ServiceMap.Key<I, S>, service: S): <A, E, R>(self: Effect<A, E, R>) => Effect<A, E, Exclude<R, I>>
-  <A, E, R, I, S>(self: Effect<A, E, R>, key: ServiceMap.Key<I, S>, service: S): Effect<A, E, Exclude<R, I>>
+  <I, S>(
+    service: ServiceMap.Service<I, S>,
+    implementation: S
+  ): <A, E, R>(self: Effect<A, E, R>) => Effect<A, E, Exclude<R, I>>
+  <A, E, R, I, S>(
+    self: Effect<A, E, R>,
+    service: ServiceMap.Service<I, S>,
+    implementation: S
+  ): Effect<A, E, Exclude<R, I>>
 } = internal.provideService
 
 /**
@@ -4758,15 +4778,13 @@ export const provideService: {
  *
  * @example
  * ```ts
- * import { Effect } from "effect"
- * import { Console } from "effect"
- * import { ServiceMap } from "effect"
+ * import { Console, Effect, ServiceMap } from "effect"
  *
  * // Define a database connection service
  * interface DatabaseConnection {
  *   readonly query: (sql: string) => Effect.Effect<string>
  * }
- * const Database = ServiceMap.Key<DatabaseConnection>("Database")
+ * const Database = ServiceMap.Service<DatabaseConnection>("Database")
  *
  * // Effect that creates a database connection
  * const createConnection = Effect.gen(function* () {
@@ -4798,12 +4816,12 @@ export const provideService: {
  */
 export const provideServiceEffect: {
   <I, S, E2, R2>(
-    key: ServiceMap.Key<I, S>,
+    service: ServiceMap.Service<I, S>,
     acquire: Effect<S, E2, R2>
   ): <A, E, R>(self: Effect<A, E, R>) => Effect<A, E | E2, Exclude<R, I> | R2>
   <A, E, R, I, S, E2, R2>(
     self: Effect<A, E, R>,
-    key: ServiceMap.Key<I, S>,
+    service: ServiceMap.Service<I, S>,
     acquire: Effect<S, E2, R2>
   ): Effect<A, E | E2, Exclude<R, I> | R2>
 } = internal.provideServiceEffect
@@ -4817,8 +4835,7 @@ export const provideServiceEffect: {
  *
  * @example
  * ```ts
- * import { Effect } from "effect"
- * import { Console } from "effect"
+ * import { Console, Effect } from "effect"
  *
  * const task = (id: number) => Effect.gen(function* () {
  *   yield* Console.log(`Task ${id} starting`)
@@ -4862,9 +4879,7 @@ export const withConcurrency: {
  *
  * @example
  * ```ts
- * import { Effect } from "effect"
- * import { Scope } from "effect"
- * import { Console } from "effect"
+ * import { Console, Effect, Scope } from "effect"
  *
  * const program = Effect.gen(function* () {
  *   const currentScope = yield* Effect.scope
@@ -7146,14 +7161,13 @@ export const runFork: <A, E>(effect: Effect<A, E, never>, options?: RunOptions |
  *
  * @example
  * ```ts
- * import { Effect } from "effect"
- * import { ServiceMap } from "effect"
+ * import { Effect, ServiceMap } from "effect"
  *
  * interface Logger {
  *   log: (message: string) => void
  * }
  *
- * const Logger = ServiceMap.Key<Logger>("Logger")
+ * const Logger = ServiceMap.Service<Logger>("Logger")
  *
  * const services = ServiceMap.make(Logger, {
  *   log: (message) => console.log(message)
@@ -7239,14 +7253,13 @@ export const runPromise: <A, E>(
  *
  * @example
  * ```ts
- * import { Effect } from "effect"
- * import { ServiceMap } from "effect"
+ * import { Effect, ServiceMap } from "effect"
  *
  * interface Config {
  *   apiUrl: string
  * }
  *
- * const Config = ServiceMap.Key<Config>("Config")
+ * const Config = ServiceMap.Service<Config>("Config")
  *
  * const services = ServiceMap.make(Config, {
  *   apiUrl: "https://api.example.com"
@@ -7324,14 +7337,13 @@ export const runPromiseExit: <A, E>(
  *
  * @example
  * ```ts
- * import { Effect, Exit } from "effect"
- * import { ServiceMap } from "effect"
+ * import { Effect, Exit, ServiceMap } from "effect"
  *
  * interface Database {
  *   query: (sql: string) => string
  * }
  *
- * const Database = ServiceMap.Key<Database>("Database")
+ * const Database = ServiceMap.Service<Database>("Database")
  *
  * const services = ServiceMap.make(Database, {
  *   query: (sql) => `Result for: ${sql}`
@@ -7421,14 +7433,13 @@ export const runSync: <A, E>(effect: Effect<A, E>) => A = internal.runSync
  *
  * @example
  * ```ts
- * import { Effect } from "effect"
- * import { ServiceMap } from "effect"
+ * import { Effect, ServiceMap } from "effect"
  *
  * interface MathService {
  *   add: (a: number, b: number) => number
  * }
  *
- * const MathService = ServiceMap.Key<MathService>("MathService")
+ * const MathService = ServiceMap.Service<MathService>("MathService")
  *
  * const services = ServiceMap.make(MathService, {
  *   add: (a, b) => a + b
@@ -7526,11 +7537,12 @@ export const runSyncExit: <A, E>(effect: Effect<A, E>) => Exit.Exit<A, E> = inte
  *
  * @example
  * ```ts
- * import { Effect, Exit } from "effect"
- * import { ServiceMap } from "effect"
+ * import { Effect, Exit, ServiceMap } from "effect"
  *
  * // Define a logger service
- * const Logger = ServiceMap.Key<{ log: (msg: string) => void }>("Logger")
+ * const Logger = ServiceMap.Service<{
+ *   log: (msg: string) => void
+ * }>("Logger")
  *
  * const program = Effect.gen(function* () {
  *   const logger = yield* Effect.service(Logger)
@@ -10717,8 +10729,6 @@ export const trackDuration: {
  * - a journal that stores any non committed change to TxRef values
  * - a retry flag to know if the transaction should be retried
  *
- * @since 4.0.0
- * @category Transactions
  * @example
  * ```ts
  * import { Effect } from "effect"
@@ -10730,8 +10740,11 @@ export const trackDuration: {
  *   return "Transaction complete"
  * })
  * ```
+ *
+ * @since 4.0.0
+ * @category Transactions
  */
-export class Transaction extends ServiceMap.Key<
+export class Transaction extends ServiceMap.Service<
   Transaction,
   {
     retry: boolean

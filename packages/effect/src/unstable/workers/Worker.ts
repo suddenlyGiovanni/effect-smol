@@ -13,8 +13,10 @@ import { WorkerError } from "./WorkerError.ts"
  * @since 4.0.0
  * @category models
  */
-export class WorkerPlatform extends ServiceMap.Key<WorkerPlatform, {
-  readonly spawn: <O = unknown, I = unknown>(id: number) => Effect.Effect<Worker<O, I>, WorkerError, Spawner>
+export class WorkerPlatform extends ServiceMap.Service<WorkerPlatform, {
+  readonly spawn: <O = unknown, I = unknown>(
+    id: number
+  ) => Effect.Effect<Worker<O, I>, WorkerError, Spawner>
 }>()("effect/workers/Worker/WorkerPlatform") {}
 
 /**
@@ -22,12 +24,17 @@ export class WorkerPlatform extends ServiceMap.Key<WorkerPlatform, {
  * @category models
  */
 export interface Worker<O = unknown, I = unknown> {
-  readonly send: (message: I, transfers?: ReadonlyArray<unknown>) => Effect.Effect<void, WorkerError>
+  readonly send: (
+    message: I,
+    transfers?: ReadonlyArray<unknown>
+  ) => Effect.Effect<void, WorkerError>
   readonly run: <A, E, R>(
     handler: (message: O) => Effect.Effect<A, E, R>,
-    options?: {
-      readonly onSpawn?: Effect.Effect<void> | undefined
-    } | undefined
+    options?:
+      | {
+        readonly onSpawn?: Effect.Effect<void> | undefined
+      }
+      | undefined
   ) => Effect.Effect<never, E | WorkerError, R>
 }
 
@@ -36,7 +43,10 @@ export interface Worker<O = unknown, I = unknown> {
  * @category models
  */
 export const makeUnsafe = (options: {
-  readonly send: (message: unknown, transfers?: ReadonlyArray<unknown>) => Effect.Effect<void, WorkerError>
+  readonly send: (
+    message: unknown,
+    transfers?: ReadonlyArray<unknown>
+  ) => Effect.Effect<void, WorkerError>
   readonly run: <A, E, R>(
     handler: (message: PlatformMessage) => Effect.Effect<A, E, R>
   ) => Effect.Effect<never, E | WorkerError, R>
@@ -69,7 +79,10 @@ export interface Spawner {
  * @since 4.0.0
  * @category tags
  */
-export const Spawner: ServiceMap.Key<Spawner, SpawnerFn<unknown>> = ServiceMap.Key("effect/workers/Worker/Spawner")
+export const Spawner: ServiceMap.Service<
+  Spawner,
+  SpawnerFn<unknown>
+> = ServiceMap.Service("effect/workers/Worker/Spawner")
 
 /**
  * @since 4.0.0
@@ -83,7 +96,9 @@ export interface SpawnerFn<W = unknown> {
  * @since 4.0.0
  * @category layers
  */
-export const layerSpawner: <W = unknown>(spawner: SpawnerFn<W>) => Layer.Layer<Spawner> = Layer.succeed(Spawner)
+export const layerSpawner: <W = unknown>(
+  spawner: SpawnerFn<W>
+) => Layer.Layer<Spawner> = Layer.succeed(Spawner)
 
 /**
  * @since 4.0.0
@@ -117,45 +132,51 @@ export const makePlatform = <W>() =>
           opts?: { readonly onSpawn?: Effect.Effect<void> | undefined }
         ) =>
           Effect.uninterruptibleMask((restore) =>
-            Effect.scopedWith(Effect.fnUntraced(function*(scope) {
-              const port = yield* options.setup({ worker: spawn(id), scope })
-              yield* Scope.addFinalizer(
-                scope,
-                Effect.sync(() => {
-                  currentPort = undefined
+            Effect.scopedWith(
+              Effect.fnUntraced(function*(scope) {
+                const port = yield* options.setup({
+                  worker: spawn(id),
+                  scope
                 })
-              )
-              const fiberSet = yield* FiberSet.make<any, WorkerError | E>().pipe(
-                Scope.provide(scope)
-              )
-              const run = yield* FiberSet.runtime(fiberSet)<R>()
-              const ready = Effect.makeLatchUnsafe()
-              yield* options.listen({
-                port,
-                scope,
-                emit(data: PlatformMessage) {
-                  if (data[0] === 0) {
-                    if (opts?.onSpawn) {
-                      run(Effect.ensuring(opts.onSpawn, ready.open))
-                    } else {
-                      ready.openUnsafe()
+                yield* Scope.addFinalizer(
+                  scope,
+                  Effect.sync(() => {
+                    currentPort = undefined
+                  })
+                )
+                const fiberSet = yield* FiberSet.make<
+                  any,
+                  WorkerError | E
+                >().pipe(Scope.provide(scope))
+                const run = yield* FiberSet.runtime(fiberSet)<R>()
+                const ready = Effect.makeLatchUnsafe()
+                yield* options.listen({
+                  port,
+                  scope,
+                  emit(data: PlatformMessage) {
+                    if (data[0] === 0) {
+                      if (opts?.onSpawn) {
+                        run(Effect.ensuring(opts.onSpawn, ready.open))
+                      } else {
+                        ready.openUnsafe()
+                      }
+                      return
                     }
-                    return
+                    run(handler(data[1] as O))
+                  },
+                  deferred: fiberSet.deferred as any
+                })
+                yield* ready.await
+                currentPort = port
+                if (buffer.length > 0) {
+                  for (const [message, transfers] of buffer) {
+                    port.postMessage([0, message], transfers as any)
                   }
-                  run(handler(data[1] as O))
-                },
-                deferred: fiberSet.deferred as any
-              })
-              yield* ready.await
-              currentPort = port
-              if (buffer.length > 0) {
-                for (const [message, transfers] of buffer) {
-                  port.postMessage([0, message], transfers as any)
+                  buffer.length = 0
                 }
-                buffer.length = 0
-              }
-              return (yield* restore(FiberSet.join(fiberSet))) as never
-            }))
+                return (yield* restore(FiberSet.join(fiberSet))) as never
+              })
+            )
           )
 
         const send = (message: I, transfers?: ReadonlyArray<unknown>) =>
@@ -169,7 +190,11 @@ export const makePlatform = <W>() =>
               return Effect.void
             } catch (cause) {
               return Effect.fail(
-                new WorkerError({ reason: "Send", message: "Failed to send message to worker", cause })
+                new WorkerError({
+                  reason: "Send",
+                  message: "Failed to send message to worker",
+                  cause
+                })
               )
             }
           })
