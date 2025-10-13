@@ -2,7 +2,7 @@ import type { Brand } from "effect/data"
 import type { ServiceMap } from "effect"
 import { Effect, flow, hole, String as Str  } from "effect"
 import { Option, Predicate, Struct, Tuple } from "effect/data"
-import { AST, Check, Getter, Schema, Transformation } from 'effect/schema'
+import { AST, Getter, Schema, Transformation } from 'effect/schema'
 import type { Array } from "effect/collections"
 import { immerable, produce } from "immer"
 import { describe, expect, it, when } from "tstyche"
@@ -99,7 +99,7 @@ describe("Schema", () => {
     })
 
     it("check", () => {
-      const schema = Schema.String.check(Check.minLength(1))
+      const schema = Schema.String.check(Schema.isMinLength(1))
       expect(schema.makeUnsafe).type.toBe<MakeUnsafe<string, string>>()
     })
 
@@ -404,11 +404,6 @@ describe("Schema", () => {
     })
   })
 
-  it("Schema", () => {
-    const schema: Schema.Schema<string> = Schema.String
-    expect(schema.annotate({})).type.toBe<Schema.Schema<string>>()
-  })
-
   describe("Never", () => {
     const schema = Schema.Never
 
@@ -699,6 +694,63 @@ describe("Schema", () => {
     })
   })
 
+  describe("checks", () => {
+    describe("and / annotate", () => {
+      it("Filter + Filter", () => {
+        const f1 = Schema.isInt()
+        const f2 = Schema.isInt()
+
+        expect(f1.and(f2)).type.toBe<AST.FilterGroup<number>>()
+        expect(f1.and(f2).annotate({})).type.toBe<AST.FilterGroup<number>>()
+      })
+
+      it("Filter + FilterGroup", () => {
+        const f1 = Schema.isInt()
+        const f2 = Schema.isInt32()
+
+        expect(f1.and(f2)).type.toBe<AST.FilterGroup<number>>()
+        expect(f2.and(f1)).type.toBe<AST.FilterGroup<number>>()
+        expect(f1.and(f2).annotate({})).type.toBe<AST.FilterGroup<number>>()
+        expect(f2.and(f1).annotate({})).type.toBe<AST.FilterGroup<number>>()
+      })
+
+      it("FilterGroup + FilterGroup", () => {
+        const f1 = Schema.isInt32()
+        const f2 = Schema.isInt32()
+
+        expect(f1.and(f2)).type.toBe<AST.FilterGroup<number>>()
+        expect(f2.and(f1)).type.toBe<AST.FilterGroup<number>>()
+        expect(f1.and(f2).annotate({})).type.toBe<AST.FilterGroup<number>>()
+        expect(f2.and(f1).annotate({})).type.toBe<AST.FilterGroup<number>>()
+      })
+
+      it("RefinementGroup + Filter", () => {
+        const f1 = Schema.isInt().pipe(Schema.isBranded("a"))
+        const f2 = Schema.isInt()
+
+        expect(f1.and(f2)).type.toBe<AST.RefinementGroup<number & Brand.Brand<"a">, number>>()
+        expect(f2.and(f1)).type.toBe<AST.RefinementGroup<number & Brand.Brand<"a">, number>>()
+        expect(f1.and(f2).annotate({})).type.toBe<AST.RefinementGroup<number & Brand.Brand<"a">, number>>()
+        expect(f2.and(f1).annotate({})).type.toBe<AST.RefinementGroup<number & Brand.Brand<"a">, number>>()
+      })
+
+      it("RefinementGroup + RefinementGroup", () => {
+        const f1 = Schema.isInt().pipe(Schema.isBranded("a"))
+        const f2 = Schema.isInt().pipe(Schema.isBranded("b"))
+
+        expect(f1.and(f2)).type.toBe<AST.RefinementGroup<number & Brand.Brand<"a"> & Brand.Brand<"b">, number>>()
+        expect(f2.and(f1)).type.toBe<AST.RefinementGroup<number & Brand.Brand<"a"> & Brand.Brand<"b">, number>>()
+        expect(f1.and(f2).annotate({})).type.toBe<
+          AST.RefinementGroup<number & Brand.Brand<"a"> & Brand.Brand<"b">, number>
+        >()
+        expect(f2.and(f1).annotate({})).type.toBe<
+          AST.RefinementGroup<number & Brand.Brand<"a"> & Brand.Brand<"b">, number>
+        >()
+      })
+    })
+  })
+
+
   describe("refinements", () => {
     describe("refineByGuard", () => {
       it("String & isString", () => {
@@ -747,8 +799,8 @@ describe("Schema", () => {
     })
 
     it("refine", () => {
-      const min2 = Check.greaterThanOrEqualTo(2).pipe(Check.brand("min2"))
-      const int = Check.int().pipe(Check.brand("int"))
+      const min2 = Schema.isGreaterThanOrEqualTo(2).pipe(Schema.isBranded("min2"))
+      const int = Schema.isInt().pipe(Schema.isBranded("int"))
 
       const schema = Schema.Number.pipe(
         Schema.refine(min2.and(int))
