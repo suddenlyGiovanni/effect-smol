@@ -31,6 +31,7 @@ import * as InternalArbitrary from "../internal/ToArbitrary.ts"
 import * as InternalEquivalence from "../internal/ToEquivalence.ts"
 import * as InternalJsonSchema from "../internal/ToJsonSchema.ts"
 import { remainder } from "../Number.ts"
+import * as Optic_ from "../Optic.ts"
 import * as Request from "../Request.ts"
 import * as Scheduler from "../Scheduler.ts"
 import * as FastCheck from "../testing/FastCheck.ts"
@@ -3155,16 +3156,10 @@ export function link<T>() { // TODO: better name
 /**
  * @since 4.0.0
  */
-export function makeRefinedByGuard<T extends E, E>(
+export const makeRefinedByGuard: <T extends E, E>(
   is: (value: E) => value is T,
   annotations?: Annotations.Filter
-): AST.Refinement<T, E> {
-  return new AST.Filter(
-    (input: E) => is(input) ? undefined : new Issue.InvalidValue(Option_.some(input)),
-    annotations,
-    true // after a guard, we always want to abort
-  ) as any
-}
+) => AST.Refinement<T, E> = AST.makeRefinedByGuard
 
 /**
  * @since 4.0.0
@@ -4522,66 +4517,10 @@ export function isUnique<T>(equivalence: Equivalence.Equivalence<T>, annotations
 }
 
 /**
- * A check that ensures the value is a `Some` value.
- *
- * @category Option checks
  * @since 4.0.0
  */
-export function isSome<A>(annotations?: Annotations.Filter) {
-  return makeRefinedByGuard<Option_.Some<A>, Option_.Option<A>>(
-    Option_.isSome,
-    Annotations.combine({ title: "isSome", description: "a Some value" }, annotations)
-  )
-}
-
-/**
- * A check that ensures the value is a `None` value.
- *
- * @category Option checks
- * @since 4.0.0
- */
-export function isNone<A>(annotations?: Annotations.Filter) {
-  return makeRefinedByGuard<Option_.None<A>, Option_.Option<A>>(
-    Option_.isNone,
-    Annotations.combine({ title: "isNone", description: "a None value" }, annotations)
-  )
-}
-
-/**
- * A check that ensures the value is a `Result.Success` value.
- *
- * @category Result checks
- * @since 4.0.0
- */
-export function isSuccess<A, E>(annotations?: Annotations.Filter) {
-  return makeRefinedByGuard<Result_.Success<A, E>, Result_.Result<A, E>>(
-    Result_.isSuccess,
-    Annotations.combine({ title: "isSuccess", description: "a Result.Success value" }, annotations)
-  )
-}
-
-/**
- * A check that ensures the value is a `Result.Failure` value.
- *
- * @category Result checks
- * @since 4.0.0
- */
-export function isFailure<A, E>(annotations?: Annotations.Filter) {
-  return makeRefinedByGuard<Result_.Failure<A, E>, Result_.Result<A, E>>(
-    Result_.isFailure,
-    Annotations.combine({ title: "isFailure", description: "a Result.Failure value" }, annotations)
-  )
-}
-
-/**
- * @since 4.0.0
- */
-export function isNotUndefined<A>(annotations?: Annotations.Filter) {
-  return makeRefinedByGuard<Exclude<A, undefined>, A>(
-    Predicate.isNotUndefined,
-    Annotations.combine({ title: "isNotUndefined", description: "a value other than `undefined`" }, annotations)
-  )
-}
+export const isNotUndefined: <A>(annotations?: Annotations.Filter) => AST.Refinement<Exclude<A, undefined>, A> =
+  AST.isNotUndefined
 
 /**
  * @since 4.0.0
@@ -7155,4 +7094,86 @@ const parseTagName = (name: string): { safe: string; changed: boolean } => {
   safe = safe.replace(/[^A-Za-z0-9._-]/g, "_")
   if (/^xml/i.test(safe)) safe = "_" + safe
   return { safe, changed: safe !== original }
+}
+
+// -----------------------------------------------------------------------------
+// Optic APIs
+// -----------------------------------------------------------------------------
+
+/**
+ * @category Optic
+ * @since 4.0.0
+ */
+export function makeIso<S extends Top>(schema: S): Optic_.Iso<S["Type"], S["Iso"]> {
+  const serializer = makeSerializerIso(schema)
+  return Optic_.makeIso(ToParser.encodeSync(serializer), ToParser.decodeSync(serializer))
+}
+
+/**
+ * @category Optic
+ * @since 4.0.0
+ */
+export function makeIsoSource<S extends Top>(_: S): Optic_.Iso<S["Type"], S["Type"]> {
+  return Optic_.id()
+}
+
+/**
+ * @category Optic
+ * @since 4.0.0
+ */
+export function makeIsoFocus<S extends Top>(_: S): Optic_.Iso<S["Iso"], S["Iso"]> {
+  return Optic_.id()
+}
+
+/**
+ * @category Optic
+ * @since 4.0.0
+ */
+export interface overrideIso<S extends Top, Iso> extends
+  Bottom<
+    S["Type"],
+    S["Encoded"],
+    S["DecodingServices"],
+    S["EncodingServices"],
+    S["ast"],
+    overrideIso<S, Iso>,
+    S["~type.make.in"],
+    Iso,
+    S["~type.parameters"],
+    S["~type.make"],
+    S["~type.mutability"],
+    S["~type.optionality"],
+    S["~type.constructor.default"],
+    S["~encoded.mutability"],
+    S["~encoded.optionality"]
+  >
+{
+  readonly "~rebuild.out": this
+  readonly schema: S
+}
+
+/**
+ * **Technical Note**
+ *
+ * This annotation cannot be added to `Annotations.Bottom` because it changes
+ * the schema type.
+ *
+ * @category Optic
+ * @since 4.0.0
+ */
+export function overrideIso<S extends Top, Iso>(
+  to: Codec<Iso>,
+  transformation: {
+    readonly decode: Getter.Getter<S["Type"], Iso>
+    readonly encode: Getter.Getter<Iso, S["Type"]>
+  }
+) {
+  return (schema: S): overrideIso<S, Iso> => {
+    return makeProto(
+      AST.annotate(schema.ast, {
+        defaultIsoSerializer: () => new AST.Link(to.ast, Transformation.make(transformation))
+      }),
+      { schema }
+    )
+  }
 }
