@@ -2,36 +2,43 @@ import { describe, expect, it } from "@effect/vitest"
 import { Effect, Layer } from "effect"
 import { FileSystem, Path } from "effect/platform"
 import { TestConsole } from "effect/testing"
-import { Command, HelpFormatter } from "effect/unstable/cli"
-import { comprehensiveCli } from "./utils/comprehensiveCli.ts"
-import * as TestActions from "./utils/TestActions.ts"
+import { HelpFormatter } from "effect/unstable/cli"
+import * as Cli from "./fixtures/ComprehensiveCli.ts"
+import * as MockTerminal from "./services/MockTerminal.ts"
+import * as TestActions from "./services/TestActions.ts"
 
-const TestLayer = Layer.mergeAll(
-  TestConsole.layer,
-  HelpFormatter.layer(HelpFormatter.defaultHelpRenderer({ colors: false })),
-  TestActions.layer,
-  FileSystem.layerNoop({}),
-  Path.layer
+const ActionsLayer = TestActions.layer
+const ConsoleLayer = TestConsole.layer
+const FileSystemLayer = FileSystem.layerNoop({})
+const PathLayer = Path.layer
+const TerminalLayer = MockTerminal.layer
+const HelpFormatterLayer = HelpFormatter.layer(
+  HelpFormatter.defaultHelpRenderer({
+    colors: false
+  })
 )
 
-/**
- * Use the shared comprehensive CLI tool for testing
- */
-const cli = comprehensiveCli
+const TestLayer = Layer.mergeAll(
+  ActionsLayer,
+  ConsoleLayer,
+  FileSystemLayer,
+  PathLayer,
+  TerminalLayer,
+  HelpFormatterLayer
+)
 
-const runCommand = Command.runWithArgs(cli, { version: "1.0.0" })
-
-const runCommandAndGetOutput = (command: ReadonlyArray<string>) =>
-  Effect.gen(function*() {
-    yield* runCommand(command)
+const runCommand = Effect.fnUntraced(
+  function*(command: ReadonlyArray<string>) {
+    yield* Cli.run(command)
     const output = yield* TestConsole.logLines
     return output.join("\n")
-  })
+  }
+)
 
 describe("Command help output", () => {
   it.effect("root command help", () =>
     Effect.gen(function*() {
-      const helpText = yield* runCommandAndGetOutput(["--help"])
+      const helpText = yield* runCommand(["--help"])
 
       expect(helpText).toMatchInlineSnapshot(`
         "DESCRIPTION
@@ -61,7 +68,7 @@ describe("Command help output", () => {
 
   it.effect("file operation command with positional args", () =>
     Effect.gen(function*() {
-      const helpText = yield* runCommandAndGetOutput(["copy", "--help"])
+      const helpText = yield* runCommand(["copy", "--help"])
 
       expect(helpText).toMatchInlineSnapshot(`
         "DESCRIPTION
@@ -83,7 +90,7 @@ describe("Command help output", () => {
 
   it.effect("variadic arguments command", () =>
     Effect.gen(function*() {
-      const helpText = yield* runCommandAndGetOutput(["remove", "--help"])
+      const helpText = yield* runCommand(["remove", "--help"])
 
       expect(helpText).toMatchInlineSnapshot(`
         "DESCRIPTION
@@ -104,7 +111,7 @@ describe("Command help output", () => {
 
   it.effect("deeply nested subcommand", () =>
     Effect.gen(function*() {
-      const helpText = yield* runCommandAndGetOutput(["admin", "users", "list", "--help"])
+      const helpText = yield* runCommand(["admin", "users", "list", "--help"])
 
       expect(helpText).toMatchInlineSnapshot(`
         "DESCRIPTION
@@ -122,7 +129,7 @@ describe("Command help output", () => {
 
   it.effect("command with mixed positional args", () =>
     Effect.gen(function*() {
-      const helpText = yield* runCommandAndGetOutput(["admin", "users", "create", "--help"])
+      const helpText = yield* runCommand(["admin", "users", "create", "--help"])
 
       expect(helpText).toMatchInlineSnapshot(`
         "DESCRIPTION
@@ -143,7 +150,7 @@ describe("Command help output", () => {
 
   it.effect("intermediate subcommand with options", () =>
     Effect.gen(function*() {
-      const helpText = yield* runCommandAndGetOutput(["admin", "config", "--help"])
+      const helpText = yield* runCommand(["admin", "config", "--help"])
 
       expect(helpText).toMatchInlineSnapshot(`
         "DESCRIPTION
@@ -163,7 +170,7 @@ describe("Command help output", () => {
 
   it.effect("variadic with minimum count", () =>
     Effect.gen(function*() {
-      const helpText = yield* runCommandAndGetOutput(["admin", "config", "set", "--help"])
+      const helpText = yield* runCommand(["admin", "config", "set", "--help"])
 
       expect(helpText).toMatchInlineSnapshot(`
         "DESCRIPTION

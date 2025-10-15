@@ -4,28 +4,40 @@ import { Option } from "effect/data"
 import { FileSystem, Path } from "effect/platform"
 import { TestConsole } from "effect/testing"
 import { Command, Flag, HelpFormatter } from "effect/unstable/cli"
-import { comprehensiveCli, runComprehensiveCli } from "./utils/comprehensiveCli.ts"
-import * as TestActions from "./utils/TestActions.ts"
+import * as Cli from "./fixtures/ComprehensiveCli.ts"
+import * as MockTerminal from "./services/MockTerminal.ts"
+import * as TestActions from "./services/TestActions.ts"
 
-// Create a test layer that provides TestConsole and TestActions
+const ActionsLayer = TestActions.layer
+const ConsoleLayer = TestConsole.layer
+const FileSystemLayer = FileSystem.layerNoop({})
+const PathLayer = Path.layer
+const TerminalLayer = MockTerminal.layer
+const HelpFormatterLayer = HelpFormatter.layer(
+  HelpFormatter.defaultHelpRenderer({
+    colors: false
+  })
+)
+
 const TestLayer = Layer.mergeAll(
-  TestConsole.layer,
-  HelpFormatter.layer(HelpFormatter.defaultHelpRenderer({ colors: false })),
-  TestActions.layer,
-  FileSystem.layerNoop({}),
-  Path.layer
+  ActionsLayer,
+  ConsoleLayer,
+  FileSystemLayer,
+  PathLayer,
+  TerminalLayer,
+  HelpFormatterLayer
 )
 
 describe("Command", () => {
   describe("run", () => {
     it.effect("should execute handler with parsed config", () =>
       Effect.gen(function*() {
-        yield* runComprehensiveCli(["copy", "src.txt", "dest.txt", "--recursive", "--force"])
         const path = yield* Path.Path
         const resolvedSrc = path.resolve("src.txt")
         const resolvedDest = path.resolve("dest.txt")
 
-        // Check the logged actions
+        yield* Cli.run(["copy", "src.txt", "dest.txt", "--recursive", "--force"])
+
         const actions = yield* TestActions.getActions
         assert.strictEqual(actions.length, 1)
         assert.deepStrictEqual(actions[0], {
@@ -35,60 +47,39 @@ describe("Command", () => {
             destination: resolvedDest,
             recursive: true,
             force: true,
-            bufferSize: 64 // default value
+            bufferSize: 64
           }
         })
-      }).pipe(
-        Effect.provide(TestLayer)
-      ))
+      }).pipe(Effect.provide(TestLayer)))
 
     it.effect("should handle nested config in handler", () =>
       Effect.gen(function*() {
-        yield* runComprehensiveCli([
-          "admin",
-          "users",
-          "create",
-          "john_doe", // username (positional)
-          "john@example.com", // email (optional positional)
-          "--role",
-          "admin", // required option
-          "--notify" // boolean flag
-        ])
+        const username = "john_doe"
+        const email = "john@example.com"
+        const role = "admin"
 
-        // Check the logged actions
+        yield* Cli.run(["admin", "users", "create", username, email, "--role", role, "--notify"])
+
         const actions = yield* TestActions.getActions
         assert.strictEqual(actions.length, 1)
         assert.deepStrictEqual(actions[0], {
           command: "users create",
-          details: {
-            username: "john_doe",
-            email: Option.some("john@example.com"),
-            role: "admin",
-            notify: true
-          }
+          details: { username, email: Option.some(email), role, notify: true }
         })
       }).pipe(Effect.provide(TestLayer)))
 
     it.effect("should work with effectful handlers", () =>
       Effect.gen(function*() {
-        // Use the rm command with multiple boolean flags
-        yield* runComprehensiveCli([
-          "remove",
-          "file1.txt",
-          "file2.txt",
-          "dir/", // variadic files
-          "--recursive", // -r flag
-          "--force", // -f flag
-          "--verbose" // -v flag
-        ])
+        const files = ["file1.txt", "file2.txt", "dir/"]
 
-        // Check the logged actions
+        yield* Cli.run(["remove", ...files, "--recursive", "--force", "--verbose"])
+
         const actions = yield* TestActions.getActions
         assert.strictEqual(actions.length, 1)
         assert.deepStrictEqual(actions[0], {
           command: "remove",
           details: {
-            files: ["file1.txt", "file2.txt", "dir/"],
+            files,
             recursive: true,
             force: true,
             verbose: true
@@ -98,32 +89,25 @@ describe("Command", () => {
 
     it.effect("should work with option aliases in handler", () =>
       Effect.gen(function*() {
-        yield* runComprehensiveCli([
-          "build",
-          "-o",
-          "dist/",
-          "-v",
-          "-f",
-          "build.json"
-        ])
+        const config = "build.json"
+        const output = "dist/"
 
-        // Check the logged actions
+        yield* Cli.run(["build", "-o", output, "-v", "-f", config])
+
         const actions = yield* TestActions.getActions
         assert.strictEqual(actions.length, 1)
         assert.deepStrictEqual(actions[0], {
           command: "build",
-          details: {
-            output: "dist/",
-            verbose: true,
-            config: "build.json"
-          }
+          details: { output, verbose: true, config }
         })
       }).pipe(Effect.provide(TestLayer)))
 
     it.effect("should handle parsing errors from run", () =>
       Effect.gen(function*() {
-        // Test with invalid subcommand - should display help and error
-        const runCommand = Command.runWithArgs(comprehensiveCli, { version: "1.0.0" })
+        const runCommand = Command.runWith(Cli.ComprehensiveCli, {
+          version: "1.0.0"
+        })
+
         yield* runCommand(["invalid-command"])
 
         // Check that help text was shown to stdout
@@ -140,109 +124,90 @@ describe("Command", () => {
 
     it.effect("should propagate handler errors from run", () =>
       Effect.gen(function*() {
-        const result = yield* Effect.flip(
-          runComprehensiveCli(["test-failing", "--input", "test"]).pipe(Effect.provide(TestLayer))
-        )
+        const result = yield* Effect.flip(Cli.run(["test-failing", "--input", "test"]))
         assert.strictEqual(result, "Handler error")
-      }))
+      }).pipe(Effect.provide(TestLayer)))
   })
 
   describe("withSubcommands", () => {
     it.effect("should execute parent handler when no subcommand provided", () =>
       Effect.gen(function*() {
-        yield* runComprehensiveCli(["git", "--verbose"])
+        const command = "git"
 
-        // Check the logged actions
+        yield* Cli.run([command, "--verbose"])
+
         const actions = yield* TestActions.getActions
         assert.strictEqual(actions.length, 1)
-        assert.deepStrictEqual(actions[0], {
-          command: "git",
-          details: {
-            verbose: true
-          }
-        })
+        assert.deepStrictEqual(actions[0], { command, details: { verbose: true } })
       }).pipe(Effect.provide(TestLayer)))
 
     it.effect("should execute subcommand when provided", () =>
       Effect.gen(function*() {
-        yield* runComprehensiveCli(["git", "clone", "myrepo", "--branch", "develop"])
+        const command = ["git", "clone"]
+        const repository = "myrepo"
+        const branch = "develop"
 
-        // Check the logged actions
+        yield* Cli.run([...command, repository, "--branch", branch])
+
         const actions = yield* TestActions.getActions
         assert.strictEqual(actions.length, 1)
         assert.deepStrictEqual(actions[0], {
-          command: "git clone",
-          details: {
-            repository: "myrepo",
-            branch: "develop"
-          }
+          command: command.join(" "),
+          details: { repository, branch }
         })
       }).pipe(Effect.provide(TestLayer)))
 
     it.effect("should handle multiple subcommands correctly", () =>
       Effect.gen(function*() {
-        // Test clone subcommand
-        yield* runComprehensiveCli(["git", "clone", "repo1"])
+        yield* Cli.run(["git", "clone", "repo1"])
+        yield* Cli.run(["git", "add", "file1", "--update"])
+        yield* Cli.run(["git", "status", "--short"])
 
-        // Test add subcommand
-        yield* runComprehensiveCli(["git", "add", "file1", "--update"])
-
-        // Test status subcommand
-        yield* runComprehensiveCli(["git", "status", "--short"])
-
-        // Check the logged actions
         const actions = yield* TestActions.getActions
         assert.strictEqual(actions.length, 3)
         assert.deepStrictEqual(actions[0], {
           command: "git clone",
-          details: {
-            repository: "repo1",
-            branch: "main" // default value
-          }
+          details: { repository: "repo1", branch: "main" }
         })
         assert.deepStrictEqual(actions[1], {
           command: "git add",
-          details: {
-            files: "file1",
-            update: true
-          }
+          details: { files: "file1", update: true }
         })
         assert.deepStrictEqual(actions[2], {
           command: "git status",
-          details: {
-            short: true
-          }
+          details: { short: true }
         })
       }).pipe(Effect.provide(TestLayer)))
 
     it.effect("should handle nested config structures in subcommands", () =>
       Effect.gen(function*() {
-        yield* runComprehensiveCli([
+        const service = "api-service"
+        const environment = "production"
+        const dbHost = "localhost"
+        const dbPort = 5432
+
+        yield* Cli.run([
           "app",
           "--env",
           "prod",
           "deploy",
-          "api-service",
-          "production",
+          service,
+          environment,
           "--db-host",
-          "localhost",
+          dbHost,
           "--db-port",
-          "5432",
+          dbPort.toString(),
           "--dry-run"
         ])
 
-        // Check the logged actions
         const actions = yield* TestActions.getActions
         assert.strictEqual(actions.length, 1)
         assert.deepStrictEqual(actions[0], {
           command: "deploy",
           details: {
-            service: "api-service",
-            environment: "production",
-            database: {
-              host: "localhost",
-              port: 5432
-            },
+            service,
+            environment,
+            database: { host: dbHost, port: dbPort },
             dryRun: true
           }
         })
@@ -252,42 +217,39 @@ describe("Command", () => {
       Effect.gen(function*() {
         // Use git command with only --verbose flag (git doesn't have an "unknown" option)
         // This will execute the parent git handler instead of trying to match subcommands
-        yield* runComprehensiveCli(["git", "--verbose"])
+        yield* Cli.run(["git", "--verbose"])
 
-        // Check the logged actions
         const actions = yield* TestActions.getActions
         assert.strictEqual(actions.length, 1)
         assert.deepStrictEqual(actions[0], {
           command: "git",
-          details: {
-            verbose: true
-          }
+          details: { verbose: true }
         })
       }).pipe(Effect.provide(TestLayer)))
 
     it.effect("should propagate subcommand errors", () =>
       Effect.gen(function*() {
-        const result = (yield* Effect.flip(
-          runComprehensiveCli(["test-failing", "--input", "test"]).pipe(Effect.provide(TestLayer))
-        )) as unknown as string
-
+        const result = yield* Effect.flip(Cli.run(["test-failing", "--input", "test"]))
         assert.strictEqual(result, "Handler error")
-      }))
+      }).pipe(Effect.provide(TestLayer)))
 
     it.effect("should provide parent context to subcommands", () =>
       Effect.gen(function*() {
         const messages: Array<string> = []
 
-        // Create parent command
-        const parent = Command.make("parent", {
+        const config = {
           verbose: Flag.boolean("verbose"),
           config: Flag.string("config")
-        }, (config) => Effect.sync(() => messages.push(`parent: config=${config.config}`)))
+        }
+
+        // Create parent command
+        const parent = Command.make("parent", config, (config) =>
+          Effect.sync(() => {
+            messages.push(`parent: config=${config.config}`)
+          }))
 
         // Create subcommand that accesses parent context
-        const child = Command.make("child", {
-          action: Flag.string("action")
-        }, (config) =>
+        const child = Command.make("child", { action: Flag.string("action") }, (config) =>
           Effect.gen(function*() {
             // Access parent config via the auto-generated tag
             const parentConfig = yield* parent.service
@@ -301,7 +263,10 @@ describe("Command", () => {
           Command.withSubcommands(child)
         )
 
-        const runCommand = Command.runWithArgs(combined, { version: "1.0.0" })
+        const runCommand = Command.runWith(combined, {
+          version: "1.0.0"
+        })
+
         yield* runCommand([
           "--verbose",
           "--config",
@@ -309,14 +274,14 @@ describe("Command", () => {
           "child",
           "--action",
           "deploy"
-        ]).pipe(Effect.provide(TestLayer))
+        ])
 
         assert.deepStrictEqual(messages, [
           "child: parent.verbose=true",
           "child: parent.config=prod.json",
           "child: action=deploy"
         ])
-      }))
+      }).pipe(Effect.provide(TestLayer)))
 
     it.effect("should accept parent flags before or after a subcommand (npm-style)", () =>
       Effect.gen(function*() {
@@ -337,20 +302,20 @@ describe("Command", () => {
 
         const npm = root.pipe(Command.withSubcommands(install))
 
-        const runNpm = Command.runWithArgs(npm, { version: "1.0.0" })
+        const runNpm = Command.runWith(npm, { version: "1.0.0" })
 
         // Global before subcommand
-        yield* runNpm(["--global", "install", "--pkg", "cowsay"]).pipe(Effect.provide(TestLayer))
+        yield* runNpm(["--global", "install", "--pkg", "cowsay"])
         // Global after subcommand
-        yield* runNpm(["install", "--pkg", "cowsay", "--global"]).pipe(Effect.provide(TestLayer))
+        yield* runNpm(["install", "--pkg", "cowsay", "--global"])
 
         assert.deepStrictEqual(messages, [
           "install: global=true, pkg=cowsay",
           "install: global=true, pkg=cowsay"
         ])
-      }))
+      }).pipe(Effect.provide(TestLayer)))
 
-    it.effect("should allow direct yielding of parent command (new Yieldable pattern)", () =>
+    it.effect("should allow direct accessing parent config in subcommands", () =>
       Effect.gen(function*() {
         const messages: Array<string> = []
 
@@ -370,62 +335,15 @@ describe("Command", () => {
 
         const npm = root.pipe(Command.withSubcommands(install))
 
-        const runNpm = Command.runWithArgs(npm, { version: "1.0.0" })
+        const runNpm = Command.runWith(npm, { version: "1.0.0" })
 
         // Test the new pattern works
-        yield* runNpm(["--global", "install", "--pkg", "effect"]).pipe(Effect.provide(TestLayer))
+        yield* runNpm(["--global", "install", "--pkg", "effect"])
 
         assert.deepStrictEqual(messages, [
           "install: global=true, pkg=effect"
         ])
-      }))
-
-    it.effect("should support both .tag and direct yielding patterns (backward compatibility)", () =>
-      Effect.gen(function*() {
-        const messages: Array<string> = []
-
-        const parent = Command.make("parent", {
-          verbose: Flag.boolean("verbose"),
-          config: Flag.string("config")
-        })
-
-        // Child using old pattern (.tag)
-        const childOld = Command.make("child-old", {
-          action: Flag.string("action")
-        }, (config) =>
-          Effect.gen(function*() {
-            const parentConfig = yield* parent.service // Old pattern
-            messages.push(`child-old: parent.verbose=${parentConfig.verbose}, action=${config.action}`)
-          }))
-
-        // Child using new pattern (direct yield)
-        const childNew = Command.make("child-new", {
-          action: Flag.string("action")
-        }, (config) =>
-          Effect.gen(function*() {
-            const parentConfig = yield* parent // New pattern
-            messages.push(`child-new: parent.verbose=${parentConfig.verbose}, action=${config.action}`)
-          }))
-
-        const combined = parent.pipe(
-          Command.withSubcommands(childOld, childNew)
-        )
-
-        const runCommand = Command.runWithArgs(combined, { version: "1.0.0" })
-
-        // Test both patterns work
-        yield* runCommand(["--verbose", "--config", "prod.json", "child-old", "--action", "deploy"]).pipe(
-          Effect.provide(TestLayer)
-        )
-        yield* runCommand(["--verbose", "--config", "prod.json", "child-new", "--action", "deploy"]).pipe(
-          Effect.provide(TestLayer)
-        )
-
-        assert.deepStrictEqual(messages, [
-          "child-old: parent.verbose=true, action=deploy",
-          "child-new: parent.verbose=true, action=deploy"
-        ])
-      }))
+      }).pipe(Effect.provide(TestLayer)))
 
     it.effect("should handle nested subcommands with context sharing", () =>
       Effect.gen(function*() {
@@ -470,7 +388,7 @@ describe("Command", () => {
           Command.withSubcommands(serviceWithDeploy)
         )
 
-        const runCommand = Command.runWithArgs(appWithService, { version: "1.0.0" })
+        const runCommand = Command.runWith(appWithService, { version: "1.0.0" })
         yield* runCommand([
           "--env",
           "production",
@@ -480,14 +398,14 @@ describe("Command", () => {
           "deploy",
           "--target-version",
           "1.0.0"
-        ]).pipe(Effect.provide(TestLayer))
+        ])
 
         assert.deepStrictEqual(messages, [
           "deploy: root.env=production",
           "deploy: service.name=api",
           "deploy: target-version=1.0.0"
         ])
-      }))
+      }).pipe(Effect.provide(TestLayer)))
 
     it.effect("should handle boolean flags before subcommands", () =>
       Effect.gen(function*() {
@@ -517,7 +435,7 @@ describe("Command", () => {
           Command.withSubcommands(deploy)
         )
 
-        const runCommand = Command.runWithArgs(combined, { version: "1.0.0" })
+        const runCommand = Command.runWith(combined, { version: "1.0.0" })
         yield* runCommand([
           "--config",
           "prod.json",
@@ -525,20 +443,20 @@ describe("Command", () => {
           "deploy", // This should be recognized as subcommand, not as value for --verbose
           "--target-version",
           "1.0.0"
-        ]).pipe(Effect.provide(TestLayer))
+        ])
 
         assert.deepStrictEqual(messages, [
           "deploy: parent.verbose=true",
           "deploy: target-version=1.0.0"
         ])
-      }))
+      }).pipe(Effect.provide(TestLayer)))
 
     it.effect("should support options before, after, or between operands (relaxed POSIX Syntax Guideline No. 9)", () =>
       Effect.gen(function*() {
         // Test both orderings work: POSIX (options before operands) and modern (mixed)
 
         // Test 1: POSIX style - options before operands
-        yield* runComprehensiveCli([
+        yield* Cli.run([
           "copy",
           "--recursive",
           "--force",
@@ -547,7 +465,7 @@ describe("Command", () => {
         ])
 
         // Test 2: Modern style - options after operands
-        yield* runComprehensiveCli([
+        yield* Cli.run([
           "copy",
           "src.txt",
           "dest.txt",
@@ -556,7 +474,7 @@ describe("Command", () => {
         ])
 
         // Test 3: Mixed style - some options before, some after
-        yield* runComprehensiveCli([
+        yield* Cli.run([
           "copy",
           "--recursive",
           "src.txt",
@@ -568,7 +486,6 @@ describe("Command", () => {
         const actions = yield* TestActions.getActions
         assert.strictEqual(actions.length, 3)
 
-        // All should have the same config regardless of order
         for (let i = 0; i < 3; i++) {
           assert.strictEqual(actions[i].command, "copy")
           assert.strictEqual(actions[i].details.recursive, true)
@@ -582,14 +499,10 @@ describe("Command", () => {
 
     it.effect("should suggest similar subcommands for unknown subcommands", () =>
       Effect.gen(function*() {
-        // Test unknown subcommand with suggestion - "cpy" should suggest "copy"
-        const runCommand = Command.runWithArgs(comprehensiveCli, { version: "1.0.0" })
-        yield* runCommand(["cpy"])
+        yield* Cli.run(["cpy"])
 
-        // Capture the error output
         const errorOutput = yield* TestConsole.errorLines
         const errorText = errorOutput.join("\n")
-
         expect(errorText).toMatchInlineSnapshot(`
           "
           ERROR
@@ -602,14 +515,11 @@ describe("Command", () => {
 
     it.effect("should suggest similar subcommands for nested unknown subcommands", () =>
       Effect.gen(function*() {
-        // Test unknown nested subcommand with suggestion - "usrs" should suggest "users"
-        const runCommand = Command.runWithArgs(comprehensiveCli, { version: "1.0.0" })
-        yield* runCommand(["admin", "usrs", "list"])
+        yield* Cli.run(["admin", "usrs", "list"])
 
         // Capture the error output
         const errorOutput = yield* TestConsole.errorLines
         const errorText = errorOutput.join("\n")
-
         expect(errorText).toMatchInlineSnapshot(`
           "
           ERROR
@@ -622,14 +532,10 @@ describe("Command", () => {
 
     it.effect("should suggest similar options for unrecognized options", () =>
       Effect.gen(function*() {
-        // Test unrecognized option with suggestion - "--debugs" should suggest "--debug"
-        const runCommand = Command.runWithArgs(comprehensiveCli, { version: "1.0.0" })
-        yield* runCommand(["--debugs", "copy", "src.txt", "dest.txt"])
+        yield* Cli.run(["--debugs", "copy", "src.txt", "dest.txt"])
 
-        // Capture the error output
         const errorOutput = yield* TestConsole.errorLines
         const errorText = errorOutput.join("\n")
-
         expect(errorText).toMatchInlineSnapshot(`
           "
           ERROR
@@ -642,14 +548,10 @@ describe("Command", () => {
 
     it.effect("should suggest similar short options for unrecognized short options", () =>
       Effect.gen(function*() {
-        // Test unrecognized short option with suggestion - "-u" suggests similar single-char options
-        const runCommand = Command.runWithArgs(comprehensiveCli, { version: "1.0.0" })
-        yield* runCommand(["-u", "copy", "src.txt", "dest.txt"])
+        yield* Cli.run(["-u", "copy", "src.txt", "dest.txt"])
 
-        // Capture the error output
         const errorOutput = yield* TestConsole.errorLines
         const errorText = errorOutput.join("\n")
-
         expect(errorText).toMatchInlineSnapshot(`
           "
           ERROR

@@ -2,6 +2,7 @@ import { assert, describe, it } from "@effect/vitest"
 import { Effect, Layer, Logger } from "effect"
 import { FileSystem, Path } from "effect/platform"
 import { Command, Flag, HelpFormatter } from "effect/unstable/cli"
+import * as MockTerminal from "./services/MockTerminal.ts"
 
 // Create a test logger that captures log messages
 const makeTestLogger = () => {
@@ -27,12 +28,21 @@ const makeTestLogger = () => {
   return { testLogger, capturedLogs }
 }
 
-// Create a test layer with the test logger
+const FileSystemLayer = FileSystem.layerNoop({})
+const PathLayer = Path.layer
+const TerminalLayer = MockTerminal.layer
+const HelpFormatterLayer = HelpFormatter.layer(
+  HelpFormatter.defaultHelpRenderer({
+    colors: false
+  })
+)
+
 const makeTestLayer = (testLogger: Logger.Logger<unknown, void>) =>
   Layer.mergeAll(
-    FileSystem.layerNoop({}),
-    Path.layer,
-    HelpFormatter.layer(HelpFormatter.defaultHelpRenderer({ colors: false })),
+    FileSystemLayer,
+    PathLayer,
+    TerminalLayer,
+    HelpFormatterLayer,
     Logger.layer([testLogger])
   )
 
@@ -80,7 +90,7 @@ describe("LogLevel", () => {
           yield* Effect.logFatal("fatal")
         }))
 
-      const runCommand = Command.runWithArgs(testCommand, { version: "1.0.0" })
+      const runCommand = Command.runWith(testCommand, { version: "1.0.0" })
       const args = logLevel ? ["--log-level", logLevel] : []
 
       yield* runCommand(args).pipe(Effect.provide(TestLayer))
@@ -104,11 +114,11 @@ describe("LogLevel", () => {
     "none"
   ]
 
-  it.effect.each(testCases)("level=%s", (level) =>
+  it.each(testCases)("level=%s", (level) =>
     Effect.gen(function*() {
       const logs = yield* testLogLevels(level)
       assert.deepStrictEqual(logs, filterLogs(level))
-    }))
+    }).pipe(Effect.runPromise))
 
   it.effect("should use default log level when --log-level is not provided", () =>
     Effect.gen(function*() {
@@ -135,7 +145,7 @@ describe("LogLevel", () => {
         }))
 
       const combined = parentCommand.pipe(Command.withSubcommands(childCommand))
-      const runCommand = Command.runWithArgs(combined, { version: "1.0.0" })
+      const runCommand = Command.runWith(combined, { version: "1.0.0" })
 
       yield* runCommand(["--log-level", "info", "child"]).pipe(Effect.provide(TestLayer))
 
@@ -155,7 +165,7 @@ describe("LogLevel", () => {
 
       const testCommand = Command.make("test", {}, () => Effect.logInfo("Should not see this"))
 
-      const runCommand = Command.runWithArgs(testCommand, { version: "1.0.0" })
+      const runCommand = Command.runWith(testCommand, { version: "1.0.0" })
 
       const result = yield* Effect.flip(
         runCommand(["--log-level", "invalid"]).pipe(Effect.provide(TestLayer))
