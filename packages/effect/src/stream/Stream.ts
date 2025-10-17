@@ -3,6 +3,7 @@
  */
 // @effect-diagnostics returnEffectInGen:off
 import * as Cause from "../Cause.ts"
+import { Clock } from "../Clock.ts"
 import * as Arr from "../collections/Array.ts"
 import * as MutableHashMap from "../collections/MutableHashMap.ts"
 import * as Filter from "../data/Filter.ts"
@@ -1309,13 +1310,16 @@ export const scoped = <A, E, R>(
  * @category mapping
  */
 export const map: {
-  <A, B>(f: (a: A) => B): <E, R>(self: Stream<A, E, R>) => Stream<B, E, R>
-  <A, E, R, B>(self: Stream<A, E, R>, f: (a: A) => B): Stream<B, E, R>
-} = dual(2, <A, E, R, B>(self: Stream<A, E, R>, f: (a: A) => B): Stream<B, E, R> =>
-  fromChannel(Channel.map(
-    self.channel,
-    Arr.map(f)
-  )))
+  <A, B>(f: (a: A, i: number) => B): <E, R>(self: Stream<A, E, R>) => Stream<B, E, R>
+  <A, E, R, B>(self: Stream<A, E, R>, f: (a: A, i: number) => B): Stream<B, E, R>
+} = dual(2, <A, E, R, B>(self: Stream<A, E, R>, f: (a: A, i: number) => B): Stream<B, E, R> =>
+  suspend(() => {
+    let i = 0
+    return fromChannel(Channel.map(
+      self.channel,
+      Arr.map((o) => f(o, i++))
+    ))
+  }))
 
 /**
  * @since 2.0.0
@@ -1323,15 +1327,15 @@ export const map: {
  */
 export const mapArray: {
   <A, B>(
-    f: (a: Arr.NonEmptyReadonlyArray<A>) => Arr.NonEmptyReadonlyArray<B>
+    f: (a: Arr.NonEmptyReadonlyArray<A>, i: number) => Arr.NonEmptyReadonlyArray<B>
   ): <E, R>(self: Stream<A, E, R>) => Stream<B, E, R>
   <A, E, R, B>(
     self: Stream<A, E, R>,
-    f: (a: Arr.NonEmptyReadonlyArray<A>) => Arr.NonEmptyReadonlyArray<B>
+    f: (a: Arr.NonEmptyReadonlyArray<A>, i: number) => Arr.NonEmptyReadonlyArray<B>
   ): Stream<B, E, R>
 } = dual(2, <A, E, R, B>(
   self: Stream<A, E, R>,
-  f: (a: Arr.NonEmptyReadonlyArray<A>) => Arr.NonEmptyReadonlyArray<B>
+  f: (a: Arr.NonEmptyReadonlyArray<A>, i: number) => Arr.NonEmptyReadonlyArray<B>
 ): Stream<B, E, R> => fromChannel(Channel.map(self.channel, f)))
 
 /**
@@ -1365,7 +1369,7 @@ export const mapArray: {
  */
 export const mapEffect: {
   <A, A2, E2, R2>(
-    f: (a: A) => Effect.Effect<A2, E2, R2>,
+    f: (a: A, i: number) => Effect.Effect<A2, E2, R2>,
     options?: {
       readonly concurrency?: number | "unbounded" | undefined
       readonly bufferSize?: number | undefined
@@ -1374,7 +1378,7 @@ export const mapEffect: {
   ): <E, R>(self: Stream<A, E, R>) => Stream<A2, E2 | E, R2 | R>
   <A, E, R, A2, E2, R2>(
     self: Stream<A, E, R>,
-    f: (a: A) => Effect.Effect<A2, E2, R2>,
+    f: (a: A, i: number) => Effect.Effect<A2, E2, R2>,
     options?: {
       readonly concurrency?: number | "unbounded" | undefined
       readonly bufferSize?: number | undefined
@@ -1383,7 +1387,7 @@ export const mapEffect: {
   ): Stream<A2, E | E2, R | R2>
 } = dual((args) => isStream(args[0]), <A, E, R, A2, E2, R2>(
   self: Stream<A, E, R>,
-  f: (a: A) => Effect.Effect<A2, E2, R2>,
+  f: (a: A, i: number) => Effect.Effect<A2, E2, R2>,
   options?: {
     readonly concurrency?: number | "unbounded" | undefined
     readonly bufferSize?: number | undefined
@@ -1432,15 +1436,15 @@ export const flattenEffect: {
  */
 export const mapArrayEffect: {
   <A, B, E2, R2>(
-    f: (a: Arr.NonEmptyReadonlyArray<A>) => Effect.Effect<Arr.NonEmptyReadonlyArray<B>, E2, R2>
+    f: (a: Arr.NonEmptyReadonlyArray<A>, i: number) => Effect.Effect<Arr.NonEmptyReadonlyArray<B>, E2, R2>
   ): <E, R>(self: Stream<A, E, R>) => Stream<B, E | E2, R | R2>
   <A, E, R, B, E2, R2>(
     self: Stream<A, E, R>,
-    f: (a: Arr.NonEmptyReadonlyArray<A>) => Effect.Effect<Arr.NonEmptyReadonlyArray<B>, E2, R2>
+    f: (a: Arr.NonEmptyReadonlyArray<A>, i: number) => Effect.Effect<Arr.NonEmptyReadonlyArray<B>, E2, R2>
   ): Stream<B, E | E2, R | R2>
 } = dual(2, <A, E, R, B, E2, R2>(
   self: Stream<A, E, R>,
-  f: (a: Arr.NonEmptyReadonlyArray<A>) => Effect.Effect<Arr.NonEmptyReadonlyArray<B>, E2, R2>
+  f: (a: Arr.NonEmptyReadonlyArray<A>, i: number) => Effect.Effect<Arr.NonEmptyReadonlyArray<B>, E2, R2>
 ): Stream<B, E | E2, R | R2> => fromChannel(Channel.mapEffect(self.channel, f)))
 
 /**
@@ -1697,6 +1701,531 @@ export const merge: {
       readonly haltStrategy?: HaltStrategy | undefined
     } | undefined
   ): Stream<A | A2, E | E2, R | R2> => fromChannel(Channel.merge(toChannel(self), toChannel(that), options))
+)
+
+/**
+ * Composes this stream with the specified stream to create a cartesian
+ * product of elements. The `right` stream would be run multiple times, for
+ * every element in the `left` stream.
+ *
+ * See also `Stream.zip` for the more common point-wise variant.
+ *
+ * @since 2.0.0
+ * @category utils
+ */
+export const cross: {
+  <AR, ER, RR>(right: Stream<AR, ER, RR>): <AL, EL, RL>(left: Stream<AL, EL, RL>) => Stream<[AL, AR], EL | ER, RL | RR>
+  <AL, ER, RR, AR, EL, RL>(left: Stream<AL, ER, RR>, right: Stream<AR, EL, RL>): Stream<[AL, AR], EL | ER, RL | RR>
+} = dual(2, <AL, EL, RL, AR, ER, RR>(
+  left: Stream<AL, EL, RL>,
+  right: Stream<AR, ER, RR>
+): Stream<[AL, AR], EL | ER, RL | RR> => crossWith(left, right, (l, r) => [l, r]))
+
+/**
+ * Composes this stream with the specified stream to create a cartesian
+ * product of elements with a specified function. The `right` stream would be
+ * run multiple times, for every element in the `left` stream.
+ *
+ * See also `Stream.zipWith` for the more common point-wise variant.
+ *
+ * @since 2.0.0
+ * @category utils
+ */
+export const crossWith: {
+  <AR, ER, RR, AL, A>(
+    right: Stream<AR, ER, RR>,
+    f: (left: AL, right: AR) => A
+  ): <EL, RL>(left: Stream<AL, EL, RL>) => Stream<A, EL | ER, RL | RR>
+  <AL, EL, RL, AR, ER, RR, A>(
+    left: Stream<AL, EL, RL>,
+    right: Stream<AR, ER, RR>,
+    f: (left: AL, right: AR) => A
+  ): Stream<A, EL | ER, RL | RR>
+} = dual(3, <AL, EL, RL, AR, ER, RR, A>(
+  left: Stream<AL, EL, RL>,
+  right: Stream<AR, ER, RR>,
+  f: (left: AL, right: AR) => A
+): Stream<A, EL | ER, RL | RR> => flatMap(left, (l) => map(right, (r) => f(l, r))))
+
+/**
+ * Zips this stream with another point-wise and applies the function to the
+ * paired elements.
+ *
+ * The new stream will end when one of the sides ends.
+ *
+ * @example
+ * ```ts
+ * import { Effect } from "effect"
+ * import { Stream } from "effect/stream"
+ *
+ * const stream1 = Stream.make(1, 2, 3, 4, 5, 6)
+ * const stream2 = Stream.make("a", "b", "c")
+ *
+ * const zipped = Stream.zipWith(stream1, stream2, (n, s) => `${n}-${s}`)
+ *
+ * Effect.runPromise(Stream.runCollect(zipped)).then(console.log)
+ * // Output: ["1-a", "2-b", "3-c"]
+ * ```
+ *
+ * @since 2.0.0
+ * @category zipping
+ */
+export const zipWith: {
+  <AR, ER, RR, AL, A>(
+    right: Stream<AR, ER, RR>,
+    f: (left: AL, right: AR) => A
+  ): <EL, RL>(left: Stream<AL, EL, RL>) => Stream<A, EL | ER, RL | RR>
+  <AL, EL, RL, AR, ER, RR, A>(
+    left: Stream<AL, EL, RL>,
+    right: Stream<AR, ER, RR>,
+    f: (left: AL, right: AR) => A
+  ): Stream<A, EL | ER, RL | RR>
+} = dual(3, <AL, EL, RL, AR, ER, RR, A>(
+  left: Stream<AL, EL, RL>,
+  right: Stream<AR, ER, RR>,
+  f: (left: AL, right: AR) => A
+): Stream<A, EL | ER, RL | RR> => zipWithArray(left, right, zipArrays(f)))
+
+const zipArrays = <AL, AR, A>(
+  f: (left: AL, right: AR) => A
+) =>
+(
+  leftArr: Arr.NonEmptyReadonlyArray<AL>,
+  rightArr: Arr.NonEmptyReadonlyArray<AR>
+) => {
+  const minLength = Math.min(leftArr.length, rightArr.length)
+  const result: Arr.NonEmptyArray<A> = [] as any
+
+  for (let i = 0; i < minLength; i++) {
+    result.push(f(leftArr[i], rightArr[i]))
+  }
+
+  return [result, leftArr.slice(minLength), rightArr.slice(minLength)] as const
+}
+
+/**
+ * Zips this stream with another stream using a function that operates on arrays
+ * (chunks) of elements rather than individual elements.
+ *
+ * @since 2.0.0
+ * @category zipping
+ */
+export const zipWithArray: {
+  <AR, ER, RR, AL, A>(
+    right: Stream<AR, ER, RR>,
+    f: (
+      left: Arr.NonEmptyReadonlyArray<AL>,
+      right: Arr.NonEmptyReadonlyArray<AR>
+    ) => readonly [
+      output: Arr.NonEmptyReadonlyArray<A>,
+      leftoverLeft: ReadonlyArray<AL>,
+      leftoverRight: ReadonlyArray<AR>
+    ]
+  ): <EL, RL>(left: Stream<AL, EL, RL>) => Stream<A, EL | ER, RL | RR>
+  <AL, EL, RL, AR, ER, RR, A>(
+    left: Stream<AL, EL, RL>,
+    right: Stream<AR, ER, RR>,
+    f: (
+      left: Arr.NonEmptyReadonlyArray<AL>,
+      right: Arr.NonEmptyReadonlyArray<AR>
+    ) => readonly [
+      output: Arr.NonEmptyReadonlyArray<A>,
+      leftoverLeft: ReadonlyArray<AL>,
+      leftoverRight: ReadonlyArray<AR>
+    ]
+  ): Stream<A, EL | ER, RL | RR>
+} = dual(3, <AL, EL, RL, AR, ER, RR, A>(
+  left: Stream<AL, EL, RL>,
+  right: Stream<AR, ER, RR>,
+  f: (
+    left: Arr.NonEmptyReadonlyArray<AL>,
+    right: Arr.NonEmptyReadonlyArray<AR>
+  ) => readonly [
+    output: Arr.NonEmptyReadonlyArray<A>,
+    leftoverLeft: ReadonlyArray<AL>,
+    leftoverRight: ReadonlyArray<AR>
+  ]
+): Stream<A, EL | ER, RL | RR> =>
+  fromChannel(Channel.fromTransform(Effect.fnUntraced(function*(_, scope) {
+    const pullLeft = yield* Channel.toPullScoped(left.channel, scope)
+    const pullRight = yield* Channel.toPullScoped(right.channel, scope)
+
+    type State =
+      | { _tag: "PullBoth" }
+      | { _tag: "PullLeft"; rightArray: Arr.NonEmptyReadonlyArray<AR> }
+      | { _tag: "PullRight"; leftArray: Arr.NonEmptyReadonlyArray<AL> }
+    let state: State = { _tag: "PullBoth" }
+
+    const pull: Effect.Effect<
+      Arr.NonEmptyReadonlyArray<A>,
+      EL | ER | Pull.Halt,
+      RL | RR
+    > = Effect.gen(function*() {
+      const result = f(
+        state._tag === "PullRight" ? state.leftArray : yield* pullLeft,
+        state._tag === "PullLeft" ? state.rightArray : yield* pullRight
+      )
+      if (Arr.isReadonlyArrayNonEmpty(result[1])) {
+        state = { _tag: "PullRight", leftArray: result[1] }
+      } else if (Arr.isReadonlyArrayNonEmpty(result[2])) {
+        state = { _tag: "PullLeft", rightArray: result[2] }
+      } else {
+        state = { _tag: "PullBoth" }
+      }
+      return result[0]
+    })
+
+    return pull
+  }))))
+
+/**
+ * Zips this stream with another point-wise and emits tuples of elements from
+ * both streams.
+ *
+ * The new stream will end when one of the sides ends.
+ *
+ * @example
+ * ```ts
+ * import { Effect } from "effect"
+ * import { Stream } from "effect/stream"
+ *
+ * const stream1 = Stream.make(1, 2, 3)
+ * const stream2 = Stream.make("a", "b", "c")
+ *
+ * const zipped = Stream.zip(stream1, stream2)
+ *
+ * Effect.runPromise(Stream.runCollect(zipped)).then(console.log)
+ * // Output: [[1, "a"], [2, "b"], [3, "c"]]
+ * ```
+ *
+ * @since 2.0.0
+ * @category zipping
+ */
+export const zip: {
+  <A2, E2, R2>(that: Stream<A2, E2, R2>): <A, E, R>(self: Stream<A, E, R>) => Stream<[A, A2], E2 | E, R2 | R>
+  <A, E, R, A2, E2, R2>(self: Stream<A, E, R>, that: Stream<A2, E2, R2>): Stream<[A, A2], E | E2, R | R2>
+} = dual(
+  2,
+  <A, E, R, A2, E2, R2>(
+    self: Stream<A, E, R>,
+    that: Stream<A2, E2, R2>
+  ): Stream<[A, A2], E | E2, R | R2> => zipWith(self, that, (a, a2) => [a, a2])
+)
+
+/**
+ * Zips this stream with another point-wise, but keeps only the outputs of
+ * the left stream.
+ *
+ * The new stream will end when one of the sides ends.
+ *
+ * @example
+ * ```ts
+ * import { Effect } from "effect"
+ * import { Stream } from "effect/stream"
+ *
+ * const stream1 = Stream.make(1, 2, 3, 4)
+ * const stream2 = Stream.make("a", "b")
+ *
+ * const zipped = Stream.zipLeft(stream1, stream2)
+ *
+ * Effect.runPromise(Stream.runCollect(zipped)).then(console.log)
+ * // Output: [1, 2]
+ * ```
+ *
+ * @since 2.0.0
+ * @category zipping
+ */
+export const zipLeft: {
+  <AR, ER, RR>(right: Stream<AR, ER, RR>): <AL, EL, RL>(left: Stream<AL, EL, RL>) => Stream<AL, ER | EL, RR | RL>
+  <AL, EL, RL, AR, ER, RR>(left: Stream<AL, EL, RL>, right: Stream<AR, ER, RR>): Stream<AL, EL | ER, RL | RR>
+} = dual(
+  2,
+  <AL, EL, RL, AR, ER, RR>(
+    left: Stream<AL, EL, RL>,
+    right: Stream<AR, ER, RR>
+  ): Stream<AL, EL | ER, RL | RR> =>
+    zipWithArray(left, right, (leftArr, rightArr) => {
+      const minLength = Math.min(leftArr.length, rightArr.length)
+      const output = leftArr.slice(0, minLength) as Arr.NonEmptyArray<AL>
+      const leftoverLeft = leftArr.slice(minLength)
+      const leftoverRight = rightArr.slice(minLength)
+
+      return [output, leftoverLeft, leftoverRight] as const
+    })
+)
+
+/**
+ * Zips this stream with another point-wise, but keeps only the outputs of
+ * the right stream.
+ *
+ * The new stream will end when one of the sides ends.
+ *
+ * @example
+ * ```ts
+ * import { Effect } from "effect"
+ * import { Stream } from "effect/stream"
+ *
+ * const stream1 = Stream.make(1, 2)
+ * const stream2 = Stream.make("a", "b", "c", "d")
+ *
+ * const zipped = Stream.zipRight(stream1, stream2)
+ *
+ * Effect.runPromise(Stream.runCollect(zipped)).then(console.log)
+ * // Output: ["a", "b"]
+ * ```
+ *
+ * @since 2.0.0
+ * @category zipping
+ */
+export const zipRight: {
+  <AR, ER, RR>(right: Stream<AR, ER, RR>): <AL, EL, RL>(left: Stream<AL, EL, RL>) => Stream<AR, ER | EL, RR | RL>
+  <AL, EL, RL, AR, ER, RR>(left: Stream<AL, EL, RL>, right: Stream<AR, ER, RR>): Stream<AR, EL | ER, RL | RR>
+} = dual(
+  2,
+  <AL, EL, RL, AR, ER, RR>(
+    left: Stream<AL, EL, RL>,
+    right: Stream<AR, ER, RR>
+  ): Stream<AR, EL | ER, RL | RR> =>
+    zipWithArray(left, right, (leftArr, rightArr) => {
+      const minLength = Math.min(leftArr.length, rightArr.length)
+      const output = rightArr.slice(0, minLength) as Arr.NonEmptyArray<AR>
+      const leftoverLeft = leftArr.slice(minLength)
+      const leftoverRight = rightArr.slice(minLength)
+
+      return [output, leftoverLeft, leftoverRight] as const
+    })
+)
+
+/**
+ * Zips this stream with another point-wise and emits tuples of elements from
+ * both streams, flattening the left tuple.
+ *
+ * The new stream will end when one of the sides ends.
+ *
+ * @example
+ * ```ts
+ * import { Effect } from "effect"
+ * import { Stream } from "effect/stream"
+ *
+ * const stream1 = Stream.make([1, "a"] as const, [2, "b"] as const, [3, "c"] as const)
+ * const stream2 = Stream.make("x", "y", "z")
+ *
+ * const zipped = Stream.zipFlatten(stream1, stream2)
+ *
+ * Effect.runPromise(Stream.runCollect(zipped)).then(console.log)
+ * // Output: [[1, "a", "x"], [2, "b", "y"], [3, "c", "z"]]
+ * ```
+ *
+ * @since 2.0.0
+ * @category zipping
+ */
+export const zipFlatten: {
+  <A2, E2, R2>(
+    that: Stream<A2, E2, R2>
+  ): <A extends ReadonlyArray<any>, E, R>(self: Stream<A, E, R>) => Stream<[...A, A2], E2 | E, R2 | R>
+  <A extends ReadonlyArray<any>, E, R, A2, E2, R2>(
+    self: Stream<A, E, R>,
+    that: Stream<A2, E2, R2>
+  ): Stream<[...A, A2], E | E2, R | R2>
+} = dual(
+  2,
+  <A extends ReadonlyArray<any>, E, R, A2, E2, R2>(
+    self: Stream<A, E, R>,
+    that: Stream<A2, E2, R2>
+  ): Stream<[...A, A2], E | E2, R | R2> => zipWith(self, that, (a, a2) => [...a, a2])
+)
+
+/**
+ * Zips this stream together with the index of elements.
+ *
+ * @example
+ * ```ts
+ * import { Effect } from "effect"
+ * import { Stream } from "effect/stream"
+ *
+ * const stream = Stream.make("a", "b", "c", "d")
+ *
+ * const indexed = Stream.zipWithIndex(stream)
+ *
+ * Effect.runPromise(Stream.runCollect(indexed)).then(console.log)
+ * // Output: [["a", 0], ["b", 1], ["c", 2], ["d", 3]]
+ * ```
+ *
+ * @since 2.0.0
+ * @category zipping
+ */
+export const zipWithIndex = <A, E, R>(self: Stream<A, E, R>): Stream<[A, number], E, R> => map(self, (a, i) => [a, i])
+
+/**
+ * @since 2.0.0
+ * @category zipping
+ */
+export const zipLatestAll = <T extends ReadonlyArray<Stream<any, any, any>>>(
+  ...streams: T
+): Stream<
+  [T[number]] extends [never] ? never
+    : { [K in keyof T]: T[K] extends Stream<infer A, infer _E, infer _R> ? A : never },
+  [T[number]] extends [never] ? never : T[number] extends Stream<infer _A, infer _E, infer _R> ? _E : never,
+  [T[number]] extends [never] ? never : T[number] extends Stream<infer _A, infer _E, infer _R> ? _R : never
+> =>
+  fromChannel(Channel.suspend(() => {
+    const latest: Array<any> = []
+    const emitted = new Set<number>()
+    const readyLatch = Effect.makeLatchUnsafe()
+    return Channel.mergeAll(
+      Channel.fromArray(
+        streams.map((s, i) =>
+          s.channel.pipe(
+            Channel.flattenArray,
+            Channel.mapEffect((a) => {
+              latest[i] = a
+              if (!emitted.has(i)) {
+                emitted.add(i)
+                if (emitted.size < streams.length) {
+                  return readyLatch.await as Effect.Effect<undefined>
+                }
+                return Effect.as(readyLatch.open, Arr.of(latest.slice()))
+              }
+              return Effect.succeed(Arr.of(latest.slice()))
+            }),
+            Channel.filter((a) => a === undefined ? Filter.failVoid : a)
+          )
+        )
+      ),
+      {
+        concurrency: "unbounded",
+        bufferSize: 0
+      }
+    )
+  })) as any
+
+/**
+ * Zips the two streams so that when a value is emitted by either of the two
+ * streams, it is combined with the latest value from the other stream to
+ * produce a result.
+ *
+ * Note: tracking the latest value is done on a per-array basis. That means
+ * that emitted elements that are not the last value in arrays will never be
+ * used for zipping.
+ *
+ * @example
+ * ```ts
+ * import { Effect } from "effect"
+ * import { Stream } from "effect/stream"
+ *
+ * const s1 = Stream.make(1, 2, 3)
+ * const s2 = Stream.make("a", "b", "c", "d")
+ *
+ * const stream = Stream.zipLatest(s1, s2)
+ *
+ * Effect.runPromise(Stream.runCollect(stream)).then(console.log)
+ * // Output combines values as they arrive
+ * ```
+ *
+ * @example
+ * ```ts
+ * import { Effect } from "effect"
+ * import { Stream } from "effect/stream"
+ *
+ * // Combining sensor readings with timestamps
+ * const temperatures = Stream.make(20.5, 21.0, 20.8, 22.1)
+ * const timestamps = Stream.make("10:00", "10:01", "10:02", "10:03", "10:04")
+ *
+ * const readings = Stream.zipLatest(temperatures, timestamps)
+ *
+ * Effect.runPromise(Stream.runCollect(readings)).then((result) =>
+ *   console.log(result)
+ * )
+ * // Each temperature is paired with the latest timestamp
+ * ```
+ *
+ * @since 2.0.0
+ * @category zipping
+ */
+export const zipLatest: {
+  <AR, ER, RR>(
+    right: Stream<AR, ER, RR>
+  ): <AL, EL, RL>(left: Stream<AL, EL, RL>) => Stream<[AL, AR], EL | ER, RL | RR>
+  <AL, EL, RL, AR, ER, RR>(
+    left: Stream<AL, EL, RL>,
+    right: Stream<AR, ER, RR>
+  ): Stream<[AL, AR], EL | ER, RL | RR>
+} = dual(
+  2,
+  <AL, EL, RL, AR, ER, RR>(
+    left: Stream<AL, EL, RL>,
+    right: Stream<AR, ER, RR>
+  ): Stream<[AL, AR], EL | ER, RL | RR> => zipLatestAll(left, right)
+)
+
+/**
+ * Zips the two streams so that when a value is emitted by either of the two
+ * streams, it is combined with the latest value from the other stream using
+ * the provided function to produce a result.
+ *
+ * Note: tracking the latest value is done on a per-array basis. That means
+ * that emitted elements that are not the last value in arrays will never be
+ * used for zipping.
+ *
+ * @example
+ * ```ts
+ * import { Effect } from "effect"
+ * import { Stream } from "effect/stream"
+ *
+ * const numbers = Stream.make(1, 2, 3)
+ * const multipliers = Stream.make(10, 20, 30)
+ *
+ * const stream = Stream.zipLatestWith(
+ *   numbers,
+ *   multipliers,
+ *   (n: number, m: number) => n * m
+ * )
+ *
+ * Effect.runPromise(Stream.runCollect(stream)).then(console.log)
+ * // Combines values using multiplication as they arrive
+ * ```
+ *
+ * @example
+ * ```ts
+ * import { Effect } from "effect"
+ * import { Stream } from "effect/stream"
+ *
+ * // Combining first and last names
+ * const firstNames = Stream.make("Alice", "Bob", "Charlie")
+ * const lastNames = Stream.make("Smith", "Jones")
+ *
+ * const fullNames = Stream.zipLatestWith(
+ *   firstNames,
+ *   lastNames,
+ *   (first: string, last: string) => `${first} ${last}`
+ * )
+ *
+ * Effect.runPromise(Stream.runCollect(fullNames)).then((result) =>
+ *   console.log(result)
+ * )
+ * // ["Alice Smith", "Bob Smith", "Bob Jones", "Charlie Jones"]
+ * ```
+ *
+ * @since 2.0.0
+ * @category zipping
+ */
+export const zipLatestWith: {
+  <AR, ER, RR, AL, A>(
+    right: Stream<AR, ER, RR>,
+    f: (left: AL, right: AR) => A
+  ): <EL, RL>(left: Stream<AL, EL, RL>) => Stream<A, EL | ER, RL | RR>
+  <AL, EL, RL, AR, ER, RR, A>(
+    left: Stream<AL, EL, RL>,
+    right: Stream<AR, ER, RR>,
+    f: (left: AL, right: AR) => A
+  ): Stream<A, EL | ER, RL | RR>
+} = dual(
+  3,
+  <AL, EL, RL, AR, ER, RR, A>(
+    left: Stream<AL, EL, RL>,
+    right: Stream<AR, ER, RR>,
+    f: (left: AL, right: AR) => A
+  ): Stream<A, EL | ER, RL | RR> => map(zipLatestAll(left, right), ([a, a2]) => f(a, a2))
 )
 
 /**
@@ -2661,6 +3190,314 @@ export const scanEffect: {
 
 /**
  * @since 2.0.0
+ * @category Rate-limiting
+ */
+export const debounce: {
+  (duration: Duration.DurationInput): <A, E, R>(self: Stream<A, E, R>) => Stream<A, E, R>
+  <A, E, R>(self: Stream<A, E, R>, duration: Duration.DurationInput): Stream<A, E, R>
+} = dual(
+  2,
+  <A, E, R>(self: Stream<A, E, R>, duration: Duration.DurationInput): Stream<A, E, R> =>
+    transformPull(
+      self,
+      Effect.fnUntraced(function*(pull, scope) {
+        const clock = yield* Clock
+        const durationMs = Duration.toMillis(Duration.fromDurationInputUnsafe(duration))
+        let lastArr: Arr.NonEmptyReadonlyArray<A> | undefined
+        let cause: Cause.Cause<Pull.Halt | E> | undefined
+        let emitAtMs = Infinity
+        const pullLatch = Effect.makeLatchUnsafe()
+        const emitLatch = Effect.makeLatchUnsafe()
+        const endLatch = Effect.makeLatchUnsafe()
+
+        yield* pull.pipe(
+          pullLatch.whenOpen,
+          Effect.flatMap((arr) => {
+            emitLatch.openUnsafe()
+            lastArr = arr
+            emitAtMs = clock.currentTimeMillisUnsafe() + durationMs
+            return Effect.void
+          }),
+          Effect.forever({ autoYield: false }),
+          Effect.onError((cause_) => {
+            cause = cause_
+            emitAtMs = clock.currentTimeMillisUnsafe()
+            emitLatch.openUnsafe()
+            endLatch.openUnsafe()
+            return Effect.void
+          }),
+          Effect.forkIn(scope)
+        )
+
+        const sleepLoop = Effect.suspend(function loop(): Pull.Pull<Arr.NonEmptyReadonlyArray<A>, E, void, R> {
+          const now = clock.currentTimeMillisUnsafe()
+          const timeMs = emitAtMs < now ? durationMs : Math.min(durationMs, emitAtMs - now)
+          return Effect.flatMap(Effect.raceFirst(Effect.sleep(timeMs), endLatch.await), () => {
+            const now = clock.currentTimeMillisUnsafe()
+            if (now < emitAtMs) {
+              return loop()
+            } else if (lastArr) {
+              emitLatch.closeUnsafe()
+              pullLatch.closeUnsafe()
+              const eff = Effect.succeed(Arr.of(Arr.lastNonEmpty(lastArr)))
+              lastArr = undefined
+              return eff
+            } else if (cause) {
+              return Effect.failCause(cause!)
+            }
+            return loop()
+          })
+        })
+
+        return Effect.suspend(() => {
+          if (cause) {
+            if (lastArr) {
+              const eff = Effect.succeed(Arr.of(Arr.lastNonEmpty(lastArr)))
+              lastArr = undefined
+              return eff
+            }
+            return Effect.failCause(cause)
+          }
+          pullLatch.openUnsafe()
+          return emitLatch.whenOpen(sleepLoop)
+        })
+      })
+    )
+)
+
+/**
+ * Delays the arrays of this stream according to the given bandwidth
+ * parameters using the token bucket algorithm. Allows for burst in the
+ * processing of elements by allowing the token bucket to accumulate tokens up
+ * to a `units + burst` threshold. The weight of each array is determined by
+ * the effectful `cost` function.
+ *
+ * If using the "enforce" strategy, arrays that do not meet the bandwidth
+ * constraints are dropped. If using the "shape" strategy, arrays are delayed
+ * until they can be emitted without exceeding the bandwidth constraints.
+ *
+ * Defaults to the "shape" strategy.
+ *
+ * @example
+ * ```ts
+ * import { Effect, Schedule } from "effect"
+ * import { Stream } from "effect/stream"
+ *
+ * // Using the "shape" strategy to delay elements
+ * const stream = Stream.fromSchedule(Schedule.spaced("50 millis")).pipe(
+ *   Stream.take(10),
+ *   Stream.throttleEffect({
+ *     // Cost function that returns an Effect
+ *     cost: (arr) => Effect.succeed(arr.length),
+ *     units: 1,
+ *     duration: "100 millis",
+ *     strategy: "shape"
+ *   })
+ * )
+ *
+ * Effect.runPromise(Stream.runCollect(stream)).then(console.log)
+ * // Elements are delayed to match the specified bandwidth
+ * ```
+ *
+ * @since 2.0.0
+ * @category utils
+ */
+export const throttleEffect: {
+  <A, E2, R2>(options: {
+    readonly cost: (arr: Arr.NonEmptyReadonlyArray<A>) => Effect.Effect<number, E2, R2>
+    readonly units: number
+    readonly duration: Duration.DurationInput
+    readonly burst?: number | undefined
+    readonly strategy?: "enforce" | "shape" | undefined
+  }): <E, R>(self: Stream<A, E, R>) => Stream<A, E2 | E, R2 | R>
+  <A, E, R, E2, R2>(
+    self: Stream<A, E, R>,
+    options: {
+      readonly cost: (arr: Arr.NonEmptyReadonlyArray<A>) => Effect.Effect<number, E2, R2>
+      readonly units: number
+      readonly duration: Duration.DurationInput
+      readonly burst?: number | undefined
+      readonly strategy?: "enforce" | "shape" | undefined
+    }
+  ): Stream<A, E | E2, R | R2>
+} = dual(
+  2,
+  <A, E, R, E2, R2>(
+    self: Stream<A, E, R>,
+    options: {
+      readonly cost: (arr: Arr.NonEmptyReadonlyArray<A>) => Effect.Effect<number, E2, R2>
+      readonly units: number
+      readonly duration: Duration.DurationInput
+      readonly burst?: number | undefined
+      readonly strategy?: "enforce" | "shape" | undefined
+    }
+  ): Stream<A, E | E2, R | R2> => {
+    const burst = options.burst ?? 0
+    if (options.strategy === "enforce") {
+      return throttleEnforceEffect(self, options.cost, options.units, options.duration, burst)
+    }
+    return throttleShapeEffect(self, options.cost, options.units, options.duration, burst)
+  }
+)
+
+const throttleEnforceEffect = <A, E, R, E2, R2>(
+  self: Stream<A, E, R>,
+  cost: (arr: Arr.NonEmptyReadonlyArray<A>) => Effect.Effect<number, E2, R2>,
+  units: number,
+  duration: Duration.DurationInput,
+  burst: number
+): Stream<A, E | E2, R | R2> =>
+  transformPull(self, (pull) =>
+    Effect.clockWith((clock) => {
+      const durationMs = Duration.toMillis(Duration.fromDurationInputUnsafe(duration))
+      const max = units + burst < 0 ? Number.POSITIVE_INFINITY : units + burst
+      let tokens = units
+      let timestampMs = clock.currentTimeMillisUnsafe()
+
+      return Effect.succeed(
+        Effect.flatMap(pull, function loop(arr): Pull.Pull<Arr.NonEmptyReadonlyArray<A>, E | E2, void, R | R2> {
+          return Effect.flatMap(cost(arr), (weight) => {
+            const currentMs = clock.currentTimeMillisUnsafe()
+            const elapsed = currentMs - timestampMs
+            const cycles = elapsed / durationMs
+            const sum = tokens + (cycles * units)
+            const available = sum < 0 ? max : Math.min(sum, max)
+
+            if (weight <= available) {
+              tokens = available - weight
+              timestampMs = currentMs
+              return Effect.succeed(arr)
+            }
+
+            // Drop the array and continue
+            return Effect.flatMap(pull, loop)
+          })
+        })
+      )
+    }))
+
+const throttleShapeEffect = <A, E, R, E2, R2>(
+  self: Stream<A, E, R>,
+  cost: (arr: Arr.NonEmptyReadonlyArray<A>) => Effect.Effect<number, E2, R2>,
+  units: number,
+  duration: Duration.DurationInput,
+  burst: number
+): Stream<A, E | E2, R | R2> =>
+  transformPull(self, (pull) =>
+    Effect.clockWith((clock) => {
+      const durationMs = Duration.toMillis(Duration.fromDurationInputUnsafe(duration))
+      const max = units + burst < 0 ? Number.POSITIVE_INFINITY : units + burst
+      let tokens = units
+      let timestampMs = clock.currentTimeMillisUnsafe()
+
+      return Effect.succeed(Effect.flatMap(pull, (arr) =>
+        Effect.flatMap(cost(arr), (weight) => {
+          const currentMs = clock.currentTimeMillisUnsafe()
+          const elapsed = currentMs - timestampMs
+          const cycles = elapsed / durationMs
+          const sum = tokens + (cycles * units)
+          const available = sum < 0 ? max : Math.min(sum, max)
+          const remaining = available - weight
+
+          if (remaining >= 0) {
+            tokens = remaining
+            timestampMs = currentMs
+            return Effect.succeed(arr)
+          }
+
+          // Calculate delay needed
+          const waitCycles = -remaining / units
+          const delayMs = Math.max(0, waitCycles * durationMs)
+
+          if (delayMs > 0) {
+            return Effect.flatMap(Effect.sleep(delayMs), () => {
+              tokens = remaining
+              timestampMs = currentMs
+              return Effect.succeed(arr)
+            })
+          }
+
+          tokens = remaining
+          timestampMs = currentMs
+          return Effect.succeed(arr)
+        })))
+    }))
+
+/**
+ * Delays the arrays of this stream according to the given bandwidth
+ * parameters using the token bucket algorithm. Allows for burst in the
+ * processing of elements by allowing the token bucket to accumulate tokens up
+ * to a `units + burst` threshold. The weight of each array is determined by
+ * the `cost` function.
+ *
+ * If using the "enforce" strategy, arrays that do not meet the bandwidth
+ * constraints are dropped. If using the "shape" strategy, arrays are delayed
+ * until they can be emitted without exceeding the bandwidth constraints.
+ *
+ * Defaults to the "shape" strategy.
+ *
+ * @example
+ * ```ts
+ * import { Effect, Schedule } from "effect"
+ * import { Stream } from "effect/stream"
+ *
+ * // Rate limiting a stream to 1 element per 100ms using array length as cost
+ * const stream = Stream.fromSchedule(Schedule.spaced("50 millis")).pipe(
+ *   Stream.take(6),
+ *   Stream.throttle({
+ *     cost: (arr) => arr.length,
+ *     units: 1,
+ *     duration: "100 millis",
+ *     strategy: "shape"
+ *   })
+ * )
+ *
+ * Effect.runPromise(Stream.runCollect(stream)).then(console.log)
+ * // Output: [0, 1, 2, 3, 4, 5]
+ * // Elements are emitted respecting the bandwidth constraints
+ * ```
+ *
+ * @since 2.0.0
+ * @category utils
+ */
+export const throttle: {
+  <A>(options: {
+    readonly cost: (arr: Arr.NonEmptyReadonlyArray<A>) => number
+    readonly units: number
+    readonly duration: Duration.DurationInput
+    readonly burst?: number | undefined
+    readonly strategy?: "enforce" | "shape" | undefined
+  }): <E, R>(self: Stream<A, E, R>) => Stream<A, E, R>
+  <A, E, R>(
+    self: Stream<A, E, R>,
+    options: {
+      readonly cost: (arr: Arr.NonEmptyReadonlyArray<A>) => number
+      readonly units: number
+      readonly duration: Duration.DurationInput
+      readonly burst?: number | undefined
+      readonly strategy?: "enforce" | "shape" | undefined
+    }
+  ): Stream<A, E, R>
+} = dual(
+  2,
+  <A, E, R>(
+    self: Stream<A, E, R>,
+    options: {
+      readonly cost: (arr: Arr.NonEmptyReadonlyArray<A>) => number
+      readonly units: number
+      readonly duration: Duration.DurationInput
+      readonly burst?: number | undefined
+      readonly strategy?: "enforce" | "shape" | undefined
+    }
+  ): Stream<A, E, R> =>
+    throttleEffect(self, {
+      ...options,
+      cost: (arr) => Effect.succeed(options.cost(arr))
+    })
+)
+
+/**
+ * @since 2.0.0
  * @category Grouping
  */
 export const grouped: {
@@ -3611,7 +4448,7 @@ export const provide: {
  * dependency on `R`.
  *
  * @since 4.0.0
- * @category context
+ * @category Services
  */
 export const provideServices: {
   <R2>(services: ServiceMap.ServiceMap<R2>): <A, E, R>(self: Stream<A, E, R>) => Stream<A, E, Exclude<R, R2>>

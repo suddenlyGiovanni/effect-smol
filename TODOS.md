@@ -325,15 +325,15 @@ The exports under each section are organized as they are in Effect 3.0. The cate
 |       `changesWith`        |  Done  |                               |          |
 |    `changesWithEffect`     |  Done  |                               |          |
 |          `chunks`          |  Done  |           `chunks`            |          |
-|        `chunksWith`        |   -    |                               |          |
+|        `chunksWith`        |   X    |                               |          |
 |         `combine`          |   -    |                               |          |
 |      `combineChunks`       |   -    |                               |          |
 |          `concat`          |  Done  |           `concat`            |          |
-|          `cross`           |   -    |                               |          |
-|        `crossLeft`         |   -    |                               |          |
-|        `crossRight`        |   -    |                               |          |
-|        `crossWith`         |   -    |                               |          |
-|         `debounce`         |   -    |                               |          |
+|          `cross`           |  Done  |                               |          |
+|        `crossLeft`         |   X    |                               |          |
+|        `crossRight`        |   X    |                               |          |
+|        `crossWith`         |  Done  |                               |          |
+|         `debounce`         |  Done  |                               |          |
 |     `distributedWith`      |   -    |                               |          |
 |  `distributedWithDynamic`  |   -    |                               |          |
 |          `drain`           |  Done  |            `drain`            |          |
@@ -372,7 +372,7 @@ The exports under each section are organized as they are in Effect 3.0. The cate
 |        `mergeRight`        |   -    |                               |          |
 |        `mergeWith`         |   -    |                               |          |
 |         `mkString`         |  Done  |          `mkString`           |          |
-|          `onDone`          |   -    |                               |          |
+|          `onDone`          |   X    |                               |          |
 |         `onError`          |   -    |                               |          |
 |        `partition`         |   -    |                               |          |
 |     `partitionEither`      |   -    |                               |          |
@@ -408,8 +408,8 @@ The exports under each section are organized as they are in Effect 3.0. The cate
 |     `takeUntilEffect`      |  Done  |       `takeUntilEffect`       |          |
 |        `takeWhile`         |  Done  |          `takeWhile`          |          |
 |      `tapErrorCause`       |  Done  |          `tapCause`           |          |
-|         `throttle`         |   -    |                               |          |
-|      `throttleEffect`      |   -    |                               |          |
+|         `throttle`         |  Done  |                               |          |
+|      `throttleEffect`      |  Done  |                               |          |
 |         `timeout`          |   -    |                               |          |
 |       `timeoutFail`        |  Done  |        `timeoutOrElse`        |          |
 |     `timeoutFailCause`     |   X    |                               |          |
@@ -423,7 +423,7 @@ The exports under each section are organized as they are in Effect 3.0. The cate
 
 |         Effect 3         | Ported | Effect 4 | Comments |
 | :----------------------: | :----: | :------: | :------: |
-|          `zip`           |   -    |          |          |
+|          `zip`           |  Done  |          |          |
 |         `zipAll`         |   -    |          |          |
 |       `zipAllLeft`       |   -    |          |          |
 |      `zipAllRight`       |   -    |          |          |
@@ -432,15 +432,15 @@ The exports under each section are organized as they are in Effect 3.0. The cate
 | `zipAllSortedByKeyRight` |   X    |          |          |
 | `zipAllSortedByKeyWith`  |   X    |          |          |
 |       `zipAllWith`       |   -    |          |          |
-|       `zipFlatten`       |   -    |          |          |
-|       `zipLatest`        |   -    |          |          |
-|      `zipLatestAll`      |   -    |          |          |
-|     `zipLatestWith`      |   -    |          |          |
-|        `zipLeft`         |   -    |          |          |
-|        `zipRight`        |   -    |          |          |
-|        `zipWith`         |   -    |          |          |
-|     `zipWithChunks`      |   -    |          |          |
-|      `zipWithIndex`      |   -    |          |          |
+|       `zipFlatten`       |  Done  |          |          |
+|       `zipLatest`        |  Done  |          |          |
+|      `zipLatestAll`      |  Done  |          |          |
+|     `zipLatestWith`      |  Done  |          |          |
+|        `zipLeft`         |  Done  |          |          |
+|        `zipRight`        |  Done  |          |          |
+|        `zipWith`         |  Done  |          |          |
+|     `zipWithChunks`      |  Done  |          |          |
+|      `zipWithIndex`      |  Done  |          |          |
 |      `zipWithNext`       |   -    |          |          |
 |    `zipWithPrevious`     |   -    |          |          |
 | `zipWithPreviousAndNext` |   -    |          |          |
