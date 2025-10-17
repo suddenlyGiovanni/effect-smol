@@ -2,7 +2,6 @@
  * @since 4.0.0
  */
 import * as Console from "../../Console.ts"
-import * as Option from "../../data/Option.ts"
 import * as Predicate from "../../data/Predicate.ts"
 import * as Effect from "../../Effect.ts"
 import { dual } from "../../Function.ts"
@@ -622,7 +621,6 @@ export const make: {
  * ```ts
  * import { Command, Flag } from "effect/unstable/cli"
  * import { Effect, Console } from "effect"
- * import { Option } from "effect/data"
  *
  * // First define subcommands
  * const clone = Command.make("clone", {
@@ -650,8 +648,8 @@ export const make: {
  *     Effect.gen(function*() {
  *       // Now config has the subcommand field
  *       yield* Console.log(`Git verbose: ${config.verbose}`)
- *       if (Option.isSome(config.subcommand)) {
- *         yield* Console.log(`Executed subcommand: ${config.subcommand.value.name}`)
+ *       if (config.subcommand) {
+ *         yield* Console.log(`Executed subcommand: ${config.subcommand.name}`)
  *       }
  *     })
  *   )
@@ -715,46 +713,45 @@ export const withSubcommands = <const Subcommands extends ReadonlyArray<Command<
   self: Command<Name, Input, E, R>
 ): Command<
   Name,
-  Input & { readonly subcommand: Option.Option<ExtractSubcommandInputs<Subcommands>> },
+  Input & { readonly subcommand: ExtractSubcommandInputs<Subcommands> | undefined },
   ExtractSubcommandErrors<Subcommands>,
   R | Exclude<ExtractSubcommandContext<Subcommands>, ParentCommand<Name>>
 > => {
   checkForDuplicateFlags(self, subcommands)
 
-  type NewInput = Input & { readonly subcommand: Option.Option<ExtractSubcommandInputs<Subcommands>> }
+  type NewInput = Input & { readonly subcommand: ExtractSubcommandInputs<Subcommands> | undefined }
 
   // Build a stable name → subcommand index to avoid repeated linear scans
-  const subcommandIndex = new Map<string, Command<any, any, any, any>>()
+  const subcommandIndex = new Map<string, Command<string, any, any, any>>()
   for (const s of subcommands) {
     subcommandIndex.set(s.name, s)
   }
 
-  const parse = Effect.fnUntraced(function*(input: RawInput) {
-    const parentResult = yield* self.parse(input)
+  const parse: (input: RawInput) => Effect.Effect<NewInput, CliError.CliError, Environment> = Effect.fnUntraced(
+    function*(input: RawInput) {
+      const parentResult = yield* self.parse(input)
 
-    const subRef = input.subcommand
-    if (!subRef) {
-      return { ...parentResult, subcommand: Option.none() } as NewInput
+      const subRef = input.subcommand
+      if (!subRef) {
+        return { ...parentResult, subcommand: undefined }
+      }
+
+      const sub = subcommandIndex.get(subRef.name)
+
+      // Parser guarantees valid subcommand names, but guard defensively
+      if (!sub) {
+        return { ...parentResult, subcommand: undefined }
+      }
+
+      const subResult = yield* sub.parse(subRef.parsedInput)
+      const subcommand = { name: sub.name, result: subResult } as ExtractSubcommandInputs<Subcommands>
+      return { ...parentResult, subcommand }
     }
-
-    const sub = subcommandIndex.get(subRef.name)
-
-    // Parser guarantees valid subcommand names, but guard defensively
-    if (!sub) {
-      return {
-        ...parentResult,
-        subcommand: Option.none()
-      } as NewInput
-    }
-
-    const subResult = yield* sub.parse(subRef.parsedInput)
-    const value = { name: sub.name, result: subResult } as ExtractSubcommandInputs<Subcommands>
-    return { ...parentResult, subcommand: Option.some(value) } as NewInput
-  })
+  )
 
   const handle = Effect.fnUntraced(function*(input: NewInput, commandPath: ReadonlyArray<string>) {
-    if (Option.isSome(input.subcommand)) {
-      const selected = input.subcommand.value
+    const selected = input.subcommand
+    if (selected !== undefined) {
       const child = subcommandIndex.get(selected.name)
       if (!child) {
         return yield* new CliError.ShowHelp({ commandPath })
@@ -902,7 +899,7 @@ export const getHelpDoc = <Name extends string, Input>(
       args.push({
         name: single.name,
         type: single.typeName ?? Primitive.getTypeName(single.primitiveType),
-        description: Option.getOrElse(single.description, () => ""),
+        description: single.description,
         required: !metadata.isOptional,
         variadic: metadata.isVariadic
       })
@@ -940,7 +937,7 @@ export const getHelpDoc = <Name extends string, Input>(
         name: single.name,
         aliases: formattedAliases,
         type: single.typeName ?? Primitive.getTypeName(single.primitiveType),
-        description: Option.getOrElse(single.description, () => ""),
+        description: single.description,
         required: single.primitiveType._tag !== "Boolean"
       })
     }
@@ -1226,18 +1223,16 @@ export const runWith = <const Name extends string, Input, E, R>(
         const helpText = helpRenderer.formatHelpDoc(helpDoc)
         yield* Console.log(helpText)
         return
-      } else if (Option.isSome(completions)) {
-        const shell = completions.value
-        const script = shell === "bash"
+      } else if (completions !== undefined) {
+        const script = completions === "bash"
           ? generateBashCompletions(command, command.name)
-          : shell === "fish"
+          : completions === "fish"
           ? generateFishCompletions(command, command.name)
           : generateZshCompletions(command, command.name)
         yield* Console.log(script)
         return
-      } else if (Option.isSome(dynamicCompletions)) {
-        const shell = dynamicCompletions.value
-        const script = generateDynamicCompletion(command, command.name, shell)
+      } else if (dynamicCompletions !== undefined) {
+        const script = generateDynamicCompletion(command, command.name, dynamicCompletions)
         yield* Console.log(script)
         return
       } else if (version && command.subcommands.length === 0) {
@@ -1285,8 +1280,8 @@ export const runWith = <const Name extends string, Input, E, R>(
       const program = command.handle(parsed, [command.name])
 
       // Apply log level if provided via built-ins
-      const finalProgram = Option.isSome(logLevel)
-        ? Effect.provideService(program, References.MinimumLogLevel, logLevel.value)
+      const finalProgram = logLevel !== undefined
+        ? Effect.provideService(program, References.MinimumLogLevel, logLevel)
         : program
 
       // Normalize non-CLI errors into CliError.UserError so downstream catchTags

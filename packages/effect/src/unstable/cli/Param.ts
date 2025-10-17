@@ -119,7 +119,7 @@ export interface Single<out A, Kind extends ParamKind = "flag"> extends Param<A,
   readonly _tag: "Single"
   readonly kind: Kind
   readonly name: string
-  readonly description: Option.Option<string>
+  readonly description: string | undefined
   readonly aliases: ReadonlyArray<string>
   readonly primitiveType: Primitive.Primitive<A>
   readonly typeName?: string | undefined
@@ -167,8 +167,8 @@ export interface Variadic<A, Kind extends ParamKind = ParamKind> extends Param<R
   readonly _tag: "Variadic"
   readonly kind: Kind
   readonly param: Param<A, Kind>
-  readonly min: Option.Option<number>
-  readonly max: Option.Option<number>
+  readonly min: number | undefined
+  readonly max: number | undefined
 }
 
 const Proto = {
@@ -229,7 +229,7 @@ export const makeSingle = <A, K extends ParamKind>(params: {
   readonly primitiveType: Primitive.Primitive<A>
   readonly kind: K
   readonly typeName?: string | undefined
-  readonly description?: Option.Option<string> | undefined
+  readonly description?: string | undefined
   readonly aliases?: ReadonlyArray<string> | undefined
 }): Single<A, K> => {
   const parse: Parse<A> = (args) =>
@@ -239,7 +239,7 @@ export const makeSingle = <A, K extends ParamKind>(params: {
   return Object.assign(Object.create(Proto), {
     _tag: "Single",
     ...params,
-    description: params.description ?? Option.none(),
+    description: params.description,
     aliases: params.aliases ?? [],
     parse
   })
@@ -634,7 +634,7 @@ export const keyValueMap = <K extends ParamKind>(name: string, kind: K) =>
   map(
     variadic(
       makeSingle({ name, primitiveType: Primitive.keyValueMap, kind }),
-      Option.some(1)
+      1
     ),
     (objects) => Object.assign({}, ...objects)
   )
@@ -740,7 +740,7 @@ export const withDescription: {
     return transformSingle(self, <X>(single: Single<X, K>) =>
       makeSingle({
         ...single,
-        description: Option.some(description)
+        description
       }))
   }
 )
@@ -1006,7 +1006,6 @@ export const withDefault: {
  *
  * @example
  * ```ts
- * import { Option } from "effect/data"
  * import { Param } from "effect/unstable/cli"
  *
  * // Basic variadic parameter (0 to infinity)
@@ -1015,14 +1014,14 @@ export const withDefault: {
  * // Variadic with minimum count
  * const inputs = Param.variadic(
  *   Param.string("input", "flag"),
- *   Option.some(1)  // at least 1 required
+ *   1  // at least 1 required
  * )
  *
  * // Variadic with both min and max
  * const limited = Param.variadic(
  *   Param.string("item", "flag"),
- *   Option.some(2),  // at least 2
- *   Option.some(5)   // at most 5
+ *   2,  // at least 2
+ *   5   // at most 5
  * )
  * ```
  *
@@ -1031,8 +1030,8 @@ export const withDefault: {
  */
 export const variadic = <A, Kind extends ParamKind>(
   self: Param<A, Kind>,
-  min: Option.Option<number> = Option.none(),
-  max: Option.Option<number> = Option.none()
+  min?: number,
+  max?: number
 ): Param<ReadonlyArray<A>, Kind> => {
   const single = getUnderlyingSingleOrThrow(self)
   const parse: Parse<ReadonlyArray<A>> = (args) => {
@@ -1109,7 +1108,7 @@ export const between: {
       throw new Error("between: max must be greater than or equal to min")
     }
 
-    return variadic(self, Option.some(min), Option.some(max))
+    return variadic(self, min, max)
   }
 )
 
@@ -1182,7 +1181,7 @@ export const atMost: {
       throw new Error("atMost: max must be non-negative")
     }
 
-    return variadic(self, Option.none(), Option.some(max))
+    return variadic(self, undefined, max)
   }
 )
 
@@ -1229,7 +1228,7 @@ export const atLeast: {
       throw new Error("atLeast: min must be non-negative")
     }
 
-    return variadic(self, Option.some(min), Option.none())
+    return variadic(self, min)
   }
 )
 
@@ -1574,8 +1573,8 @@ const parseOption: <A>(
 const parsePositionalVariadic: <A, Kind extends ParamKind>(
   single: Single<A, Kind>,
   param: Param<A, Kind>,
-  min: Option.Option<number>,
-  max: Option.Option<number>,
+  min: number | undefined,
+  max: number | undefined,
   args: ParsedArgs
 ) => Effect.Effect<
   readonly [remainingOperands: ReadonlyArray<string>, value: ReadonlyArray<A>],
@@ -1584,13 +1583,13 @@ const parsePositionalVariadic: <A, Kind extends ParamKind>(
 > = Effect.fnUntraced(function*<A, Kind extends ParamKind>(
   single: Single<A, Kind>,
   param: Param<A, Kind>,
-  min: Option.Option<number>,
-  max: Option.Option<number>,
+  min: number | undefined,
+  max: number | undefined,
   args: ParsedArgs
 ) {
   const results: Array<A> = []
-  const minValue = Option.getOrElse(min, () => 0)
-  const maxValue = Option.getOrElse(max, () => Number.POSITIVE_INFINITY)
+  const minValue = min ?? 0
+  const maxValue = max ?? Number.POSITIVE_INFINITY
 
   let count = 0
   let currentArgs = args.arguments
@@ -1618,8 +1617,8 @@ const parsePositionalVariadic: <A, Kind extends ParamKind>(
 const parseOptionVariadic: <A, Kind extends ParamKind>(
   single: Single<A, Kind>,
   param: Param<A, Kind>,
-  min: Option.Option<number>,
-  max: Option.Option<number>,
+  min: number | undefined,
+  max: number | undefined,
   args: ParsedArgs
 ) => Effect.Effect<
   readonly [remainingOperands: ReadonlyArray<string>, value: ReadonlyArray<A>],
@@ -1628,8 +1627,8 @@ const parseOptionVariadic: <A, Kind extends ParamKind>(
 > = Effect.fnUntraced(function*<A, Kind extends ParamKind>(
   single: Single<A, Kind>,
   param: Param<A, Kind>,
-  min: Option.Option<number>,
-  max: Option.Option<number>,
+  min: number | undefined,
+  max: number | undefined,
   args: ParsedArgs
 ) {
   const results: Array<A> = []
@@ -1638,21 +1637,21 @@ const parseOptionVariadic: <A, Kind extends ParamKind>(
   const count = values.length
 
   // Validate count constraints
-  if (Option.isSome(min) && count < min.value) {
+  if (min !== undefined && count < min) {
     return yield* count === 0
       ? new CliError.MissingOption({ option: single.name })
       : new CliError.InvalidValue({
         option: single.name,
         value: `${count} occurrences`,
-        expected: `at least ${min.value} value${min.value === 1 ? "" : "s"}`
+        expected: `at least ${min} value${min === 1 ? "" : "s"}`
       })
   }
 
-  if (Option.isSome(max) && count > max.value) {
+  if (max !== undefined && count > max) {
     return yield* new CliError.InvalidValue({
       option: single.name,
       value: `${count} occurrences`,
-      expected: `at most ${max.value} value${max.value === 1 ? "" : "s"}`
+      expected: `at most ${max} value${max === 1 ? "" : "s"}`
     })
   }
 
