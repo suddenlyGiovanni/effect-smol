@@ -4043,8 +4043,9 @@ export const mergeAll: {
             }
 
             const fiber = yield* childPull.pipe(
+              Effect.tap(() => Effect.yieldNow),
               Effect.flatMap((value) => Queue.offer(queue, value)),
-              Effect.forever,
+              Effect.forever({ autoYield: false }),
               Effect.onError(Effect.fnUntraced(function*(cause) {
                 const halt = Pull.filterHalt(cause)
                 yield* Effect.exit(Scope.close(
