@@ -631,7 +631,13 @@ export const fileSchema = <A, K extends ParamKind>(
  * @category constructors
  */
 export const keyValueMap = <K extends ParamKind>(name: string, kind: K) =>
-  makeSingle({ name, primitiveType: Primitive.keyValueMap, kind })
+  map(
+    variadic(
+      makeSingle({ name, primitiveType: Primitive.keyValueMap, kind }),
+      Option.some(1)
+    ),
+    (objects) => Object.assign({}, ...objects)
+  )
 
 /**
  * Creates an empty sentinel parameter that always fails to parse.
