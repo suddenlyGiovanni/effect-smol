@@ -70,8 +70,8 @@ describe("ToFormat", () => {
     strictEqual(format(Symbol.for("a")), "Symbol(a)")
   })
 
-  it("Object", () => {
-    const format = Schema.makeFormat(Schema.Object)
+  it("ObjectKeyword", () => {
+    const format = Schema.makeFormat(Schema.ObjectKeyword)
     strictEqual(format({}), "{}")
     strictEqual(format({ a: 1 }), `{"a":1}`)
     strictEqual(format([1, 2, 3]), `[1,2,3]`)
@@ -112,33 +112,33 @@ describe("ToFormat", () => {
     strictEqual(format("ab"), `"ab"`)
   })
 
-  describe("Enums", () => {
-    it("Numeric enums", () => {
+  describe("Enum", () => {
+    it("Numeric enum", () => {
       enum Fruits {
         Apple,
         Banana
       }
-      const format = Schema.makeFormat(Schema.Enums(Fruits))
+      const format = Schema.makeFormat(Schema.Enum(Fruits))
       strictEqual(format(Fruits.Apple), "0")
     })
 
-    it("String enums", () => {
+    it("String enum", () => {
       enum Fruits {
         Apple = "apple",
         Banana = "banana",
         Cantaloupe = 0
       }
-      const format = Schema.makeFormat(Schema.Enums(Fruits))
+      const format = Schema.makeFormat(Schema.Enum(Fruits))
       strictEqual(format(Fruits.Apple), `"apple"`)
     })
 
-    it("Const enums", () => {
+    it("Const enum", () => {
       const Fruits = {
         Apple: "apple",
         Banana: "banana",
         Cantaloupe: 3
       } as const
-      const format = Schema.makeFormat(Schema.Enums(Fruits))
+      const format = Schema.makeFormat(Schema.Enum(Fruits))
       strictEqual(format(Fruits.Apple), `"apple"`)
     })
   })
@@ -496,7 +496,7 @@ describe("ToFormat", () => {
   it("should allow for custom compilers", () => {
     const visitor = {
       ...Schema.defaultVisitorFormat,
-      "BooleanKeyword": () => (b: boolean) => b ? "True" : "False"
+      "Boolean": () => (b: boolean) => b ? "True" : "False"
     }
     const format = Schema.makeVisitFormat(visitor)
     strictEqual(format(Schema.Boolean)(true), `True`)
