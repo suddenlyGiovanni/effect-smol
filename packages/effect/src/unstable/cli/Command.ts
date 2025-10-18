@@ -27,6 +27,7 @@ import * as Lexer from "./internal/lexer.ts"
 import * as Parser from "./internal/parser.ts"
 import * as Param from "./Param.ts"
 import * as Primitive from "./Primitive.ts"
+import * as Prompt from "./Prompt.ts"
 
 const TypeId = "~effect/cli/Command" as const
 const ParsedConfigTypeId = "~effect/cli/Command/ParsedConfig" as const
@@ -121,7 +122,10 @@ export interface Command<Name extends string, Input, E = never, R = never> exten
    * The method which will be invoked with the command-line input and path to
    * execute the logic associated with the command.
    */
-  readonly handle: (input: Input, commandPath: ReadonlyArray<string>) => Effect.Effect<void, E | CliError.CliError, R>
+  readonly handle: (
+    input: Input,
+    commandPath: ReadonlyArray<string>
+  ) => Effect.Effect<void, E | CliError.CliError, R | Environment>
 }
 
 /**
@@ -610,6 +614,22 @@ export const make: {
     config: config ?? {} as CommandConfig,
     ...(Predicate.isNotUndefined(handler) ? { handle: handler } : {})
   })) as any
+
+/**
+ * @since 4.0.0
+ * @category constructors
+ */
+export const prompt = <Name extends string, A, E, R>(
+  name: Name,
+  prompt: Prompt.Prompt<A>,
+  handler: (value: A) => Effect.Effect<void, E, R>
+): Command<Name, A, E | Terminal.QuitError, R> => {
+  return makeCommand({
+    name,
+    config: {},
+    handle: () => Effect.flatMap(Prompt.run(prompt), (value) => handler(value))
+  })
+}
 
 /**
  * Adds or replaces the handler for a command.
@@ -1446,13 +1466,18 @@ const makeCommand = <const Name extends string, Input, E, R>(options: {
   readonly description?: string | undefined
   readonly subcommands?: ReadonlyArray<Command<any, unknown, unknown, unknown>> | undefined
   readonly parse?: ((input: RawInput) => Effect.Effect<Input, CliError.CliError, Environment>) | undefined
-  readonly handle?: ((input: Input, commandPath: ReadonlyArray<string>) => Effect.Effect<void, E, R>) | undefined
+  readonly handle?:
+    | ((input: Input, commandPath: ReadonlyArray<string>) => Effect.Effect<void, E, R | Environment>)
+    | undefined
 }): Command<Name, Input, E, R> => {
   const service = options.service ?? ServiceMap.Service<ParentCommand<Name>, Input>(`${TypeId}/${options.name}`)
 
   const config = isParsedConfig(options.config) ? options.config : parseConfig(options.config)
 
-  const handle = (input: Input, commandPath: ReadonlyArray<string>): Effect.Effect<void, CliError.CliError | E, R> =>
+  const handle = (
+    input: Input,
+    commandPath: ReadonlyArray<string>
+  ): Effect.Effect<void, CliError.CliError | E, R | Environment> =>
     Predicate.isNotUndefined(options.handle)
       ? options.handle(input, commandPath)
       : Effect.fail(new CliError.ShowHelp({ commandPath }))
