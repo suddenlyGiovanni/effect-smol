@@ -4,6 +4,8 @@
 import type * as Config from "effect/Config"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
+import type * as FileSystem from "effect/platform/FileSystem"
+import type * as Path from "effect/platform/Path"
 import * as HttpRunner from "effect/unstable/cluster/HttpRunner"
 import * as MessageStorage from "effect/unstable/cluster/MessageStorage"
 import * as RunnerHealth from "effect/unstable/cluster/RunnerHealth"
@@ -25,7 +27,6 @@ import { layerHttpClientK8s } from "./NodeClusterRunnerSocket.ts"
 import * as NodeFileSystem from "./NodeFileSystem.ts"
 import * as NodeHttpClient from "./NodeHttpClient.ts"
 import * as NodeHttpServer from "./NodeHttpServer.ts"
-import type { NodeServices } from "./NodeServices.ts"
 import * as NodeSocket from "./NodeSocket.ts"
 
 /**
@@ -103,10 +104,11 @@ export const layer = <
  * @category Layers
  */
 export const layerHttpServer: Layer.Layer<
-  | HttpPlatform
   | Etag.Generator
-  | NodeServices
-  | HttpServer,
+  | FileSystem.FileSystem
+  | HttpPlatform
+  | HttpServer
+  | Path.Path,
   ServeError,
   ShardingConfig.ShardingConfig
 > = Effect.gen(function*() {

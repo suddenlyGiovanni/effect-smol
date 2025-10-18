@@ -1,0 +1,54 @@
+{
+  "name": "@effect/openapi-generator",
+  "type": "module",
+  "version": "0.4.13",
+  "license": "MIT",
+  "description": "",
+  "homepage": "https://effect.website",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Effect-TS/effect.git",
+    "directory": "packages/tools/openapi-generator"
+  },
+  "bugs": {
+    "url": "https://github.com/Effect-TS/effect/issues"
+  },
+  "tags": [
+    "typescript",
+    "openapi",
+    "codegen"
+  ],
+  "keywords": [
+    "typescript",
+    "openapi",
+    "codegen"
+  ],
+  "bin": {
+    "openapigen": "./src/bin.ts"
+  },
+  "files": [],
+  "publishConfig": {
+    "provenance": true,
+    "bin": {
+      "openapigen": "./dist/bin.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "check": "tsc -b tsconfig.json",
+    "test": "vitest",
+    "coverage": "vitest --coverage"
+  },
+  "peerDependencies": {
+    "@effect/platform-node": "workspace:^",
+    "effect": "workspace:^"
+  },
+  "devDependencies": {
+    "@types/swagger2openapi": "^7.0.4",
+    "effect": "workspace:^",
+    "json-schema-typed": "^8.0.1",
+    "openapi-typescript": "^7.10.1",
+    "swagger2openapi": "^7.0.8",
+    "tsup": "^8.5.0"
+  }
+}
