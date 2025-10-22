@@ -6300,6 +6300,8 @@ export interface Class<Self, S extends Top & { readonly fields: Struct.Fields },
   ): Struct<Simplify<Readonly<To>>>
 }
 
+type AddStaticMembers<C, Static> = C & Pick<Static, Exclude<keyof Static, keyof C>>
+
 /**
  * Not all classes are extendable (e.g. `RequestClass`).
  *
@@ -6308,12 +6310,15 @@ export interface Class<Self, S extends Top & { readonly fields: Struct.Fields },
 export interface ExtendableClass<Self, S extends Top & { readonly fields: Struct.Fields }, Inherited>
   extends Class<Self, S, Inherited>
 {
-  extend<Extended>(
+  extend<Extended, Static = {}, Brand = {}>(
     identifier: string
   ): <NewFields extends Struct.Fields>(
     fields: NewFields,
     annotations?: Annotations.Declaration<Extended, readonly [Struct<Simplify<Merge<S["fields"], NewFields>>>]>
-  ) => ExtendableClass<Extended, Struct<Simplify<Merge<S["fields"], NewFields>>>, Self>
+  ) => AddStaticMembers<
+    ExtendableClass<Extended, Struct<Simplify<Merge<S["fields"], NewFields>>>, Self & Brand>,
+    Static
+  >
 }
 
 const immerable: unique symbol = globalThis.Symbol.for("immer-draftable") as any
