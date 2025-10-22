@@ -90,6 +90,7 @@ describe("Inspectable", () => {
 
     it("Error", () => {
       strictEqual(format(new Error("a")), `Error: a`)
+      strictEqual(format(new Error("a", { cause: "b" })), `Error: a (cause: "b")`)
     })
 
     it("Date", () => {
@@ -127,7 +128,7 @@ describe("Inspectable", () => {
       class E extends Schema.ErrorClass<E>("E")({
         a: Schema.String
       }) {}
-      strictEqual(format(new E({ a: "a" })), `Error`)
+      strictEqual(format(new E({ a: "a" })), `E({"a":"a"})`)
     })
 
     describe("whitespace", () => {
