@@ -19,8 +19,8 @@ import * as RegEx from "../RegExp.ts"
 import * as Annotations from "./Annotations.ts"
 import * as Getter from "./Getter.ts"
 import * as Issue from "./Issue.ts"
+import type * as ToParser from "./Parser.ts"
 import type * as Schema from "./Schema.ts"
-import type * as ToParser from "./ToParser.ts"
 import * as Transformation from "./Transformation.ts"
 
 /**
@@ -365,7 +365,7 @@ export class Declaration extends Base {
   /** @internal */
   getExpected(): string {
     // Annotations on checks are ignored internally
-    const expected = this.annotations?.identifier ?? this.annotations?.title
+    const expected = this.annotations?.identifier ?? this.annotations?.title ?? this.annotations?.expected
     if (Predicate.isString(expected)) return expected
     return "<Declaration>"
   }
@@ -2048,8 +2048,7 @@ export function isPattern(regex: RegExp, annotations?: Annotations.Filter) {
   return makeFilter(
     (s: string) => regex.test(s),
     Annotations.combine({
-      title: `isPattern(${source})`,
-      description: `a string matching the regex ${source}`,
+      expected: `a string matching the regex ${source}`,
       jsonSchema: {
         _tag: "Constraint",
         constraint: () => ({ pattern: regex.source })
@@ -2086,6 +2085,16 @@ function modifyOwnPropertyDescriptors<A extends AST>(
 }
 
 /** @internal */
+export function replaceAnnotations<A extends AST>(ast: A, annotations: Annotations.Annotations | undefined): A {
+  if (ast.annotations === annotations) {
+    return ast
+  }
+  return modifyOwnPropertyDescriptors(ast, (d) => {
+    d.annotations.value = annotations
+  })
+}
+
+/** @internal */
 export function replaceEncoding<A extends AST>(ast: A, encoding: Encoding | undefined): A {
   if (ast.encoding === encoding) {
     return ast
@@ -2099,7 +2108,8 @@ function replaceLastLink(encoding: Encoding, link: Link): Encoding {
   return Arr.append(encoding.slice(0, encoding.length - 1), link)
 }
 
-function replaceContext<A extends AST>(ast: A, context: Context | undefined): A {
+/** @internal */
+export function replaceContext<A extends AST>(ast: A, context: Context | undefined): A {
   if (ast.context === context) {
     return ast
   }

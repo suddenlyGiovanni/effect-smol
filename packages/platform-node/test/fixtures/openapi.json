@@ -29,7 +29,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$schema": "https://json-schema.org/draft/2020-12/schema",
                   "$ref": "#/components/schemas/Group"
                 }
               }
@@ -40,14 +39,13 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$schema": "https://json-schema.org/draft/2020-12/schema",
                   "$ref": "#/components/schemas/effect~1HttpApiSchemaError"
                 }
               }
             }
           },
           "418": {
-            "description": "Error"
+            "description": "GroupError"
           }
         }
       }
@@ -64,7 +62,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$schema": "https://json-schema.org/draft/2020-12/schema",
                   "$ref": "#/components/schemas/Group"
                 }
               }
@@ -75,7 +72,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$schema": "https://json-schema.org/draft/2020-12/schema",
                   "$ref": "#/components/schemas/effect~1HttpApiSchemaError"
                 }
               }
@@ -86,7 +82,6 @@
           "content": {
             "application/json": {
               "schema": {
-                "$schema": "https://json-schema.org/draft/2020-12/schema",
                 "type": "object",
                 "properties": {
                   "name": {
@@ -99,7 +94,6 @@
             },
             "application/x-www-form-urlencoded": {
               "schema": {
-                "$schema": "https://json-schema.org/draft/2020-12/schema",
                 "type": "object",
                 "properties": {
                   "foo": {
@@ -112,7 +106,6 @@
             },
             "multipart/form-data": {
               "schema": {
-                "$schema": "https://json-schema.org/draft/2020-12/schema",
                 "type": "object",
                 "properties": {
                   "name": {
@@ -151,7 +144,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$schema": "https://json-schema.org/draft/2020-12/schema",
                   "type": "object",
                   "properties": {
                     "id": {
@@ -172,7 +164,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$schema": "https://json-schema.org/draft/2020-12/schema",
                   "$ref": "#/components/schemas/effect~1HttpApiSchemaError"
                 }
               }
@@ -183,7 +174,6 @@
           "content": {
             "application/json": {
               "schema": {
-                "$schema": "https://json-schema.org/draft/2020-12/schema",
                 "type": "object",
                 "properties": {
                   "name": {
@@ -222,7 +212,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$schema": "https://json-schema.org/draft/2020-12/schema",
                   "type": "object",
                   "properties": {
                     "id": {
@@ -243,7 +232,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$schema": "https://json-schema.org/draft/2020-12/schema",
                   "$ref": "#/components/schemas/effect~1HttpApiSchemaError"
                 }
               }
@@ -254,7 +242,6 @@
           "content": {
             "application/json": {
               "schema": {
-                "$schema": "https://json-schema.org/draft/2020-12/schema",
                 "type": "object",
                 "properties": {
                   "name": {
@@ -297,7 +284,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$schema": "https://json-schema.org/draft/2020-12/schema",
                   "$ref": "#/components/schemas/User"
                 }
               }
@@ -308,7 +294,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$schema": "https://json-schema.org/draft/2020-12/schema",
                   "anyOf": [
                     {
                       "$ref": "#/components/schemas/effect~1HttpApiSchemaError"
@@ -351,7 +336,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$schema": "https://json-schema.org/draft/2020-12/schema",
                   "$ref": "#/components/schemas/User"
                 }
               }
@@ -362,7 +346,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$schema": "https://json-schema.org/draft/2020-12/schema",
                   "anyOf": [
                     {
                       "$ref": "#/components/schemas/effect~1HttpApiSchemaError"
@@ -380,7 +363,6 @@
           "content": {
             "application/json": {
               "schema": {
-                "$schema": "https://json-schema.org/draft/2020-12/schema",
                 "type": "object",
                 "properties": {
                   "uuid": {
@@ -434,7 +416,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$schema": "https://json-schema.org/draft/2020-12/schema",
                   "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/User"
@@ -448,7 +429,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$schema": "https://json-schema.org/draft/2020-12/schema",
                   "$ref": "#/components/schemas/effect~1HttpApiSchemaError"
                 }
               }
@@ -459,7 +439,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$schema": "https://json-schema.org/draft/2020-12/schema",
                   "$ref": "#/components/schemas/NoStatusError"
                 }
               }
@@ -495,16 +474,13 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$schema": "https://json-schema.org/draft/2020-12/schema",
                   "type": "object",
                   "properties": {
                     "contentType": {
                       "type": "string"
                     },
                     "length": {
-                      "type": "integer",
-                      "title": "isInt",
-                      "description": "an integer"
+                      "type": "integer"
                     }
                   },
                   "required": ["contentType", "length"],
@@ -518,7 +494,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$schema": "https://json-schema.org/draft/2020-12/schema",
                   "$ref": "#/components/schemas/effect~1HttpApiSchemaError"
                 }
               }
@@ -529,7 +504,6 @@
           "content": {
             "multipart/form-data": {
               "schema": {
-                "$schema": "https://json-schema.org/draft/2020-12/schema",
                 "type": "object",
                 "properties": {
                   "file": {
@@ -561,16 +535,13 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$schema": "https://json-schema.org/draft/2020-12/schema",
                   "type": "object",
                   "properties": {
                     "contentType": {
                       "type": "string"
                     },
                     "length": {
-                      "type": "integer",
-                      "title": "isInt",
-                      "description": "an integer"
+                      "type": "integer"
                     }
                   },
                   "required": ["contentType", "length"],
@@ -584,7 +555,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$schema": "https://json-schema.org/draft/2020-12/schema",
                   "$ref": "#/components/schemas/effect~1HttpApiSchemaError"
                 }
               }
@@ -595,7 +565,6 @@
           "content": {
             "multipart/form-data": {
               "schema": {
-                "$schema": "https://json-schema.org/draft/2020-12/schema",
                 "type": "object",
                 "properties": {
                   "file": {
@@ -626,7 +595,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$schema": "https://json-schema.org/draft/2020-12/schema",
                   "$ref": "#/components/schemas/effect~1HttpApiSchemaError"
                 }
               }
@@ -645,8 +613,6 @@
              "type": "string"
            },
            "length": {
-             "description": "an integer",
-             "title": "isInt",
              "type": "integer"
            }
          },
@@ -660,9 +626,7 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "integer",
-            "title": "isInt",
-            "description": "an integer"
+            "type": "integer"
           },
           "name": {
             "type": "string"
@@ -693,9 +657,7 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "integer",
-            "title": "isInt",
-            "description": "an integer"
+            "type": "integer"
           },
           "uuid": {
             "type": "string"

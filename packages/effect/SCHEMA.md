@@ -553,7 +553,7 @@ everything is a string
 
 ## 🆕 XML Encoder
 
-`Schema.xmlEncoder` lets you serialize values to XML.
+`Schema.makeEncoderXml` lets you serialize values to XML.
 
 **Example**
 
@@ -573,7 +573,7 @@ const schema = Schema.Struct({
 })
 
 // const encoder: (t: {...}) => Effect<string, Schema.SchemaError, never>
-const xmlEncoder = Schema.xmlEncoder(schema)
+const xmlEncoder = Schema.makeEncoderXml(schema)
 
 console.log(
   Effect.runSync(
@@ -954,7 +954,7 @@ Default values can also be computed using effects, as long as the environment is
 ```ts
 import { Effect } from "effect"
 import { Option } from "effect/data"
-import { Schema, ToParser } from "effect/schema"
+import { Schema, Parser } from "effect/schema"
 
 const schema = Schema.Struct({
   a: Schema.Number.pipe(
@@ -967,7 +967,7 @@ const schema = Schema.Struct({
   )
 })
 
-ToParser.makeEffect(schema)({}).pipe(Effect.runPromise).then(console.log)
+Parser.makeEffect(schema)({}).pipe(Effect.runPromise).then(console.log)
 // { a: -1 }
 ```
 
@@ -976,7 +976,7 @@ ToParser.makeEffect(schema)({}).pipe(Effect.runPromise).then(console.log)
 ```ts
 import { Effect, ServiceMap } from "effect"
 import { Option } from "effect/data"
-import { Schema, ToParser } from "effect/schema"
+import { Schema, Parser } from "effect/schema"
 
 // Define a service that may provide a default value
 class ConstructorService extends ServiceMap.Service<ConstructorService, { defaultValue: Effect.Effect<number> }>()(
@@ -998,7 +998,7 @@ const schema = Schema.Struct({
   )
 })
 
-ToParser.makeEffect(schema)({})
+Parser.makeEffect(schema)({})
   .pipe(
     Effect.provideService(ConstructorService, ConstructorService.of({ defaultValue: Effect.succeed(-1) })),
     Effect.runPromise
@@ -4369,17 +4369,20 @@ console.log(JSON.stringify(jsonSchema, null, 2))
 /*
 Output:
 {
-  "$schema": "http://json-schema.org/draft-07/schema",
-  "type": "array",
-  "items": [
-    {
-      "type": "string"
-    },
-    {
-      "type": "number"
-    }
-  ],
-  "additionalItems": false
+  "uri": "http://json-schema.org/draft-07/schema",
+  "jsonSchema": {
+    "type": "array",
+    "items": [
+      {
+        "type": "string"
+      },
+      {
+        "type": "number"
+      }
+    ],
+    "additionalItems": false
+  },
+  "definitions": {}
 }
 */
 ```
@@ -4399,17 +4402,20 @@ console.log(JSON.stringify(jsonSchema, null, 2))
 /*
 Output:
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "type": "array",
-  "prefixItems": [
-    {
-      "type": "string"
-    },
-    {
-      "type": "number"
-    }
-  ],
-  "items": false
+  "uri": "https://json-schema.org/draft/2020-12/schema",
+  "jsonSchema": {
+    "type": "array",
+    "prefixItems": [
+      {
+        "type": "string"
+      },
+      {
+        "type": "number"
+      }
+    ],
+    "items": false
+  },
+  "definitions": {}
 }
 */
 ```
@@ -4421,10 +4427,16 @@ If the top-level schema is a "Declaration" (e.g. `Schema.Option(Schema.String)`)
 ```ts
 import { Schema } from "effect/schema"
 
-const schema = Schema.BigInt
+const schema = Schema.Struct({
+  a: Schema.BigInt
+})
 
 Schema.makeJsonSchemaDraft07(schema)
-// throws Error: cannot generate JSON Schema for BigIntKeyword at root
+/*
+throws:
+Error: Unsupported schema BigInt
+  at ["a"]
+*/
 ```
 
 ### Attaching Standard Metadata
@@ -4454,25 +4466,28 @@ console.log(JSON.stringify(jsonSchema, null, 2))
 /*
 Output:
 {
-  "$schema": "http://json-schema.org/draft-07/schema",
-  "type": "string",
-  "title": "Username",
-  "description": "A non-empty user name string",
-  "default": "anonymous",
-  "examples": [
-    "alice",
-    "bob"
-  ],
-  "minLength": 1
+  "uri": "http://json-schema.org/draft-07/schema",
+  "jsonSchema": {
+    "type": "string",
+    "title": "Username",
+    "description": "A non-empty user name string",
+    "default": "anonymous",
+    "examples": [
+      "alice",
+      "bob"
+    ],
+    "minLength": 1
+  },
+  "definitions": {}
 }
 */
 ```
 
 ### Handling invalid examples and defaults
 
-Annotations are not validated when you set them. During generation, `examples` and `default` are converted to the schema's encoded type. If the schema represents a transformation (for example `Schema.FiniteFromString`), values may change type in the output. Invalid examples are filtered out.
+Annotations are not validated when you set them.
 
-**Example** (Filtering invalid annotations)
+**Example**
 
 ```ts
 import { Schema } from "effect/schema"
@@ -4483,22 +4498,24 @@ const schema = Schema.NonEmptyString.annotate({
   examples: ["alice", "", "bob"] // the empty string is invalid
 })
 
-// During generation invalid annotations are dropped
 const jsonSchema = Schema.makeJsonSchemaDraft07(schema)
 
 console.log(JSON.stringify(jsonSchema, null, 2))
 /*
 Output:
 {
-  "$schema": "http://json-schema.org/draft-07/schema",
-  "type": "string",
-  "title": "minLength(1)",
-  "description": "a value with a length of at least 1",
-  "examples": [
-    "alice",
-    "bob"
-  ],
-  "minLength": 1
+  "uri": "http://json-schema.org/draft-07/schema",
+  "jsonSchema": {
+    "type": "string",
+    "default": "",
+    "examples": [
+      "alice",
+      "",
+      "bob"
+    ],
+    "minLength": 1
+  },
+  "definitions": {}
 }
 */
 ```
@@ -4520,15 +4537,18 @@ console.log(JSON.stringify(jsonSchema, null, 2))
 /*
 Output:
 {
-  "$schema": "http://json-schema.org/draft-07/schema",
-  "type": "object",
-  "properties": {
-    "a": {
-      "type": "number"
-    }
+  "uri": "http://json-schema.org/draft-07/schema",
+  "jsonSchema": {
+    "type": "object",
+    "properties": {
+      "a": {
+        "type": "number"
+      }
+    },
+    "required": [],
+    "additionalProperties": false
   },
-  "required": [], // <= "a" is optional
-  "additionalProperties": false
+  "definitions": {}
 }
 */
 ```
@@ -4546,74 +4566,46 @@ console.log(JSON.stringify(jsonSchema, null, 2))
 /*
 Output:
 {
-  "$schema": "http://json-schema.org/draft-07/schema",
-  "type": "array",
-  "minItems": 0, // <= first element is optional
-  "items": [
-    {
-      "type": "number"
-    }
-  ],
-  "additionalItems": false
+  "uri": "http://json-schema.org/draft-07/schema",
+  "jsonSchema": {
+    "type": "array",
+    "minItems": 0,
+    "items": [
+      {
+        "type": "number"
+      }
+    ],
+    "additionalItems": false
+  },
+  "definitions": {}
 }
 */
 ```
 
-### Overriding the default generated JSON Schema
+### Defining your own JSON Schema for custom types
 
-Sometimes you need to adjust the generated JSON Schema. Use the `jsonSchema: { _tag: "Override", ... }` annotation to replace or extend the defaults.
-
-```ts
-type Target = "draft-07" | "draft-2020-12" | "openApi3.1"
-
-type OverrideContext = {
-  /** The target of the JSON Schema */
-  readonly target: Target
-  /** The default JSON Schema that would be generated by the AST */
-  readonly jsonSchema: JsonSchema
-  /** A function that generates a JSON Schema from an AST */
-  readonly make: (ast: AST.AST) => JsonSchema
-}
-
-type Override = {
-  readonly _tag: "Override"
-  readonly override: (context: OverrideContext) => JsonSchema
-  /** Whether the field / element is required */
-  readonly required?: boolean | undefined
-}
-```
-
-**Example** (Without override, filter ignored in JSON Schema)
+Without a way to specify a custom JSON Schema for custom types, the default behavior is to throw an error:
 
 ```ts
 import { Schema } from "effect/schema"
 
-// Validation at runtime: n > 0
-const schema = Schema.Number.check(Schema.makeFilter((n) => n > 0))
+const schema = Schema.instanceOf(URL)
 
-// No override: the JSON Schema keeps the basic 'number' shape
-const jsonSchema = Schema.makeJsonSchemaDraft07(schema)
-
-console.log(JSON.stringify(jsonSchema, null, 2))
-/*
-Output:
-{
-  "$schema": "http://json-schema.org/draft-07/schema",
-  "type": "number"
-}
-*/
+Schema.makeJsonSchemaDraft07(schema)
+// Error: Unsupported schema Declaration
 ```
 
-**Example** (With override, add 'minimum: 0')
+You can specify a custom JSON Schema for custom types by using the `jsonSchema` annotation:
 
 ```ts
 import { Schema } from "effect/schema"
 
-const schema = Schema.Number.check(Schema.makeFilter((n) => n > 0)).annotate({
+const schema = Schema.instanceOf(URL, {
   jsonSchema: {
     _tag: "Override",
-    // Evaluated during generation; return a JSON Schema object
-    override: (ctx) => ({ ...ctx.jsonSchema, minimum: 0 })
+    override: () => ({
+      type: "string"
+    })
   }
 })
 
@@ -4623,129 +4615,11 @@ console.log(JSON.stringify(jsonSchema, null, 2))
 /*
 Output:
 {
-  "$schema": "http://json-schema.org/draft-07/schema",
-  "type": "number",
-  "minimum": 0
-}
-*/
-```
-
-### Overriding the default optional strategy
-
-You can force a field to be required (or optional) regardless of `UndefinedOr` by setting `required` in the override.
-
-**Example** (Mark an otherwise optional field as required)
-
-```ts
-import { Schema } from "effect/schema"
-
-const schema = Schema.Struct({
-  a: Schema.UndefinedOr(Schema.Number).annotate({
-    jsonSchema: {
-      _tag: "Override",
-      override: (ctx) => ctx.jsonSchema, // keep the generated property schema
-      required: true // but mark it as required
-    }
-  })
-})
-
-const jsonSchema = Schema.makeJsonSchemaDraft07(schema)
-
-console.log(JSON.stringify(jsonSchema, null, 2))
-/*
-Output:
-{
-  "$schema": "http://json-schema.org/draft-07/schema",
-  "type": "object",
-  "properties": {
-    "a": {
-      "type": "number"
-    }
+  "uri": "http://json-schema.org/draft-07/schema",
+  "jsonSchema": {
+    "type": "string"
   },
-  "required": [
-    "a" // <= "a" is required
-  ],
-  "additionalProperties": false
-}
-*/
-```
-
-### Unsupported Schemas
-
-Some schemas cannot be represented in JSON Schema. For these, add a custom JSON Schema using the `Override` annotation.
-
-**Example** (Override `Date` as a string)
-
-```ts
-import { Schema } from "effect/schema"
-
-const schema = Schema.Struct({
-  // 'a' is a Date at runtime, but JSON Schema has no 'date' type
-  a: Schema.Date.annotate({
-    jsonSchema: {
-      _tag: "Override",
-      // Provide a replacement JSON Schema for this node
-      override: () => ({
-        type: "string",
-        description: "a string that will be decoded as a date"
-      })
-    }
-  })
-})
-
-const jsonSchema = Schema.makeJsonSchemaDraft07(schema)
-
-console.log(JSON.stringify(jsonSchema, null, 2))
-/*
-Output:
-{
-  "$schema": "http://json-schema.org/draft-07/schema",
-  "type": "object",
-  "properties": {
-    "a": {
-      "type": "string",
-      "description": "a string that will be decoded as a date"
-    }
-  },
-  "required": [
-    "a"
-  ],
-  "additionalProperties": false
-}
-*/
-```
-
-You can set a global hook to handle unsupported schemas.
-
-**Example** (Global hook for unsupported nodes)
-
-```ts
-import { Schema } from "effect/schema"
-
-const schema = Schema.Struct({
-  a: Schema.Date
-})
-
-const jsonSchema = Schema.makeJsonSchemaDraft07(schema, {
-  // Invoked when a node lacks a JSON Schema annotation and is unsupported.
-  // Return a JSON Schema fragment to use in its place.
-  // Return undefined to signal an error (you can inspect the AST to decide).
-  onMissingJsonSchemaAnnotation: (/* ast */) => ({})
-})
-
-console.log(JSON.stringify(jsonSchema, null, 2))
-/*
-Output:
-{
-  "$schema": "http://json-schema.org/draft-07/schema",
-  "type": "object",
-  "properties": {
-    "a": {}
-  },
-  "required": [
-    "a"
-  ],
-  "additionalProperties": false
+  "definitions": {}
 }
 */
 ```
@@ -4769,16 +4643,15 @@ console.log(JSON.stringify(jsonSchema, null, 2))
 /*
 Output:
 {
-  "$schema": "http://json-schema.org/draft-07/schema",
-  "type": "string",
-  "title": "minLength(1)",
-  "description": "a value with a length of at least 1",
-  "minLength": 1
+  "uri": "http://json-schema.org/draft-07/schema",
+  "jsonSchema": {
+    "type": "string",
+    "minLength": 1
+  },
+  "definitions": {}
 }
 */
 ```
-
-Because no outer `.annotate(...)` is present and this is the first filter, the fragment's keywords are merged into the top level.
 
 **Example** (Multiple filters: top-level + `allOf`)
 
@@ -4786,8 +4659,8 @@ Because no outer `.annotate(...)` is present and this is the first filter, the f
 import { Schema } from "effect/schema"
 
 const schema = Schema.String.check(
-  Schema.isMinLength(1), // first: merged at top-level
-  Schema.isMaxLength(2) // subsequent: wrapped under allOf
+  Schema.isMinLength(1, { description: "description1" }),
+  Schema.isMaxLength(2, { description: "description2" })
 )
 
 const jsonSchema = Schema.makeJsonSchemaDraft07(schema)
@@ -4796,27 +4669,22 @@ console.log(JSON.stringify(jsonSchema, null, 2))
 /*
 Output:
 {
-  "$schema": "http://json-schema.org/draft-07/schema",
-  "type": "string",
-  "allOf": [
-    {
-      "title": "maxLength(2)",
-      "description": "a value with a length of at most 2",
-      "maxLength": 2
-    }
-  ],
-  "title": "minLength(1)",
-  "description": "a value with a length of at least 1",
-  "minLength": 1
+  "uri": "http://json-schema.org/draft-07/schema",
+  "jsonSchema": {
+    "type": "string",
+    "description": "description1",
+    "minLength": 1,
+    "allOf": [
+      {
+        "description": "description2",
+        "maxLength": 2
+      }
+    ]
+  },
+  "definitions": {}
 }
 */
 ```
-
-Rules of thumb:
-
-- The first fragment (if present) is merged at the top level.
-- Any further fragments are added under `"allOf": [ ... ]`.
-- If you later call `.annotate(...)`, your `title`, `description`, `default`, and `examples` appear alongside these fragments.
 
 #### Declaring your own fragment filter
 
@@ -4847,16 +4715,17 @@ console.log(JSON.stringify(jsonSchema, null, 2))
 /*
 Output:
 {
-  "$schema": "http://json-schema.org/draft-07/schema",
-  "type": "string",
-  "title": "containsFoo",
-  "description": "must contain 'foo'",
-  "pattern": "foo"
+  "uri": "http://json-schema.org/draft-07/schema",
+  "jsonSchema": {
+    "type": "string",
+    "title": "containsFoo",
+    "description": "must contain 'foo'",
+    "pattern": "foo"
+  },
+  "definitions": {}
 }
 */
 ```
-
-The resulting JSON Schema merges `pattern: "foo"` at the top level, together with the filter's `title` and `description` (if present).
 
 ### The fromJsonString combinator
 
@@ -4879,23 +4748,25 @@ const jsonSchema = Schema.makeJsonSchemaDraft2020_12(schema)
 console.log(JSON.stringify(jsonSchema, null, 2))
 /*
 Output:
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "type": "string",
-  "description": "a string that will be decoded as JSON",
-  "contentMediaType": "application/json",
-  "contentSchema": {
-    "type": "object",
-    "properties": {
-      "a": {
-        "type": "string"
-      }
+  "uri": "https://json-schema.org/draft/2020-12/schema",
+  "jsonSchema": {
+    "type": "string",
+    "contentMediaType": "application/json",
+    "contentSchema": {
+      "type": "object",
+      "properties": {
+        "a": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "a"
+      ],
+      "additionalProperties": false
     },
-    "required": [
-      "a"
-    ],
-    "additionalProperties": false
-  }
+    "description": "a string that will be decoded as JSON"
+  },
+  "definitions": {}
 }
 */
 ```
@@ -5522,7 +5393,7 @@ You can use the `Schema.StandardSchemaV1FailureResult` schema to send a `Standar
 **Example** (Sending a FailureResult over the wire)
 
 ```ts
-import { Issue, Schema, ToParser } from "effect/schema"
+import { Issue, Schema, Parser } from "effect/schema"
 
 const b = Symbol.for("b")
 
@@ -5532,7 +5403,7 @@ const schema = Schema.Struct({
   c: Schema.Tuple([Schema.String])
 })
 
-const r = ToParser.decodeUnknownExit(schema)({ a: "", c: [] }, { errors: "all" })
+const r = Parser.decodeUnknownExit(schema)({ a: "", c: [] }, { errors: "all" })
 
 if (r._tag === "Failure") {
   const failures = r.cause.failures
@@ -5654,7 +5525,7 @@ export default function App() {
     defaultValues: {
       firstName: "John",
       age: ""
-    },
+    } satisfies (typeof schema)["Encoded"],
     validators: {
       onChangeAsync: Schema.asStandardSchemaV1(schema),
 
@@ -5773,7 +5644,7 @@ Schema.Null
 To coerce input data to the appropriate type:
 
 ```ts
-import { Schema, Getter, ToParser } from "effect/schema"
+import { Schema, Getter, Parser } from "effect/schema"
 
 //      ┌─── Codec<string, unknown>
 //      ▼
@@ -5784,7 +5655,7 @@ const schema = Schema.Unknown.pipe(
   })
 )
 
-const parser = ToParser.decodeUnknownSync(schema)
+const parser = Parser.decodeUnknownSync(schema)
 
 console.log(parser("tuna")) // => "tuna"
 console.log(parser(42)) // => "42"

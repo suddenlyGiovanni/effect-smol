@@ -331,13 +331,10 @@ describe("HttpApi", () => {
           "content": {
             "application/json": {
               "schema": {
-                "$schema": "https://json-schema.org/draft/2020-12/schema",
                 "anyOf": [
                   { "$ref": "#/components/schemas/effect~1HttpApiSchemaError" },
                   {
-                    "type": "integer",
-                    "title": "isInt",
-                    "description": "an integer"
+                    "type": "integer"
                   }
                 ]
               }
@@ -362,7 +359,6 @@ describe("HttpApi", () => {
           "content": {
             "application/json": {
               "schema": {
-                "$schema": "https://json-schema.org/draft/2020-12/schema",
                 "anyOf": [
                   { "$ref": "#/components/schemas/effect~1HttpApiSchemaError" },
                   {
@@ -394,7 +390,6 @@ describe("HttpApi", () => {
           "content": {
             "application/json": {
               "schema": {
-                "$schema": "https://json-schema.org/draft/2020-12/schema",
                 "$ref": "#/components/schemas/ID"
               }
             }
@@ -420,14 +415,11 @@ describe("HttpApi", () => {
           "content": {
             "application/json": {
               "schema": {
-                "$schema": "https://json-schema.org/draft/2020-12/schema",
                 "anyOf": [
                   { "$ref": "#/components/schemas/effect~1HttpApiSchemaError" },
                   {
                     "type": "string",
-                    "description": "a value with a length of at least 1",
-                    "minLength": 1,
-                    "title": "isMinLength(1)"
+                    "minLength": 1
                   }
                 ]
               }
@@ -439,7 +431,6 @@ describe("HttpApi", () => {
           "content": {
             "application/json": {
               "schema": {
-                "$schema": "https://json-schema.org/draft/2020-12/schema",
                 "type": "number"
               }
             }
@@ -470,7 +461,6 @@ describe("HttpApi", () => {
           "content": {
             "application/json": {
               "schema": {
-                "$schema": "https://json-schema.org/draft/2020-12/schema",
                 "type": "string"
               }
             }
@@ -496,7 +486,6 @@ describe("HttpApi", () => {
           "content": {
             "application/json": {
               "schema": {
-                "$schema": "https://json-schema.org/draft/2020-12/schema",
                 "anyOf": [
                   { "$ref": "#/components/schemas/effect~1HttpApiSchemaError" },
                   {
@@ -533,10 +522,11 @@ describe("HttpApi", () => {
           "content": {
             "application/json": {
               "schema": {
-                "$schema": "https://json-schema.org/draft/2020-12/schema",
                 "anyOf": [
                   { "$ref": "#/components/schemas/effect~1HttpApiSchemaError" },
-                  { "type": "string" }
+                  {
+                    "type": "string"
+                  }
                 ]
               }
             }
