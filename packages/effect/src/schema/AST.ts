@@ -730,6 +730,8 @@ export function coerceLiteral(ast: Literal): Literal {
  */
 export type LiteralValue = string | number | boolean | bigint
 
+const isProd = typeof process === "object" && process.env?.NODE_ENV === "production"
+
 /**
  * @category model
  * @since 4.0.0
@@ -746,7 +748,7 @@ export class Literal extends Base {
     context?: Context
   ) {
     super(annotations, checks, encoding, context)
-    if (process.env.NODE_ENV !== "production") {
+    if (!isProd) {
       if (Predicate.isNumber(literal) && !globalThis.Number.isFinite(literal)) {
         throw new Error(`LiteralType must be a finite number, got: ${literal}`)
       }
@@ -923,7 +925,7 @@ export class Arrays extends Base {
     this.elements = elements
     this.rest = rest
 
-    if (process.env.NODE_ENV !== "production") {
+    if (!isProd) {
       // A required element cannot follow an optional element. ts(1257)
       const i = elements.findIndex(isOptional)
       if (i !== -1 && (elements.slice(i + 1).some((e) => !isOptional(e)) || rest.length > 1)) {
@@ -1186,7 +1188,7 @@ export class IndexSignature {
     this.parameter = parameter
     this.type = type
     this.merge = merge
-    if (process.env.NODE_ENV !== "production") {
+    if (!isProd) {
       if (isOptional(type) && !containsUndefined(type)) {
         throw new Error("Cannot use `Schema.optionalKey` with index signatures, use `Schema.optional` instead.")
       }
@@ -1217,7 +1219,7 @@ export class Objects extends Base {
     this.propertySignatures = propertySignatures
     this.indexSignatures = indexSignatures
 
-    if (process.env.NODE_ENV !== "production") {
+    if (!isProd) {
       // Duplicate property signatures
       let duplicates = propertySignatures.map((ps) => ps.name).filter((name, i, arr) => arr.indexOf(name) !== i)
       if (duplicates.length > 0) {
@@ -1518,7 +1520,7 @@ export function union<Members extends ReadonlyArray<Schema.Top>>(
 
 /** @internal */
 export function structWithRest(ast: Objects, records: ReadonlyArray<Objects>): Objects {
-  if (process.env.NODE_ENV !== "production") {
+  if (!isProd) {
     if (ast.encoding || records.some((r) => r.encoding)) {
       throw new Error("StructWithRest does not support encodings")
     }
@@ -1536,7 +1538,7 @@ export function structWithRest(ast: Objects, records: ReadonlyArray<Objects>): O
 
 /** @internal */
 export function tupleWithRest(ast: Arrays, rest: ReadonlyArray<AST>): Arrays {
-  if (process.env.NODE_ENV !== "production") {
+  if (!isProd) {
     if (ast.encoding) {
       throw new Error("TupleWithRest does not support encodings")
     }
@@ -2039,7 +2041,7 @@ export function isFailure<A, E>(annotations?: Annotations.Filter) {
 
 /** @internal */
 export function isPattern(regex: RegExp, annotations?: Annotations.Filter) {
-  if (process.env.NODE_ENV !== "production") {
+  if (!isProd) {
     if (regex.flags !== "") {
       throw new globalThis.Error("regex flags are not supported")
     }
