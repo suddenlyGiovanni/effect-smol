@@ -4771,6 +4771,73 @@ Output:
 */
 ```
 
+### Rewriters
+
+Sometimes you need to adapt a schema to a different target format. For example, you might convert a JSON Schema to the subset supported by OpenAI (https://platform.openai.com/docs/guides/structured-outputs/supported-schemas?type-restrictions=string-restrictions#supported-schemas).
+
+Note: the more context that an LLM has, the more "correct" the structured output will be, so it's advised to pass the `generateDescriptions: true` option to `makeJsonSchemaDraft2020_12`.
+
+**Example** (Convert to an OpenAI-compatible schema)
+
+```ts
+import { Schema } from "effect/schema"
+import { Rewriter } from "effect/unstable/jsonschema"
+
+// Define a schema with an optional non-empty string field 'a'
+const schema = Schema.Struct({
+  a: Schema.optionalKey(Schema.NonEmptyString)
+})
+
+const document = Schema.makeJsonSchemaDraft2020_12(schema, {
+  referenceStrategy: "skip-top-level",
+  generateDescriptions: true
+})
+
+console.log(JSON.stringify(document.schema, null, 2))
+/*
+Output (before rewrite):
+{
+  "type": "object",
+  "properties": {
+    "a": {
+      "type": "string",
+      "minLength": 1, // not supported by the OpenAI subset
+      "description": "a value with a length of at least 1" // generated description
+    }
+  },
+  "required": [], // optional field (OpenAI requires all fields to be required)
+  "additionalProperties": false
+}
+*/
+
+// Rewrite to the OpenAI subset:
+// - Make all fields required
+// - Represent optionality by unioning with null (T | null)
+// - Drop unsupported keywords like minLength
+const rewritten = Rewriter.openAi(document)
+
+console.log(JSON.stringify(rewritten.schema, null, 2))
+/*
+Output:
+{
+  "type": "object",
+  "properties": {
+    "a": {
+      "type": [ // optional via nullability
+        "string",
+        "null"
+      ],
+      "description": "a value with a length of at least 1"
+    }
+  },
+  "required": [
+    "a" // now required
+  ],
+  "additionalProperties": false
+}
+*/
+```
+
 ## Generating an Arbitrary from a Schema
 
 ### Basic Conversion

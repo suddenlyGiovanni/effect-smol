@@ -11,38 +11,40 @@ interface Options extends Schema.JsonSchemaOptions {
 }
 
 /** @internal */
-export function make<S extends Schema.Top>(schema: S, options: Options): {
-  readonly uri: string
-  readonly jsonSchema: Annotations.JsonSchema.JsonSchema
-  readonly definitions: Record<string, Annotations.JsonSchema.JsonSchema>
-} {
+export function make<S extends Schema.Top>(schema: S, options: Options): Schema.JsonSchema.Document {
   const definitions = options.definitions ?? {}
   const target = options.target
   const additionalProperties = options.additionalProperties ?? false
   const referenceStrategy = options.referenceStrategy ?? "keep"
-  const jsonSchema = go(
-    schema.ast,
-    [],
-    {
-      target,
-      definitions,
-      referenceStrategy,
-      additionalProperties,
-      onMissingJsonSchemaAnnotation: options.onMissingJsonSchemaAnnotation
-    },
-    false,
-    false
-  )
+  const generateDescriptions = options.generateDescriptions ?? false
   return {
     uri: getMetaSchemaUri(target),
-    jsonSchema,
+    schema: go(
+      schema.ast,
+      [],
+      {
+        target,
+        definitions,
+        referenceStrategy,
+        additionalProperties,
+        onMissingJsonSchemaAnnotation: options.onMissingJsonSchemaAnnotation,
+        generateDescriptions
+      },
+      false,
+      false
+    ),
     definitions
   }
 }
 
 interface GoOptions extends Options {
-  readonly additionalProperties: true | false | Annotations.JsonSchema.JsonSchema
-  readonly definitions: Record<string, Annotations.JsonSchema.JsonSchema>
+  readonly additionalProperties: true | false | Schema.JsonSchema.Schema
+  readonly definitions: Record<string, Schema.JsonSchema.Schema>
+  readonly generateDescriptions: boolean
+}
+
+function escapeJsonPointer(identifier: string) {
+  return identifier.replace(/~/ig, "~0").replace(/\//ig, "~1")
 }
 
 function go(
@@ -51,16 +53,21 @@ function go(
   options: GoOptions,
   ignoreIdentifier: boolean,
   ignoreAnnotation: boolean
-): Annotations.JsonSchema.JsonSchema {
+): Schema.JsonSchema.Schema {
   const target = options.target
   // ---------------------------------------------
   // handle identifier annotation
   // ---------------------------------------------
-  if (!ignoreIdentifier && (options.referenceStrategy !== "skip" || AST.isSuspend(ast))) {
+  if (
+    !ignoreIdentifier && (
+      options.referenceStrategy === "keep"
+      || options.referenceStrategy === "skip-top-level" && path.length > 0
+      || AST.isSuspend(ast)
+    )
+  ) {
     const identifier = getIdentifier(ast)
     if (identifier !== undefined) {
-      const escapedIdentifier = identifier.replace(/~/ig, "~0").replace(/\//ig, "~1")
-      const $ref = { $ref: getPointer(target) + escapedIdentifier }
+      const $ref = { $ref: getPointer(target) + escapeJsonPointer(identifier) }
       if (Object.hasOwn(options.definitions, identifier)) {
         if (AST.isSuspend(ast)) {
           return $ref
@@ -103,7 +110,7 @@ function go(
             jsonSchema: getDefaultJsonSchema(),
             make: (ast) => go(ast, path, options, false, false)
           })
-          return overwriteJsonSchemaAnnotations(out, ast.annotations)
+          return overwriteJsonSchemaAnnotations(out, ast.annotations, options.generateDescriptions)
         }
       }
     }
@@ -119,12 +126,12 @@ function go(
   // handle checks
   // ---------------------------------------------
   if (ast.checks) {
-    out = appendFragments(out, getFragments(ast.checks, options.target, out.type))
+    out = appendFragments(out, getFragments(ast.checks, options, out.type))
   }
   // ---------------------------------------------
   // handle JSON Schema annotations
   // ---------------------------------------------
-  return overwriteJsonSchemaAnnotations(out, ast.annotations)
+  return overwriteJsonSchemaAnnotations(out, ast.annotations, options.generateDescriptions)
 }
 
 function base(
@@ -132,7 +139,7 @@ function base(
   path: ReadonlyArray<PropertyKey>,
   options: GoOptions,
   ignoreAnnotation: boolean
-): Annotations.JsonSchema.JsonSchema {
+): Schema.JsonSchema.Schema {
   const target = options.target
   // ---------------------------------------------
   // handle Override annotation
@@ -158,7 +165,7 @@ function base(
             jsonSchema: getDefaultJsonSchema(),
             make: (ast) => go(ast, path, options, false, false)
           })
-          return overwriteJsonSchemaAnnotations(out, ast.annotations)
+          return overwriteJsonSchemaAnnotations(out, ast.annotations, options.generateDescriptions)
         }
       }
     }
@@ -235,7 +242,8 @@ function base(
       const items = ast.elements.map((e, i) =>
         mergeOrAppendJsonSchemaAnnotations(
           go(e, [...path, i], options, false, false),
-          e.context?.annotations
+          e.context?.annotations,
+          options.generateDescriptions
         )
       )
       const minItems = ast.elements.findIndex(isOptional)
@@ -284,7 +292,8 @@ function base(
         } else {
           out.properties[name] = mergeOrAppendJsonSchemaAnnotations(
             go(ps.type, [...path, name], options, false, false),
-            ps.type.context?.annotations
+            ps.type.context?.annotations,
+            options.generateDescriptions
           )
           if (!isOptional(ps.type)) {
             out.required.push(name)
@@ -312,7 +321,7 @@ function base(
       return out
     }
     case "Union": {
-      const types: Array<Annotations.JsonSchema.JsonSchema> = []
+      const types: Array<Schema.JsonSchema.Schema> = []
       for (const type of ast.types) {
         if (!AST.isUndefined(type)) {
           types.push(go(type, path, options, false, false))
@@ -364,12 +373,12 @@ function getPointer(target: Annotations.JsonSchema.Target) {
 
 function getFragments(
   checks: AST.Checks,
-  target: Annotations.JsonSchema.Target,
-  type?: Annotations.JsonSchema.Type
-): [Annotations.JsonSchema.Fragment, ...Array<Annotations.JsonSchema.Fragment>] | undefined {
-  const allOf: Array<Annotations.JsonSchema.Fragment> = []
+  options: GoOptions,
+  type?: Schema.JsonSchema.Type
+): [Schema.JsonSchema.Fragment, ...Array<Schema.JsonSchema.Fragment>] | undefined {
+  const allOf: Array<Schema.JsonSchema.Fragment> = []
   for (let i = 0; i < checks.length; i++) {
-    const fragment = getFragment(checks[i], target, type)
+    const fragment = getFragment(checks[i], options, type)
     if (fragment) {
       if (allOf.length === 0) {
         allOf.push(fragment)
@@ -390,24 +399,24 @@ function getFragments(
 
 function getFragment(
   check: AST.Check<any>,
-  target: Annotations.JsonSchema.Target,
-  type?: Annotations.JsonSchema.Type
-): Annotations.JsonSchema.Fragment | undefined {
+  options: GoOptions,
+  type?: Schema.JsonSchema.Type
+): Schema.JsonSchema.Fragment | undefined {
   switch (check._tag) {
     case "Filter": {
-      const fragment = getConstraint(check, target, type)
+      const fragment = getConstraint(check, options.target, type)
       if (fragment) {
-        return mergeOrAppendJsonSchemaAnnotations(fragment, check.annotations)
+        return mergeOrAppendJsonSchemaAnnotations(fragment, check.annotations, options.generateDescriptions)
       } else {
-        return getJsonSchemaAnnotations(check.annotations)
+        return getJsonSchemaAnnotations(check.annotations, options.generateDescriptions)
       }
     }
     case "FilterGroup": {
-      const allOf = getFragments(check.checks, target, type)
+      const allOf = getFragments(check.checks, options, type)
       if (allOf) {
-        return mergeOrAppendJsonSchemaAnnotations({ allOf }, check.annotations)
+        return mergeOrAppendJsonSchemaAnnotations({ allOf }, check.annotations, options.generateDescriptions)
       } else {
-        return getJsonSchemaAnnotations(check.annotations)
+        return getJsonSchemaAnnotations(check.annotations, options.generateDescriptions)
       }
     }
   }
@@ -416,8 +425,8 @@ function getFragment(
 function getConstraint<T>(
   check: AST.Check<T>,
   target: Annotations.JsonSchema.Target,
-  type?: Annotations.JsonSchema.Type
-): Annotations.JsonSchema.Fragment | undefined {
+  type?: Schema.JsonSchema.Type
+): Schema.JsonSchema.Fragment | undefined {
   const annotation = getAnnotation(check.annotations)
   if (annotation && annotation._tag === "Constraint") {
     return annotation.constraint({ target, type })
@@ -458,15 +467,18 @@ function getPattern(
 }
 
 function getJsonSchemaAnnotations(
-  annotations: Annotations.Annotations | undefined
-): Annotations.JsonSchema.Fragment | undefined {
+  annotations: Annotations.Annotations | undefined,
+  generateDescriptions: boolean
+): Schema.JsonSchema.Fragment | undefined {
   if (annotations) {
-    const out: Annotations.JsonSchema.Fragment = {}
+    const out: Schema.JsonSchema.Fragment = {}
     if (Predicate.isString(annotations.title)) {
       out.title = annotations.title
     }
     if (Predicate.isString(annotations.description)) {
       out.description = annotations.description
+    } else if (generateDescriptions && Predicate.isString(annotations.expected)) {
+      out.description = annotations.expected
     }
     if (annotations.default !== undefined) {
       out.default = annotations.default
@@ -479,7 +491,7 @@ function getJsonSchemaAnnotations(
   }
 }
 
-function unwrap(jsonSchema: Annotations.JsonSchema.JsonSchema): Annotations.JsonSchema.JsonSchema | undefined {
+function unwrap(jsonSchema: Schema.JsonSchema.Schema): Schema.JsonSchema.Schema | undefined {
   if (Object.keys(jsonSchema).length === 1) {
     if (Array.isArray(jsonSchema.anyOf) && jsonSchema.anyOf.length === 1) {
       return jsonSchema.anyOf[0]
@@ -492,10 +504,11 @@ function unwrap(jsonSchema: Annotations.JsonSchema.JsonSchema): Annotations.Json
 }
 
 function overwriteJsonSchemaAnnotations(
-  jsonSchema: Annotations.JsonSchema.JsonSchema,
-  annotations: Annotations.Annotations | undefined
-): Annotations.JsonSchema.JsonSchema {
-  const jsonSchemaAnnotations = getJsonSchemaAnnotations(annotations)
+  jsonSchema: Schema.JsonSchema.Schema,
+  annotations: Annotations.Annotations | undefined,
+  generateDescriptions: boolean
+): Schema.JsonSchema.Schema {
+  const jsonSchemaAnnotations = getJsonSchemaAnnotations(annotations, generateDescriptions)
   if (jsonSchemaAnnotations) {
     if ("$ref" in jsonSchema) {
       return { allOf: [jsonSchema, jsonSchemaAnnotations] }
@@ -512,24 +525,27 @@ function overwriteJsonSchemaAnnotations(
 }
 
 function mergeOrAppendJsonSchemaAnnotations(
-  jsonSchema: Annotations.JsonSchema.JsonSchema,
-  annotations: Annotations.Annotations | undefined
-): Annotations.JsonSchema.JsonSchema {
-  const fragment = getJsonSchemaAnnotations(annotations)
+  jsonSchema: Schema.JsonSchema.Schema,
+  annotations: Annotations.Annotations | undefined,
+  generateDescriptions: boolean
+): Schema.JsonSchema.Schema {
+  const fragment = getJsonSchemaAnnotations(annotations, generateDescriptions)
   return appendFragments(jsonSchema, fragment ? [fragment] : undefined)
 }
 
 function hasIntersection(
-  jsonSchema: Annotations.JsonSchema.JsonSchema,
-  fragment: Annotations.JsonSchema.Fragment
+  jsonSchema: Schema.JsonSchema.Schema,
+  fragment: Schema.JsonSchema.Fragment
 ): boolean {
   return Object.keys(jsonSchema).filter((key) => key !== "type").some((key) => Object.hasOwn(fragment, key))
 }
 
 function appendFragments(
-  jsonSchema: Annotations.JsonSchema.JsonSchema,
-  fragments: [Annotations.JsonSchema.Fragment, ...Array<Annotations.JsonSchema.Fragment>] | undefined
-): Annotations.JsonSchema.JsonSchema {
+  jsonSchema: Schema.JsonSchema.Schema,
+  fragments:
+    | [Schema.JsonSchema.Fragment, ...Array<Schema.JsonSchema.Fragment>]
+    | undefined
+): Schema.JsonSchema.Schema {
   if (fragments) {
     if ("$ref" in jsonSchema) {
       return { allOf: [jsonSchema, ...fragments] }
