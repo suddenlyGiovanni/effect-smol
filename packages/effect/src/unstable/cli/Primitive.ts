@@ -4,15 +4,16 @@
 import * as Ini from "ini"
 import * as Toml from "toml"
 import * as Yaml from "yaml"
+import * as Config from "../../Config.ts"
 import * as Redacted from "../../data/Redacted.ts"
 import type * as Struct from "../../data/Struct.ts"
 import * as Effect from "../../Effect.ts"
 import { identity } from "../../Function.ts"
+import { format } from "../../interfaces/Inspectable.ts"
 import * as FileSystem from "../../platform/FileSystem.ts"
 import * as Path from "../../platform/Path.ts"
 import type { Formatter } from "../../schema/Issue.ts"
 import * as Schema from "../../schema/Schema.ts"
-import * as Transformation from "../../schema/Transformation.ts"
 import type { Covariant } from "../../types/Types.ts"
 
 const TypeId = "~effect/cli/Primitive"
@@ -78,16 +79,10 @@ const Proto = {
 }
 
 /** @internal */
-export const trueValues = Schema.Literals(["true", "1", "y", "yes", "on"])
+export const isTrueValue = Schema.is(Config.TrueValues)
 
 /** @internal */
-export const isTrueValue = Schema.is(trueValues)
-
-/** @internal */
-export const falseValues = Schema.Literals(["false", "0", "n", "no", "off"])
-
-/** @internal */
-export const isFalseValue = Schema.is(falseValues)
+export const isFalseValue = Schema.is(Config.FalseValues)
 
 const makePrimitive = <A>(
   tag: string,
@@ -100,17 +95,13 @@ const makePrimitive = <A>(
     parse
   })
 
-const makeSchemaPrimitive = <A>(
+const makeSchemaPrimitive = <T, E>(
   tag: string,
-  schema: Schema.Codec<A, string>,
-  errorPrefix: string
-): Primitive<A> => {
-  const decode = Schema.decodeUnknownEffect(schema)
-  return makePrimitive(tag, (value) =>
-    Effect.mapError(
-      decode(value),
-      (error) => `${errorPrefix}: ${error.message}`
-    ))
+  schema: Schema.Codec<T, E>
+): Primitive<T> => {
+  const serializer = Schema.makeSerializerStringPojo(schema)
+  const decode = Schema.decodeUnknownEffect(serializer)
+  return makePrimitive(tag, (value) => Effect.mapError(decode(value), (error) => error.message))
 }
 
 /**
@@ -143,11 +134,10 @@ const makeSchemaPrimitive = <A>(
  * @since 4.0.0
  * @category constructors
  */
-export const boolean: Primitive<boolean> = makePrimitive("Boolean", (value) => {
-  if (isTrueValue(value)) return Effect.succeed(true)
-  if (isFalseValue(value)) return Effect.succeed(false)
-  return Effect.fail(`Unable to recognize '${value}' as a valid boolean`)
-})
+export const boolean: Primitive<boolean> = makeSchemaPrimitive(
+  "Boolean",
+  Config.Boolean
+)
 
 /**
  * Creates a primitive that parses floating-point numbers from string input.
@@ -174,10 +164,7 @@ export const boolean: Primitive<boolean> = makePrimitive("Boolean", (value) => {
  */
 export const float: Primitive<number> = makeSchemaPrimitive(
   "Float",
-  Schema.String.pipe(
-    Schema.decodeTo(Schema.Finite, Transformation.numberFromString)
-  ),
-  "Failed to parse number"
+  Schema.Finite
 )
 
 /**
@@ -205,27 +192,7 @@ export const float: Primitive<number> = makeSchemaPrimitive(
  */
 export const integer: Primitive<number> = makeSchemaPrimitive(
   "Integer",
-  Schema.String.pipe(
-    Schema.decodeTo(Schema.Int, Transformation.numberFromString)
-  ),
-  "Failed to parse integer"
-)
-
-// Date
-const DateFromString = Schema.String.pipe(
-  Schema.decodeTo(
-    Schema.Date,
-    Transformation.transform({
-      decode: (input: string) => {
-        const date = new Date(input)
-        if (isNaN(date.getTime())) {
-          return new Date("invalid") // will be rejected by validation layer
-        }
-        return date
-      },
-      encode: (date) => date.toISOString()
-    })
-  )
+  Schema.Int
 )
 
 /**
@@ -253,8 +220,7 @@ const DateFromString = Schema.String.pipe(
  */
 export const date: Primitive<Date> = makeSchemaPrimitive(
   "Date",
-  DateFromString,
-  "Failed to parse date"
+  Schema.ValidDate
 )
 
 /**
@@ -315,12 +281,12 @@ export const choice = <A>(
   choices: ReadonlyArray<readonly [string, A]>
 ): Primitive<A> => {
   const choiceMap = new Map(choices)
-  const validChoices = choices.map(([key]) => key).join(", ")
+  const validChoices = choices.map(([key]) => format(key)).join(" | ")
   return makePrimitive("Choice", (value) => {
     if (choiceMap.has(value)) {
       return Effect.succeed(choiceMap.get(value)!)
     }
-    return Effect.fail(`Expected one of: ${validChoices}. Got: ${value}`)
+    return Effect.fail(`Expected ${validChoices}, got ${format(value)}`)
   })
 }
 
