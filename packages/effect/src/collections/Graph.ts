@@ -485,10 +485,18 @@ export const addNode = <N, E, T extends Kind = "directed">(
  * @since 4.0.0
  * @category getters
  */
-export const getNode = <N, E, T extends Kind = "directed">(
+export const getNode: {
+  <N, E, T extends Kind = "directed">(
+    nodeIndex: NodeIndex
+  ): (graph: Graph<N, E, T> | MutableGraph<N, E, T>) => Option.Option<N>
+  <N, E, T extends Kind = "directed">(
+    graph: Graph<N, E, T> | MutableGraph<N, E, T>,
+    nodeIndex: NodeIndex
+  ): Option.Option<N>
+} = dual(2, <N, E, T extends Kind = "directed">(
   graph: Graph<N, E, T> | MutableGraph<N, E, T>,
   nodeIndex: NodeIndex
-): Option.Option<N> => graph.nodes.has(nodeIndex) ? Option.some(graph.nodes.get(nodeIndex)!) : Option.none()
+): Option.Option<N> => graph.nodes.has(nodeIndex) ? Option.some(graph.nodes.get(nodeIndex)!) : Option.none())
 
 /**
  * Checks if a node with the given index exists in the graph.
@@ -513,10 +521,13 @@ export const getNode = <N, E, T extends Kind = "directed">(
  * @since 4.0.0
  * @category getters
  */
-export const hasNode = <N, E, T extends Kind = "directed">(
+export const hasNode: {
+  (nodeIndex: NodeIndex): <N, E, T extends Kind = "directed">(graph: Graph<N, E, T> | MutableGraph<N, E, T>) => boolean
+  <N, E, T extends Kind = "directed">(graph: Graph<N, E, T> | MutableGraph<N, E, T>, nodeIndex: NodeIndex): boolean
+} = dual(2, <N, E, T extends Kind = "directed">(
   graph: Graph<N, E, T> | MutableGraph<N, E, T>,
   nodeIndex: NodeIndex
-): boolean => graph.nodes.has(nodeIndex)
+): boolean => graph.nodes.has(nodeIndex))
 
 /**
  * Returns the number of nodes in the graph.
@@ -567,7 +578,15 @@ export const nodeCount = <N, E, T extends Kind = "directed">(
  * @since 4.0.0
  * @category getters
  */
-export const findNode = <N, E, T extends Kind = "directed">(
+export const findNode: {
+  <N>(
+    predicate: (data: N) => boolean
+  ): <E, T extends Kind = "directed">(graph: Graph<N, E, T> | MutableGraph<N, E, T>) => NodeIndex | undefined
+  <N, E, T extends Kind = "directed">(
+    graph: Graph<N, E, T> | MutableGraph<N, E, T>,
+    predicate: (data: N) => boolean
+  ): NodeIndex | undefined
+} = dual(2, <N, E, T extends Kind = "directed">(
   graph: Graph<N, E, T> | MutableGraph<N, E, T>,
   predicate: (data: N) => boolean
 ): NodeIndex | undefined => {
@@ -576,7 +595,7 @@ export const findNode = <N, E, T extends Kind = "directed">(
       return index
     }
   }
-}
+})
 
 /**
  * Finds all nodes that match the given predicate.
@@ -601,7 +620,15 @@ export const findNode = <N, E, T extends Kind = "directed">(
  * @since 4.0.0
  * @category getters
  */
-export const findNodes = <N, E, T extends Kind = "directed">(
+export const findNodes: {
+  <N>(
+    predicate: (data: N) => boolean
+  ): <E, T extends Kind = "directed">(graph: Graph<N, E, T> | MutableGraph<N, E, T>) => Array<NodeIndex>
+  <N, E, T extends Kind = "directed">(
+    graph: Graph<N, E, T> | MutableGraph<N, E, T>,
+    predicate: (data: N) => boolean
+  ): Array<NodeIndex>
+} = dual(2, <N, E, T extends Kind = "directed">(
   graph: Graph<N, E, T> | MutableGraph<N, E, T>,
   predicate: (data: N) => boolean
 ): Array<NodeIndex> => {
@@ -612,7 +639,7 @@ export const findNodes = <N, E, T extends Kind = "directed">(
     }
   }
   return results
-}
+})
 
 /**
  * Finds the first edge that matches the given predicate.
@@ -639,7 +666,15 @@ export const findNodes = <N, E, T extends Kind = "directed">(
  * @since 4.0.0
  * @category getters
  */
-export const findEdge = <N, E, T extends Kind = "directed">(
+export const findEdge: {
+  <E>(
+    predicate: (data: E, source: NodeIndex, target: NodeIndex) => boolean
+  ): <N, T extends Kind = "directed">(graph: Graph<N, E, T> | MutableGraph<N, E, T>) => EdgeIndex | undefined
+  <N, E, T extends Kind = "directed">(
+    graph: Graph<N, E, T> | MutableGraph<N, E, T>,
+    predicate: (data: E, source: NodeIndex, target: NodeIndex) => boolean
+  ): EdgeIndex | undefined
+} = dual(2, <N, E, T extends Kind = "directed">(
   graph: Graph<N, E, T> | MutableGraph<N, E, T>,
   predicate: (data: E, source: NodeIndex, target: NodeIndex) => boolean
 ): EdgeIndex | undefined => {
@@ -648,7 +683,7 @@ export const findEdge = <N, E, T extends Kind = "directed">(
       return edgeIndex
     }
   }
-}
+})
 
 /**
  * Finds all edges that match the given predicate.
@@ -676,7 +711,15 @@ export const findEdge = <N, E, T extends Kind = "directed">(
  * @since 4.0.0
  * @category getters
  */
-export const findEdges = <N, E, T extends Kind = "directed">(
+export const findEdges: {
+  <E>(
+    predicate: (data: E, source: NodeIndex, target: NodeIndex) => boolean
+  ): <N, T extends Kind = "directed">(graph: Graph<N, E, T> | MutableGraph<N, E, T>) => Array<EdgeIndex>
+  <N, E, T extends Kind = "directed">(
+    graph: Graph<N, E, T> | MutableGraph<N, E, T>,
+    predicate: (data: E, source: NodeIndex, target: NodeIndex) => boolean
+  ): Array<EdgeIndex>
+} = dual(2, <N, E, T extends Kind = "directed">(
   graph: Graph<N, E, T> | MutableGraph<N, E, T>,
   predicate: (data: E, source: NodeIndex, target: NodeIndex) => boolean
 ): Array<EdgeIndex> => {
@@ -687,7 +730,7 @@ export const findEdges = <N, E, T extends Kind = "directed">(
     }
   }
   return results
-}
+})
 
 /**
  * Updates a single node's data by applying a transformation function.
@@ -1363,10 +1406,18 @@ const removeEdgeInternal = <N, E, T extends Kind = "directed">(
  * @since 4.0.0
  * @category getters
  */
-export const getEdge = <N, E, T extends Kind = "directed">(
+export const getEdge: {
+  <E>(
+    edgeIndex: EdgeIndex
+  ): <N, T extends Kind = "directed">(graph: Graph<N, E, T> | MutableGraph<N, E, T>) => Edge<E> | undefined
+  <N, E, T extends Kind = "directed">(
+    graph: Graph<N, E, T> | MutableGraph<N, E, T>,
+    edgeIndex: EdgeIndex
+  ): Edge<E> | undefined
+} = dual(2, <N, E, T extends Kind = "directed">(
   graph: Graph<N, E, T> | MutableGraph<N, E, T>,
   edgeIndex: EdgeIndex
-): Edge<E> | undefined => graph.edges.get(edgeIndex)
+): Edge<E> | undefined => graph.edges.get(edgeIndex))
 
 /**
  * Checks if an edge exists between two nodes in the graph.
@@ -1396,7 +1447,17 @@ export const getEdge = <N, E, T extends Kind = "directed">(
  * @since 4.0.0
  * @category getters
  */
-export const hasEdge = <N, E, T extends Kind = "directed">(
+export const hasEdge: {
+  (
+    source: NodeIndex,
+    target: NodeIndex
+  ): <N, E, T extends Kind = "directed">(graph: Graph<N, E, T> | MutableGraph<N, E, T>) => boolean
+  <N, E, T extends Kind = "directed">(
+    graph: Graph<N, E, T> | MutableGraph<N, E, T>,
+    source: NodeIndex,
+    target: NodeIndex
+  ): boolean
+} = dual(3, <N, E, T extends Kind = "directed">(
   graph: Graph<N, E, T> | MutableGraph<N, E, T>,
   source: NodeIndex,
   target: NodeIndex
@@ -1415,7 +1476,7 @@ export const hasEdge = <N, E, T extends Kind = "directed">(
   }
 
   return false
-}
+})
 
 /**
  * Returns the number of edges in the graph.
@@ -1475,7 +1536,15 @@ export const edgeCount = <N, E, T extends Kind = "directed">(
  * @since 4.0.0
  * @category getters
  */
-export const neighbors = <N, E, T extends Kind = "directed">(
+export const neighbors: {
+  (
+    nodeIndex: NodeIndex
+  ): <N, E, T extends Kind = "directed">(graph: Graph<N, E, T> | MutableGraph<N, E, T>) => Array<NodeIndex>
+  <N, E, T extends Kind = "directed">(
+    graph: Graph<N, E, T> | MutableGraph<N, E, T>,
+    nodeIndex: NodeIndex
+  ): Array<NodeIndex>
+} = dual(2, <N, E, T extends Kind = "directed">(
   graph: Graph<N, E, T> | MutableGraph<N, E, T>,
   nodeIndex: NodeIndex
 ): Array<NodeIndex> => {
@@ -1498,7 +1567,7 @@ export const neighbors = <N, E, T extends Kind = "directed">(
   }
 
   return result
-}
+})
 
 /**
  * Get neighbors of a node in a specific direction for bidirectional traversal.
@@ -1526,7 +1595,17 @@ export const neighbors = <N, E, T extends Kind = "directed">(
  * @since 4.0.0
  * @category queries
  */
-export const neighborsDirected = <N, E, T extends Kind = "directed">(
+export const neighborsDirected: {
+  (
+    nodeIndex: NodeIndex,
+    direction: Direction
+  ): <N, E, T extends Kind = "directed">(graph: Graph<N, E, T> | MutableGraph<N, E, T>) => Array<NodeIndex>
+  <N, E, T extends Kind = "directed">(
+    graph: Graph<N, E, T> | MutableGraph<N, E, T>,
+    nodeIndex: NodeIndex,
+    direction: Direction
+  ): Array<NodeIndex>
+} = dual(3, <N, E, T extends Kind = "directed">(
   graph: Graph<N, E, T> | MutableGraph<N, E, T>,
   nodeIndex: NodeIndex,
   direction: Direction
@@ -1553,7 +1632,7 @@ export const neighborsDirected = <N, E, T extends Kind = "directed">(
   }
 
   return result
-}
+})
 
 // =============================================================================
 // GraphViz Export
@@ -1637,7 +1716,15 @@ export interface GraphVizOptions<N, E> {
  * @since 4.0.0
  * @category utils
  */
-export const toGraphViz = <N, E, T extends Kind = "directed">(
+export const toGraphViz: {
+  <N, E>(
+    options?: GraphVizOptions<N, E>
+  ): <T extends Kind = "directed">(graph: Graph<N, E, T> | MutableGraph<N, E, T>) => string
+  <N, E, T extends Kind = "directed">(
+    graph: Graph<N, E, T> | MutableGraph<N, E, T>,
+    options?: GraphVizOptions<N, E>
+  ): string
+} = dual((args) => isGraph(args[0]), <N, E, T extends Kind = "directed">(
   graph: Graph<N, E, T> | MutableGraph<N, E, T>,
   options?: GraphVizOptions<N, E>
 ): string => {
@@ -1668,7 +1755,7 @@ export const toGraphViz = <N, E, T extends Kind = "directed">(
 
   lines.push("}")
   return lines.join("\n")
-}
+})
 
 // =============================================================================
 // Mermaid Export
@@ -2047,7 +2134,15 @@ const formatMermaidNode = (
  * @since 4.0.0
  * @category utils
  */
-export const toMermaid = <N, E, T extends Kind = "directed">(
+export const toMermaid: {
+  <N, E>(
+    options?: MermaidOptions<N, E>
+  ): <T extends Kind = "directed">(graph: Graph<N, E, T> | MutableGraph<N, E, T>) => string
+  <N, E, T extends Kind = "directed">(
+    graph: Graph<N, E, T> | MutableGraph<N, E, T>,
+    options?: MermaidOptions<N, E>
+  ): string
+} = dual((args) => isGraph(args[0]), <N, E, T extends Kind = "directed">(
   graph: Graph<N, E, T> | MutableGraph<N, E, T>,
   options?: MermaidOptions<N, E>
 ): string => {
@@ -2092,7 +2187,7 @@ export const toMermaid = <N, E, T extends Kind = "directed">(
   }
 
   return lines.join("\n")
-}
+})
 
 // =============================================================================
 // Direction Types for Bidirectional Traversal
