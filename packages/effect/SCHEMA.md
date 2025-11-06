@@ -4585,12 +4585,9 @@ You can specify a custom JSON Schema for custom types by using the `jsonSchema` 
 import { Schema } from "effect/schema"
 
 const schema = Schema.instanceOf(URL, {
-  jsonSchema: {
-    _tag: "Override",
-    override: () => ({
-      type: "string"
-    })
-  }
+  jsonSchema: () => ({
+    type: "string"
+  })
 })
 
 const jsonSchema = Schema.makeJsonSchemaDraft07(schema)
@@ -4683,13 +4680,11 @@ const schema = Schema.String.check(
   Schema.makeFilter((s) => /foo/.test(s), {
     title: "containsFoo",
     description: "must contain 'foo'",
-    jsonSchema: {
-      _tag: "Constraint",
+    jsonSchemaConstraint:
       // Evaluated during generation; return a fragment that will be merged
-      constraint: () => ({
+      () => ({
         pattern: "foo"
       })
-    }
   })
 )
 
@@ -4898,11 +4893,9 @@ import { FastCheck } from "effect/testing"
 
 const URL = Schema.instanceOf(globalThis.URL, {
   title: "URL",
-  arbitrary: {
-    _tag: "Override",
+  arbitrary:
     // Build a URL by first generating a valid web URL string with Fast-Check
-    override: () => (fc) => fc.webUrl().map((s) => new globalThis.URL(s))
-  }
+    () => (fc) => fc.webUrl().map((s) => new globalThis.URL(s))
 })
 
 console.log(FastCheck.sample(Schema.makeArbitrary(URL), 3))
@@ -4918,7 +4911,7 @@ Example Output:
 
 ### Overriding the default generated Arbitrary
 
-You can adjust the generated Arbitrary by adding an `arbitrary: { _tag: "Override", ... }` annotation.
+You can adjust the generated Arbitrary by adding an `arbitrary` annotation.
 
 ```ts
 interface Context {
@@ -4931,12 +4924,11 @@ interface Context {
   readonly constraints?: Annotation.Constraints["constraints"] | undefined
 }
 
-type Override<T, TypeParameters extends ReadonlyArray<Schema.Top>> = {
-  readonly _tag: "Override"
-  readonly override: (
-    // Arbitraries for any type parameters of the schema (if present)
+export interface Override<T, TypeParameters extends ReadonlyArray<Schema.Top>> {
+  (
+    /* Arbitraries for any type parameters of the schema (if present) */
     typeParameters: { readonly [K in keyof TypeParameters]: FastCheck.Arbitrary<TypeParameters[K]["Type"]> }
-  ) => (fc: typeof FastCheck, context?: Context) => FastCheck.Arbitrary<T>
+  ): (fc: typeof FastCheck, context: Context) => FastCheck.Arbitrary<T>
 }
 ```
 
@@ -4959,10 +4951,7 @@ Example Output:
 
 // Add an override to restrict numbers to integers 10..20
 const schema = Schema.Number.annotate({
-  arbitrary: {
-    _tag: "Override",
-    override: () => (fc) => fc.integer({ min: 10, max: 20 }) // custom generator
-  }
+  arbitrary: () => (fc) => fc.integer({ min: 10, max: 20 }) // custom generator
 })
 
 console.log(FastCheck.sample(Schema.makeArbitrary(schema), 3))
@@ -4984,16 +4973,12 @@ import { FastCheck } from "effect/testing"
 
 // A reusable 'isNonEmpty' filter for strings and arrays
 const isNonEmpty = Schema.makeFilter((s: string) => s.length > 0, {
-  arbitrary: {
-    _tag: "Constraint",
-    // Tell the generator how to satisfy this check
-    constraint: {
-      string: {
-        minLength: 1
-      },
-      array: {
-        minLength: 1
-      }
+  arbitraryConstraint: {
+    string: {
+      minLength: 1
+    },
+    array: {
+      minLength: 1
     }
   }
 })
@@ -5004,6 +4989,81 @@ console.log(FastCheck.sample(Schema.makeArbitrary(schema), 3))
 /*
 Example Output:
 [ 'R|I6', 'q#" Z', 'qc= f' ]
+*/
+```
+
+### Integration with synthetic data generation tools
+
+You can integrate `@faker-js/faker` by adding an `arbitrary` override to your schemas. The helper below ties Faker's randomness to Fast-Check's RNG so samples are reproducible and shrink well.
+
+**Example** (Faker-powered override tied to Fast-Check's RNG)
+
+```ts
+import { faker } from "@faker-js/faker"
+import type { Annotations } from "effect/schema"
+import { Schema } from "effect/schema"
+import { FastCheck } from "effect/testing"
+
+/**
+ * Make it easy to plug a Faker generator into a Schema's `arbitrary` override.
+ * The seed comes from Fast-Check so data is reproducible and shrinks correctly.
+ */
+function fake<A>(
+  gen: (f: typeof faker, ctx: Annotations.Arbitrary.Context) => A
+): Annotations.Arbitrary.Override<A, readonly []> {
+  return () => (fc, ctx) =>
+    fc.nat().map((seed) => {
+      faker.seed(seed)
+      return gen(faker, ctx)
+    })
+}
+
+/** Leaf fields use Faker through the `arbitrary` override */
+const FirstName = Schema.String.annotate({
+  arbitrary: fake((f) => f.person.firstName())
+})
+
+const LastName = Schema.String.annotate({
+  arbitrary: fake((f) => f.person.lastName())
+})
+
+const Age = Schema.Int.check(Schema.isBetween(18, 80)).annotate({
+  arbitrary: fake((f, ctx) => {
+    // Use the constraints from the schema to generate a random age
+    const min = ctx.constraints?.number?.min ?? 0
+    const max = ctx.constraints?.number?.max ?? Number.MAX_SAFE_INTEGER
+    return f.number.int({ min, max })
+  })
+})
+
+/** Compose leaves with regular Schema combinators */
+const FullName = Schema.Struct({
+  firstName: FirstName,
+  lastName: LastName,
+  age: Age
+})
+
+/** Build and sample an Arbitrary for the composed schema */
+console.log(JSON.stringify(FastCheck.sample(Schema.makeArbitrary(FullName), 3), null, 2))
+/*
+Example Output:
+[
+  {
+    "firstName": "Kiana",
+    "lastName": "Balistreri",
+    "age": 18
+  },
+  {
+    "firstName": "Wendy",
+    "lastName": "Baumbach",
+    "age": 51
+  },
+  {
+    "firstName": "Kelton",
+    "lastName": "Kshlerin",
+    "age": 72
+  }
+]
 */
 ```
 
@@ -5034,10 +5094,7 @@ class MyClass {
 }
 
 const schema = Schema.instanceOf(MyClass, {
-  equivalence: {
-    _tag: "Override",
-    override: () => (x, y) => x.a === y.a
-  }
+  equivalence: () => (x, y) => x.a === y.a
 })
 
 const equivalence = Schema.makeEquivalence(schema)

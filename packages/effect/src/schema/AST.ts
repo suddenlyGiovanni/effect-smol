@@ -2035,20 +2035,14 @@ export function isPattern(regex: RegExp, annotations?: Annotations.Filter) {
     (s: string) => regex.test(s),
     Annotations.combine({
       expected: `a string matching the regex ${source}`,
-      jsonSchema: {
-        _tag: "Constraint",
-        constraint: () => ({ pattern: regex.source })
-      },
+      jsonSchemaConstraint: () => ({ pattern: regex.source }),
       meta: {
         _tag: "isPattern",
         regex
       },
-      arbitrary: {
-        _tag: "Constraint",
-        constraint: {
-          string: {
-            patterns: [regex.source]
-          }
+      arbitraryConstraint: {
+        string: {
+          patterns: [regex.source]
         }
       }
     }, annotations)
@@ -2556,21 +2550,6 @@ export const enumsToLiterals = memoize((ast: Enum): Union<Literal> => {
     "anyOf"
   )
 })
-
-/** @internal */
-export function getFilters(checks: Checks | undefined): Array<Filter<any>> {
-  if (checks) {
-    return checks.flatMap((check) => {
-      switch (check._tag) {
-        case "Filter":
-          return [check]
-        case "FilterGroup":
-          return getFilters(check.checks)
-      }
-    })
-  }
-  return []
-}
 
 /**
  * @category Visitor

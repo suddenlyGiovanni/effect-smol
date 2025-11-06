@@ -3278,19 +3278,13 @@ export function isTrimmed(annotations?: Annotations.Filter) {
     (s: string) => s.trim() === s,
     Annotations.combine({
       expected: "a string with no leading or trailing whitespace",
-      jsonSchema: {
-        _tag: "Constraint",
-        constraint: () => ({ pattern: TRIMMED_PATTERN })
-      },
+      jsonSchemaConstraint: () => ({ pattern: TRIMMED_PATTERN }),
       meta: {
         _tag: "isTrimmed"
       },
-      arbitrary: {
-        _tag: "Constraint",
-        constraint: {
-          string: {
-            patterns: [TRIMMED_PATTERN]
-          }
+      arbitraryConstraint: {
+        string: {
+          patterns: [TRIMMED_PATTERN]
         }
       }
     }, annotations)
@@ -3347,13 +3341,10 @@ export function isUUID(version?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8) {
   const re = getUUIDRegex(version)
   return isPattern(re, {
     expected: version ? `a UUID v${version}` : "a UUID",
-    jsonSchema: {
-      _tag: "Constraint",
-      constraint: () => ({
-        pattern: re.source,
-        format: "uuid"
-      })
-    }
+    jsonSchemaConstraint: () => ({
+      pattern: re.source,
+      format: "uuid"
+    })
   })
 }
 
@@ -3420,20 +3411,14 @@ export function isStartsWith(startsWith: string, annotations?: Annotations.Filte
     (s: string) => s.startsWith(startsWith),
     Annotations.combine({
       expected: `a string starting with ${formatted}`,
-      jsonSchema: {
-        _tag: "Constraint",
-        constraint: () => ({ pattern: `^${startsWith}` })
-      },
+      jsonSchemaConstraint: () => ({ pattern: `^${startsWith}` }),
       meta: {
         _tag: "isStartsWith",
         startsWith
       },
-      arbitrary: {
-        _tag: "Constraint",
-        constraint: {
-          string: {
-            patterns: [`^${startsWith}`]
-          }
+      arbitraryConstraint: {
+        string: {
+          patterns: [`^${startsWith}`]
         }
       }
     }, annotations)
@@ -3450,20 +3435,14 @@ export function isEndsWith(endsWith: string, annotations?: Annotations.Filter) {
     (s: string) => s.endsWith(endsWith),
     Annotations.combine({
       expected: `a string ending with ${formatted}`,
-      jsonSchema: {
-        _tag: "Constraint",
-        constraint: () => ({ pattern: `${endsWith}$` })
-      },
+      jsonSchemaConstraint: () => ({ pattern: `${endsWith}$` }),
       meta: {
         _tag: "isEndsWith",
         endsWith
       },
-      arbitrary: {
-        _tag: "Constraint",
-        constraint: {
-          string: {
-            patterns: [`${endsWith}$`]
-          }
+      arbitraryConstraint: {
+        string: {
+          patterns: [`${endsWith}$`]
         }
       }
     }, annotations)
@@ -3480,20 +3459,14 @@ export function isIncludes(includes: string, annotations?: Annotations.Filter) {
     (s: string) => s.includes(includes),
     Annotations.combine({
       expected: `a string including ${formatted}`,
-      jsonSchema: {
-        _tag: "Constraint",
-        constraint: () => ({ pattern: includes })
-      },
+      jsonSchemaConstraint: () => ({ pattern: includes }),
       meta: {
         _tag: "isIncludes",
         includes
       },
-      arbitrary: {
-        _tag: "Constraint",
-        constraint: {
-          string: {
-            patterns: [includes]
-          }
+      arbitraryConstraint: {
+        string: {
+          patterns: [includes]
         }
       }
     }, annotations)
@@ -3511,19 +3484,13 @@ export function isUppercased(annotations?: Annotations.Filter) {
     (s: string) => s.toUpperCase() === s,
     Annotations.combine({
       expected: "a string with all characters in uppercase",
-      jsonSchema: {
-        _tag: "Constraint",
-        constraint: () => ({ pattern: UPPERCASED_PATTERN })
-      },
+      jsonSchemaConstraint: () => ({ pattern: UPPERCASED_PATTERN }),
       meta: {
         _tag: "isUppercased"
       },
-      arbitrary: {
-        _tag: "Constraint",
-        constraint: {
-          string: {
-            patterns: [UPPERCASED_PATTERN]
-          }
+      arbitraryConstraint: {
+        string: {
+          patterns: [UPPERCASED_PATTERN]
         }
       }
     }, annotations)
@@ -3541,19 +3508,13 @@ export function isLowercased(annotations?: Annotations.Filter) {
     (s: string) => s.toLowerCase() === s,
     Annotations.combine({
       expected: "a string with all characters in lowercase",
-      jsonSchema: {
-        _tag: "Constraint",
-        constraint: () => ({ pattern: LOWERCASED_PATTERN })
-      },
+      jsonSchemaConstraint: () => ({ pattern: LOWERCASED_PATTERN }),
       meta: {
         _tag: "isLowercased"
       },
-      arbitrary: {
-        _tag: "Constraint",
-        constraint: {
-          string: {
-            patterns: [LOWERCASED_PATTERN]
-          }
+      arbitraryConstraint: {
+        string: {
+          patterns: [LOWERCASED_PATTERN]
         }
       }
     }, annotations)
@@ -3573,19 +3534,13 @@ export function isCapitalized(annotations?: Annotations.Filter) {
     (s: string) => s.charAt(0).toUpperCase() === s.charAt(0),
     Annotations.combine({
       expected: "a string with the first character in uppercase",
-      jsonSchema: {
-        _tag: "Constraint",
-        constraint: () => ({ pattern: CAPITALIZED_PATTERN })
-      },
+      jsonSchemaConstraint: () => ({ pattern: CAPITALIZED_PATTERN }),
       meta: {
         _tag: "isCapitalized"
       },
-      arbitrary: {
-        _tag: "Constraint",
-        constraint: {
-          string: {
-            patterns: [CAPITALIZED_PATTERN]
-          }
+      arbitraryConstraint: {
+        string: {
+          patterns: [CAPITALIZED_PATTERN]
         }
       }
     }, annotations)
@@ -3605,19 +3560,13 @@ export function isUncapitalized(annotations?: Annotations.Filter) {
     (s: string) => s.charAt(0).toLowerCase() === s.charAt(0),
     Annotations.combine({
       expected: "a string with the first character in lowercase",
-      jsonSchema: {
-        _tag: "Constraint",
-        constraint: () => ({ pattern: UNCAPITALIZED_PATTERN })
-      },
+      jsonSchemaConstraint: () => ({ pattern: UNCAPITALIZED_PATTERN }),
       meta: {
         _tag: "isUncapitalized"
       },
-      arbitrary: {
-        _tag: "Constraint",
-        constraint: {
-          string: {
-            patterns: [UNCAPITALIZED_PATTERN]
-          }
+      arbitraryConstraint: {
+        string: {
+          patterns: [UNCAPITALIZED_PATTERN]
         }
       }
     }, annotations)
@@ -3636,13 +3585,10 @@ export function isFinite(annotations?: Annotations.Filter) {
       meta: {
         _tag: "isFinite"
       },
-      arbitrary: {
-        _tag: "Constraint",
-        constraint: {
-          number: {
-            noDefaultInfinity: true,
-            noNaN: true
-          }
+      arbitraryConstraint: {
+        number: {
+          noDefaultInfinity: true,
+          noNaN: true
         }
       }
     }, annotations)
@@ -3789,21 +3735,15 @@ export function deriveIsMultipleOf<T>(options: {
 export const isGreaterThan = deriveIsGreaterThan({
   order: Order.number,
   annotate: (exclusiveMinimum) => ({
-    jsonSchema: {
-      _tag: "Constraint",
-      constraint: () => ({ exclusiveMinimum })
-    },
+    jsonSchemaConstraint: () => ({ exclusiveMinimum }),
     meta: {
       _tag: "isGreaterThan",
       exclusiveMinimum
     },
-    arbitrary: {
-      _tag: "Constraint",
-      constraint: {
-        number: {
-          min: exclusiveMinimum,
-          minExcluded: true
-        }
+    arbitraryConstraint: {
+      number: {
+        min: exclusiveMinimum,
+        minExcluded: true
       }
     }
   })
@@ -3816,20 +3756,14 @@ export const isGreaterThan = deriveIsGreaterThan({
 export const isGreaterThanOrEqualTo = deriveIsGreaterThanOrEqualTo({
   order: Order.number,
   annotate: (minimum) => ({
-    jsonSchema: {
-      _tag: "Constraint",
-      constraint: () => ({ minimum })
-    },
+    jsonSchemaConstraint: () => ({ minimum }),
     meta: {
       _tag: "isGreaterThanOrEqualTo",
       minimum
     },
-    arbitrary: {
-      _tag: "Constraint",
-      constraint: {
-        number: {
-          min: minimum
-        }
+    arbitraryConstraint: {
+      number: {
+        min: minimum
       }
     }
   })
@@ -3842,21 +3776,15 @@ export const isGreaterThanOrEqualTo = deriveIsGreaterThanOrEqualTo({
 export const isLessThan = deriveIsLessThan({
   order: Order.number,
   annotate: (exclusiveMaximum) => ({
-    jsonSchema: {
-      _tag: "Constraint",
-      constraint: () => ({ exclusiveMaximum })
-    },
+    jsonSchemaConstraint: () => ({ exclusiveMaximum }),
     meta: {
       _tag: "isLessThan",
       exclusiveMaximum
     },
-    arbitrary: {
-      _tag: "Constraint",
-      constraint: {
-        number: {
-          max: exclusiveMaximum,
-          maxExcluded: true
-        }
+    arbitraryConstraint: {
+      number: {
+        max: exclusiveMaximum,
+        maxExcluded: true
       }
     }
   })
@@ -3869,20 +3797,14 @@ export const isLessThan = deriveIsLessThan({
 export const isLessThanOrEqualTo = deriveIsLessThanOrEqualTo({
   order: Order.number,
   annotate: (maximum) => ({
-    jsonSchema: {
-      _tag: "Constraint",
-      constraint: () => ({ maximum })
-    },
+    jsonSchemaConstraint: () => ({ maximum }),
     meta: {
       _tag: "isLessThanOrEqualTo",
       maximum
     },
-    arbitrary: {
-      _tag: "Constraint",
-      constraint: {
-        number: {
-          max: maximum
-        }
+    arbitraryConstraint: {
+      number: {
+        max: maximum
       }
     }
   })
@@ -3895,22 +3817,16 @@ export const isLessThanOrEqualTo = deriveIsLessThanOrEqualTo({
 export const isBetween = deriveIsBetween({
   order: Order.number,
   annotate: (minimum, maximum) => ({
-    jsonSchema: {
-      _tag: "Constraint",
-      constraint: () => ({ minimum, maximum })
-    },
+    jsonSchemaConstraint: () => ({ minimum, maximum }),
     meta: {
       _tag: "isBetween",
       minimum,
       maximum
     },
-    arbitrary: {
-      _tag: "Constraint",
-      constraint: {
-        number: {
-          min: minimum,
-          max: maximum
-        }
+    arbitraryConstraint: {
+      number: {
+        min: minimum,
+        max: maximum
       }
     }
   })
@@ -3957,10 +3873,7 @@ export const isMultipleOf = deriveIsMultipleOf({
   zero: 0,
   annotate: (divisor) => ({
     expected: `a value that is a multiple of ${divisor}`,
-    jsonSchema: {
-      _tag: "Constraint",
-      constraint: () => ({ multipleOf: Math.abs(divisor) })
-    }
+    jsonSchemaConstraint: () => ({ multipleOf: Math.abs(divisor) })
   })
 })
 
@@ -3975,19 +3888,13 @@ export function isInt(annotations?: Annotations.Filter) {
     (n: number) => globalThis.Number.isSafeInteger(n),
     Annotations.combine({
       expected: "an integer",
-      jsonSchema: {
-        _tag: "Constraint",
-        constraint: () => ({ type: "integer" })
-      },
+      jsonSchemaConstraint: () => ({ type: "integer" }),
       meta: {
         _tag: "isInt"
       },
-      arbitrary: {
-        _tag: "Constraint",
-        constraint: {
-          number: {
-            isInteger: true
-          }
+      arbitraryConstraint: {
+        number: {
+          isInteger: true
         }
       }
     }, annotations)
@@ -4006,13 +3913,10 @@ export function isInt32(annotations?: Annotations.Filter) {
     ],
     Annotations.combine({
       expected: "a 32-bit integer",
-      jsonSchema: {
-        _tag: "Constraint",
-        constraint: (ctx) =>
-          ctx.target === "oas3.1" ?
-            { format: "int32" } :
-            undefined
-      },
+      jsonSchemaConstraint: (ctx) =>
+        ctx.target === "oas3.1" ?
+          { format: "int32" } :
+          undefined,
       meta: {
         _tag: "isInt32"
       }
@@ -4032,13 +3936,10 @@ export function isUint32(annotations?: Annotations.Filter) {
     ],
     Annotations.combine({
       expected: "a 32-bit unsigned integer",
-      jsonSchema: {
-        _tag: "Constraint",
-        constraint: (ctx) =>
-          ctx.target === "oas3.1" ?
-            { format: "uint32" } :
-            undefined
-      },
+      jsonSchemaConstraint: (ctx) =>
+        ctx.target === "oas3.1" ?
+          { format: "uint32" } :
+          undefined,
       meta: {
         _tag: "isUint32"
       }
@@ -4058,12 +3959,9 @@ export function isValidDate(annotations?: Annotations.Filter) {
       meta: {
         _tag: "isValidDate"
       },
-      arbitrary: {
-        _tag: "Constraint",
-        constraint: {
-          date: {
-            noInvalidDate: true
-          }
+      arbitraryConstraint: {
+        date: {
+          noInvalidDate: true
         }
       }
     }, annotations)
@@ -4081,12 +3979,9 @@ export const isGreaterThanOrEqualToDate = deriveIsGreaterThanOrEqualTo({
       _tag: "isGreaterThanOrEqualToDate",
       minimum
     },
-    arbitrary: {
-      _tag: "Constraint",
-      constraint: {
-        date: {
-          min: minimum
-        }
+    arbitraryConstraint: {
+      date: {
+        min: minimum
       }
     }
   })
@@ -4103,12 +3998,9 @@ export const isLessThanOrEqualToDate = deriveIsLessThanOrEqualTo({
       _tag: "isLessThanOrEqualToDate",
       maximum
     },
-    arbitrary: {
-      _tag: "Constraint",
-      constraint: {
-        date: {
-          max: maximum
-        }
+    arbitraryConstraint: {
+      date: {
+        max: maximum
       }
     }
   })
@@ -4126,13 +4018,10 @@ export const isBetweenDate = deriveIsBetween({
       minimum,
       maximum
     },
-    arbitrary: {
-      _tag: "Constraint",
-      constraint: {
-        date: {
-          min: minimum,
-          max: maximum
-        }
+    arbitraryConstraint: {
+      date: {
+        min: minimum,
+        max: maximum
       }
     }
   })
@@ -4149,12 +4038,9 @@ export const isGreaterThanOrEqualToBigInt = deriveIsGreaterThanOrEqualTo({
       _tag: "isGreaterThanOrEqualToBigInt",
       minimum
     },
-    arbitrary: {
-      _tag: "Constraint",
-      constraint: {
-        bigint: {
-          min: minimum
-        }
+    arbitraryConstraint: {
+      bigint: {
+        min: minimum
       }
     }
   })
@@ -4171,12 +4057,9 @@ export const isLessThanOrEqualToBigInt = deriveIsLessThanOrEqualTo({
       _tag: "isLessThanOrEqualToBigInt",
       maximum
     },
-    arbitrary: {
-      _tag: "Constraint",
-      constraint: {
-        bigint: {
-          max: maximum
-        }
+    arbitraryConstraint: {
+      bigint: {
+        max: maximum
       }
     }
   })
@@ -4194,13 +4077,10 @@ export const isBetweenBigInt = deriveIsBetween({
       minimum,
       maximum
     },
-    arbitrary: {
-      _tag: "Constraint",
-      constraint: {
-        bigint: {
-          min: minimum,
-          max: maximum
-        }
+    arbitraryConstraint: {
+      bigint: {
+        min: minimum,
+        max: maximum
       }
     }
   })
@@ -4232,15 +4112,12 @@ export function isMinLength(minLength: number, annotations?: Annotations.Filter)
     (input) => input.length >= minLength,
     Annotations.combine({
       expected: `a value with a length of at least ${minLength}`,
-      jsonSchema: {
-        _tag: "Constraint",
-        constraint: (ctx) => {
-          switch (ctx.type) {
-            case "string":
-              return { minLength }
-            case "array":
-              return { minItems: minLength }
-          }
+      jsonSchemaConstraint: (ctx) => {
+        switch (ctx.type) {
+          case "string":
+            return { minLength }
+          case "array":
+            return { minItems: minLength }
         }
       },
       meta: {
@@ -4248,15 +4125,12 @@ export function isMinLength(minLength: number, annotations?: Annotations.Filter)
         minLength
       },
       [Annotations.STRUCTURAL_ANNOTATION_KEY]: true,
-      arbitrary: {
-        _tag: "Constraint",
-        constraint: {
-          string: {
-            minLength
-          },
-          array: {
-            minLength
-          }
+      arbitraryConstraint: {
+        string: {
+          minLength
+        },
+        array: {
+          minLength
         }
       }
     }, annotations)
@@ -4281,15 +4155,12 @@ export function isMaxLength(maxLength: number, annotations?: Annotations.Filter)
     (input) => input.length <= maxLength,
     Annotations.combine({
       expected: `a value with a length of at most ${maxLength}`,
-      jsonSchema: {
-        _tag: "Constraint",
-        constraint: (ctx) => {
-          switch (ctx.type) {
-            case "string":
-              return { maxLength }
-            case "array":
-              return { maxItems: maxLength }
-          }
+      jsonSchemaConstraint: (ctx) => {
+        switch (ctx.type) {
+          case "string":
+            return { maxLength }
+          case "array":
+            return { maxItems: maxLength }
         }
       },
       meta: {
@@ -4297,15 +4168,12 @@ export function isMaxLength(maxLength: number, annotations?: Annotations.Filter)
         maxLength
       },
       [Annotations.STRUCTURAL_ANNOTATION_KEY]: true,
-      arbitrary: {
-        _tag: "Constraint",
-        constraint: {
-          string: {
-            maxLength
-          },
-          array: {
-            maxLength
-          }
+      arbitraryConstraint: {
+        string: {
+          maxLength
+        },
+        array: {
+          maxLength
         }
       }
     }, annotations)
@@ -4322,15 +4190,12 @@ export function isLength(length: number, annotations?: Annotations.Filter) {
     (input) => input.length === length,
     Annotations.combine({
       expected: `a value with a length of ${length}`,
-      jsonSchema: {
-        _tag: "Constraint",
-        constraint: (ctx) => {
-          switch (ctx.type) {
-            case "string":
-              return { minLength: length, maxLength: length }
-            case "array":
-              return { minItems: length, maxItems: length }
-          }
+      jsonSchemaConstraint: (ctx) => {
+        switch (ctx.type) {
+          case "string":
+            return { minLength: length, maxLength: length }
+          case "array":
+            return { minItems: length, maxItems: length }
         }
       },
       meta: {
@@ -4338,17 +4203,14 @@ export function isLength(length: number, annotations?: Annotations.Filter) {
         length
       },
       [Annotations.STRUCTURAL_ANNOTATION_KEY]: true,
-      arbitrary: {
-        _tag: "Constraint",
-        constraint: {
-          string: {
-            minLength: length,
-            maxLength: length
-          },
-          array: {
-            minLength: length,
-            maxLength: length
-          }
+      arbitraryConstraint: {
+        string: {
+          minLength: length,
+          maxLength: length
+        },
+        array: {
+          minLength: length,
+          maxLength: length
         }
       }
     }, annotations)
@@ -4370,12 +4232,9 @@ export function isMinSize(minSize: number, annotations?: Annotations.Filter) {
         minSize
       },
       [Annotations.STRUCTURAL_ANNOTATION_KEY]: true,
-      arbitrary: {
-        _tag: "Constraint",
-        constraint: {
-          array: {
-            minLength: minSize
-          }
+      arbitraryConstraint: {
+        array: {
+          minLength: minSize
         }
       }
     }, annotations)
@@ -4397,12 +4256,9 @@ export function isMaxSize(maxSize: number, annotations?: Annotations.Filter) {
         maxSize
       },
       [Annotations.STRUCTURAL_ANNOTATION_KEY]: true,
-      arbitrary: {
-        _tag: "Constraint",
-        constraint: {
-          array: {
-            maxLength: maxSize
-          }
+      arbitraryConstraint: {
+        array: {
+          maxLength: maxSize
         }
       }
     }, annotations)
@@ -4424,13 +4280,10 @@ export function isSize(size: number, annotations?: Annotations.Filter) {
         size
       },
       [Annotations.STRUCTURAL_ANNOTATION_KEY]: true,
-      arbitrary: {
-        _tag: "Constraint",
-        constraint: {
-          array: {
-            minLength: size,
-            maxLength: size
-          }
+      arbitraryConstraint: {
+        array: {
+          minLength: size,
+          maxLength: size
         }
       }
     }, annotations)
@@ -4447,21 +4300,15 @@ export function isMinEntries(minEntries: number, annotations?: Annotations.Filte
     (input) => Object.entries(input).length >= minEntries,
     Annotations.combine({
       expected: `an object with at least ${minEntries} entries`,
-      jsonSchema: {
-        _tag: "Constraint",
-        constraint: () => ({ minProperties: minEntries })
-      },
+      jsonSchemaConstraint: () => ({ minProperties: minEntries }),
       meta: {
         _tag: "isMinEntries",
         minEntries
       },
       [Annotations.STRUCTURAL_ANNOTATION_KEY]: true,
-      arbitrary: {
-        _tag: "Constraint",
-        constraint: {
-          array: {
-            minLength: minEntries
-          }
+      arbitraryConstraint: {
+        array: {
+          minLength: minEntries
         }
       }
     }, annotations)
@@ -4478,21 +4325,15 @@ export function isMaxEntries(maxEntries: number, annotations?: Annotations.Filte
     (input) => Object.entries(input).length <= maxEntries,
     Annotations.combine({
       expected: `an object with at most ${maxEntries} entries`,
-      jsonSchema: {
-        _tag: "Constraint",
-        constraint: () => ({ maxProperties: maxEntries })
-      },
+      jsonSchemaConstraint: () => ({ maxProperties: maxEntries }),
       meta: {
         _tag: "isMaxEntries",
         maxEntries
       },
       [Annotations.STRUCTURAL_ANNOTATION_KEY]: true,
-      arbitrary: {
-        _tag: "Constraint",
-        constraint: {
-          array: {
-            maxLength: maxEntries
-          }
+      arbitraryConstraint: {
+        array: {
+          maxLength: maxEntries
         }
       }
     }, annotations)
@@ -4509,22 +4350,16 @@ export function isEntriesLength(length: number, annotations?: Annotations.Filter
     (input) => Object.entries(input).length === length,
     Annotations.combine({
       expected: `an object with exactly ${length} entries`,
-      jsonSchema: {
-        _tag: "Constraint",
-        constraint: () => ({ minProperties: length, maxProperties: length })
-      },
+      jsonSchemaConstraint: () => ({ minProperties: length, maxProperties: length }),
       meta: {
         _tag: "isEntriesLength",
         length
       },
       [Annotations.STRUCTURAL_ANNOTATION_KEY]: true,
-      arbitrary: {
-        _tag: "Constraint",
-        constraint: {
-          array: {
-            minLength: length,
-            maxLength: length
-          }
+      arbitraryConstraint: {
+        array: {
+          minLength: length,
+          maxLength: length
         }
       }
     }, annotations)
@@ -4539,20 +4374,14 @@ export function isUnique<T>(equivalence: Equivalence.Equivalence<T>, annotations
     (input) => Arr.dedupeWith(input, equivalence).length === input.length,
     Annotations.combine({
       expected: "an array with unique items",
-      jsonSchema: {
-        _tag: "Constraint",
-        constraint: () => ({ uniqueItems: true })
-      },
+      jsonSchemaConstraint: () => ({ uniqueItems: true }),
       meta: {
         _tag: "isUnique",
         equivalence
       },
-      arbitrary: {
-        _tag: "Constraint",
-        constraint: {
-          array: {
-            comparator: equivalence
-          }
+      arbitraryConstraint: {
+        array: {
+          comparator: equivalence
         }
       }
     }, annotations)
@@ -4666,28 +4495,19 @@ export function Option<A extends Top>(value: A): Option<A> {
             encode: (o) => (Option_.isSome(o) ? { _tag: "Some", value: o.value } as const : { _tag: "None" } as const)
           })
         ),
-      arbitrary: {
-        _tag: "Override",
-        override: ([value]) => (fc, ctx) => {
-          return fc.oneof(
-            ctx?.isSuspend ? { maxDepth: 2, depthIdentifier: "Option" } : {},
-            fc.constant(Option_.none()),
-            value.map(Option_.some)
-          )
-        }
+      arbitrary: ([value]) => (fc, ctx) => {
+        return fc.oneof(
+          ctx?.isSuspend ? { maxDepth: 2, depthIdentifier: "Option" } : {},
+          fc.constant(Option_.none()),
+          value.map(Option_.some)
+        )
       },
-      equivalence: {
-        _tag: "Override",
-        override: ([value]) => Option_.getEquivalence(value)
-      },
-      format: {
-        _tag: "Override",
-        override: ([value]) =>
-          Option_.match({
-            onNone: () => "none()",
-            onSome: (t) => `some(${value(t)})`
-          })
-      }
+      equivalence: ([value]) => Option_.getEquivalence(value),
+      format: ([value]) =>
+        Option_.match({
+          onNone: () => "none()",
+          onSome: (t) => `some(${value(t)})`
+        })
     }
   )
   return makeProto(schema.ast, { value })
@@ -4844,28 +4664,19 @@ export function Result<A extends Top, E extends Top>(
                 : { _tag: "Failure", failure: r.failure } as const
           })
         ),
-      arbitrary: {
-        _tag: "Override",
-        override: ([success, failure]) => (fc, ctx) => {
-          return fc.oneof(
-            ctx?.isSuspend ? { maxDepth: 2, depthIdentifier: "Result" } : {},
-            success.map(Result_.succeed),
-            failure.map(Result_.fail)
-          )
-        }
+      arbitrary: ([success, failure]) => (fc, ctx) => {
+        return fc.oneof(
+          ctx?.isSuspend ? { maxDepth: 2, depthIdentifier: "Result" } : {},
+          success.map(Result_.succeed),
+          failure.map(Result_.fail)
+        )
       },
-      equivalence: {
-        _tag: "Override",
-        override: ([success, failure]) => Result_.getEquivalence(success, failure)
-      },
-      format: {
-        _tag: "Override",
-        override: ([success, failure]) =>
-          Result_.match({
-            onSuccess: (t) => `success(${success(t)})`,
-            onFailure: (t) => `failure(${failure(t)})`
-          })
-      }
+      equivalence: ([success, failure]) => Result_.getEquivalence(success, failure),
+      format: ([success, failure]) =>
+        Result_.match({
+          onSuccess: (t) => `success(${success(t)})`,
+          onFailure: (t) => `failure(${failure(t)})`
+        })
     }
   )
   return makeProto(schema.ast, { success, failure })
@@ -4953,18 +4764,9 @@ export function Redacted<S extends Top>(value: S, options?: {
             )
           }
         ),
-      arbitrary: {
-        _tag: "Override",
-        override: ([value]) => () => value.map((a) => Redacted_.make(a, { label: options?.label }))
-      },
-      format: {
-        _tag: "Override",
-        override: () => globalThis.String
-      },
-      equivalence: {
-        _tag: "Override",
-        override: ([value]) => Redacted_.getEquivalence(value)
-      }
+      arbitrary: ([value]) => () => value.map((a) => Redacted_.make(a, { label: options?.label })),
+      format: () => globalThis.String,
+      equivalence: ([value]) => Redacted_.getEquivalence(value)
     }
   )
   return makeProto(schema.ast, { value })
@@ -5057,43 +4859,34 @@ export function CauseFailure<E extends Top, D extends Top>(error: E, defect: D):
             encode: identity
           })
         ),
-      arbitrary: {
-        _tag: "Override",
-        override: ([error, defect]) => (fc, ctx) => {
-          return fc.oneof(
-            ctx?.isSuspend ? { maxDepth: 2, depthIdentifier: "Cause.Failure" } : {},
-            fc.constant(Cause_.failureInterrupt()),
-            fc.integer({ min: 1 }).map(Cause_.failureInterrupt),
-            error.map((e) => Cause_.failureFail(e)),
-            defect.map((d) => Cause_.failureDie(d))
-          )
+      arbitrary: ([error, defect]) => (fc, ctx) => {
+        return fc.oneof(
+          ctx?.isSuspend ? { maxDepth: 2, depthIdentifier: "Cause.Failure" } : {},
+          fc.constant(Cause_.failureInterrupt()),
+          fc.integer({ min: 1 }).map(Cause_.failureInterrupt),
+          error.map((e) => Cause_.failureFail(e)),
+          defect.map((d) => Cause_.failureDie(d))
+        )
+      },
+      equivalence: ([error, defect]) => (a, b) => {
+        if (a._tag !== b._tag) return false
+        switch (a._tag) {
+          case "Fail":
+            return error(a.error, (b as Cause_.Fail<unknown>).error)
+          case "Die":
+            return defect(a.defect, (b as Cause_.Die).defect)
+          case "Interrupt":
+            return Equal.equals(a.fiberId, (b as Cause_.Interrupt).fiberId)
         }
       },
-      equivalence: {
-        _tag: "Override",
-        override: ([error, defect]) => (a, b) => {
-          if (a._tag !== b._tag) return false
-          switch (a._tag) {
-            case "Fail":
-              return error(a.error, (b as Cause_.Fail<unknown>).error)
-            case "Die":
-              return defect(a.defect, (b as Cause_.Die).defect)
-            case "Interrupt":
-              return Equal.equals(a.fiberId, (b as Cause_.Interrupt).fiberId)
-          }
-        }
-      },
-      format: {
-        _tag: "Override",
-        override: ([error, defect]) => (t) => {
-          switch (t._tag) {
-            case "Fail":
-              return `Fail(${error(t.error)})`
-            case "Die":
-              return `Die(${defect(t.defect)})`
-            case "Interrupt":
-              return "Interrupt"
-          }
+      format: ([error, defect]) => (t) => {
+        switch (t._tag) {
+          case "Fail":
+            return `Fail(${error(t.error)})`
+          case "Die":
+            return `Die(${defect(t.defect)})`
+          case "Interrupt":
+            return "Interrupt"
         }
       }
     }
@@ -5149,18 +4942,9 @@ export function Cause<E extends Top, D extends Top>(error: E, defect: D): Cause<
             encode: ({ failures }) => failures
           })
         ),
-      arbitrary: {
-        _tag: "Override",
-        override: ([failures]) => () => failures.map(Cause_.fromFailures)
-      },
-      equivalence: {
-        _tag: "Override",
-        override: ([failures]) => (a, b) => failures(a.failures, b.failures)
-      },
-      format: {
-        _tag: "Override",
-        override: ([failures]) => (t) => `Cause(${failures(t.failures)})`
-      }
+      arbitrary: ([failures]) => () => failures.map(Cause_.fromFailures),
+      equivalence: ([failures]) => (a, b) => failures(a.failures, b.failures),
+      format: ([failures]) => (t) => `Cause(${failures(t.failures)})`
     }
   )
   return makeProto(schema.ast, { error, defect })
@@ -5189,10 +4973,7 @@ const ErrorJsonEncoded = Struct({
 export const Error: Error = instanceOf(globalThis.Error, {
   expected: "Error",
   defaultJsonSerializer: () => link<globalThis.Error>()(ErrorJsonEncoded, Transformation.errorFromErrorJsonEncoded),
-  arbitrary: {
-    _tag: "Override",
-    override: () => (fc) => fc.string().map((message) => new globalThis.Error(message))
-  }
+  arbitrary: () => (fc) => fc.string().map((message) => new globalThis.Error(message))
 })
 
 /**
@@ -5236,10 +5017,7 @@ export const Defect: Defect = Union([
   Any.pipe(decodeTo(
     Unknown.annotate({
       defaultJsonSerializer: () => link<unknown>()(Any, defectTransformation),
-      arbitrary: {
-        _tag: "Override",
-        override: () => (fc) => fc.json()
-      }
+      arbitrary: () => (fc) => fc.json()
     }),
     defectTransformation
   ))
@@ -5325,36 +5103,27 @@ export function Exit<A extends Top, E extends Top, D extends Top>(value: A, erro
                 : { _tag: "Failure", cause: exit.cause } as const
           })
         ),
-      arbitrary: {
-        _tag: "Override",
-        override: ([value, cause]) => (fc, ctx) =>
-          fc.oneof(
-            ctx?.isSuspend ? { maxDepth: 2, depthIdentifier: "Exit" } : {},
-            value.map((v) => Exit_.succeed(v)),
-            cause.map((cause) => Exit_.failCause(cause))
-          )
-      },
-      equivalence: {
-        _tag: "Override",
-        override: ([value, cause]) => (a, b) => {
-          if (a._tag !== b._tag) return false
-          switch (a._tag) {
-            case "Success":
-              return value(a.value, (b as Exit_.Success<A["Type"]>).value)
-            case "Failure":
-              return cause(a.cause, (b as Exit_.Failure<E["Type"], D["Type"]>).cause)
-          }
+      arbitrary: ([value, cause]) => (fc, ctx) =>
+        fc.oneof(
+          ctx?.isSuspend ? { maxDepth: 2, depthIdentifier: "Exit" } : {},
+          value.map((v) => Exit_.succeed(v)),
+          cause.map((cause) => Exit_.failCause(cause))
+        ),
+      equivalence: ([value, cause]) => (a, b) => {
+        if (a._tag !== b._tag) return false
+        switch (a._tag) {
+          case "Success":
+            return value(a.value, (b as Exit_.Success<A["Type"]>).value)
+          case "Failure":
+            return cause(a.cause, (b as Exit_.Failure<E["Type"], D["Type"]>).cause)
         }
       },
-      format: {
-        _tag: "Override",
-        override: ([value, cause]) => (t) => {
-          switch (t._tag) {
-            case "Success":
-              return `Exit.Success(${value(t.value)})`
-            case "Failure":
-              return `Exit.Failure(${cause(t.cause)})`
-          }
+      format: ([value, cause]) => (t) => {
+        switch (t._tag) {
+          case "Success":
+            return `Exit.Success(${value(t.value)})`
+          case "Failure":
+            return `Exit.Failure(${cause(t.cause)})`
         }
       }
     }
@@ -5421,30 +5190,21 @@ export function ReadonlyMap<Key extends Top, Value extends Top>(key: Key, value:
             encode: (map) => [...map.entries()]
           })
         ),
-      arbitrary: {
-        _tag: "Override",
-        override: ([key, value]) => (fc, ctx) => {
-          return fc.oneof(
-            ctx?.isSuspend ? { maxDepth: 2, depthIdentifier: "ReadonlyMap" } : {},
-            fc.constant([]),
-            fc.array(fc.tuple(key, value), ctx?.constraints?.array)
-          ).map((as) => new globalThis.Map(as))
-        }
+      arbitrary: ([key, value]) => (fc, ctx) => {
+        return fc.oneof(
+          ctx?.isSuspend ? { maxDepth: 2, depthIdentifier: "ReadonlyMap" } : {},
+          fc.constant([]),
+          fc.array(fc.tuple(key, value), ctx?.constraints?.array)
+        ).map((as) => new globalThis.Map(as))
       },
-      equivalence: {
-        _tag: "Override",
-        override: ([key, value]) => Equal.makeCompareMap(key, value)
-      },
-      format: {
-        _tag: "Override",
-        override: ([key, value]) => (t) => {
-          const size = t.size
-          if (size === 0) {
-            return "ReadonlyMap(0) {}"
-          }
-          const entries = globalThis.Array.from(t.entries()).sort().map(([k, v]) => `${key(k)} => ${value(v)}`)
-          return `ReadonlyMap(${size}) { ${entries.join(", ")} }`
+      equivalence: ([key, value]) => Equal.makeCompareMap(key, value),
+      format: ([key, value]) => (t) => {
+        const size = t.size
+        if (size === 0) {
+          return "ReadonlyMap(0) {}"
         }
+        const entries = globalThis.Array.from(t.entries()).sort().map(([k, v]) => `${key(k)} => ${value(v)}`)
+        return `ReadonlyMap(${size}) { ${entries.join(", ")} }`
       }
     }
   )
@@ -5506,30 +5266,21 @@ export function ReadonlySet<Value extends Top>(value: Value): ReadonlySet$<Value
             encode: (set) => [...set.values()]
           })
         ),
-      arbitrary: {
-        _tag: "Override",
-        override: ([value]) => (fc, ctx) => {
-          return fc.oneof(
-            ctx?.isSuspend ? { maxDepth: 2, depthIdentifier: "ReadonlySet" } : {},
-            fc.constant([]),
-            fc.array(value, ctx?.constraints?.array)
-          ).map((as) => new globalThis.Set(as))
-        }
+      arbitrary: ([value]) => (fc, ctx) => {
+        return fc.oneof(
+          ctx?.isSuspend ? { maxDepth: 2, depthIdentifier: "ReadonlySet" } : {},
+          fc.constant([]),
+          fc.array(value, ctx?.constraints?.array)
+        ).map((as) => new globalThis.Set(as))
       },
-      equivalence: {
-        _tag: "Override",
-        override: ([value]) => Equal.makeCompareSet(value)
-      },
-      format: {
-        _tag: "Override",
-        override: ([value]) => (t) => {
-          const size = t.size
-          if (size === 0) {
-            return "ReadonlySet(0) {}"
-          }
-          const values = globalThis.Array.from(t.values()).sort().map((v) => `${value(v)}`)
-          return `ReadonlySet(${size}) { ${values.join(", ")} }`
+      equivalence: ([value]) => Equal.makeCompareSet(value),
+      format: ([value]) => (t) => {
+        const size = t.size
+        if (size === 0) {
+          return "ReadonlySet(0) {}"
         }
+        const values = globalThis.Array.from(t.values()).sort().map((v) => `${value(v)}`)
+        return `ReadonlySet(${size}) { ${values.join(", ")} }`
       }
     }
   )
@@ -5556,14 +5307,8 @@ export const URL: URL = instanceOf(
   {
     expected: "URL",
     defaultJsonSerializer: () => link<globalThis.URL>()(String, Transformation.urlFromString),
-    arbitrary: {
-      _tag: "Override",
-      override: () => (fc) => fc.webUrl().map((s) => new globalThis.URL(s))
-    },
-    equivalence: {
-      _tag: "Override",
-      override: () => (a, b) => a.toString() === b.toString()
-    }
+    arbitrary: () => (fc) => fc.webUrl().map((s) => new globalThis.URL(s)),
+    equivalence: () => (a, b) => a.toString() === b.toString()
   }
 )
 
@@ -5613,10 +5358,7 @@ export const Date: Date = instanceOf(
           encode: formatDate
         })
       ),
-    arbitrary: {
-      _tag: "Override",
-      override: () => (fc, ctx) => fc.date(ctx?.constraints?.date)
-    }
+    arbitrary: () => (fc, ctx) => fc.date(ctx?.constraints?.date)
   }
 )
 
@@ -5674,23 +5416,14 @@ export const Duration: Duration = declare(
           }
         })
       ),
-    arbitrary: {
-      _tag: "Override",
-      override: () => (fc) =>
-        fc.oneof(
-          fc.constant(Duration_.infinity),
-          fc.bigInt({ min: 0n }).map(Duration_.nanos),
-          fc.maxSafeNat().map(Duration_.millis)
-        )
-    },
-    format: {
-      _tag: "Override",
-      override: () => globalThis.String
-    },
-    equivalence: {
-      _tag: "Override",
-      override: () => Duration_.Equivalence
-    }
+    arbitrary: () => (fc) =>
+      fc.oneof(
+        fc.constant(Duration_.infinity),
+        fc.bigInt({ min: 0n }).map(Duration_.nanos),
+        fc.maxSafeNat().map(Duration_.millis)
+      ),
+    format: () => globalThis.String,
+    equivalence: () => Duration_.Equivalence
   }
 )
 
@@ -5849,22 +5582,19 @@ export interface fromJsonString<S extends Top> extends decodeTo<S, String> {}
 export function fromJsonString<S extends Top>(schema: S): fromJsonString<S> {
   return String.annotate({
     description: "a string that will be decoded as JSON",
-    jsonSchema: {
-      _tag: "Override",
-      override: (ctx) => {
-        switch (ctx.target) {
-          case "draft-07":
-            return {
-              "type": "string"
-            }
-          case "2020-12":
-          case "oas3.1":
-            return {
-              "type": "string",
-              "contentMediaType": "application/json",
-              "contentSchema": ctx.make(schema.ast)
-            }
-        }
+    jsonSchema: (ctx) => {
+      switch (ctx.target) {
+        case "draft-07":
+          return {
+            "type": "string"
+          }
+        case "2020-12":
+        case "oas3.1":
+          return {
+            "type": "string",
+            "contentMediaType": "application/json",
+            "contentSchema": ctx.make(schema.ast)
+          }
       }
     }
   }).pipe(
@@ -6038,10 +5768,7 @@ export const Uint8Array: Uint8Array = instanceOf(globalThis.Uint8Array<ArrayBuff
   defaultJsonSerializer: () =>
     link<globalThis.Uint8Array<ArrayBufferLike>>()(StringBase64, Transformation.uint8ArrayFromString),
   expected: "Uint8Array",
-  arbitrary: {
-    _tag: "Override",
-    override: () => (fc) => fc.uint8Array()
-  }
+  arbitrary: () => (fc) => fc.uint8Array()
 })
 
 /**
@@ -6147,19 +5874,10 @@ export const DateTimeUtc: DateTimeUtc = declare(
           encode: Getter.transform(DateTime.formatIso)
         }
       ),
-    arbitrary: {
-      _tag: "Override",
-      override: () => (fc, ctx) =>
-        fc.date({ noInvalidDate: true, ...ctx?.constraints?.date }).map((date) => DateTime.fromDateUnsafe(date))
-    },
-    format: {
-      _tag: "Override",
-      override: () => (utc) => utc.toString()
-    },
-    equivalence: {
-      _tag: "Override",
-      override: () => DateTime.Equivalence
-    }
+    arbitrary: () => (fc, ctx) =>
+      fc.date({ noInvalidDate: true, ...ctx?.constraints?.date }).map((date) => DateTime.fromDateUnsafe(date)),
+    format: () => (utc) => utc.toString(),
+    equivalence: () => DateTime.Equivalence
   }
 )
 
@@ -6436,14 +6154,8 @@ function getClassSchemaFactory<S extends Top>(
             identifier,
             [AST.ClassTypeId]: ([from]: readonly [AST.AST]) => new AST.Link(from, transformation),
             serializer: ([from]) => new AST.Link(from.ast, transformation),
-            arbitrary: {
-              _tag: "Override",
-              override: ([from]) => () => from.map((args) => new self(args))
-            },
-            format: {
-              _tag: "Override",
-              override: ([from]) => (t: Self) => `${self.identifier}(${from(t)})`
-            }
+            arbitrary: ([from]) => () => from.map((args) => new self(args)),
+            format: ([from]) => (t: Self) => `${self.identifier}(${from(t)})`
           }, annotations)
         )
       )
@@ -6579,8 +6291,8 @@ export type LazyArbitrary<T> = (fc: typeof FastCheck) => FastCheck.Arbitrary<T>
  * @since 4.0.0
  */
 export function makeArbitraryLazy<S extends Top>(schema: S): LazyArbitrary<S["Type"]> {
-  const go = InternalArbitrary.go(schema.ast)
-  return (fc) => go(fc, {})
+  const lawc = InternalArbitrary.memoized(schema.ast)
+  return (fc) => lawc(fc, {})
 }
 
 /**
@@ -6604,14 +6316,10 @@ export function makeArbitrary<S extends Top>(schema: S): FastCheck.Arbitrary<S["
  * @category Format
  * @since 4.0.0
  */
-export function overrideFormat<S extends Top>(override: () => Format<S["Type"]>) {
+export function overrideFormat<S extends Top>(format: () => Format<S["Type"]>) {
   return (self: S): S["~rebuild.out"] => {
-    return self.annotate({ format: { _tag: "Override", override } })
+    return self.annotate({ format })
   }
-}
-
-function getFormatAnnotation(ast: AST.AST): Annotations.Format.Override<any, ReadonlyArray<any>> | undefined {
-  return Annotations.get(ast)?.["format"] as any
 }
 
 const defaultFormat = () => format
@@ -6625,12 +6333,14 @@ export const defaultVisitorFormat: AST.Visitor<Format<any>> = {
     // ---------------------------------------------
     // handle annotations
     // ---------------------------------------------
-    const annotation = getFormatAnnotation(ast)
+    const annotation = Annotations.get(ast)?.["format"] as
+      | Annotations.Format.Override<any, ReadonlyArray<any>>
+      | undefined
     if (annotation) {
       if (AST.isDeclaration(ast)) {
-        return Option_.some(annotation.override(ast.typeParameters.map(visit)))
+        return Option_.some(annotation(ast.typeParameters.map(visit)))
       }
-      return Option_.some(annotation.override([]))
+      return Option_.some(annotation([]))
     }
     return Option_.none()
   },
@@ -6776,9 +6486,9 @@ export const makeFormat = makeVisitFormat(defaultVisitorFormat)
  * @category Equivalence
  * @since 4.0.0
  */
-export function overrideEquivalence<S extends Top>(override: () => Equivalence.Equivalence<S["Type"]>) {
+export function overrideEquivalence<S extends Top>(equivalence: () => Equivalence.Equivalence<S["Type"]>) {
   return (self: S): S["~rebuild.out"] => {
-    return self.annotate({ equivalence: { _tag: "Override", override } })
+    return self.annotate({ equivalence })
   }
 }
 

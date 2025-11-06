@@ -1,14 +1,18 @@
 import * as InternalArbitrary from "effect/internal/arbitrary"
 import type { Annotations } from "effect/schema"
-import { AST, Schema } from "effect/schema"
+import { Schema } from "effect/schema"
 import { TestSchema } from "effect/testing"
-import { deepStrictEqual } from "node:assert"
 import { describe, it } from "vitest"
+import { deepStrictEqual, throws } from "../utils/assert.ts"
+
+function assertUnsupportedSchema(schema: Schema.Top, message: string) {
+  throws(() => Schema.makeArbitrary(schema), message)
+}
 
 function assertFragments(schema: Schema.Schema<any>, ctx: Annotations.Arbitrary.Context) {
   const ast = schema.ast
-  const filters = AST.getFilters(ast.checks)
-  const f = InternalArbitrary.mergeFiltersConstraints(filters)
+  const filters = InternalArbitrary.getFilters(ast.checks)
+  const f = InternalArbitrary.constraintContext(filters)
   deepStrictEqual(f({}), ctx)
 }
 
@@ -18,6 +22,36 @@ function verifyGeneration<S extends Schema.Codec<unknown, unknown, never, unknow
 }
 
 describe("Arbitrary generation", () => {
+  describe("Thrown errors", () => {
+    it("Declaration", () => {
+      assertUnsupportedSchema(
+        Schema.Struct({ a: Schema.instanceOf(globalThis.URL) }),
+        `Unsupported schema Declaration
+  at ["a"]`
+      )
+    })
+
+    it("Never", () => {
+      assertUnsupportedSchema(
+        Schema.Struct({ a: Schema.Never }),
+        `Unsupported schema Never
+  at ["a"]`
+      )
+    })
+  })
+
+  it("should pass constraints to the override annotation", () => {
+    let constraints: Annotations.Arbitrary.NumberConstraints | undefined
+    const schema = Schema.Int.check(Schema.isBetween(1, 100)).annotate({
+      arbitrary: () => (fc, ctx) => {
+        constraints = ctx.constraints?.number
+        return fc.float(constraints)
+      }
+    })
+    verifyGeneration(schema)
+    deepStrictEqual(constraints, { min: 1, max: 100, isInteger: true })
+  })
+
   it("Any", () => {
     verifyGeneration(Schema.Any)
   })
@@ -444,14 +478,20 @@ describe("Arbitrary generation", () => {
       )
     })
 
+    it("isBetween(1, 100)", () => {
+      verifyGeneration(Schema.Number.check(Schema.isBetween(1, 100)))
+    })
+
     it("isInt", () => {
-      const schema = Schema.Number.check(Schema.isInt())
-      verifyGeneration(schema)
+      verifyGeneration(Schema.Number.check(Schema.isInt()))
+    })
+
+    it("isInt & isBetween(1, 100)", () => {
+      verifyGeneration(Schema.Int.check(Schema.isBetween(1, 100)))
     })
 
     it("isInt32", () => {
-      const schema = Schema.Number.check(Schema.isInt32())
-      verifyGeneration(schema)
+      verifyGeneration(Schema.Number.check(Schema.isInt32()))
     })
 
     it("isPattern", () => {

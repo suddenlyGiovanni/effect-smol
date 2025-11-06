@@ -6,27 +6,14 @@ import * as Predicate from "../data/Predicate.ts"
 import * as Struct from "../data/Struct.ts"
 import * as UndefinedOr from "../data/UndefinedOr.ts"
 import { memoize } from "../Function.ts"
+import * as Inspectable from "../interfaces/Inspectable.ts"
 import * as Number from "../Number.ts"
-import type * as Annotations from "../schema/Annotations.ts"
+import * as Annotations from "../schema/Annotations.ts"
 import * as AST from "../schema/AST.ts"
 import type * as Schema from "../schema/Schema.ts"
 import type * as FastCheck from "../testing/FastCheck.ts"
 
 const arbitraryMemoMap = new WeakMap<AST.AST, LazyArbitraryWithContext<any>>()
-
-function getAnnotation(annotations: Annotations.Annotations | undefined):
-  | Annotations.Arbitrary.Constraint
-  | Annotations.Arbitrary.Override<any, ReadonlyArray<Schema.Top>>
-  | undefined
-{
-  return annotations?.arbitrary as any
-}
-
-function getCheckAnnotation(
-  check: AST.Check<any>
-): Annotations.Arbitrary.Constraint | Annotations.Arbitrary.Constraint | undefined {
-  return check.annotations?.arbitrary as any
-}
 
 function applyChecks(ast: AST.AST, filters: Array<AST.Filter<any>>, arbitrary: FastCheck.Arbitrary<any>) {
   return filters.map((filter) => (a: any) => filter.run(a, ast, AST.defaultParseOptions) === undefined).reduce(
@@ -88,9 +75,9 @@ type FastCheckConstraint =
 
 function merge(
   _tag: "string" | "number" | "bigint" | "array" | "date",
-  constraints: Annotations.Arbitrary.Constraint["constraint"],
+  constraints: Annotations.Arbitrary.Constraint,
   constraint: FastCheckConstraint
-): Annotations.Arbitrary.Constraint["constraint"] {
+): Annotations.Arbitrary.Constraint {
   const c = constraints[_tag]
   return {
     ...constraints,
@@ -106,28 +93,24 @@ const constraintsKeys = {
   date: null
 }
 
-function isConstraintKey(key: string): key is keyof Annotations.Arbitrary.Constraint["constraint"] {
+function isConstraintKey(key: string): key is keyof Annotations.Arbitrary.Constraint {
   return key in constraintsKeys
 }
 
 /** @internal */
-export function mergeFiltersConstraints(
+export function constraintContext(
   filters: Array<AST.Filter<any>>
 ): (ctx: Annotations.Arbitrary.Context) => Annotations.Arbitrary.Context {
-  const annotations = filters.map(getCheckAnnotation).filter(Predicate.isNotUndefined)
+  const annotations = filters.map((filter) => filter.annotations?.arbitraryConstraint).filter(Predicate.isNotUndefined)
   return (ctx) => {
-    const constraints = annotations.reduce((acc: Annotations.Arbitrary.Constraint["constraint"], c) => {
-      switch (c._tag) {
-        case "Constraint": {
-          const keys = Object.keys(c.constraint)
-          for (const key of keys) {
-            if (isConstraintKey(key)) {
-              acc = merge(key, acc, c.constraint[key]!)
-            }
-          }
-          return acc
+    const constraints = annotations.reduce((acc: Annotations.Arbitrary.Constraint, c) => {
+      const keys = Object.keys(c)
+      for (const key of keys) {
+        if (isConstraintKey(key)) {
+          acc = merge(key, acc, c[key]!)
         }
       }
+      return acc
     }, ctx.constraints || {})
     return { ...ctx, constraints }
   }
@@ -137,46 +120,74 @@ function resetContext(ctx: Annotations.Arbitrary.Context): Annotations.Arbitrary
   return { ...ctx, constraints: undefined }
 }
 
-type LazyArbitraryWithContext<T> = (
-  fc: typeof FastCheck,
-  context: Annotations.Arbitrary.Context
-) => FastCheck.Arbitrary<T>
+interface LazyArbitraryWithContext<T> {
+  (fc: typeof FastCheck, ctx: Annotations.Arbitrary.Context): FastCheck.Arbitrary<T>
+}
 
 /** @internal */
-export const go = memoize((ast: AST.AST): LazyArbitraryWithContext<any> => {
-  if (ast.checks) {
-    const filters = AST.getFilters(ast.checks)
-    const f = mergeFiltersConstraints(filters)
-    const out = go(AST.replaceChecks(ast, undefined))
-    return (fc, ctx) => applyChecks(ast, filters, out(fc, f(ctx)))
-  }
-  // ---------------------------------------------
-  // handle annotations
-  // ---------------------------------------------
-  const annotation = getAnnotation(ast.annotations)
-  if (annotation) {
-    switch (annotation._tag) {
-      case "Override": {
-        if (AST.isDeclaration(ast)) {
-          const typeParameters = ast.typeParameters.map(go)
-          return (fc, ctx) => annotation.override(typeParameters.map((tp) => tp(fc, resetContext(ctx))))(fc, ctx)
-        }
-        return annotation.override([])
+export function getFilters(checks: AST.Checks | undefined): Array<AST.Filter<any>> {
+  if (checks) {
+    return checks.flatMap((check) => {
+      switch (check._tag) {
+        case "Filter":
+          return [check]
+        case "FilterGroup":
+          return getFilters(check.checks)
       }
-      case "Constraint":
-        throw new Error("Constraint annotation found on non-constrained AST", { cause: ast })
-    }
+    })
   }
+  return []
+}
+
+/** @internal */
+export const memoized = memoize((ast: AST.AST): LazyArbitraryWithContext<any> => {
+  return go(ast, [])
+})
+
+function error(message: string, path: ReadonlyArray<PropertyKey>) {
+  if (path.length > 0) {
+    message += `\n  at ${Inspectable.formatPath(path)}`
+  }
+  return new Error(message)
+}
+
+function go(ast: AST.AST, path: ReadonlyArray<PropertyKey>): LazyArbitraryWithContext<any> {
+  // ---------------------------------------------
+  // handle Override annotation
+  // ---------------------------------------------
+  const annotation = Annotations.get(ast)?.arbitrary as
+    | Annotations.Arbitrary.Override<any, ReadonlyArray<Schema.Top>>
+    | undefined
+  if (annotation) {
+    const typeParameters = AST.isDeclaration(ast) ? ast.typeParameters.map((tp) => go(tp, path)) : []
+    const filters = getFilters(ast.checks)
+    const f = constraintContext(filters)
+    return (fc, ctx) =>
+      applyChecks(
+        ast,
+        filters,
+        annotation(typeParameters.map((tp) => tp(fc, resetContext(ctx))))(fc, f(ctx))
+      )
+  }
+  if (ast.checks) {
+    const filters = getFilters(ast.checks)
+    const f = constraintContext(filters)
+    const lawc = go(AST.replaceChecks(ast, undefined), path)
+    return (fc, ctx) => applyChecks(ast, filters, lawc(fc, f(ctx)))
+  }
+  return base(ast, path)
+}
+
+function base(ast: AST.AST, path: ReadonlyArray<PropertyKey>): LazyArbitraryWithContext<any> {
   switch (ast._tag) {
+    case "Never":
     case "Declaration":
-      throw new Error(`cannot generate Arbitrary, no annotation found for declaration`, { cause: ast })
+      throw error(`Unsupported schema ${ast._tag}`, path)
     case "Null":
       return (fc) => fc.constant(null)
     case "Void":
     case "Undefined":
       return (fc) => fc.constant(undefined)
-    case "Never":
-      throw new Error(`cannot generate Arbitrary, no annotation found for never`, { cause: ast })
     case "Unknown":
     case "Any":
       return (fc) => fc.anything()
@@ -210,7 +221,7 @@ export const go = memoize((ast: AST.AST): LazyArbitraryWithContext<any> => {
     case "ObjectKeyword":
       return (fc) => fc.oneof(fc.object(), fc.array(fc.anything()))
     case "Enum":
-      return go(AST.enumsToLiterals(ast))
+      return go(AST.enumsToLiterals(ast), path)
     case "TemplateLiteral":
       return (fc) => fc.stringMatching(AST.getTemplateLiteralRegExp(ast))
     case "Arrays":
@@ -219,8 +230,8 @@ export const go = memoize((ast: AST.AST): LazyArbitraryWithContext<any> => {
         // ---------------------------------------------
         // handle elements
         // ---------------------------------------------
-        const elements: Array<FastCheck.Arbitrary<Option.Option<any>>> = ast.elements.map((ast) => {
-          const out = go(ast)(fc, reset)
+        const elements: Array<FastCheck.Arbitrary<Option.Option<any>>> = ast.elements.map((ast, i) => {
+          const out = go(ast, [...path, i])(fc, reset)
           if (!AST.isOptional(ast)) {
             return out.map(Option.some)
           }
@@ -232,7 +243,7 @@ export const go = memoize((ast: AST.AST): LazyArbitraryWithContext<any> => {
         // ---------------------------------------------
         if (Array.isReadonlyArrayNonEmpty(ast.rest)) {
           const len = ast.elements.length
-          const [head, ...tail] = ast.rest.map((ast) => go(ast)(fc, reset))
+          const [head, ...tail] = ast.rest.map((ast, i) => go(ast, [...path, len + i])(fc, reset))
 
           const rest = array(fc, ast.elements.length === 0 ? ctx : reset, head)
           out = out.chain((as) => {
@@ -265,17 +276,18 @@ export const go = memoize((ast: AST.AST): LazyArbitraryWithContext<any> => {
         const pss: any = {}
         const requiredKeys: Array<PropertyKey> = []
         for (const ps of ast.propertySignatures) {
+          const name = ps.name
           if (!AST.isOptional(ps.type)) {
-            requiredKeys.push(ps.name)
+            requiredKeys.push(name)
           }
-          pss[ps.name] = go(ps.type)(fc, reset)
+          pss[name] = go(ps.type, [...path, name])(fc, reset)
         }
         let out = fc.record<any>(pss, { requiredKeys })
         // ---------------------------------------------
         // handle index signatures
         // ---------------------------------------------
         for (const is of ast.indexSignatures) {
-          const entry = fc.tuple(go(is.parameter)(fc, reset), go(is.type)(fc, reset))
+          const entry = fc.tuple(go(is.parameter, path)(fc, reset), go(is.type, path)(fc, reset))
           const entries = array(fc, ast.propertySignatures.length === 0 ? ctx : reset, entry)
           out = out.chain((o) => {
             return entries.map((entries) => {
@@ -289,13 +301,13 @@ export const go = memoize((ast: AST.AST): LazyArbitraryWithContext<any> => {
         return out
       }
     case "Union":
-      return (fc, ctx) => fc.oneof(...ast.types.map((ast) => go(ast)(fc, ctx)))
+      return (fc, ctx) => fc.oneof(...ast.types.map((ast) => go(ast, path)(fc, ctx)))
     case "Suspend": {
       const memo = arbitraryMemoMap.get(ast)
 
       if (memo) return memo
 
-      const get = AST.memoizeThunk(() => go(ast.thunk()))
+      const get = AST.memoizeThunk(() => go(ast.thunk(), path))
       const out: LazyArbitraryWithContext<any> = (fc, ctx) =>
         fc.constant(null).chain(() => get()(fc, { ...ctx, isSuspend: true }))
 
@@ -304,4 +316,4 @@ export const go = memoize((ast: AST.AST): LazyArbitraryWithContext<any> => {
       return out
     }
   }
-})
+}
