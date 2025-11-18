@@ -1077,6 +1077,31 @@ export * as PubSub from "./PubSub.ts"
 export * as Queue from "./Queue.ts"
 
 /**
+ * The Random module provides a service for generating random numbers in Effect
+ * programs. It offers a testable and composable way to work with randomness,
+ * supporting integers, floating-point numbers, and range-based generation.
+ *
+ * @example
+ * ```ts
+ * import { Effect, Random } from "effect"
+ *
+ * const program = Effect.gen(function* () {
+ *   const randomFloat = yield* Random.next
+ *   console.log("Random float:", randomFloat)
+ *
+ *   const randomInt = yield* Random.nextInt
+ *   console.log("Random integer:", randomInt)
+ *
+ *   const diceRoll = yield* Random.nextIntBetween(1, 6)
+ *   console.log("Dice roll:", diceRoll)
+ * })
+ * ```
+ *
+ * @since 4.0.0
+ */
+export * as Random from "./Random.ts"
+
+/**
  * @since 3.5.0
  */
 export * as RcMap from "./RcMap.ts"
