@@ -5577,15 +5577,7 @@ export interface UnknownFromJsonString extends decodeTo<Unknown, String> {}
  */
 export const UnknownFromJsonString: UnknownFromJsonString = String.annotate({
   description: "a string that will be decoded as JSON"
-}).pipe(
-  decodeTo(
-    Unknown,
-    new Transformation.Transformation<unknown, string>(
-      Getter.parseJson(),
-      Getter.stringifyJson()
-    )
-  )
-)
+}).pipe(decodeTo(Unknown, Transformation.fromJsonString))
 
 /**
  * @since 4.0.0
@@ -5671,15 +5663,48 @@ export function fromJsonString<S extends Top>(schema: S): fromJsonString<S> {
           }
       }
     }
-  }).pipe(
-    decodeTo(
-      schema,
-      new Transformation.Transformation<unknown, string>(
-        Getter.parseJson(),
-        Getter.stringifyJson()
-      )
-    )
-  )
+  }).pipe(decodeTo(schema, Transformation.fromJsonString))
+}
+
+/**
+ * @since 4.0.0
+ */
+export interface FormData extends instanceOf<globalThis.FormData> {}
+
+/**
+ * @since 4.0.0
+ */
+export const FormData: FormData = instanceOf(globalThis.FormData)
+
+/**
+ * @since 4.0.0
+ */
+export interface fromFormData<S extends Top> extends decodeTo<S, FormData> {}
+
+/**
+ * Returns a schema that decodes a `FormData` and then decodes the parsed value
+ * using the given schema.
+ *
+ * The resulting schema first parses the input `FormData` as a `string` key-value pairs, and then runs the
+ * provided schema on the parsed result.
+ *
+ * **Example**
+ *
+ * ```ts
+ * import { Schema } from "effect/schema"
+ *
+ * const schema = Schema.fromFormData(Schema.Struct({ a: Schema.String }))
+ * const formData = new FormData()
+ * formData.append("a", "1")
+ *
+ * console.log(String(Schema.decodeUnknownExit(schema)(formData)))
+ * // Success({"a":"1"})
+ * ```
+ *
+ * @since 4.0.0
+ */
+export function fromFormData<S extends Top>(schema: S): fromFormData<S> {
+  return FormData.pipe(decodeTo(schema, Transformation.fromFormData))
 }
 
 /**
