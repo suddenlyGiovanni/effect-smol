@@ -283,7 +283,7 @@ export const unwrap = <T>(wrapped: Wrap<T>): Config<T> => {
 const dump: (
   provider: ConfigProvider.ConfigProvider,
   path: Path
-) => Effect.Effect<Schema.StringPojo, SourceError> = Effect.fnUntraced(function*(
+) => Effect.Effect<Schema.StringTree, SourceError> = Effect.fnUntraced(function*(
   provider,
   path
 ) {
@@ -295,7 +295,7 @@ const dump: (
     case "object": {
       // If the object has no children but has a co-located value, surface that value.
       if (stat.keys.size === 0 && stat.value !== undefined) return stat.value
-      const out: Record<string, Schema.StringPojo> = {}
+      const out: Record<string, Schema.StringTree> = {}
       for (const key of stat.keys) {
         const child = yield* dump(provider, [...path, key])
         if (child !== undefined) out[key] = child
@@ -305,7 +305,7 @@ const dump: (
     case "array": {
       // If the array has no children but has a co-located value, surface that value.
       if (stat.length === 0 && stat.value !== undefined) return stat.value
-      const out: Array<Schema.StringPojo> = []
+      const out: Array<Schema.StringTree> = []
       for (let i = 0; i < stat.length; i++) {
         const child = yield* dump(provider, [...path, i])
         if (child !== undefined) out.push(child)
@@ -315,19 +315,19 @@ const dump: (
   }
 })
 
-const go: (
+const recur: (
   ast: AST.AST,
   provider: ConfigProvider.ConfigProvider,
   path: Path
-) => Effect.Effect<Schema.StringPojo, Schema.SchemaError | SourceError> = Effect.fnUntraced(
+) => Effect.Effect<Schema.StringTree, Schema.SchemaError | SourceError> = Effect.fnUntraced(
   function*(ast, provider, path) {
     switch (ast._tag) {
       case "Objects": {
-        const out: Record<string, Schema.StringPojo> = {}
+        const out: Record<string, Schema.StringTree> = {}
         for (const ps of ast.propertySignatures) {
           const name = ps.name
           if (typeof name === "string") {
-            const value = yield* go(ps.type, provider, [...path, name])
+            const value = yield* recur(ps.type, provider, [...path, name])
             if (value !== undefined) out[name] = value
           }
         }
@@ -338,7 +338,7 @@ const go: (
               const matches = Parser.refinement(is.parameter)
               for (const key of stat.keys) {
                 if (!Object.prototype.hasOwnProperty.call(out, key) && matches(key)) {
-                  const value = yield* go(is.type, provider, [...path, key])
+                  const value = yield* recur(is.type, provider, [...path, key])
                   if (value !== undefined) out[key] = value
                 }
               }
@@ -355,9 +355,9 @@ const go: (
         }
         const stat = yield* provider.load(path)
         if (stat && stat._tag === "leaf") return stat.value
-        const out: Array<Schema.StringPojo> = []
+        const out: Array<Schema.StringTree> = []
         for (let i = 0; i < ast.elements.length; i++) {
-          const value = yield* go(ast.elements[i], provider, [...path, i])
+          const value = yield* recur(ast.elements[i], provider, [...path, i])
           if (value !== undefined) out.push(value)
         }
         return out
@@ -366,7 +366,7 @@ const go: (
         // Let downstream decoding decide; dump can return a string, object, or array.
         return yield* dump(provider, path)
       case "Suspend":
-        return yield* go(ast.thunk(), provider, path)
+        return yield* recur(ast.thunk(), provider, path)
       default: {
         // Base primitives / string-like encoded nodes.
         const stat = yield* provider.load(path)
@@ -386,14 +386,14 @@ const go: (
  * @since 4.0.0
  */
 export function schema<T, E>(codec: Schema.Codec<T, E>, path?: string | ConfigProvider.Path): Config<T> {
-  const serializer = Schema.makeSerializerEnsureArray(Schema.makeSerializerStringPojo(codec))
+  const serializer = Schema.toSerializerEnsureArray(Schema.toSerializerStringTree(codec))
   const decodeUnknownEffect = Parser.decodeUnknownEffect(serializer)
   const serializerEncodedAST = AST.encodedAST(serializer.ast)
   const defaultPath = typeof path === "string" ? [path] : path ?? []
   return make((provider) =>
-    go(serializerEncodedAST, provider, defaultPath).pipe(
-      Effect.flatMapEager((stringPojo) =>
-        decodeUnknownEffect(stringPojo).pipe(Effect.mapErrorEager((issue) =>
+    recur(serializerEncodedAST, provider, defaultPath).pipe(
+      Effect.flatMapEager((tree) =>
+        decodeUnknownEffect(tree).pipe(Effect.mapErrorEager((issue) =>
           new Schema.SchemaError(defaultPath.length > 0 ? new Issue.Pointer(defaultPath, issue) : issue)
         ))
       ),
