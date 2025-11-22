@@ -1,10 +1,25 @@
 import { Option, Redacted } from "effect/data"
-import { format } from "effect/interfaces/Inspectable"
+import { format, formatJson } from "effect/data/Formatter"
+import { Redactable } from "effect/interfaces"
 import { Schema } from "effect/schema"
 import { describe, it } from "vitest"
 import { strictEqual } from "../utils/assert.ts"
 
-describe("Inspectable", () => {
+class SensitiveData implements Redactable.Redactable {
+  constructor(private secret: string) {}
+
+  f(s: string) {
+    this.secret += s
+  }
+
+  [Redactable.symbolRedactable]() {
+    return { secret: "[REDACTED]" }
+  }
+}
+
+const data = new SensitiveData("my-secret-key")
+
+describe("Formatter", () => {
   describe("format", () => {
     it("null", () => {
       strictEqual(format(null), `null`)
@@ -185,6 +200,18 @@ describe("Inspectable", () => {
           `{"a":1}`
         )
       })
+    })
+
+    it("should redact sensitive data", () => {
+      strictEqual(format(data), `{"secret":"[REDACTED]"}`)
+      strictEqual(format({ a: data }), `{"a":{"secret":"[REDACTED]"}}`)
+    })
+  })
+
+  describe("formatJson", () => {
+    it("should redact sensitive data", () => {
+      strictEqual(formatJson(data), `{"secret":"[REDACTED]"}`)
+      strictEqual(formatJson({ a: data }), `{"a":{"secret":"[REDACTED]"}}`)
     })
   })
 })
