@@ -1918,7 +1918,7 @@ export const setSystem: {
  *
  * @example
  * ```ts
- * import { Prompt } from "@effect/ai"
+ * import { Prompt } from "effect/unstable/ai"
  *
  * const systemPrompt = Prompt.make([{
  *   role: "system",
@@ -1927,7 +1927,7 @@ export const setSystem: {
  *
  * const userPrompt = Prompt.make("Hello, world!")
  *
- * const prompt = Prompt.merge(systemPrompt, userPrompt)
+ * const prompt = Prompt.concat(systemPrompt, userPrompt)
  *
  * const replaced = Prompt.prependSystem(
  *   prompt,
@@ -1967,7 +1967,7 @@ export const prependSystem: {
  *
  * @example
  * ```ts
- * import { Prompt } from "@effect/ai"
+ * import { Prompt } from "effect/unstable/ai"
  *
  * const systemPrompt = Prompt.make([{
  *   role: "system",
@@ -1976,7 +1976,7 @@ export const prependSystem: {
  *
  * const userPrompt = Prompt.make("Hello, world!")
  *
- * const prompt = Prompt.merge(systemPrompt, userPrompt)
+ * const prompt = Prompt.concat(systemPrompt, userPrompt)
  *
  * const replaced = Prompt.appendSystem(
  *   prompt,
