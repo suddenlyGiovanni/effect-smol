@@ -43,6 +43,7 @@ import * as AST from "./AST.ts"
 import * as Getter from "./Getter.ts"
 import * as Issue from "./Issue.ts"
 import * as Parser from "./Parser.ts"
+import type { StandardJSONSchemaV1 } from "./StandardSchema.ts"
 import * as Transformation from "./Transformation.ts"
 
 /**
@@ -484,6 +485,7 @@ function makeStandardResult<A>(exit: Exit_.Exit<StandardSchemaV1.Result<A>>): St
  * console.log(invalidResult) // { issues: [{ path: ["name"], message: "..." }, { path: ["age"], message: "..." }] }
  * ```
  *
+ * @category Standard Schema
  * @since 4.0.0
  */
 export function asStandardSchemaV1<
@@ -502,33 +504,101 @@ export function asStandardSchemaV1<
   ) => Effect.Effect<S["Type"], Issue.Issue>
   const parseOptions: AST.ParseOptions = { errors: "all", ...options?.parseOptions }
   const formatter = Issue.makeFormatterStandardSchemaV1(options)
-  const standard: StandardSchemaV1<S["Encoded"], S["Type"]> = {
-    "~standard": {
-      version: 1,
-      vendor: "effect",
-      validate(value) {
-        const scheduler = new Scheduler.MixedScheduler()
-        const fiber = Effect.runFork(
-          Effect.match(decodeUnknownEffect(value, parseOptions), {
-            onFailure: formatter,
-            onSuccess: (value): StandardSchemaV1.Result<S["Type"]> => ({ value })
-          }),
-          { scheduler }
-        )
-        scheduler.flush()
-        const exit = fiber.pollUnsafe()
-        if (exit) {
-          return makeStandardResult(exit)
-        }
-        return new Promise((resolve) => {
-          fiber.addObserver((exit) => {
-            resolve(makeStandardResult(exit))
-          })
-        })
-      }
+  const validate: StandardSchemaV1<S["Encoded"], S["Type"]>["~standard"]["validate"] = (value: unknown) => {
+    const scheduler = new Scheduler.MixedScheduler()
+    const fiber = Effect.runFork(
+      Effect.match(decodeUnknownEffect(value, parseOptions), {
+        onFailure: formatter,
+        onSuccess: (value): StandardSchemaV1.Result<S["Type"]> => ({ value })
+      }),
+      { scheduler }
+    )
+    scheduler.flush()
+    const exit = fiber.pollUnsafe()
+    if (exit) {
+      return makeStandardResult(exit)
+    }
+    return new Promise((resolve) => {
+      fiber.addObserver((exit) => {
+        resolve(makeStandardResult(exit))
+      })
+    })
+  }
+  if ("~standard" in self) {
+    const out = self as any
+    if ("validate" in out["~standard"]) return out
+    Object.assign(out["~standard"], { validate })
+    return out
+  } else {
+    return Object.assign(self, {
+      "~standard": {
+        version: 1,
+        vendor: "effect",
+        validate
+      } as const
+    })
+  }
+}
+
+const targets = ["draft-07", "draft-2020-12", "openapi-3.1"]
+
+function isTarget(target: StandardJSONSchemaV1.Target): target is JsonSchema.Target {
+  return targets.includes(target)
+}
+
+function getDefinitionsNamespace(target: JsonSchema.Target): string {
+  switch (target) {
+    case "draft-07":
+      return "definitions"
+    case "draft-2020-12":
+    case "openapi-3.1":
+      return "$defs"
+  }
+}
+
+function makeStandardJSONSchemaV1(self: Top, target: StandardJSONSchemaV1.Target): JsonSchema {
+  if (isTarget(target)) {
+    const { definitions, schema } = makeJsonSchema(self, { target })
+    if (Object.keys(definitions).length > 0) {
+      schema[getDefinitionsNamespace(target)] = definitions
+    }
+    return schema
+  }
+  throw new globalThis.Error(`Unsupported target: ${target}`)
+}
+
+/**
+ * Experimental support for converting a schema to a Standard JSON Schema V1.
+ *
+ * https://github.com/standard-schema/standard-schema/pull/134
+ *
+ * @category Standard Schema
+ * @since 4.0.0
+ * @experimental
+ */
+export function asStandardJSONSchemaV1<S extends Top>(self: S): StandardJSONSchemaV1<S["Encoded"], S["Type"]> & S {
+  const jsonSchema: StandardJSONSchemaV1.Props<S["Encoded"], S["Type"]>["jsonSchema"] = {
+    input(options) {
+      return makeStandardJSONSchemaV1(self, options.target)
+    },
+    output(options) {
+      return makeStandardJSONSchemaV1(typeCodec(self), options.target)
     }
   }
-  return Object.assign(self, standard)
+  if ("~standard" in self) {
+    const out = self as any
+    if ("jsonSchema" in out["~standard"]) return out
+    Object.assign(out["~standard"], { jsonSchema })
+    return out
+  } else {
+    return Object.assign(self, {
+      "~standard": {
+        version: 1,
+        vendor: "effect",
+        jsonSchema
+      } as const
+    })
+  }
 }
 
 /**
@@ -7456,8 +7526,6 @@ export function makeEquivalence<T>(schema: Schema<T>): Equivalence.Equivalence<T
 export interface MakeJsonSchemaOptions {
   /**
    * The target of the JSON Schema.
-   *
-   * Defaults to `"draft-2020-12"`.
    */
   readonly target: JsonSchema.Target
   /**
@@ -7535,7 +7603,7 @@ export declare namespace JsonSchema {
 }
 
 /**
- * Returns a `draft-2020-12` JSON Schema.
+ * Returns a JSON Schema.
  *
  * You can use the `options` parameter to return a different target JSON Schema.
  *
