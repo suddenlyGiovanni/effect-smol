@@ -66,17 +66,16 @@ export const make = <E, R>(options: {
   const InitialRun = Singleton.make(
     `ClusterCron/${options.name}`,
     Effect.gen(function*() {
-      const client = (yield* CronEntity.client)("initial")
       const now = yield* DateTime.now
-      const next = Cron.next(options.cron, now)
-      yield* client.run({
-        dateTime: DateTime.fromDateUnsafe(next)
-      }, { discard: true })
+      const next = DateTime.fromDateUnsafe(Cron.next(options.cron, now))
+      const entityId = options.calculateNextRunFromPrevious ? "initial" : DateTime.formatIso(next)
+      const client = (yield* CronEntity.client)(entityId)
+      yield* client.run({ dateTime: next }, { discard: true })
     }),
     { shardGroup: options.shardGroup }
   )
 
-  const skipIfOlderThan = Option.fromNullishOr(options.skipIfOlderThan).pipe(
+  const skipIfOlderThan = Option.fromUndefinedOr(options.skipIfOlderThan).pipe(
     Option.map(Duration.fromDurationInputUnsafe),
     Option.getOrElse(() => Duration.days(1))
   )
@@ -105,13 +104,14 @@ export const make = <E, R>(options: {
             ))
             const client = makeClient(DateTime.formatIso(next))
             return yield* client.run({ dateTime: next }, { discard: true }).pipe(
+              Effect.tapCause((cause) => Effect.logWarning("Failed to schedule next run, retrying", cause)),
               Effect.sandbox,
               Effect.retry(retryPolicy),
               Effect.orDie
             )
           })),
           Effect.annotateLogs({
-            module: "ClusterCron",
+            module: "effect/cluster/ClusterCron",
             name: options.name,
             dateTime: request.payload.dateTime
           })
@@ -126,7 +126,7 @@ const retryPolicy = Schedule.exponential(200, 1.5).pipe(
   Schedule.either(Schedule.spaced("1 minute"))
 )
 
-class CronPayload extends Schema.Class<CronPayload>("@effect/cluster/ClusterCron/CronPayload")({
+class CronPayload extends Schema.Class<CronPayload>("effect/cluster/ClusterCron/CronPayload")({
   dateTime: Schema.DateTimeUtc
 }) {
   [PrimaryKey.symbol]() {

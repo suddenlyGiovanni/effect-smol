@@ -54,6 +54,7 @@ export * as Schema from "./Schema.ts"
 
 /**
  * @since 4.0.0
+ * @experimental
  */
 export * as StandardSchema from "./StandardSchema.ts"
 

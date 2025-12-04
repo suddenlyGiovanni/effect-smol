@@ -1,7 +1,7 @@
 /**
  * @since 1.0.0
  */
-import type * as Cause from "effect/Cause"
+import * as Cause from "effect/Cause"
 import * as Config from "effect/Config"
 import type * as Record from "effect/data/Record"
 import * as Effect from "effect/Effect"
@@ -361,7 +361,7 @@ export const layerServer: (
  * @category Layers
  */
 export const layerHttpServices: Layer.Layer<
-  FileSystem.FileSystem | Path.Path | HttpPlatform.HttpPlatform | Etag.Generator
+  NodeServices.NodeServices | HttpPlatform.HttpPlatform | Etag.Generator
 > = Layer.mergeAll(
   NodeHttpPlatform.layer,
   Etag.layerWeak,
@@ -376,7 +376,7 @@ export const layer = (
   evaluate: LazyArg<Http.Server>,
   options: Net.ListenOptions
 ): Layer.Layer<
-  HttpServer.HttpServer | FileSystem.FileSystem | Path.Path | HttpPlatform.HttpPlatform | Etag.Generator,
+  HttpServer.HttpServer | NodeServices.NodeServices | HttpPlatform.HttpPlatform | Etag.Generator,
   ServeError
 > =>
   Layer.mergeAll(
@@ -477,7 +477,7 @@ const handleResponse = (
             })
         }).pipe(
           Effect.interruptible,
-          Effect.tapCause(handleCause(nodeResponse))
+          Effect.tapCause(handleCause(nodeResponse, response))
         )
       }
       return Effect.callback<void>((resume) => {
@@ -520,41 +520,56 @@ const handleResponse = (
             })
         }).pipe(
           Effect.interruptible,
-          Effect.tapCause(handleCause(nodeResponse))
+          Effect.tapCause(handleCause(nodeResponse, response))
         )
       })
     }
     case "Stream": {
       nodeResponse.writeHead(response.status, headers)
+      const drainLatch = Effect.makeLatchUnsafe()
+      nodeResponse.on("drain", () => drainLatch.openUnsafe())
       return body.stream.pipe(
         Stream.orDie,
-        Stream.runForEachArray((array) =>
-          Effect.callback<void>((resume) => {
-            for (let i = 0; i < array.length - 1; i++) {
-              nodeResponse.write(array[i])
+        Stream.runForEachArray((array) => {
+          let needDrain = false
+          for (let i = 0; i < array.length; i++) {
+            const written = nodeResponse.write(array[i])
+            if (!written && !needDrain) {
+              needDrain = true
+              drainLatch.closeUnsafe()
+            } else if (written && needDrain) {
+              needDrain = false
             }
-            nodeResponse.write(array[array.length - 1], () => resume(Effect.void))
-          })
-        ),
+          }
+          if (!needDrain) return Effect.void
+          return drainLatch.await
+        }),
         Effect.interruptible,
         Effect.matchCauseEffect({
           onSuccess: () => Effect.sync(() => nodeResponse.end()),
-          onFailure: handleCause(nodeResponse)
+          onFailure: handleCause(nodeResponse, response)
         })
       )
     }
   }
 }
 
-const handleCause = (nodeResponse: Http.ServerResponse) => <E>(cause: Cause.Cause<E>) =>
-  causeResponse(cause).pipe(
-    Effect.flatMap(([response, cause]) => {
-      if (!nodeResponse.headersSent) {
-        nodeResponse.writeHead(response.status)
-      }
-      if (!nodeResponse.writableEnded) {
-        nodeResponse.end()
-      }
-      return Effect.failCause(cause)
-    })
-  )
+const handleCause = (
+  nodeResponse: Http.ServerResponse,
+  originalResponse: HttpServerResponse
+) =>
+<E>(originalCause: Cause.Cause<E>) =>
+  Effect.flatMap(causeResponse(originalCause), ([response, cause]) => {
+    const headersSent = nodeResponse.headersSent
+    if (!headersSent) {
+      nodeResponse.writeHead(response.status)
+    }
+    if (!nodeResponse.writableEnded) {
+      nodeResponse.end()
+    }
+    return Effect.failCause(
+      headersSent
+        ? Cause.merge(originalCause, Cause.die(originalResponse))
+        : cause
+    )
+  })

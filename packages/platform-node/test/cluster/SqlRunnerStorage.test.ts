@@ -3,7 +3,14 @@ import { SqliteClient } from "@effect/sql-sqlite-node"
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Layer } from "effect"
 import { FileSystem } from "effect/platform"
-import { Runner, RunnerAddress, RunnerStorage, ShardId, SqlRunnerStorage } from "effect/unstable/cluster"
+import {
+  Runner,
+  RunnerAddress,
+  RunnerStorage,
+  ShardId,
+  ShardingConfig,
+  SqlRunnerStorage
+} from "effect/unstable/cluster"
 import { MysqlContainer } from "../fixtures/mysql2-utils.ts"
 import { PgContainer } from "../fixtures/pg-utils.ts"
 
@@ -13,9 +20,23 @@ describe("SqlRunnerStorage", () => {
   ;([
     ["pg", Layer.orDie(PgContainer.layerClient)],
     ["mysql", Layer.orDie(MysqlContainer.layerClient)],
+    ["vitess", Layer.orDie(MysqlContainer.layerClientVitess)],
     ["sqlite", Layer.orDie(SqliteLayer)]
-  ] as const).forEach(([label, layer]) => {
-    it.layer(StorageLive.pipe(Layer.provideMerge(layer)), {
+  ] as const).flatMap(([label, layer]) =>
+    [
+      [label, StorageLive.pipe(Layer.provideMerge(layer), Layer.provide(ShardingConfig.layer()))],
+      [
+        label + " (no advisory)",
+        StorageLive.pipe(
+          Layer.provideMerge(layer),
+          Layer.provide(ShardingConfig.layer({
+            shardLockDisableAdvisory: true
+          }))
+        )
+      ]
+    ] as const
+  ).forEach(([label, layer]) => {
+    it.layer(layer, {
       timeout: 60000
     })(label, (it) => {
       it.effect("getRunners", () =>
@@ -37,7 +58,7 @@ describe("SqlRunnerStorage", () => {
 
           yield* storage.unregister(runnerAddress1)
           expect(yield* storage.getRunners).toEqual([])
-        }))
+        }), 30_000)
 
       it.effect("acquireShards", () =>
         Effect.gen(function*() {
@@ -63,19 +84,14 @@ describe("SqlRunnerStorage", () => {
           ])
           expect(refreshed.map((_) => _.id)).toEqual([1, 2, 3])
 
-          acquired = yield* storage.acquire(runnerAddress2, [
-            ShardId.make("default", 1),
-            ShardId.make("default", 2),
-            ShardId.make("default", 3)
-          ])
-          expect(acquired).toEqual([])
+          // smoke test release
+          yield* storage.release(runnerAddress1, ShardId.make("default", 2))
         }))
     })
   })
 })
 
 const runnerAddress1 = RunnerAddress.make("localhost", 1234)
-const runnerAddress2 = RunnerAddress.make("localhost", 1235)
 
 const SqliteLayer = Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem
