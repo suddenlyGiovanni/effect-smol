@@ -1,7 +1,6 @@
 import * as Layer from "effect/Layer"
 import * as ServiceMap from "effect/ServiceMap"
 import type { OpenAPISpecMethodName } from "effect/unstable/httpapi/OpenApi"
-import * as JsonSchemaTransformer from "./JsonSchemaTransformer.ts"
 import type { ParsedOperation } from "./ParsedOperation.ts"
 import * as Utils from "./Utils.ts"
 
@@ -94,7 +93,7 @@ ${clientErrorSource(name)}`
     operations: ReadonlyArray<ParsedOperation>
   ) =>
     `export const make = (
-  httpClient: HttpClient.HttpClient, 
+  httpClient: HttpClient.HttpClient,
   options: {
     readonly transformClient?: ((client: HttpClient.HttpClient) => Effect.Effect<HttpClient.HttpClient>) | undefined
   } = {}
@@ -197,7 +196,7 @@ ${clientErrorSource(name)}`
 export const layerTransformerSchema = Layer.sync(
   OpenApiTransformer,
   makeTransformerSchema
-).pipe(Layer.merge(JsonSchemaTransformer.layerTransformerSchema))
+)
 
 export const makeTransformerTs = () => {
   const operationsToInterface = (
@@ -264,7 +263,7 @@ ${clientErrorSource(name)}`
     operations: ReadonlyArray<ParsedOperation>
   ) =>
     `export const make = (
-  httpClient: HttpClient.HttpClient, 
+  httpClient: HttpClient.HttpClient,
   options: {
     readonly transformClient?: ((client: HttpClient.HttpClient) => Effect.Effect<HttpClient.HttpClient>) | undefined
   } = {}
@@ -381,7 +380,7 @@ ${clientErrorSource(name)}`
 export const layerTransformerTs = Layer.sync(
   OpenApiTransformer,
   makeTransformerSchema
-).pipe(Layer.merge(JsonSchemaTransformer.layerTransformerTs))
+)
 
 const commonSource = `const unexpectedStatus = (response: HttpClientResponse.HttpClientResponse) =>
     Effect.flatMap(
