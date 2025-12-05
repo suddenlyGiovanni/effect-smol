@@ -9,7 +9,7 @@ function assertRoundtrip(input: {
   const source = input.source ?? "draft-07"
   const document = Schema.makeJsonSchema(input.schema, { target: source })
   const output = FromJsonSchema.generate(document.schema, { source })
-  const fn = new Function("Schema", `return ${output.runtime}`)
+  const fn = new Function("Schema", `return ${output.code}`)
   const generated = fn(Schema)
   const codedocument = Schema.makeJsonSchema(generated, { target: source })
   deepStrictEqual(codedocument, document)
@@ -28,7 +28,7 @@ function assertGeneration(
     } | undefined
   },
   expected: {
-    readonly runtime: string
+    readonly code: string
     readonly types: FromJsonSchema.Types
     readonly annotations?: FromJsonSchema.Annotations | undefined
     readonly importDeclarations?: ReadonlySet<string>
@@ -550,8 +550,8 @@ describe("FromJsonSchema", () => {
             options
           },
           FromJsonSchema.makeGeneration(
-            `Schema.fromJsonString(A)`,
-            FromJsonSchema.makeTypes("A", "string", "never", "never")
+            `Schema.fromJsonString(Schema.Unknown)`,
+            FromJsonSchema.makeTypes("unknown", "string", "never", "never")
           )
         )
       })
@@ -1480,8 +1480,8 @@ describe("FromJsonSchema", () => {
           }
         },
         FromJsonSchema.makeGeneration(
-          `Schema.Struct({ "a": A })`,
-          FromJsonSchema.makeTypes(`{ readonly "a": A }`)
+          `Schema.Struct({ "a": Schema.Unknown })`,
+          FromJsonSchema.makeTypes(`{ readonly "a": unknown }`)
         )
       )
       // nested inline definitions
@@ -2409,18 +2409,26 @@ describe("FromJsonSchema", () => {
       definitions: Schema.JsonSchema.Definitions,
       schemas: ReadonlyArray<Schema.JsonSchema>
     ) {
-      const genDependencies = FromJsonSchema.generateDefinitions(definitions, { source: "draft-07" })
-      const genSchemas = schemas.map((schema) => FromJsonSchema.generate(schema, { source: "draft-07", definitions }))
+      const resolver: FromJsonSchema.Resolver = (ref) => {
+        return FromJsonSchema.makeGeneration(
+          ref,
+          FromJsonSchema.makeTypes(ref)
+        )
+      }
+      const genDependencies = FromJsonSchema.generateDefinitions(definitions, { source: "draft-07", resolver })
+      const genSchemas = schemas.map((schema) =>
+        FromJsonSchema.generate(schema, { source: "draft-07", resolver, definitions })
+      )
       let s = ""
 
       s += "// Definitions\n"
       genDependencies.forEach(({ generation: schema, ref }) => {
         s += `type ${ref} = ${schema.types.Type};\n`
-        s += `const ${ref} = ${schema.runtime};\n\n`
+        s += `const ${ref} = ${schema.code};\n\n`
       })
 
       s += "// Schemas\n"
-      s += genSchemas.map(({ runtime: code }, i) => `const schema${i + 1} = ${code};`).join("\n")
+      s += genSchemas.map(({ code: runtime }, i) => `const schema${i + 1} = ${runtime};`).join("\n")
       return s
     }
 
@@ -3105,11 +3113,11 @@ ${
       } else {
         out += `export type ${identifier}Encoded = ${identifier};\n`
       }
-      out += `export const ${identifier} = ${d.generation.runtime};\n`
+      out += `export const ${identifier} = ${d.generation.code};\n`
       return out
     }).join("\n")
   }
 
 // Schemas
-${generation.schemaGenerations.map((s) => `export const ${s.identifier} = ${s.generation.runtime};`).join("\n")}`
+${generation.schemaGenerations.map((s) => `export const ${s.identifier} = ${s.generation.code};`).join("\n")}`
 }
