@@ -1,6 +1,6 @@
 import { FromJsonSchema, Schema } from "effect/schema"
 import type { Annotations } from "effect/schema/Annotations"
-import { describe, it } from "vitest"
+import { describe, expect, it } from "vitest"
 import { deepStrictEqual, strictEqual } from "../utils/assert.ts"
 
 function assertRoundtrip(input: {
@@ -23,7 +23,7 @@ function assertGeneration(
     readonly options?: {
       readonly source?: FromJsonSchema.Source | undefined
       readonly resolver?: FromJsonSchema.Resolver | undefined
-      readonly extractJsDocs?: boolean | ((annotations: Annotations) => string) | undefined
+      readonly extractJsDocs?: boolean | ((annotations: Annotations) => string | undefined) | undefined
       readonly parseContentSchema?: boolean | undefined
       readonly collectAnnotations?: ((schema: Schema.JsonSchema, annotations: Annotations) => Annotations) | undefined
       readonly definitions?: Schema.JsonSchema.Definitions | undefined
@@ -32,7 +32,7 @@ function assertGeneration(
   expected: {
     readonly code: string
     readonly types: FromJsonSchema.Types
-    readonly annotations?: Annotations | undefined
+    readonly jsDocs?: string | undefined
     readonly importDeclarations?: ReadonlySet<string>
   }
 ) {
@@ -40,7 +40,7 @@ function assertGeneration(
   const generation = FromJsonSchema.generate(input.schema, { ...input.options, source })
   deepStrictEqual(generation, {
     importDeclarations: new Set<string>(),
-    annotations: undefined,
+    jsDocs: undefined,
     ...expected
   })
 }
@@ -58,6 +58,40 @@ const sourceOpenapi31: FromJsonSchema.GenerateOptions = {
 }
 
 describe("FromJsonSchema", () => {
+  describe("defaultExtractJsDocs", () => {
+    it("should return undefined when description is missing", () => {
+      const result = FromJsonSchema.defaultExtractJsDocs({})
+      strictEqual(result, undefined)
+    })
+
+    it("should return formatted JSDoc when description exists", () => {
+      const result = FromJsonSchema.defaultExtractJsDocs({ description: "Test description" })
+      strictEqual(result, "\n/** Test description */\n")
+    })
+
+    it("should handle `*/` in description", () => {
+      const result = FromJsonSchema.defaultExtractJsDocs({ description: "a */ b" })
+      strictEqual(result, "\n/** a *\\/ b */\n")
+    })
+  })
+
+  describe("makeGenerationExtern", () => {
+    it("should generate extern with namespace and import", () => {
+      const result = FromJsonSchema.makeGenerationExtern("MySchema", `import { MySchema } from "my-lib"`)
+      deepStrictEqual(result, {
+        code: "MySchema",
+        types: {
+          Type: `typeof MySchema["Type"]`,
+          Encoded: `typeof MySchema["Encoded"]`,
+          DecodingServices: `typeof MySchema["DecodingServices"]`,
+          EncodingServices: `typeof MySchema["EncodingServices"]`
+        },
+        jsDocs: undefined,
+        importDeclarations: new Set([`import { MySchema } from "my-lib"`])
+      })
+    })
+  })
+
   describe("generate", () => {
     describe("draft-2020-12", () => {
       it("should support prefixItems", () => {
@@ -103,13 +137,12 @@ describe("FromJsonSchema", () => {
           {
             schema: {
               "type": "string",
-              "example": "lorem"
+              "example": "a"
             }
           },
           FromJsonSchema.makeGeneration(
-            `Schema.String.annotate({ "examples": ["lorem"] })`,
-            FromJsonSchema.makeTypes("string"),
-            { examples: ["lorem"] }
+            `Schema.String.annotate({ "examples": ["a"] })`,
+            FromJsonSchema.makeTypes("string")
           )
         )
       })
@@ -212,55 +245,59 @@ describe("FromJsonSchema", () => {
             schema: {
               "type": "string",
               "nullable": true,
-              "description": "lorem",
+              "description": "a",
               "example": null
             },
             options: sourceOpenapi30
           },
           FromJsonSchema.makeGeneration(
-            `Schema.NullOr(Schema.String).annotate({ "description": "lorem", "examples": [null] })`,
-            FromJsonSchema.makeTypes("string | null"),
-            { "description": "lorem", "examples": [null] }
-          )
-        )
-        assertGeneration(
-          {
-            schema: {
-              "type": "string",
-              "allOf": [
-                { "minLength": 1, "nullable": true }
-              ]
-            },
-            options: sourceOpenapi30
-          },
-          FromJsonSchema.makeGeneration(
-            "Schema.String.check(Schema.isMinLength(1))",
-            FromJsonSchema.makeTypes("string")
-          )
-        )
-        assertGeneration(
-          {
-            schema: {
-              "allOf": [
-                { "minLength": 1, "nullable": true }
-              ]
-            },
-            options: sourceOpenapi30
-          },
-          FromJsonSchema.makeGeneration(
-            "Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))",
+            `Schema.NullOr(Schema.String).annotate({ "description": "a", "examples": [null] })`,
             FromJsonSchema.makeTypes("string | null")
           )
         )
       })
 
-      it("should support nullable in enum", () => {
+      it("nullable should be idempotent", () => {
         assertGeneration(
           {
-            schema: { "enum": ["a", null], "nullable": true },
+            schema: {
+              "type": "string",
+              "nullable": true,
+              "allOf": [{ "nullable": true }]
+            },
             options: sourceOpenapi30
           },
-          FromJsonSchema.makeGeneration(`Schema.NullOr(Schema.Literal("a"))`, FromJsonSchema.makeTypes(`"a" | null`))
+          FromJsonSchema.makeGeneration("Schema.NullOr(Schema.String)", FromJsonSchema.makeTypes("string | null"))
+        )
+        assertGeneration(
+          {
+            schema: {
+              "enum": [1, null],
+              "nullable": true
+            },
+            options: sourceOpenapi30
+          },
+          FromJsonSchema.makeGeneration("Schema.NullOr(Schema.Literal(1))", FromJsonSchema.makeTypes("1 | null"))
+        )
+        assertGeneration(
+          {
+            schema: {
+              "enum": [null],
+              "nullable": true
+            },
+            options: sourceOpenapi30
+          },
+          FromJsonSchema.makeGeneration("Schema.Null", FromJsonSchema.makeTypes("null"))
+        )
+        assertGeneration(
+          {
+            schema: {
+              "const": null,
+              "nullable": true
+            },
+            options: sourceOpenapi30
+          },
+          FromJsonSchema.makeGeneration("Schema.Null", FromJsonSchema.makeTypes("null"))
         )
       })
     })
@@ -275,7 +312,7 @@ describe("FromJsonSchema", () => {
             options: {
               resolver: (ref) => {
                 const identifier = ref.replace(/[/~]/g, "$")
-                return FromJsonSchema.makeGenerationIdentifier(identifier)
+                return FromJsonSchema.makeGeneration(identifier, FromJsonSchema.makeTypes(identifier))
               }
             }
           },
@@ -301,7 +338,7 @@ describe("FromJsonSchema", () => {
           FromJsonSchema.makeGeneration(
             `Schema.Struct({ "a": Schema.String, "b": Schema.String.annotate({ "description": "desc-b" }) }).annotate({ "description": "desc-o" })`,
             FromJsonSchema.makeTypes(`{ readonly "a": string, \n/** desc-b */\nreadonly "b": string }`),
-            { description: "desc-o" }
+            `\n/** desc-o */\n`
           )
         )
       })
@@ -311,7 +348,7 @@ describe("FromJsonSchema", () => {
           source: "draft-07",
           extractJsDocs: (annotations) => {
             const description = annotations.description ?? annotations.title
-            if (description === undefined) return ""
+            if (description === undefined) return undefined
             return `\n/** ${description} */\n`
           }
         }
@@ -329,8 +366,7 @@ describe("FromJsonSchema", () => {
           },
           FromJsonSchema.makeGeneration(
             `Schema.Struct({ "a": Schema.String, "b": Schema.String.annotate({ "title": "desc-b" }) })`,
-            FromJsonSchema.makeTypes(`{ readonly "a": string, \n/** desc-b */\nreadonly "b": string }`),
-            {}
+            FromJsonSchema.makeTypes(`{ readonly "a": string, \n/** desc-b */\nreadonly "b": string }`)
           )
         )
       })
@@ -404,7 +440,7 @@ describe("FromJsonSchema", () => {
                     new Set([C_IMPORT])
                   )
                 default:
-                  return FromJsonSchema.makeGenerationIdentifier(identifier)
+                  return FromJsonSchema.makeGeneration(identifier, FromJsonSchema.makeTypes(identifier))
               }
             }
           }
@@ -426,16 +462,14 @@ describe("FromJsonSchema", () => {
         { schema: { "type": "string", "format": "email" } },
         FromJsonSchema.makeGeneration(
           `Schema.String.annotate({ "format": "email" })`,
-          FromJsonSchema.makeTypes("string"),
-          { format: "email" }
+          FromJsonSchema.makeTypes("string")
         )
       )
       assertGeneration(
         { schema: { "format": "email" } },
         FromJsonSchema.makeGeneration(
           `Schema.String.annotate({ "format": "email" })`,
-          FromJsonSchema.makeTypes("string"),
-          { format: "email" }
+          FromJsonSchema.makeTypes("string")
         )
       )
     })
@@ -462,7 +496,7 @@ describe("FromJsonSchema", () => {
           }
         },
         FromJsonSchema.makeGeneration(
-          `Schema.Record(Schema.String.check(Schema.isPattern(/^x-/)), Schema.String)`,
+          `Schema.Record(Schema.String.check(Schema.isPattern(new RegExp("^x-"))), Schema.String)`,
           FromJsonSchema.makeTypes(`{ readonly [x: string]: string }`)
         )
       )
@@ -477,7 +511,7 @@ describe("FromJsonSchema", () => {
           }
         },
         FromJsonSchema.makeGeneration(
-          `Schema.StructWithRest(Schema.Struct({  }), [Schema.Record(Schema.String.check(Schema.isPattern(/^x-/)), Schema.String), Schema.Record(Schema.String.check(Schema.isPattern(/^y-/)), Schema.Number)])`,
+          `Schema.StructWithRest(Schema.Struct({  }), [Schema.Record(Schema.String.check(Schema.isPattern(new RegExp("^x-"))), Schema.String), Schema.Record(Schema.String.check(Schema.isPattern(new RegExp("^y-"))), Schema.Number)])`,
           FromJsonSchema.makeTypes(`{ readonly [x: string]: string, readonly [x: string]: number }`)
         )
       )
@@ -491,7 +525,7 @@ describe("FromJsonSchema", () => {
           }
         },
         FromJsonSchema.makeGeneration(
-          `Schema.Record(Schema.String.check(Schema.isPattern(/^[A-Z]/)), Schema.Unknown)`,
+          `Schema.Record(Schema.String.check(Schema.isPattern(new RegExp("^[A-Z]"))), Schema.Unknown)`,
           FromJsonSchema.makeTypes(`{ readonly [x: string]: unknown }`)
         )
       )
@@ -515,8 +549,7 @@ describe("FromJsonSchema", () => {
           },
           FromJsonSchema.makeGeneration(
             `Schema.String.annotate({ "description": "a string that will be decoded as JSON" })`,
-            FromJsonSchema.makeTypes("string"),
-            { description: "a string that will be decoded as JSON" }
+            FromJsonSchema.makeTypes("string")
           )
         )
       })
@@ -531,6 +564,21 @@ describe("FromJsonSchema", () => {
           {
             schema: {
               "contentMediaType": "application/json"
+            },
+            options
+          },
+          FromJsonSchema.makeGeneration(`Schema.String`, FromJsonSchema.makeTypes("string"))
+        )
+      })
+
+      it("should ignore contentSchema with non-application/json media type", () => {
+        assertGeneration(
+          {
+            schema: {
+              "contentMediaType": "text/plain",
+              "contentSchema": {
+                "type": "number"
+              }
             },
             options
           },
@@ -559,8 +607,7 @@ describe("FromJsonSchema", () => {
               "contentMediaType": "application/json",
               "contentSchema": {
                 "type": "number"
-              },
-              "description": "a string that will be decoded as JSON"
+              }
             },
             options
           },
@@ -578,8 +625,7 @@ describe("FromJsonSchema", () => {
               "contentMediaType": "application/json",
               "contentSchema": {
                 "$ref": "#/definitions/A"
-              },
-              "description": "a string that will be decoded as JSON"
+              }
             },
             options
           },
@@ -596,6 +642,20 @@ describe("FromJsonSchema", () => {
         { schema: true },
         FromJsonSchema.makeGeneration("Schema.Unknown", FromJsonSchema.makeTypes("unknown"))
       )
+      assertGeneration(
+        {
+          schema: {
+            "allOf": [
+              true,
+              { "description": "a" }
+            ]
+          }
+        },
+        FromJsonSchema.makeGeneration(
+          `Schema.Unknown.annotate({ "description": "a" })`,
+          FromJsonSchema.makeTypes("unknown")
+        )
+      )
     })
 
     it("false", () => {
@@ -603,21 +663,57 @@ describe("FromJsonSchema", () => {
         { schema: false },
         FromJsonSchema.makeGeneration("Schema.Never", FromJsonSchema.makeTypes("never"))
       )
-    })
-
-    it("{}", () => {
       assertGeneration(
-        { schema: {} },
-        FromJsonSchema.makeGeneration("Schema.Unknown", FromJsonSchema.makeTypes("unknown"))
-      )
-      assertGeneration(
-        { schema: { description: "lorem" } },
+        {
+          schema: {
+            "allOf": [
+              false,
+              { "description": "a" }
+            ]
+          }
+        },
         FromJsonSchema.makeGeneration(
-          `Schema.Unknown.annotate({ "description": "lorem" })`,
-          FromJsonSchema.makeTypes("unknown"),
-          { description: "lorem" }
+          `Schema.Never.annotate({ "description": "a" })`,
+          FromJsonSchema.makeTypes("never")
         )
       )
+    })
+
+    describe("Unknown", () => {
+      it("non object", () => {
+        assertGeneration(
+          { schema: null as any },
+          FromJsonSchema.makeGeneration("Schema.Unknown", FromJsonSchema.makeTypes("unknown"))
+        )
+      })
+
+      it("empty object", () => {
+        assertGeneration(
+          { schema: {} },
+          FromJsonSchema.makeGeneration("Schema.Unknown", FromJsonSchema.makeTypes("unknown"))
+        )
+        assertGeneration(
+          { schema: { description: "a" } },
+          FromJsonSchema.makeGeneration(
+            `Schema.Unknown.annotate({ "description": "a" })`,
+            FromJsonSchema.makeTypes("unknown")
+          )
+        )
+      })
+
+      it("should handle object with only unknown properties", () => {
+        assertGeneration(
+          {
+            schema: {
+              customProperty: "value"
+            }
+          },
+          FromJsonSchema.makeGeneration(
+            "Schema.Unknown",
+            FromJsonSchema.makeTypes("unknown")
+          )
+        )
+      })
     })
 
     it("const", () => {
@@ -626,11 +722,10 @@ describe("FromJsonSchema", () => {
         FromJsonSchema.makeGeneration(`Schema.Literal("a")`, FromJsonSchema.makeTypes(`"a"`))
       )
       assertGeneration(
-        { schema: { "const": "a", "description": "lorem" } },
+        { schema: { "const": "a", "description": "a" } },
         FromJsonSchema.makeGeneration(
-          `Schema.Literal("a").annotate({ "description": "lorem" })`,
-          FromJsonSchema.makeTypes(`"a"`),
-          { description: "lorem" }
+          `Schema.Literal("a").annotate({ "description": "a" })`,
+          FromJsonSchema.makeTypes(`"a"`)
         )
       )
       assertGeneration(
@@ -642,80 +737,191 @@ describe("FromJsonSchema", () => {
         FromJsonSchema.makeGeneration(`Schema.Null`, FromJsonSchema.makeTypes(`null`))
       )
       assertGeneration(
-        { schema: { "const": null, "description": "lorem" } },
+        { schema: { "const": null, "description": "a" } },
         FromJsonSchema.makeGeneration(
-          `Schema.Null.annotate({ "description": "lorem" })`,
-          FromJsonSchema.makeTypes(`null`),
-          { description: "lorem" }
+          `Schema.Null.annotate({ "description": "a" })`,
+          FromJsonSchema.makeTypes(`null`)
         )
       )
       assertGeneration(
         { schema: { "const": {} } },
-        FromJsonSchema.makeGeneration(`Schema.Never`, FromJsonSchema.makeTypes(`never`))
+        FromJsonSchema.makeGeneration(`Schema.Never`, FromJsonSchema.makeTypes("never"))
       )
     })
 
-    it("enum", () => {
-      assertGeneration(
-        { schema: { "enum": ["a", "b"] } },
-        FromJsonSchema.makeGeneration(`Schema.Literals(["a", "b"])`, FromJsonSchema.makeTypes(`"a" | "b"`))
-      )
-      assertGeneration(
-        { schema: { "enum": ["a", 1] } },
-        FromJsonSchema.makeGeneration(`Schema.Literals(["a", 1])`, FromJsonSchema.makeTypes(`"a" | 1`))
-      )
-      assertGeneration(
-        { schema: { "enum": ["a", "b"], "description": "lorem" } },
-        FromJsonSchema.makeGeneration(
-          `Schema.Literals(["a", "b"]).annotate({ "description": "lorem" })`,
-          FromJsonSchema.makeTypes(`"a" | "b"`),
-          { description: "lorem" }
+    describe("enum", () => {
+      it("baseline", () => {
+        assertGeneration(
+          { schema: { "enum": ["a", "b"] } },
+          FromJsonSchema.makeGeneration(`Schema.Literals(["a", "b"])`, FromJsonSchema.makeTypes(`"a" | "b"`))
         )
-      )
-      assertGeneration(
-        { schema: { "type": "string", "enum": ["a", "b"], "description": "lorem" } },
-        FromJsonSchema.makeGeneration(
-          `Schema.Literals(["a", "b"]).annotate({ "description": "lorem" })`,
-          FromJsonSchema.makeTypes(`"a" | "b"`),
-          { description: "lorem" }
+        assertGeneration(
+          { schema: { "type": "string", "enum": ["a", "b"] } },
+          FromJsonSchema.makeGeneration(`Schema.Literals(["a", "b"])`, FromJsonSchema.makeTypes(`"a" | "b"`))
         )
-      )
-      assertGeneration(
-        { schema: { "enum": [] } },
-        FromJsonSchema.makeGeneration(`Schema.Never`, FromJsonSchema.makeTypes(`never`))
-      )
-      assertGeneration(
-        { schema: { "enum": [], "description": "lorem" } },
-        FromJsonSchema.makeGeneration(
-          `Schema.Never.annotate({ "description": "lorem" })`,
-          FromJsonSchema.makeTypes(`never`),
-          { description: "lorem" }
+        assertGeneration(
+          { schema: { "enum": ["a", 1] } },
+          FromJsonSchema.makeGeneration(`Schema.Literals(["a", 1])`, FromJsonSchema.makeTypes(`"a" | 1`))
         )
-      )
-      assertGeneration(
-        { schema: { "enum": [null] } },
-        FromJsonSchema.makeGeneration(`Schema.Null`, FromJsonSchema.makeTypes(`null`))
-      )
-      assertGeneration(
-        { schema: { "enum": [null], "description": "lorem" } },
-        FromJsonSchema.makeGeneration(
-          `Schema.Null.annotate({ "description": "lorem" })`,
-          FromJsonSchema.makeTypes(`null`),
-          { description: "lorem" }
+        assertGeneration(
+          { schema: { "enum": ["a", "b"], "description": "a" } },
+          FromJsonSchema.makeGeneration(
+            `Schema.Literals(["a", "b"]).annotate({ "description": "a" })`,
+            FromJsonSchema.makeTypes(`"a" | "b"`)
+          )
         )
-      )
-      assertGeneration(
-        { schema: { "enum": ["a", null] } },
-        FromJsonSchema.makeGeneration(`Schema.NullOr(Schema.Literal("a"))`, FromJsonSchema.makeTypes(`"a" | null`))
-      )
-      assertGeneration(
-        { schema: { "enum": ["a", null], "description": "lorem" } },
-        FromJsonSchema.makeGeneration(
-          `Schema.NullOr(Schema.Literal("a")).annotate({ "description": "lorem" })`,
-          FromJsonSchema.makeTypes(`"a" | null`),
-          { description: "lorem" }
+        assertGeneration(
+          { schema: { "enum": [] } },
+          FromJsonSchema.makeGeneration(`Schema.Never`, FromJsonSchema.makeTypes("never"))
         )
-      )
+        assertGeneration(
+          { schema: { "enum": [], "description": "a" } },
+          FromJsonSchema.makeGeneration(
+            `Schema.Never.annotate({ "description": "a" })`,
+            FromJsonSchema.makeTypes("never")
+          )
+        )
+      })
+
+      it("including null", () => {
+        assertGeneration(
+          { schema: { "enum": [null] } },
+          FromJsonSchema.makeGeneration(`Schema.Null`, FromJsonSchema.makeTypes(`null`))
+        )
+        assertGeneration(
+          { schema: { "enum": [null], "description": "a" } },
+          FromJsonSchema.makeGeneration(
+            `Schema.Null.annotate({ "description": "a" })`,
+            FromJsonSchema.makeTypes(`null`)
+          )
+        )
+        assertGeneration(
+          { schema: { "enum": ["a", null] } },
+          FromJsonSchema.makeGeneration(`Schema.NullOr(Schema.Literal("a"))`, FromJsonSchema.makeTypes(`"a" | null`))
+        )
+        assertGeneration(
+          { schema: { "enum": ["a", null], "description": "a" } },
+          FromJsonSchema.makeGeneration(
+            `Schema.NullOr(Schema.Literal("a")).annotate({ "description": "a" })`,
+            FromJsonSchema.makeTypes(`"a" | null`)
+          )
+        )
+      })
+
+      describe("allOf", () => {
+        it("enum & enum", () => {
+          assertGeneration(
+            {
+              schema: {
+                "enum": ["a", "b"],
+                "allOf": [{ "enum": ["a"] }]
+              }
+            },
+            FromJsonSchema.makeGeneration(`Schema.Literal("a")`, FromJsonSchema.makeTypes(`"a"`))
+          )
+          assertGeneration(
+            {
+              schema: {
+                "enum": ["a", "b"],
+                "allOf": [{ "enum": ["c"] }]
+              }
+            },
+            FromJsonSchema.makeGeneration(`Schema.Never`, FromJsonSchema.makeTypes("never"))
+          )
+        })
+
+        it("enum & string", () => {
+          assertGeneration(
+            {
+              schema: {
+                "enum": ["a", 1],
+                "allOf": [{ "type": "string" }]
+              }
+            },
+            FromJsonSchema.makeGeneration(`Schema.Literal("a")`, FromJsonSchema.makeTypes(`"a"`))
+          )
+          assertGeneration(
+            {
+              schema: {
+                "enum": [1, 2],
+                "allOf": [{ "type": "string" }]
+              }
+            },
+            FromJsonSchema.makeGeneration(`Schema.Never`, FromJsonSchema.makeTypes("never"))
+          )
+          assertGeneration(
+            {
+              schema: {
+                "enum": [1, 2, "a", "aa"],
+                "allOf": [{ "minLength": 2 }]
+              }
+            },
+            FromJsonSchema.makeGeneration(`Schema.Literal("aa")`, FromJsonSchema.makeTypes(`"aa"`))
+          )
+          assertGeneration(
+            {
+              schema: {
+                "enum": ["a", "b"],
+                "allOf": [{ "pattern": "a" }]
+              }
+            },
+            FromJsonSchema.makeGeneration(`Schema.Literal("a")`, FromJsonSchema.makeTypes(`"a"`))
+          )
+        })
+
+        it("enum & number", () => {
+          assertGeneration(
+            {
+              schema: {
+                "enum": ["a", 1],
+                "allOf": [{ "type": "number" }]
+              }
+            },
+            FromJsonSchema.makeGeneration(`Schema.Literal(1)`, FromJsonSchema.makeTypes(`1`))
+          )
+          assertGeneration(
+            {
+              schema: {
+                "enum": ["a", "b"],
+                "allOf": [{ "type": "number" }]
+              }
+            },
+            FromJsonSchema.makeGeneration(`Schema.Never`, FromJsonSchema.makeTypes("never"))
+          )
+          assertGeneration(
+            {
+              schema: {
+                "enum": [1, 2, "a", "aa"],
+                "allOf": [{ "minimum": 2 }]
+              }
+            },
+            FromJsonSchema.makeGeneration(`Schema.Literal(2)`, FromJsonSchema.makeTypes(`2`))
+          )
+        })
+
+        it("enum & boolean", () => {
+          assertGeneration(
+            {
+              schema: {
+                "type": "string",
+                "enum": ["a", true],
+                "allOf": [{ "type": "boolean" }]
+              }
+            },
+            FromJsonSchema.makeGeneration(`Schema.Literal(true)`, FromJsonSchema.makeTypes(`true`))
+          )
+          assertGeneration(
+            {
+              schema: {
+                "type": "string",
+                "enum": [1, 2],
+                "allOf": [{ "type": "boolean" }]
+              }
+            },
+            FromJsonSchema.makeGeneration(`Schema.Never`, FromJsonSchema.makeTypes("never"))
+          )
+        })
+      })
     })
 
     describe("type as array", () => {
@@ -729,12 +935,27 @@ describe("FromJsonSchema", () => {
         )
         assertGeneration(
           {
-            schema: { "type": ["string", "number"], "description": "lorem" }
+            schema: {
+              "type": ["string", "number"],
+              "description": "a"
+            }
           },
           FromJsonSchema.makeGeneration(
-            `Schema.Union([Schema.String, Schema.Number]).annotate({ "description": "lorem" })`,
-            FromJsonSchema.makeTypes("string | number"),
-            { description: "lorem" }
+            `Schema.Union([Schema.String, Schema.Number]).annotate({ "description": "a" })`,
+            FromJsonSchema.makeTypes("string | number")
+          )
+        )
+        assertGeneration(
+          {
+            schema: {
+              "type": ["string", "number"],
+              "minLength": 1,
+              "description": "a"
+            }
+          },
+          FromJsonSchema.makeGeneration(
+            `Schema.Union([Schema.String.check(Schema.isMinLength(1)), Schema.Number]).annotate({ "description": "a" })`,
+            FromJsonSchema.makeTypes("string | number")
           )
         )
       })
@@ -742,6 +963,15 @@ describe("FromJsonSchema", () => {
       it("string, null", () => {
         assertGeneration(
           { schema: { "type": ["string", "null"] } },
+          FromJsonSchema.makeGeneration(
+            "Schema.NullOr(Schema.String)",
+            FromJsonSchema.makeTypes("string | null")
+          )
+        )
+      })
+      it("null, string", () => {
+        assertGeneration(
+          { schema: { "type": ["null", "string"] } },
           FromJsonSchema.makeGeneration(
             "Schema.NullOr(Schema.String)",
             FromJsonSchema.makeTypes("string | null")
@@ -756,101 +986,678 @@ describe("FromJsonSchema", () => {
         FromJsonSchema.makeGeneration("Schema.Null", FromJsonSchema.makeTypes("null"))
       )
       assertGeneration(
-        { schema: { "type": "null", "description": "lorem" } },
+        { schema: { "type": "null", "description": "a" } },
         FromJsonSchema.makeGeneration(
-          `Schema.Null.annotate({ "description": "lorem" })`,
-          FromJsonSchema.makeTypes("null"),
-          { description: "lorem" }
+          `Schema.Null.annotate({ "description": "a" })`,
+          FromJsonSchema.makeTypes("null")
         )
       )
     })
 
-    it("type: string", () => {
-      assertGeneration(
-        { schema: { "type": "string" } },
-        FromJsonSchema.makeGeneration("Schema.String", FromJsonSchema.makeTypes("string"))
-      )
-      assertGeneration(
-        { schema: { "type": "string", "description": "lorem" } },
-        FromJsonSchema.makeGeneration(
-          `Schema.String.annotate({ "description": "lorem" })`,
-          FromJsonSchema.makeTypes("string"),
-          { description: "lorem" }
+    describe("type: string", () => {
+      it("baseline", () => {
+        assertGeneration(
+          { schema: { "type": "string" } },
+          FromJsonSchema.makeGeneration("Schema.String", FromJsonSchema.makeTypes("string"))
         )
-      )
-      assertGeneration(
-        { schema: { "minLength": 1 } },
-        FromJsonSchema.makeGeneration(`Schema.String.check(Schema.isMinLength(1))`, FromJsonSchema.makeTypes("string"))
-      )
-      assertGeneration(
-        { schema: { "maxLength": 10 } },
-        FromJsonSchema.makeGeneration(`Schema.String.check(Schema.isMaxLength(10))`, FromJsonSchema.makeTypes("string"))
-      )
-      assertGeneration(
-        { schema: { "pattern": "a" } },
-        FromJsonSchema.makeGeneration(`Schema.String.check(Schema.isPattern(/a/))`, FromJsonSchema.makeTypes("string"))
-      )
-      assertGeneration(
-        { schema: { "minLength": 1, "maxLength": 10 } },
-        FromJsonSchema.makeGeneration(
-          `Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(10))`,
-          FromJsonSchema.makeTypes("string")
+        assertGeneration(
+          { schema: { "type": "string", "description": "a" } },
+          FromJsonSchema.makeGeneration(
+            `Schema.String.annotate({ "description": "a" })`,
+            FromJsonSchema.makeTypes("string")
+          )
         )
-      )
+      })
+
+      it("checks", () => {
+        assertGeneration(
+          { schema: { "minLength": 1 } },
+          FromJsonSchema.makeGeneration(
+            `Schema.String.check(Schema.isMinLength(1))`,
+            FromJsonSchema.makeTypes("string")
+          )
+        )
+        assertGeneration(
+          { schema: { "maxLength": 10 } },
+          FromJsonSchema.makeGeneration(
+            `Schema.String.check(Schema.isMaxLength(10))`,
+            FromJsonSchema.makeTypes("string")
+          )
+        )
+        assertGeneration(
+          { schema: { "pattern": "a/b" } },
+          FromJsonSchema.makeGeneration(
+            `Schema.String.check(Schema.isPattern(new RegExp("a/b")))`,
+            FromJsonSchema.makeTypes("string")
+          )
+        )
+        // should ignore invalid pattern
+        assertGeneration(
+          {
+            schema: { "pattern": "\\" }
+          },
+          FromJsonSchema.makeGeneration(`Schema.String`, FromJsonSchema.makeTypes(`string`))
+        )
+        assertGeneration(
+          { schema: { "minLength": 1, "maxLength": 10 } },
+          FromJsonSchema.makeGeneration(
+            `Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(10))`,
+            FromJsonSchema.makeTypes("string")
+          )
+        )
+        assertGeneration(
+          { schema: { "minLength": 1, "maxLength": 10, "description": "a" } },
+          FromJsonSchema.makeGeneration(
+            `Schema.String.annotate({ "description": "a" }).check(Schema.isMinLength(1), Schema.isMaxLength(10))`,
+            FromJsonSchema.makeTypes("string")
+          )
+        )
+      })
+
+      describe("allOf", () => {
+        it("string & unknown", () => {
+          assertGeneration(
+            {
+              schema: {
+                "type": "string",
+                "allOf": [{ "description": "a" }]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.String.annotate({ "description": "a" })`,
+              FromJsonSchema.makeTypes("string")
+            )
+          )
+          assertGeneration(
+            {
+              schema: {
+                "type": "string",
+                "description": "a",
+                "allOf": [{ "description": "b" }]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.String.annotate({ "description": "a, b" })`,
+              FromJsonSchema.makeTypes("string")
+            )
+          )
+        })
+
+        it("string & string", () => {
+          assertGeneration(
+            {
+              schema: {
+                "type": "string",
+                "allOf": [{ "minLength": 1 }]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.String.check(Schema.isMinLength(1))`,
+              FromJsonSchema.makeTypes("string")
+            )
+          )
+          assertGeneration(
+            {
+              schema: {
+                "type": "string",
+                "description": "a",
+                "allOf": [{ "minLength": 1 }]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.String.annotate({ "description": "a" }).check(Schema.isMinLength(1))`,
+              FromJsonSchema.makeTypes("string")
+            )
+          )
+          assertGeneration(
+            {
+              schema: {
+                "type": "string",
+                "allOf": [{ "minLength": 1, "description": "b" }]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.String.check(Schema.isMinLength(1, { "description": "b" }))`,
+              FromJsonSchema.makeTypes("string")
+            )
+          )
+          assertGeneration(
+            {
+              schema: {
+                "type": "string",
+                "description": "a",
+                "allOf": [{ "minLength": 1, "description": "b" }]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.String.annotate({ "description": "a" }).check(Schema.isMinLength(1, { "description": "b" }))`,
+              FromJsonSchema.makeTypes("string")
+            )
+          )
+          assertGeneration(
+            {
+              schema: {
+                "type": "string",
+                "minLength": 1,
+                "allOf": [
+                  { "maxLength": 10 }
+                ]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(10))`,
+              FromJsonSchema.makeTypes("string")
+            )
+          )
+          assertGeneration(
+            {
+              schema: {
+                "type": "string",
+                "minLength": 1,
+                "allOf": [
+                  { "maxLength": 10, "description": "a" }
+                ]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(10, { "description": "a" }))`,
+              FromJsonSchema.makeTypes("string")
+            )
+          )
+          assertGeneration(
+            {
+              schema: {
+                "type": "string",
+                "allOf": [
+                  { "minLength": 1 },
+                  { "maxLength": 10 }
+                ]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(10))`,
+              FromJsonSchema.makeTypes("string")
+            )
+          )
+          assertGeneration(
+            {
+              schema: {
+                "type": "string",
+                "description": "a",
+                "allOf": [
+                  { "minLength": 1 },
+                  { "maxLength": 10 }
+                ]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.String.annotate({ "description": "a" }).check(Schema.isMinLength(1), Schema.isMaxLength(10))`,
+              FromJsonSchema.makeTypes("string")
+            )
+          )
+          assertGeneration(
+            {
+              schema: {
+                "type": "string",
+                "description": "a",
+                "allOf": [
+                  { "description": "b" },
+                  { "minLength": 1 },
+                  { "maxLength": 10 }
+                ]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.String.annotate({ "description": "a, b" }).check(Schema.isMinLength(1), Schema.isMaxLength(10))`,
+              FromJsonSchema.makeTypes("string")
+            )
+          )
+          assertGeneration(
+            {
+              schema: {
+                "type": "string",
+                "allOf": [
+                  { "minLength": 1, "description": "b" },
+                  { "maxLength": 10, "description": "c" }
+                ]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.String.check(Schema.isMinLength(1, { "description": "b" }), Schema.isMaxLength(10, { "description": "c" }))`,
+              FromJsonSchema.makeTypes("string")
+            )
+          )
+          assertGeneration(
+            {
+              schema: {
+                "type": "string",
+                "allOf": [
+                  { "minLength": 1, "maxLength": 10, "description": "a" }
+                ]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.String.check(Schema.makeFilterGroup([Schema.isMinLength(1), Schema.isMaxLength(10)], { "description": "a" }))`,
+              FromJsonSchema.makeTypes("string")
+            )
+          )
+          assertGeneration(
+            {
+              schema: {
+                "type": "string",
+                "description": "a",
+                "allOf": [
+                  { "minLength": 1, "maxLength": 10, "description": "b" }
+                ]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.String.annotate({ "description": "a" }).check(Schema.makeFilterGroup([Schema.isMinLength(1), Schema.isMaxLength(10)], { "description": "b" }))`,
+              FromJsonSchema.makeTypes("string")
+            )
+          )
+          assertGeneration(
+            {
+              schema: {
+                "type": "string",
+                "allOf": [
+                  { "minLength": 1 },
+                  {
+                    "allOf": [
+                      { "description": "a" },
+                      { "maxLength": 10 }
+                    ],
+                    "description": "b"
+                  }
+                ]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(10, { "description": "b, a" }))`,
+              FromJsonSchema.makeTypes("string")
+            )
+          )
+          assertGeneration(
+            {
+              schema: {
+                "type": "string",
+                "description": "a",
+                "allOf": [
+                  {
+                    "allOf": [
+                      { "minLength": 1 },
+                      { "maxLength": 10 }
+                    ],
+                    "description": "b"
+                  }
+                ]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.String.annotate({ "description": "a" }).check(Schema.makeFilterGroup([Schema.isMinLength(1), Schema.isMaxLength(10)], { "description": "b" }))`,
+              FromJsonSchema.makeTypes("string")
+            )
+          )
+        })
+      })
+
+      it("string & enum", () => {
+        assertGeneration(
+          {
+            schema: {
+              "type": "string",
+              "allOf": [{ "enum": [1, 2] }]
+            }
+          },
+          FromJsonSchema.makeGeneration(`Schema.Never`, FromJsonSchema.makeTypes("never"))
+        )
+        assertGeneration(
+          {
+            schema: {
+              "type": "string",
+              "allOf": [{ "enum": ["a", "b", 1] }]
+            }
+          },
+          FromJsonSchema.makeGeneration(`Schema.Literals(["a", "b"])`, FromJsonSchema.makeTypes(`"a" | "b"`))
+        )
+      })
     })
 
-    it("type: number", () => {
-      assertGeneration(
-        { schema: { "type": "number" } },
-        FromJsonSchema.makeGeneration("Schema.Number", FromJsonSchema.makeTypes("number"))
-      )
-      assertGeneration(
-        { schema: { "type": "number", "description": "lorem" } },
-        FromJsonSchema.makeGeneration(
-          `Schema.Number.annotate({ "description": "lorem" })`,
-          FromJsonSchema.makeTypes("number"),
-          { description: "lorem" }
+    describe("type: number", () => {
+      it("baseline", () => {
+        assertGeneration(
+          { schema: { "type": "number" } },
+          FromJsonSchema.makeGeneration("Schema.Number", FromJsonSchema.makeTypes("number"))
         )
-      )
-      assertGeneration(
-        { schema: { "minimum": 0 } },
-        FromJsonSchema.makeGeneration(
-          `Schema.Number.check(Schema.isGreaterThanOrEqualTo(0))`,
-          FromJsonSchema.makeTypes("number")
+        assertGeneration(
+          { schema: { "type": "number", "description": "a" } },
+          FromJsonSchema.makeGeneration(
+            `Schema.Number.annotate({ "description": "a" })`,
+            FromJsonSchema.makeTypes("number")
+          )
         )
-      )
-      assertGeneration(
-        { schema: { "maximum": 10 } },
-        FromJsonSchema.makeGeneration(
-          `Schema.Number.check(Schema.isLessThanOrEqualTo(10))`,
-          FromJsonSchema.makeTypes("number")
+      })
+
+      it("checks", () => {
+        assertGeneration(
+          { schema: { "minimum": 1 } },
+          FromJsonSchema.makeGeneration(
+            `Schema.Number.check(Schema.isGreaterThanOrEqualTo(1))`,
+            FromJsonSchema.makeTypes("number")
+          )
         )
-      )
-      assertGeneration(
-        { schema: { "exclusiveMinimum": 0 } },
-        FromJsonSchema.makeGeneration(
-          `Schema.Number.check(Schema.isGreaterThan(0))`,
-          FromJsonSchema.makeTypes("number")
+        assertGeneration(
+          { schema: { "maximum": 10 } },
+          FromJsonSchema.makeGeneration(
+            `Schema.Number.check(Schema.isLessThanOrEqualTo(10))`,
+            FromJsonSchema.makeTypes("number")
+          )
         )
-      )
-      assertGeneration(
-        { schema: { "exclusiveMaximum": 10 } },
-        FromJsonSchema.makeGeneration(`Schema.Number.check(Schema.isLessThan(10))`, FromJsonSchema.makeTypes("number"))
-      )
-      assertGeneration(
-        { schema: { "multipleOf": 10 } },
-        FromJsonSchema.makeGeneration(
-          `Schema.Number.check(Schema.isMultipleOf(10))`,
-          FromJsonSchema.makeTypes("number")
+        assertGeneration(
+          { schema: { "multipleOf": 10 } },
+          FromJsonSchema.makeGeneration(
+            `Schema.Number.check(Schema.isMultipleOf(10))`,
+            FromJsonSchema.makeTypes("number")
+          )
         )
-      )
-      assertGeneration(
-        { schema: { "minimum": 1, "maximum": 10 } },
-        FromJsonSchema.makeGeneration(
-          `Schema.Number.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(10))`,
-          FromJsonSchema.makeTypes("number")
+        assertGeneration(
+          { schema: { "minimum": 1, "maximum": 10 } },
+          FromJsonSchema.makeGeneration(
+            `Schema.Number.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(10))`,
+            FromJsonSchema.makeTypes("number")
+          )
         )
-      )
+        assertGeneration(
+          { schema: { "minimum": 1, "maximum": 10, "description": "a" } },
+          FromJsonSchema.makeGeneration(
+            `Schema.Number.annotate({ "description": "a" }).check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(10))`,
+            FromJsonSchema.makeTypes("number")
+          )
+        )
+      })
+
+      describe("allOf", () => {
+        it("number & unknown", () => {
+          assertGeneration(
+            {
+              schema: {
+                "type": "number",
+                "allOf": [{ "description": "a" }]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.Number.annotate({ "description": "a" })`,
+              FromJsonSchema.makeTypes("number")
+            )
+          )
+          assertGeneration(
+            {
+              schema: {
+                "type": "number",
+                "description": "a",
+                "allOf": [{ "description": "b" }]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.Number.annotate({ "description": "a, b" })`,
+              FromJsonSchema.makeTypes("number")
+            )
+          )
+        })
+
+        it("number & number", () => {
+          assertGeneration(
+            {
+              schema: {
+                "type": "number",
+                "allOf": [{ "minimum": 1 }]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.Number.check(Schema.isGreaterThanOrEqualTo(1))`,
+              FromJsonSchema.makeTypes("number")
+            )
+          )
+          assertGeneration(
+            {
+              schema: {
+                "type": "number",
+                "description": "a",
+                "allOf": [{ "minimum": 1 }]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.Number.annotate({ "description": "a" }).check(Schema.isGreaterThanOrEqualTo(1))`,
+              FromJsonSchema.makeTypes("number")
+            )
+          )
+          assertGeneration(
+            {
+              schema: {
+                "type": "number",
+                "allOf": [{ "minimum": 1, "description": "b" }]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.Number.check(Schema.isGreaterThanOrEqualTo(1, { "description": "b" }))`,
+              FromJsonSchema.makeTypes("number")
+            )
+          )
+          assertGeneration(
+            {
+              schema: {
+                "type": "number",
+                "description": "a",
+                "allOf": [{ "minimum": 1, "description": "b" }]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.Number.annotate({ "description": "a" }).check(Schema.isGreaterThanOrEqualTo(1, { "description": "b" }))`,
+              FromJsonSchema.makeTypes("number")
+            )
+          )
+          assertGeneration(
+            {
+              schema: {
+                "type": "number",
+                "minimum": 1,
+                "allOf": [
+                  { "maximum": 10 }
+                ]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.Number.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(10))`,
+              FromJsonSchema.makeTypes("number")
+            )
+          )
+          assertGeneration(
+            {
+              schema: {
+                "type": "number",
+                "minimum": 1,
+                "allOf": [
+                  { "maximum": 10, "description": "a" }
+                ]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.Number.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(10, { "description": "a" }))`,
+              FromJsonSchema.makeTypes("number")
+            )
+          )
+          assertGeneration(
+            {
+              schema: {
+                "type": "number",
+                "allOf": [
+                  { "minimum": 1 },
+                  { "maximum": 10 }
+                ]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.Number.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(10))`,
+              FromJsonSchema.makeTypes("number")
+            )
+          )
+          assertGeneration(
+            {
+              schema: {
+                "type": "number",
+                "description": "a",
+                "allOf": [
+                  { "minimum": 1 },
+                  { "maximum": 10 }
+                ]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.Number.annotate({ "description": "a" }).check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(10))`,
+              FromJsonSchema.makeTypes("number")
+            )
+          )
+          assertGeneration(
+            {
+              schema: {
+                "type": "number",
+                "description": "a",
+                "allOf": [
+                  { "description": "b" },
+                  { "minimum": 1 },
+                  { "maximum": 10 }
+                ]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.Number.annotate({ "description": "a, b" }).check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(10))`,
+              FromJsonSchema.makeTypes("number")
+            )
+          )
+          assertGeneration(
+            {
+              schema: {
+                "type": "number",
+                "allOf": [
+                  { "minimum": 1, "description": "b" },
+                  { "maximum": 10, "description": "c" }
+                ]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.Number.check(Schema.isGreaterThanOrEqualTo(1, { "description": "b" }), Schema.isLessThanOrEqualTo(10, { "description": "c" }))`,
+              FromJsonSchema.makeTypes("number")
+            )
+          )
+          assertGeneration(
+            {
+              schema: {
+                "type": "number",
+                "allOf": [
+                  { "minimum": 1, "maximum": 10, "description": "a" }
+                ]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.Number.check(Schema.makeFilterGroup([Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(10)], { "description": "a" }))`,
+              FromJsonSchema.makeTypes("number")
+            )
+          )
+          assertGeneration(
+            {
+              schema: {
+                "type": "number",
+                "description": "a",
+                "allOf": [
+                  { "minimum": 1, "maximum": 10, "description": "b" }
+                ]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.Number.annotate({ "description": "a" }).check(Schema.makeFilterGroup([Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(10)], { "description": "b" }))`,
+              FromJsonSchema.makeTypes("number")
+            )
+          )
+          assertGeneration(
+            {
+              schema: {
+                "type": "number",
+                "allOf": [
+                  { "minimum": 1 },
+                  {
+                    "allOf": [
+                      { "description": "a" },
+                      { "maximum": 10 }
+                    ],
+                    "description": "b"
+                  }
+                ]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.Number.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(10, { "description": "b, a" }))`,
+              FromJsonSchema.makeTypes("number")
+            )
+          )
+          assertGeneration(
+            {
+              schema: {
+                "type": "number",
+                "description": "a",
+                "allOf": [
+                  {
+                    "allOf": [
+                      { "minimum": 1 },
+                      { "maximum": 10 }
+                    ],
+                    "description": "b"
+                  }
+                ]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.Number.annotate({ "description": "a" }).check(Schema.makeFilterGroup([Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(10)], { "description": "b" }))`,
+              FromJsonSchema.makeTypes("number")
+            )
+          )
+        })
+      })
+
+      it("number & integer", () => {
+        assertGeneration(
+          {
+            schema: {
+              "type": "number",
+              "allOf": [{ "type": "integer" }]
+            }
+          },
+          FromJsonSchema.makeGeneration(
+            "Schema.Int",
+            FromJsonSchema.makeTypes("number")
+          )
+        )
+      })
+
+      it("number & enum", () => {
+        assertGeneration(
+          {
+            schema: {
+              "type": "number",
+              "allOf": [{ "enum": ["a", "b"] }]
+            }
+          },
+          FromJsonSchema.makeGeneration(`Schema.Never`, FromJsonSchema.makeTypes("never"))
+        )
+        assertGeneration(
+          {
+            schema: {
+              "type": "number",
+              "allOf": [{ "enum": ["a", "b", 1] }]
+            }
+          },
+          FromJsonSchema.makeGeneration(`Schema.Literal(1)`, FromJsonSchema.makeTypes("1"))
+        )
+      })
     })
 
     it("type: integer", () => {
@@ -859,17 +1666,55 @@ describe("FromJsonSchema", () => {
         FromJsonSchema.makeGeneration("Schema.Int", FromJsonSchema.makeTypes("number"))
       )
       assertGeneration(
-        { schema: { "type": "integer", "description": "lorem" } },
+        { schema: { "type": "integer", "description": "a" } },
         FromJsonSchema.makeGeneration(
-          `Schema.Int.annotate({ "description": "lorem" })`,
-          FromJsonSchema.makeTypes("number"),
-          { description: "lorem" }
+          `Schema.Int.annotate({ "description": "a" })`,
+          FromJsonSchema.makeTypes("number")
         )
       )
       assertGeneration(
-        { schema: { "type": "integer", "minimum": 1 } },
+        { schema: { "type": "integer", "minimum": 0 } },
         FromJsonSchema.makeGeneration(
-          `Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))`,
+          `Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))`,
+          FromJsonSchema.makeTypes("number")
+        )
+      )
+      assertGeneration(
+        { schema: { "type": "integer", "maximum": 10 } },
+        FromJsonSchema.makeGeneration(
+          `Schema.Int.check(Schema.isLessThanOrEqualTo(10))`,
+          FromJsonSchema.makeTypes("number")
+        )
+      )
+      assertGeneration(
+        { schema: { "type": "integer", "exclusiveMinimum": 0 } },
+        FromJsonSchema.makeGeneration(
+          `Schema.Int.check(Schema.isGreaterThan(0))`,
+          FromJsonSchema.makeTypes("number")
+        )
+      )
+      assertGeneration(
+        { schema: { "type": "integer", "exclusiveMaximum": 10 } },
+        FromJsonSchema.makeGeneration(`Schema.Int.check(Schema.isLessThan(10))`, FromJsonSchema.makeTypes("number"))
+      )
+      assertGeneration(
+        { schema: { "type": "integer", "multipleOf": 10 } },
+        FromJsonSchema.makeGeneration(
+          `Schema.Int.check(Schema.isMultipleOf(10))`,
+          FromJsonSchema.makeTypes("number")
+        )
+      )
+      assertGeneration(
+        { schema: { "type": "integer", "minimum": 1, "maximum": 10 } },
+        FromJsonSchema.makeGeneration(
+          `Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(10))`,
+          FromJsonSchema.makeTypes("number")
+        )
+      )
+      assertGeneration(
+        { schema: { "type": "integer", "minimum": 1, "maximum": 10, "description": "a" } },
+        FromJsonSchema.makeGeneration(
+          `Schema.Int.annotate({ "description": "a" }).check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(10))`,
           FromJsonSchema.makeTypes("number")
         )
       )
@@ -881,11 +1726,10 @@ describe("FromJsonSchema", () => {
         FromJsonSchema.makeGeneration("Schema.Boolean", FromJsonSchema.makeTypes("boolean"))
       )
       assertGeneration(
-        { schema: { "type": "boolean", "description": "lorem" } },
+        { schema: { "type": "boolean", "description": "a" } },
         FromJsonSchema.makeGeneration(
-          `Schema.Boolean.annotate({ "description": "lorem" })`,
-          FromJsonSchema.makeTypes("boolean"),
-          { description: "lorem" }
+          `Schema.Boolean.annotate({ "description": "a" })`,
+          FromJsonSchema.makeTypes("boolean")
         )
       )
     })
@@ -900,11 +1744,10 @@ describe("FromJsonSchema", () => {
           )
         )
         assertGeneration(
-          { schema: { "type": "array", "description": "lorem" } },
+          { schema: { "type": "array", "description": "a" } },
           FromJsonSchema.makeGeneration(
-            `Schema.Array(Schema.Unknown).annotate({ "description": "lorem" })`,
-            FromJsonSchema.makeTypes("ReadonlyArray<unknown>"),
-            { description: "lorem" }
+            `Schema.Array(Schema.Unknown).annotate({ "description": "a" })`,
+            FromJsonSchema.makeTypes("ReadonlyArray<unknown>")
           )
         )
         assertGeneration(
@@ -915,17 +1758,17 @@ describe("FromJsonSchema", () => {
           )
         )
         assertGeneration(
-          { schema: { "additionalItems": false, "minItems": 1 } },
-          FromJsonSchema.makeGeneration(
-            `Schema.Tuple([])`,
-            FromJsonSchema.makeTypes("readonly []")
-          )
-        )
-        assertGeneration(
           { schema: { "maxItems": 10 } },
           FromJsonSchema.makeGeneration(
             `Schema.Array(Schema.Unknown).check(Schema.isMaxLength(10))`,
             FromJsonSchema.makeTypes("ReadonlyArray<unknown>")
+          )
+        )
+        assertGeneration(
+          { schema: { "additionalItems": false, "minItems": 1 } },
+          FromJsonSchema.makeGeneration(
+            `Schema.Tuple([])`,
+            FromJsonSchema.makeTypes("readonly []")
           )
         )
         assertGeneration(
@@ -969,13 +1812,12 @@ describe("FromJsonSchema", () => {
             schema: {
               "items": [],
               "additionalItems": false,
-              "description": "lorem"
+              "description": "a"
             }
           },
           FromJsonSchema.makeGeneration(
-            `Schema.Tuple([]).annotate({ "description": "lorem" })`,
-            FromJsonSchema.makeTypes("readonly []"),
-            { description: "lorem" }
+            `Schema.Tuple([]).annotate({ "description": "a" })`,
+            FromJsonSchema.makeTypes("readonly []")
           )
         )
       })
@@ -1014,13 +1856,12 @@ describe("FromJsonSchema", () => {
             schema: {
               "items": [{ "type": "string" }],
               "additionalItems": false,
-              "description": "lorem"
+              "description": "a"
             }
           },
           FromJsonSchema.makeGeneration(
-            `Schema.Tuple([Schema.optionalKey(Schema.String)]).annotate({ "description": "lorem" })`,
-            FromJsonSchema.makeTypes("readonly [string?]"),
-            { description: "lorem" }
+            `Schema.Tuple([Schema.optionalKey(Schema.String)]).annotate({ "description": "a" })`,
+            FromJsonSchema.makeTypes("readonly [string?]")
           )
         )
         assertGeneration(
@@ -1057,6 +1898,102 @@ describe("FromJsonSchema", () => {
           )
         )
       })
+
+      describe("allOf", () => {
+        it("array & unknown", () => {
+          assertGeneration(
+            {
+              schema: {
+                "type": "array",
+                "allOf": [{ "description": "a" }]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.Array(Schema.Unknown).annotate({ "description": "a" })`,
+              FromJsonSchema.makeTypes("ReadonlyArray<unknown>")
+            )
+          )
+        })
+
+        it("tuple & array", () => {
+          assertGeneration(
+            {
+              schema: {
+                "minItems": 1,
+                "items": [{ "type": "string" }],
+                "allOf": [{ "items": { "type": "string" } }]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.TupleWithRest(Schema.Tuple([Schema.String]), [Schema.String])`,
+              FromJsonSchema.makeTypes("readonly [string, ...Array<string>]")
+            )
+          )
+        })
+
+        it("tuple & union of arrays", () => {
+          assertGeneration(
+            {
+              schema: {
+                "minItems": 1,
+                "items": [{ "type": "string" }],
+                "allOf": [
+                  {
+                    "anyOf": [
+                      { "items": { "type": "string" } },
+                      { "items": { "type": "number" } }
+                    ]
+                  }
+                ]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.Union([Schema.TupleWithRest(Schema.Tuple([Schema.String]), [Schema.String]), Schema.TupleWithRest(Schema.Tuple([Schema.String]), [Schema.Number])])`,
+              FromJsonSchema.makeTypes("readonly [string, ...Array<string>] | readonly [string, ...Array<number>]")
+            )
+          )
+        })
+
+        it("array & array", () => {
+          assertGeneration(
+            {
+              schema: {
+                "type": "array",
+                "allOf": [
+                  { "uniqueItems": true, "description": "a" }
+                ]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.Array(Schema.Unknown).check(Schema.isUnique({ "description": "a" }))`,
+              FromJsonSchema.makeTypes("ReadonlyArray<unknown>")
+            )
+          )
+        })
+
+        it("union of arrays & tuple", () => {
+          assertGeneration(
+            {
+              schema: {
+                "anyOf": [
+                  { "items": { "type": "string" } },
+                  { "items": { "type": "number" } }
+                ],
+                "allOf": [
+                  {
+                    "minItems": 1,
+                    "items": [{ "type": "string" }]
+                  }
+                ]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.Union([Schema.TupleWithRest(Schema.Tuple([Schema.String]), [Schema.String]), Schema.TupleWithRest(Schema.Tuple([Schema.String]), [Schema.Number])])`,
+              FromJsonSchema.makeTypes("readonly [string, ...Array<string>] | readonly [string, ...Array<number>]")
+            )
+          )
+        })
+      })
     })
 
     describe("type: object", () => {
@@ -1069,11 +2006,10 @@ describe("FromJsonSchema", () => {
           )
         )
         assertGeneration(
-          { schema: { "type": "object", "description": "lorem" } },
+          { schema: { "type": "object", "description": "a" } },
           FromJsonSchema.makeGeneration(
-            `Schema.Record(Schema.String, Schema.Unknown).annotate({ "description": "lorem" })`,
-            FromJsonSchema.makeTypes("{ readonly [x: string]: unknown }"),
-            { description: "lorem" }
+            `Schema.Record(Schema.String, Schema.Unknown).annotate({ "description": "a" })`,
+            FromJsonSchema.makeTypes("{ readonly [x: string]: unknown }")
           )
         )
         assertGeneration(
@@ -1225,345 +2161,278 @@ describe("FromJsonSchema", () => {
           )
         )
       })
-    })
 
-    it("Union", () => {
-      describe("anyOf", () => {
-        assertGeneration(
-          { schema: { "anyOf": [{ "type": "string" }, { "type": "number" }] } },
-          FromJsonSchema.makeGeneration(
-            "Schema.Union([Schema.String, Schema.Number])",
-            FromJsonSchema.makeTypes("string | number")
-          )
-        )
-        assertGeneration(
-          { schema: { "anyOf": [{ "type": "string" }, { "type": "number" }], "description": "lorem" } },
-          FromJsonSchema.makeGeneration(
-            `Schema.Union([Schema.String, Schema.Number]).annotate({ description: "lorem" })`,
-            FromJsonSchema.makeTypes("string | number")
-          )
-        )
-      })
-
-      describe("oneOf", () => {
-        assertGeneration(
-          { schema: { "oneOf": [{ "type": "string" }, { "type": "number" }] } },
-          FromJsonSchema.makeGeneration(
-            "Schema.Union([Schema.String, Schema.Number], { mode: 'oneOf' })",
-            FromJsonSchema.makeTypes("string | number")
-          )
-        )
-      })
-    })
-
-    it("$ref", () => {
-      const options: FromJsonSchema.GenerateOptions = {
-        source: "draft-07",
-        resolver: (ref) => {
-          const identifier = ref.replace(/[/~]/g, "$")
-          return FromJsonSchema.makeGeneration(
-            identifier,
-            FromJsonSchema.makeTypes(
-              `T${identifier}`,
-              `E${identifier}`,
-              `DS${identifier}`,
-              `ES${identifier}`
+      describe("allOf", () => {
+        it("object & unknown", () => {
+          assertGeneration(
+            {
+              schema: {
+                "type": "object",
+                "allOf": [{ "description": "a" }]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.Record(Schema.String, Schema.Unknown).annotate({ "description": "a" })`,
+              FromJsonSchema.makeTypes("{ readonly [x: string]: unknown }")
             )
           )
-        }
-      }
+          assertGeneration(
+            {
+              schema: {
+                "minProperties": 1,
+                "allOf": [{ "description": "b" }]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.Record(Schema.String, Schema.Unknown).annotate({ "description": "b" }).check(Schema.isMinProperties(1))`,
+              FromJsonSchema.makeTypes("{ readonly [x: string]: unknown }")
+            )
+          )
+        })
 
-      assertGeneration(
-        {
-          schema: {
-            "$ref": "#/definitions/A"
-          },
-          options
-        },
-        FromJsonSchema.makeGeneration(
-          "A",
-          FromJsonSchema.makeTypes("TA", "EA", "DSA", "ESA")
-        )
-      )
-      assertGeneration(
-        {
-          schema: {
-            "$ref": "#/definitions/A",
-            "description": "lorem"
-          },
-          options
-        },
-        FromJsonSchema.makeGeneration(
-          `A.annotate({ "description": "lorem" })`,
-          FromJsonSchema.makeTypes("TA", "EA", "DSA", "ESA"),
-          { description: "lorem" }
-        )
-      )
-      assertGeneration(
-        {
-          schema: {
-            "type": "array",
-            "minItems": 1,
-            "items": [
-              { "$ref": "#/definitions/A" }
-            ],
-            "additionalItems": false
-          },
-          options
-        },
-        FromJsonSchema.makeGeneration(
-          `Schema.Tuple([A])`,
-          FromJsonSchema.makeTypes("readonly [TA]", "readonly [EA]", "DSA", "ESA")
-        )
-      )
-      assertGeneration(
-        {
-          schema: {
-            "type": "array",
-            "minItems": 2,
-            "items": [
-              { "$ref": "#/definitions/A" },
-              { "$ref": "#/definitions/B" }
-            ],
-            "additionalItems": false
-          },
-          options
-        },
-        FromJsonSchema.makeGeneration(
-          `Schema.Tuple([A, B])`,
-          FromJsonSchema.makeTypes("readonly [TA, TB]", "readonly [EA, EB]", "DSA | DSB", "ESA | ESB")
-        )
-      )
-      assertGeneration(
-        {
-          schema: {
-            "type": "array",
-            "items": { "$ref": "#/definitions/A" }
-          },
-          options
-        },
-        FromJsonSchema.makeGeneration(
-          `Schema.Array(A)`,
-          FromJsonSchema.makeTypes("ReadonlyArray<TA>", "ReadonlyArray<EA>", "DSA", "ESA")
-        )
-      )
-      assertGeneration(
-        {
-          schema: {
-            "type": "array",
-            "minItems": 1,
-            "items": [
-              { "$ref": "#/definitions/A" }
-            ],
-            "additionalItems": { "$ref": "#/definitions/B" }
-          },
-          options
-        },
-        FromJsonSchema.makeGeneration(
-          `Schema.TupleWithRest(Schema.Tuple([A]), [B])`,
-          FromJsonSchema.makeTypes(
-            "readonly [TA, ...Array<TB>]",
-            "readonly [EA, ...Array<EB>]",
-            "DSA | DSB",
-            "ESA | ESB"
-          )
-        )
-      )
-      assertGeneration(
-        {
-          schema: {
-            "properties": {
-              "a": { "$ref": "#/definitions/A" }
-            },
-            "required": ["a"],
-            "additionalProperties": false
-          },
-          options
-        },
-        FromJsonSchema.makeGeneration(
-          `Schema.Struct({ "a": A })`,
-          FromJsonSchema.makeTypes(`{ readonly "a": TA }`, `{ readonly "a": EA }`, "DSA", "ESA")
-        )
-      )
-      assertGeneration(
-        {
-          schema: {
-            "properties": {
-              "a": { "$ref": "#/definitions/A" },
-              "b": { "$ref": "#/definitions/B" }
-            },
-            "required": ["a", "b"],
-            "additionalProperties": false
-          },
-          options
-        },
-        FromJsonSchema.makeGeneration(
-          `Schema.Struct({ "a": A, "b": B })`,
-          FromJsonSchema.makeTypes(
-            `{ readonly "a": TA, readonly "b": TB }`,
-            `{ readonly "a": EA, readonly "b": EB }`,
-            "DSA | DSB",
-            "ESA | ESB"
-          )
-        )
-      )
-      assertGeneration(
-        {
-          schema: {
-            "additionalProperties": { "$ref": "#/definitions/A" }
-          },
-          options
-        },
-        FromJsonSchema.makeGeneration(
-          `Schema.Record(Schema.String, A)`,
-          FromJsonSchema.makeTypes("{ readonly [x: string]: TA }", "{ readonly [x: string]: EA }", "DSA", "ESA")
-        )
-      )
-      assertGeneration(
-        {
-          schema: {
-            "properties": {
-              "a": { "$ref": "#/definitions/A" }
-            },
-            "required": ["a"],
-            "additionalProperties": { "$ref": "#/definitions/B" }
-          },
-          options
-        },
-        FromJsonSchema.makeGeneration(
-          `Schema.StructWithRest(Schema.Struct({ "a": A }), [Schema.Record(Schema.String, B)])`,
-          FromJsonSchema.makeTypes(
-            `{ readonly "a": TA, readonly [x: string]: TB }`,
-            `{ readonly "a": EA, readonly [x: string]: EB }`,
-            "DSA | DSB",
-            "ESA | ESB"
-          )
-        )
-      )
-      assertGeneration(
-        {
-          schema: {
-            "anyOf": [
-              { "$ref": "#/definitions/A" },
-              { "$ref": "#/definitions/B" }
-            ]
-          },
-          options
-        },
-        FromJsonSchema.makeGeneration(
-          `Schema.Union([A, B])`,
-          FromJsonSchema.makeTypes("TA | TB", "EA | EB", "DSA | DSB", "ESA | ESB")
-        )
-      )
-    })
-
-    it("should inline local definitions", () => {
-      assertGeneration(
-        {
-          schema: {
-            "properties": {
-              "a": { "$ref": "#/definitions/A" }
-            },
-            "required": ["a"],
-            "additionalProperties": false,
-            "definitions": {
-              "A": {
-                "type": "string"
-              }
-            }
-          }
-        },
-        FromJsonSchema.makeGeneration(
-          `Schema.Struct({ "a": Schema.String })`,
-          FromJsonSchema.makeTypes(`{ readonly "a": string }`)
-        )
-      )
-      assertGeneration(
-        {
-          schema: {
-            "properties": {
-              "a": { "$ref": "#/definitions/A" }
-            },
-            "required": ["a"],
-            "additionalProperties": false,
-            "definitions": {
-              "A": { "$ref": "#/definitions/B" },
-              "B": {
-                "type": "string"
-              }
-            }
-          }
-        },
-        FromJsonSchema.makeGeneration(
-          `Schema.Struct({ "a": Schema.String })`,
-          FromJsonSchema.makeTypes(`{ readonly "a": string }`)
-        )
-      )
-      // prevent stack overflow
-      assertGeneration(
-        {
-          schema: {
-            "properties": {
-              "a": { "$ref": "#/definitions/A" }
-            },
-            "required": ["a"],
-            "additionalProperties": false,
-            "definitions": {
-              "A": { "$ref": "#/definitions/A" }
-            }
-          }
-        },
-        FromJsonSchema.makeGeneration(
-          `Schema.Struct({ "a": Schema.Unknown })`,
-          FromJsonSchema.makeTypes(`{ readonly "a": unknown }`)
-        )
-      )
-      // nested inline definitions
-      assertGeneration(
-        {
-          schema: {
-            "properties": {
-              "a": { "$ref": "#/definitions/B/definitions/C" }
-            },
-            "required": ["a"],
-            "additionalProperties": false,
-            "definitions": {
-              "B": {
-                "properties": {
-                  "b": { "type": "string" }
-                },
-                "required": ["b"],
-                "definitions": {
-                  "C": {
-                    "type": "string"
-                  }
-                }
-              }
-            }
-          }
-        },
-        FromJsonSchema.makeGeneration(
-          `Schema.Struct({ "a": Schema.String })`,
-          FromJsonSchema.makeTypes(`{ readonly "a": string }`)
-        )
-      )
-      assertGeneration(
-        {
-          schema: {
-            "properties": {
-              "a": { "$ref": "#/definitions/B/definitions/C/properties/b" }
-            },
-            "required": ["a"],
-            "additionalProperties": false,
-            "definitions": {
-              "B": {
-                "properties": {
-                  "b": { "type": "string" }
-                },
-                "required": ["b"],
+        it("struct & struct", () => {
+          assertGeneration(
+            {
+              schema: {
+                "properties": { "a": { "type": "string" } },
+                "required": ["a"],
                 "additionalProperties": false,
+                "allOf": [{
+                  "properties": { "b": { "type": "string" } },
+                  "required": ["b"],
+                  "additionalProperties": false
+                }]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.Struct({ "a": Schema.String, "b": Schema.String })`,
+              FromJsonSchema.makeTypes(`{ readonly "a": string, readonly "b": string }`)
+            )
+          )
+          assertGeneration(
+            {
+              schema: {
+                "properties": { "a": { "type": "string" } },
+                "required": ["a"],
+                "additionalProperties": false,
+                "allOf": [{
+                  "properties": { "b": { "type": "string" } },
+                  "additionalProperties": false
+                }]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.Struct({ "a": Schema.String, "b": Schema.optionalKey(Schema.String) })`,
+              FromJsonSchema.makeTypes(`{ readonly "a": string, readonly "b"?: string }`)
+            )
+          )
+          assertGeneration(
+            {
+              schema: {
+                "properties": {
+                  "a": { "type": "string" },
+                  "b": { "type": "string" }
+                },
+                "required": ["a", "b"],
+                "additionalProperties": false,
+                "allOf": [{
+                  "properties": {
+                    "b": { "enum": ["b"] },
+                    "c": { "type": "string" }
+                  },
+                  "required": ["c"],
+                  "additionalProperties": false
+                }]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.Struct({ "a": Schema.String, "b": Schema.Literal("b"), "c": Schema.String })`,
+              FromJsonSchema.makeTypes(`{ readonly "a": string, readonly "b": "b", readonly "c": string }`)
+            )
+          )
+        })
+
+        it("struct & record", () => {
+          assertGeneration(
+            {
+              schema: {
+                "properties": { "a": { "type": "string" } },
+                "required": ["a"],
+                "additionalProperties": false,
+                "allOf": [{
+                  "additionalProperties": { "type": "string" }
+                }]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.Struct({ "a": Schema.String })`,
+              FromJsonSchema.makeTypes(`{ readonly "a": string }`)
+            )
+          )
+          assertGeneration(
+            {
+              schema: {
+                "properties": { "a": { "type": "string" } },
+                "required": ["a"],
+                "additionalProperties": true,
+                "allOf": [{
+                  "additionalProperties": { "type": "string" }
+                }]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.StructWithRest(Schema.Struct({ "a": Schema.String }), [Schema.Record(Schema.String, Schema.String)])`,
+              FromJsonSchema.makeTypes(`{ readonly "a": string, readonly [x: string]: string }`)
+            )
+          )
+        })
+
+        it("record & struct", () => {
+          assertGeneration(
+            {
+              schema: {
+                "additionalProperties": { "type": "string" },
+                "allOf": [{
+                  "properties": { "a": { "type": "string" } },
+                  "required": ["a"],
+                  "additionalProperties": false
+                }]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.Struct({ "a": Schema.String })`,
+              FromJsonSchema.makeTypes(`{ readonly "a": string }`)
+            )
+          )
+          assertGeneration(
+            {
+              schema: {
+                "additionalProperties": { "type": "string" },
+                "allOf": [{
+                  "properties": { "a": { "type": "string" } },
+                  "required": ["a"],
+                  "additionalProperties": true
+                }]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.StructWithRest(Schema.Struct({ "a": Schema.String }), [Schema.Record(Schema.String, Schema.String)])`,
+              FromJsonSchema.makeTypes(`{ readonly "a": string, readonly [x: string]: string }`)
+            )
+          )
+        })
+
+        it("record & record", () => {
+          assertGeneration(
+            {
+              schema: {
+                "additionalProperties": { "required": ["a"] },
+                "allOf": [{
+                  "additionalProperties": { "required": ["b"], "additionalProperties": false }
+                }]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.Record(Schema.String, Schema.Struct({ "a": Schema.Unknown, "b": Schema.Unknown }))`,
+              FromJsonSchema.makeTypes(`{ readonly [x: string]: { readonly "a": unknown, readonly "b": unknown } }`)
+            )
+          )
+          assertGeneration(
+            {
+              schema: {
+                "additionalProperties": { "required": ["a"] },
+                "allOf": [{
+                  "additionalProperties": { "required": ["b"] }
+                }]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.Record(Schema.String, Schema.StructWithRest(Schema.Struct({ "a": Schema.Unknown, "b": Schema.Unknown }), [Schema.Record(Schema.String, Schema.Unknown)]))`,
+              FromJsonSchema.makeTypes(
+                `{ readonly [x: string]: { readonly "a": unknown, readonly "b": unknown, readonly [x: string]: unknown } }`
+              )
+            )
+          )
+        })
+
+        it("struct & union", () => {
+          assertGeneration(
+            {
+              schema: {
+                "properties": { "a": { "type": "string" } },
+                "required": ["a"],
+                "additionalProperties": false,
+                "allOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "properties": { "b": { "type": "string" } },
+                        "required": ["b"],
+                        "additionalProperties": false
+                      },
+                      {
+                        "properties": { "c": { "type": "string" } },
+                        "additionalProperties": false
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.Union([Schema.Struct({ "a": Schema.String, "b": Schema.String }), Schema.Struct({ "a": Schema.String, "c": Schema.optionalKey(Schema.String) })])`,
+              FromJsonSchema.makeTypes(
+                `{ readonly "a": string, readonly "b": string } | { readonly "a": string, readonly "c"?: string }`
+              )
+            )
+          )
+        })
+
+        it("union & struct", () => {
+          assertGeneration(
+            {
+              schema: {
+                "anyOf": [
+                  {
+                    "properties": { "b": { "type": "string" } },
+                    "required": ["b"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "properties": { "c": { "type": "string" } },
+                    "additionalProperties": false
+                  }
+                ],
+                "allOf": [{
+                  "properties": { "a": { "type": "string" } },
+                  "required": ["a"],
+                  "additionalProperties": false
+                }]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.Union([Schema.Struct({ "b": Schema.String, "a": Schema.String }), Schema.Struct({ "c": Schema.optionalKey(Schema.String), "a": Schema.String })])`,
+              FromJsonSchema.makeTypes(
+                `{ readonly "b": string, readonly "a": string } | { readonly "c"?: string, readonly "a": string }`
+              )
+            )
+          )
+        })
+
+        it("object & $ref", () => {
+          assertGeneration(
+            {
+              schema: {
+                "properties": {
+                  "a": { "type": "string" }
+                },
+                "required": ["a"],
+                "additionalProperties": false,
+                "allOf": [
+                  { "$ref": "#/definitions/B" }
+                ],
                 "definitions": {
-                  "C": {
+                  "B": {
                     "properties": {
                       "b": { "type": "string" }
                     },
@@ -1572,845 +2441,557 @@ describe("FromJsonSchema", () => {
                   }
                 }
               }
-            }
-          }
-        },
-        FromJsonSchema.makeGeneration(
-          `Schema.Struct({ "a": Schema.String })`,
-          FromJsonSchema.makeTypes(`{ readonly "a": string }`)
-        )
-      )
-    })
-
-    describe("allOf", () => {
-      it("string & unknown", () => {
-        assertGeneration(
-          {
-            schema: {
-              "type": "string",
-              "allOf": [{ "description": "lorem" }]
-            }
-          },
-          FromJsonSchema.makeGeneration(
-            `Schema.String.annotate({ "description": "lorem" })`,
-            FromJsonSchema.makeTypes("string"),
-            { description: "lorem" }
-          )
-        )
-        assertGeneration(
-          {
-            schema: {
-              "type": "string",
-              "allOf": [{ "minLength": 1 }]
-            }
-          },
-          FromJsonSchema.makeGeneration(
-            `Schema.String.check(Schema.isMinLength(1))`,
-            FromJsonSchema.makeTypes("string")
-          )
-        )
-        assertGeneration(
-          {
-            schema: {
-              "type": "string",
-              "description": "lorem",
-              "allOf": [{ "minLength": 1 }]
-            }
-          },
-          FromJsonSchema.makeGeneration(
-            `Schema.String.check(Schema.isMinLength(1)).annotate({ "description": "lorem" })`,
-            FromJsonSchema.makeTypes("string"),
-            { description: "lorem" }
-          )
-        )
-        assertGeneration(
-          {
-            schema: {
-              "type": "string",
-              "description": "lorem",
-              "allOf": [{ "minLength": 1, "description": "ipsum" }]
-            }
-          },
-          FromJsonSchema.makeGeneration(
-            `Schema.String.check(Schema.isMinLength(1)).annotate({ "description": "lorem, ipsum" })`,
-            FromJsonSchema.makeTypes("string"),
-            { description: "lorem, ipsum" }
-          )
-        )
-        assertGeneration(
-          {
-            schema: {
-              "type": "string",
-              "description": " ",
-              "allOf": [{ "minLength": 1, "description": "ipsum" }]
-            }
-          },
-          FromJsonSchema.makeGeneration(
-            `Schema.String.check(Schema.isMinLength(1)).annotate({ "description": "ipsum" })`,
-            FromJsonSchema.makeTypes("string"),
-            { description: "ipsum" }
-          )
-        )
-        assertGeneration(
-          {
-            schema: {
-              "type": "string",
-              "description": "lorem",
-              "allOf": [{ "minLength": 1, "description": " " }]
-            }
-          },
-          FromJsonSchema.makeGeneration(
-            `Schema.String.check(Schema.isMinLength(1)).annotate({ "description": "lorem" })`,
-            FromJsonSchema.makeTypes("string"),
-            { description: "lorem" }
-          )
-        )
-      })
-
-      it("string & string", () => {
-        assertGeneration(
-          {
-            schema: {
-              "type": "string",
-              "minLength": 1,
-              "allOf": [{ "type": "string", "maxLength": 10 }]
-            }
-          },
-          FromJsonSchema.makeGeneration(
-            `Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(10))`,
-            FromJsonSchema.makeTypes("string")
-          )
-        )
-        assertGeneration(
-          {
-            schema: {
-              "type": "string",
-              "minLength": 1,
-              "allOf": [{ "type": "string", "minLength": 2 }]
-            }
-          },
-          FromJsonSchema.makeGeneration(
-            `Schema.String.check(Schema.isMinLength(1), Schema.isMinLength(2))`,
-            FromJsonSchema.makeTypes("string")
-          )
-        )
-      })
-
-      it("number & unknown", () => {
-        assertGeneration(
-          {
-            schema: {
-              "type": "number",
-              "allOf": [{ "description": "lorem" }]
-            }
-          },
-          FromJsonSchema.makeGeneration(
-            `Schema.Number.annotate({ "description": "lorem" })`,
-            FromJsonSchema.makeTypes("number"),
-            { description: "lorem" }
-          )
-        )
-        assertGeneration(
-          {
-            schema: {
-              "type": "number",
-              "allOf": [{ "minimum": 1 }]
-            }
-          },
-          FromJsonSchema.makeGeneration(
-            `Schema.Number.check(Schema.isGreaterThanOrEqualTo(1))`,
-            FromJsonSchema.makeTypes("number")
-          )
-        )
-        assertGeneration(
-          {
-            schema: {
-              "type": "number",
-              "description": "lorem",
-              "allOf": [{ "minimum": 1 }]
-            }
-          },
-          FromJsonSchema.makeGeneration(
-            `Schema.Number.check(Schema.isGreaterThanOrEqualTo(1)).annotate({ "description": "lorem" })`,
-            FromJsonSchema.makeTypes("number"),
-            { description: "lorem" }
-          )
-        )
-        assertGeneration(
-          {
-            schema: {
-              "type": "number",
-              "description": "lorem",
-              "allOf": [{ "minimum": 1, "description": "ipsum" }]
-            }
-          },
-          FromJsonSchema.makeGeneration(
-            `Schema.Number.check(Schema.isGreaterThanOrEqualTo(1)).annotate({ "description": "lorem, ipsum" })`,
-            FromJsonSchema.makeTypes("number"),
-            { description: "lorem, ipsum" }
-          )
-        )
-      })
-
-      it("number & integer", () => {
-        assertGeneration(
-          {
-            schema: {
-              "type": "number",
-              "allOf": [{ "type": "integer" }]
-            }
-          },
-          FromJsonSchema.makeGeneration(
-            "Schema.Int",
-            FromJsonSchema.makeTypes("number")
-          )
-        )
-      })
-
-      it("number & number", () => {
-        assertGeneration(
-          {
-            schema: {
-              "type": "number",
-              "minimum": 1,
-              "allOf": [{ "type": "number", "maximum": 10 }]
-            }
-          },
-          FromJsonSchema.makeGeneration(
-            `Schema.Number.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(10))`,
-            FromJsonSchema.makeTypes("number")
-          )
-        )
-        assertGeneration(
-          {
-            schema: {
-              "type": "number",
-              "minimum": 1,
-              "allOf": [{ "type": "number", "minimum": 2 }]
-            }
-          },
-          FromJsonSchema.makeGeneration(
-            `Schema.Number.check(Schema.isGreaterThanOrEqualTo(1), Schema.isGreaterThanOrEqualTo(2))`,
-            FromJsonSchema.makeTypes("number")
-          )
-        )
-      })
-
-      it("enum & enum", () => {
-        assertGeneration(
-          {
-            schema: {
-              "type": "string",
-              "enum": ["a", "b"],
-              "allOf": [{ "enum": ["a"] }]
-            }
-          },
-          FromJsonSchema.makeGeneration(`Schema.Literal("a")`, FromJsonSchema.makeTypes(`"a"`))
-        )
-        assertGeneration(
-          {
-            schema: {
-              "type": "string",
-              "enum": ["a", "b"],
-              "allOf": [{ "enum": ["c"] }]
-            }
-          },
-          FromJsonSchema.makeGeneration(`Schema.Never`, FromJsonSchema.makeTypes(`never`))
-        )
-      })
-
-      it("enum & string", () => {
-        assertGeneration(
-          {
-            schema: {
-              "type": "string",
-              "enum": ["a", 1],
-              "allOf": [{ "type": "string" }]
-            }
-          },
-          FromJsonSchema.makeGeneration(`Schema.Literal("a")`, FromJsonSchema.makeTypes(`"a"`))
-        )
-        assertGeneration(
-          {
-            schema: {
-              "type": "string",
-              "enum": [1, 2],
-              "allOf": [{ "type": "string" }]
-            }
-          },
-          FromJsonSchema.makeGeneration(`Schema.Never`, FromJsonSchema.makeTypes(`never`))
-        )
-      })
-
-      it("enum & number", () => {
-        assertGeneration(
-          {
-            schema: {
-              "type": "string",
-              "enum": ["a", 1],
-              "allOf": [{ "type": "number" }]
-            }
-          },
-          FromJsonSchema.makeGeneration(`Schema.Literal(1)`, FromJsonSchema.makeTypes(`1`))
-        )
-        assertGeneration(
-          {
-            schema: {
-              "type": "string",
-              "enum": ["a", "b"],
-              "allOf": [{ "type": "number" }]
-            }
-          },
-          FromJsonSchema.makeGeneration(`Schema.Never`, FromJsonSchema.makeTypes(`never`))
-        )
-      })
-
-      it("enum & boolean", () => {
-        assertGeneration(
-          {
-            schema: {
-              "type": "string",
-              "enum": ["a", true],
-              "allOf": [{ "type": "boolean" }]
-            }
-          },
-          FromJsonSchema.makeGeneration(`Schema.Literal(true)`, FromJsonSchema.makeTypes(`true`))
-        )
-        assertGeneration(
-          {
-            schema: {
-              "type": "string",
-              "enum": [1, 2],
-              "allOf": [{ "type": "boolean" }]
-            }
-          },
-          FromJsonSchema.makeGeneration(`Schema.Never`, FromJsonSchema.makeTypes(`never`))
-        )
-      })
-
-      it("object & unknown", () => {
-        assertGeneration(
-          {
-            schema: {
-              "type": "object",
-              "allOf": [{ "description": "lorem" }]
-            }
-          },
-          FromJsonSchema.makeGeneration(
-            `Schema.Record(Schema.String, Schema.Unknown).annotate({ "description": "lorem" })`,
-            FromJsonSchema.makeTypes("{ readonly [x: string]: unknown }"),
-            { description: "lorem" }
-          )
-        )
-        assertGeneration(
-          {
-            schema: {
-              "minProperties": 1,
-              "allOf": [{ "description": "lorem" }]
-            }
-          },
-          FromJsonSchema.makeGeneration(
-            `Schema.Record(Schema.String, Schema.Unknown).check(Schema.isMinProperties(1)).annotate({ "description": "lorem" })`,
-            FromJsonSchema.makeTypes("{ readonly [x: string]: unknown }"),
-            { description: "lorem" }
-          )
-        )
-      })
-
-      it("struct & struct", () => {
-        assertGeneration(
-          {
-            schema: {
-              "properties": { "a": { "type": "string" } },
-              "required": ["a"],
-              "additionalProperties": false,
-              "allOf": [{
-                "properties": { "b": { "type": "string" } },
-                "required": ["b"],
-                "additionalProperties": false
-              }]
-            }
-          },
-          FromJsonSchema.makeGeneration(
-            `Schema.Struct({ "a": Schema.String, "b": Schema.String })`,
-            FromJsonSchema.makeTypes(`{ readonly "a": string, readonly "b": string }`)
-          )
-        )
-        assertGeneration(
-          {
-            schema: {
-              "properties": { "a": { "type": "string" } },
-              "required": ["a"],
-              "additionalProperties": false,
-              "allOf": [{
-                "properties": { "b": { "type": "string" } },
-                "additionalProperties": false
-              }]
-            }
-          },
-          FromJsonSchema.makeGeneration(
-            `Schema.Struct({ "a": Schema.String, "b": Schema.optionalKey(Schema.String) })`,
-            FromJsonSchema.makeTypes(`{ readonly "a": string, readonly "b"?: string }`)
-          )
-        )
-        assertGeneration(
-          {
-            schema: {
-              "properties": {
-                "a": { "type": "string" },
-                "b": { "type": "string" }
-              },
-              "required": ["a", "b"],
-              "additionalProperties": false,
-              "allOf": [{
-                "properties": {
-                  "b": { "enum": ["b"] },
-                  "c": { "type": "string" }
-                },
-                "required": ["c"],
-                "additionalProperties": false
-              }]
-            }
-          },
-          FromJsonSchema.makeGeneration(
-            `Schema.Struct({ "a": Schema.String, "b": Schema.Literal("b"), "c": Schema.String })`,
-            FromJsonSchema.makeTypes(`{ readonly "a": string, readonly "b": "b", readonly "c": string }`)
-          )
-        )
-      })
-
-      it("struct & record", () => {
-        assertGeneration(
-          {
-            schema: {
-              "properties": { "a": { "type": "string" } },
-              "required": ["a"],
-              "additionalProperties": false,
-              "allOf": [{
-                "additionalProperties": { "type": "string" }
-              }]
-            }
-          },
-          FromJsonSchema.makeGeneration(
-            `Schema.Struct({ "a": Schema.String })`,
-            FromJsonSchema.makeTypes(`{ readonly "a": string }`)
-          )
-        )
-        assertGeneration(
-          {
-            schema: {
-              "properties": { "a": { "type": "string" } },
-              "required": ["a"],
-              "additionalProperties": true,
-              "allOf": [{
-                "additionalProperties": { "type": "string" }
-              }]
-            }
-          },
-          FromJsonSchema.makeGeneration(
-            `Schema.StructWithRest(Schema.Struct({ "a": Schema.String }), [Schema.Record(Schema.String, Schema.String)])`,
-            FromJsonSchema.makeTypes(`{ readonly "a": string, readonly [x: string]: string }`)
-          )
-        )
-      })
-
-      it("record & struct", () => {
-        assertGeneration(
-          {
-            schema: {
-              "additionalProperties": { "type": "string" },
-              "allOf": [{
-                "properties": { "a": { "type": "string" } },
-                "required": ["a"],
-                "additionalProperties": false
-              }]
-            }
-          },
-          FromJsonSchema.makeGeneration(
-            `Schema.Struct({ "a": Schema.String })`,
-            FromJsonSchema.makeTypes(`{ readonly "a": string }`)
-          )
-        )
-        assertGeneration(
-          {
-            schema: {
-              "additionalProperties": { "type": "string" },
-              "allOf": [{
-                "properties": { "a": { "type": "string" } },
-                "required": ["a"],
-                "additionalProperties": true
-              }]
-            }
-          },
-          FromJsonSchema.makeGeneration(
-            `Schema.StructWithRest(Schema.Struct({ "a": Schema.String }), [Schema.Record(Schema.String, Schema.String)])`,
-            FromJsonSchema.makeTypes(`{ readonly "a": string, readonly [x: string]: string }`)
-          )
-        )
-      })
-
-      it("record & record", () => {
-        assertGeneration(
-          {
-            schema: {
-              "additionalProperties": { "required": ["a"] },
-              "allOf": [{
-                "additionalProperties": { "required": ["b"], "additionalProperties": false }
-              }]
-            }
-          },
-          FromJsonSchema.makeGeneration(
-            `Schema.Record(Schema.String, Schema.Struct({ "a": Schema.Unknown, "b": Schema.Unknown }))`,
-            FromJsonSchema.makeTypes(`{ readonly [x: string]: { readonly "a": unknown, readonly "b": unknown } }`)
-          )
-        )
-        assertGeneration(
-          {
-            schema: {
-              "additionalProperties": { "required": ["a"] },
-              "allOf": [{
-                "additionalProperties": { "required": ["b"] }
-              }]
-            }
-          },
-          FromJsonSchema.makeGeneration(
-            `Schema.Record(Schema.String, Schema.StructWithRest(Schema.Struct({ "a": Schema.Unknown, "b": Schema.Unknown }), [Schema.Record(Schema.String, Schema.Unknown)]))`,
-            FromJsonSchema.makeTypes(
-              `{ readonly [x: string]: { readonly "a": unknown, readonly "b": unknown, readonly [x: string]: unknown } }`
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.Struct({ "a": Schema.String, "b": Schema.String })`,
+              FromJsonSchema.makeTypes(`{ readonly "a": string, readonly "b": string }`)
             )
           )
+          assertGeneration(
+            {
+              schema: {
+                "properties": {
+                  "a": { "type": "string" }
+                },
+                "required": ["a"],
+                "additionalProperties": false,
+                "allOf": [
+                  { "$ref": "#/definitions/B" }
+                ],
+                "definitions": {
+                  "B": {
+                    "properties": {
+                      "b": { "$ref": "#/definitions/C" }
+                    },
+                    "required": ["b"],
+                    "additionalProperties": false
+                  },
+                  "C": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.Struct({ "a": Schema.String, "b": Schema.String })`,
+              FromJsonSchema.makeTypes(`{ readonly "a": string, readonly "b": string }`)
+            )
+          )
+          assertGeneration(
+            {
+              schema: {
+                "properties": {
+                  "a": { "type": "string" }
+                },
+                "required": ["a"],
+                "additionalProperties": false,
+                "allOf": [
+                  { "$ref": "#/definitions/B" }
+                ]
+              },
+              options: {
+                definitions: {
+                  "B": {
+                    "properties": {
+                      "b": { "type": "string" }
+                    },
+                    "required": ["b"],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.Struct({ "a": Schema.String, "b": Schema.String })`,
+              FromJsonSchema.makeTypes(`{ readonly "a": string, readonly "b": string }`)
+            )
+          )
+          assertGeneration(
+            {
+              schema: {
+                "properties": {
+                  "a": { "type": "string" }
+                },
+                "required": ["a"],
+                "additionalProperties": false,
+                "allOf": [
+                  { "$ref": "#/definitions/B" }
+                ]
+              },
+              options: {
+                definitions: {
+                  "B": {
+                    "properties": {
+                      "b": { "$ref": "#/definitions/C" }
+                    },
+                    "required": ["b"],
+                    "additionalProperties": false
+                  },
+                  "C": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.Struct({ "a": Schema.String, "b": Schema.String })`,
+              FromJsonSchema.makeTypes(`{ readonly "a": string, readonly "b": string }`)
+            )
+          )
+          assertGeneration(
+            {
+              schema: {
+                "properties": {
+                  "a": { "type": "string" }
+                },
+                "required": ["a"],
+                "additionalProperties": false,
+                "allOf": [
+                  { "$ref": "#/definitions/B/definitions/C" }
+                ]
+              },
+              options: {
+                definitions: {
+                  "B": {
+                    "properties": {
+                      "b": { "type": "string" }
+                    },
+                    "required": ["b"],
+                    "definitions": {
+                      "C": {
+                        "properties": {
+                          "c": { "type": "string" }
+                        },
+                        "required": ["c"],
+                        "additionalProperties": false
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.Struct({ "a": Schema.String, "c": Schema.String })`,
+              FromJsonSchema.makeTypes(`{ readonly "a": string, readonly "c": string }`)
+            )
+          )
+        })
+      })
+    })
+
+    describe("Union", () => {
+      it("anyOf", () => {
+        assertGeneration(
+          { schema: { "anyOf": [{ "type": "string" }, { "type": "number" }] } },
+          FromJsonSchema.makeGeneration(
+            "Schema.Union([Schema.String, Schema.Number])",
+            FromJsonSchema.makeTypes("string | number")
+          )
+        )
+        assertGeneration(
+          { schema: { "anyOf": [{ "type": "string" }, { "type": "number" }], "description": "a" } },
+          FromJsonSchema.makeGeneration(
+            `Schema.Union([Schema.String, Schema.Number]).annotate({ "description": "a" })`,
+            FromJsonSchema.makeTypes("string | number")
+          )
         )
       })
 
-      it("struct & union", () => {
+      it("oneOf", () => {
+        assertGeneration(
+          { schema: { "oneOf": [{ "type": "string" }, { "type": "number" }] } },
+          FromJsonSchema.makeGeneration(
+            `Schema.Union([Schema.String, Schema.Number], { mode: "oneOf" })`,
+            FromJsonSchema.makeTypes("string | number")
+          )
+        )
+      })
+
+      describe("allOf", () => {
+        it("anyOf & anyOf", () => {
+          assertGeneration(
+            {
+              schema: {
+                "anyOf": [
+                  { "type": "string" },
+                  { "type": "number" }
+                ],
+                "allOf": [{ "anyOf": [{ "type": "boolean" }, { "type": "null" }] }]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.Union([Schema.String, Schema.Number, Schema.Boolean, Schema.Null])`,
+              FromJsonSchema.makeTypes("string | number | boolean | null")
+            )
+          )
+        })
+
+        it("oneOf & oneOf", () => {
+          assertGeneration(
+            {
+              schema: {
+                "oneOf": [
+                  { "type": "string" },
+                  { "type": "number" }
+                ],
+                "allOf": [{ "oneOf": [{ "type": "boolean" }, { "type": "null" }] }]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.Union([Schema.String, Schema.Number, Schema.Boolean, Schema.Null], { mode: "oneOf" })`,
+              FromJsonSchema.makeTypes("string | number | boolean | null")
+            )
+          )
+        })
+
+        it("anyOf & oneOf", () => {
+          assertGeneration(
+            {
+              schema: {
+                "anyOf": [
+                  { "type": "string" },
+                  { "type": "number" }
+                ],
+                "allOf": [{ "oneOf": [{ "type": "boolean" }, { "type": "null" }] }]
+              }
+            },
+            FromJsonSchema.makeGeneration(
+              `Schema.Union([Schema.String, Schema.Number, Schema.Boolean, Schema.Null])`,
+              FromJsonSchema.makeTypes("string | number | boolean | null")
+            )
+          )
+        })
+      })
+    })
+
+    describe("$ref", () => {
+      it("invalid $ref", () => {
+        expect(() => {
+          FromJsonSchema.generate({ $ref: "" }, { source: "draft-07" })
+        }).toThrow(`Invalid $ref: ""`)
+        expect(() => {
+          FromJsonSchema.generate({ $ref: "#" }, { source: "draft-07" })
+        }).toThrow(`Invalid $ref: "#"`)
+        expect(() => {
+          FromJsonSchema.generate({ $ref: "#/" }, { source: "draft-07" })
+        }).toThrow(`Invalid $ref: "#/"`)
+      })
+
+      it("should handle allOf with unresolvable references", () => {
         assertGeneration(
           {
             schema: {
-              "properties": { "a": { "type": "string" } },
-              "required": ["a"],
-              "additionalProperties": false,
-              "allOf": [
-                {
-                  "anyOf": [
-                    {
-                      "properties": { "b": { "type": "string" } },
-                      "required": ["b"],
-                      "additionalProperties": false
-                    },
-                    {
-                      "properties": { "c": { "type": "string" } },
-                      "additionalProperties": false
-                    }
-                  ]
-                }
+              allOf: [
+                { $ref: "#/definitions/Missing" },
+                { type: "string" }
               ]
             }
           },
           FromJsonSchema.makeGeneration(
-            `Schema.Union([Schema.Struct({ "a": Schema.String, "b": Schema.String }), Schema.Struct({ "a": Schema.String, "c": Schema.optionalKey(Schema.String) })])`,
-            FromJsonSchema.makeTypes(
-              `{ readonly "a": string, readonly "b": string } | { readonly "a": string, readonly "c"?: string }`
-            )
+            "Schema.Never",
+            FromJsonSchema.makeTypes("never")
           )
         )
       })
 
-      it("union & struct", () => {
+      it("should handle allOf with circular references in refStack", () => {
         assertGeneration(
           {
-            schema: {
-              "anyOf": [
-                {
-                  "properties": { "b": { "type": "string" } },
-                  "required": ["b"],
-                  "additionalProperties": false
+            schema: { $ref: "#/definitions/A" },
+            options: {
+              definitions: {
+                A: {
+                  allOf: [
+                    { $ref: "#/definitions/B" }
+                  ]
                 },
-                {
-                  "properties": { "c": { "type": "string" } },
-                  "additionalProperties": false
+                B: {
+                  allOf: [
+                    { $ref: "#/definitions/A" }
+                  ]
                 }
-              ],
-              "allOf": [{
-                "properties": { "a": { "type": "string" } },
-                "required": ["a"],
-                "additionalProperties": false
-              }]
+              }
             }
           },
           FromJsonSchema.makeGeneration(
-            `Schema.Union([Schema.Struct({ "b": Schema.String, "a": Schema.String }), Schema.Struct({ "c": Schema.optionalKey(Schema.String), "a": Schema.String })])`,
-            FromJsonSchema.makeTypes(
-              `{ readonly "b": string, readonly "a": string } | { readonly "c"?: string, readonly "a": string }`
+            "Schema.Unknown",
+            FromJsonSchema.makeTypes("unknown")
+          )
+        )
+      })
+
+      it("$ref", () => {
+        const options: FromJsonSchema.GenerateOptions = {
+          source: "draft-07",
+          resolver: (ref) => {
+            const identifier = ref.replace(/[/~]/g, "$")
+            return FromJsonSchema.makeGeneration(
+              identifier,
+              FromJsonSchema.makeTypes(
+                `T${identifier}`,
+                `E${identifier}`,
+                `DS${identifier}`,
+                `ES${identifier}`
+              )
             )
-          )
-        )
-      })
+          }
+        }
 
-      it("anyOf & anyOf", () => {
         assertGeneration(
           {
             schema: {
-              "anyOf": [
-                { "type": "string" },
-                { "type": "number" }
-              ],
-              "allOf": [{ "anyOf": [{ "type": "boolean" }, { "type": "null" }] }]
-            }
+              "$ref": "#/definitions/A"
+            },
+            options
           },
           FromJsonSchema.makeGeneration(
-            `Schema.Union([Schema.String, Schema.Number, Schema.Boolean, Schema.Null])`,
-            FromJsonSchema.makeTypes("string | number | boolean | null")
+            "A",
+            FromJsonSchema.makeTypes("TA", "EA", "DSA", "ESA")
           )
         )
-      })
-
-      it("oneOf & oneOf", () => {
+        // should ignore annotations on the referenced schema
         assertGeneration(
           {
             schema: {
-              "oneOf": [
-                { "type": "string" },
-                { "type": "number" }
-              ],
-              "allOf": [{ "oneOf": [{ "type": "boolean" }, { "type": "null" }] }]
-            }
+              "$ref": "#/definitions/A",
+              "description": "a"
+            },
+            options
           },
           FromJsonSchema.makeGeneration(
-            `Schema.Union([Schema.String, Schema.Number, Schema.Boolean, Schema.Null], { mode: "oneOf" })`,
-            FromJsonSchema.makeTypes("string | number | boolean | null")
+            `A`,
+            FromJsonSchema.makeTypes("TA", "EA", "DSA", "ESA")
           )
         )
-      })
-
-      it("anyOf & oneOf", () => {
-        assertGeneration(
-          {
-            schema: {
-              "anyOf": [
-                { "type": "string" },
-                { "type": "number" }
-              ],
-              "allOf": [{ "oneOf": [{ "type": "boolean" }, { "type": "null" }] }]
-            }
-          },
-          FromJsonSchema.makeGeneration(
-            `Schema.Union([Schema.String, Schema.Number, Schema.Boolean, Schema.Null])`,
-            FromJsonSchema.makeTypes("string | number | boolean | null")
-          )
-        )
-      })
-
-      it("array & unknown", () => {
         assertGeneration(
           {
             schema: {
               "type": "array",
-              "allOf": [{ "description": "lorem" }]
-            }
+              "minItems": 1,
+              "items": [
+                { "$ref": "#/definitions/A" }
+              ],
+              "additionalItems": false
+            },
+            options
           },
           FromJsonSchema.makeGeneration(
-            `Schema.Array(Schema.Unknown).annotate({ "description": "lorem" })`,
-            FromJsonSchema.makeTypes("ReadonlyArray<unknown>"),
-            { description: "lorem" }
+            `Schema.Tuple([A])`,
+            FromJsonSchema.makeTypes("readonly [TA]", "readonly [EA]", "DSA", "ESA")
           )
         )
-      })
-
-      it("tuple & array", () => {
         assertGeneration(
           {
             schema: {
-              "minItems": 1,
-              "items": [{ "type": "string" }],
-              "allOf": [{ "items": { "type": "string" } }]
-            }
+              "type": "array",
+              "minItems": 2,
+              "items": [
+                { "$ref": "#/definitions/A" },
+                { "$ref": "#/definitions/B" }
+              ],
+              "additionalItems": false
+            },
+            options
           },
           FromJsonSchema.makeGeneration(
-            `Schema.TupleWithRest(Schema.Tuple([Schema.String]), [Schema.String])`,
-            FromJsonSchema.makeTypes("readonly [string, ...Array<string>]")
+            `Schema.Tuple([A, B])`,
+            FromJsonSchema.makeTypes("readonly [TA, TB]", "readonly [EA, EB]", "DSA | DSB", "ESA | ESB")
           )
         )
-      })
-
-      it("tuple & union of arrays", () => {
         assertGeneration(
           {
             schema: {
-              "minItems": 1,
-              "items": [{ "type": "string" }],
-              "allOf": [
-                {
-                  "anyOf": [
-                    { "items": { "type": "string" } },
-                    { "items": { "type": "number" } }
-                  ]
-                }
-              ]
-            }
+              "type": "array",
+              "items": { "$ref": "#/definitions/A" }
+            },
+            options
           },
           FromJsonSchema.makeGeneration(
-            `Schema.Union([Schema.TupleWithRest(Schema.Tuple([Schema.String]), [Schema.String]), Schema.TupleWithRest(Schema.Tuple([Schema.String]), [Schema.Number])])`,
-            FromJsonSchema.makeTypes("readonly [string, ...Array<string>] | readonly [string, ...Array<number>]")
+            `Schema.Array(A)`,
+            FromJsonSchema.makeTypes("ReadonlyArray<TA>", "ReadonlyArray<EA>", "DSA", "ESA")
           )
         )
-      })
-
-      it("union of arrays & tuple", () => {
+        assertGeneration(
+          {
+            schema: {
+              "type": "array",
+              "minItems": 1,
+              "items": [
+                { "$ref": "#/definitions/A" }
+              ],
+              "additionalItems": { "$ref": "#/definitions/B" }
+            },
+            options
+          },
+          FromJsonSchema.makeGeneration(
+            `Schema.TupleWithRest(Schema.Tuple([A]), [B])`,
+            FromJsonSchema.makeTypes(
+              "readonly [TA, ...Array<TB>]",
+              "readonly [EA, ...Array<EB>]",
+              "DSA | DSB",
+              "ESA | ESB"
+            )
+          )
+        )
+        assertGeneration(
+          {
+            schema: {
+              "properties": {
+                "a": { "$ref": "#/definitions/A" }
+              },
+              "required": ["a"],
+              "additionalProperties": false
+            },
+            options
+          },
+          FromJsonSchema.makeGeneration(
+            `Schema.Struct({ "a": A })`,
+            FromJsonSchema.makeTypes(`{ readonly "a": TA }`, `{ readonly "a": EA }`, "DSA", "ESA")
+          )
+        )
+        assertGeneration(
+          {
+            schema: {
+              "properties": {
+                "a": { "$ref": "#/definitions/A" },
+                "b": { "$ref": "#/definitions/B" }
+              },
+              "required": ["a", "b"],
+              "additionalProperties": false
+            },
+            options
+          },
+          FromJsonSchema.makeGeneration(
+            `Schema.Struct({ "a": A, "b": B })`,
+            FromJsonSchema.makeTypes(
+              `{ readonly "a": TA, readonly "b": TB }`,
+              `{ readonly "a": EA, readonly "b": EB }`,
+              "DSA | DSB",
+              "ESA | ESB"
+            )
+          )
+        )
+        assertGeneration(
+          {
+            schema: {
+              "additionalProperties": { "$ref": "#/definitions/A" }
+            },
+            options
+          },
+          FromJsonSchema.makeGeneration(
+            `Schema.Record(Schema.String, A)`,
+            FromJsonSchema.makeTypes("{ readonly [x: string]: TA }", "{ readonly [x: string]: EA }", "DSA", "ESA")
+          )
+        )
+        assertGeneration(
+          {
+            schema: {
+              "properties": {
+                "a": { "$ref": "#/definitions/A" }
+              },
+              "required": ["a"],
+              "additionalProperties": { "$ref": "#/definitions/B" }
+            },
+            options
+          },
+          FromJsonSchema.makeGeneration(
+            `Schema.StructWithRest(Schema.Struct({ "a": A }), [Schema.Record(Schema.String, B)])`,
+            FromJsonSchema.makeTypes(
+              `{ readonly "a": TA, readonly [x: string]: TB }`,
+              `{ readonly "a": EA, readonly [x: string]: EB }`,
+              "DSA | DSB",
+              "ESA | ESB"
+            )
+          )
+        )
         assertGeneration(
           {
             schema: {
               "anyOf": [
-                { "items": { "type": "string" } },
-                { "items": { "type": "number" } }
-              ],
-              "allOf": [
-                {
-                  "minItems": 1,
-                  "items": [{ "type": "string" }]
-                }
+                { "$ref": "#/definitions/A" },
+                { "$ref": "#/definitions/B" }
               ]
-            }
+            },
+            options
           },
           FromJsonSchema.makeGeneration(
-            `Schema.Union([Schema.TupleWithRest(Schema.Tuple([Schema.String]), [Schema.String]), Schema.TupleWithRest(Schema.Tuple([Schema.String]), [Schema.Number])])`,
-            FromJsonSchema.makeTypes("readonly [string, ...Array<string>] | readonly [string, ...Array<number>]")
+            `Schema.Union([A, B])`,
+            FromJsonSchema.makeTypes("TA | TB", "EA | EB", "DSA | DSB", "ESA | ESB")
           )
         )
       })
 
-      it("object & $ref", () => {
+      it("should inline local definitions", () => {
         assertGeneration(
           {
             schema: {
               "properties": {
-                "a": { "type": "string" }
+                "a": { "$ref": "#/definitions/A" }
               },
               "required": ["a"],
               "additionalProperties": false,
-              "allOf": [
-                { "$ref": "#/definitions/B" }
-              ],
               "definitions": {
-                "B": {
-                  "properties": {
-                    "b": { "type": "string" }
-                  },
-                  "required": ["b"],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          FromJsonSchema.makeGeneration(
-            `Schema.Struct({ "a": Schema.String, "b": Schema.String })`,
-            FromJsonSchema.makeTypes(`{ readonly "a": string, readonly "b": string }`)
-          )
-        )
-        assertGeneration(
-          {
-            schema: {
-              "properties": {
-                "a": { "type": "string" }
-              },
-              "required": ["a"],
-              "additionalProperties": false,
-              "allOf": [
-                { "$ref": "#/definitions/B" }
-              ],
-              "definitions": {
-                "B": {
-                  "properties": {
-                    "b": { "$ref": "#/definitions/C" }
-                  },
-                  "required": ["b"],
-                  "additionalProperties": false
-                },
-                "C": {
+                "A": {
                   "type": "string"
                 }
               }
             }
           },
           FromJsonSchema.makeGeneration(
-            `Schema.Struct({ "a": Schema.String, "b": Schema.String })`,
-            FromJsonSchema.makeTypes(`{ readonly "a": string, readonly "b": string }`)
+            `Schema.Struct({ "a": Schema.String })`,
+            FromJsonSchema.makeTypes(`{ readonly "a": string }`)
           )
         )
         assertGeneration(
           {
             schema: {
               "properties": {
-                "a": { "type": "string" }
+                "a": { "$ref": "#/definitions/A" }
               },
               "required": ["a"],
               "additionalProperties": false,
-              "allOf": [
-                { "$ref": "#/definitions/B" }
-              ]
-            },
-            options: {
-              definitions: {
+              "definitions": {
+                "A": { "$ref": "#/definitions/B" },
                 "B": {
-                  "properties": {
-                    "b": { "type": "string" }
-                  },
-                  "required": ["b"],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          FromJsonSchema.makeGeneration(
-            `Schema.Struct({ "a": Schema.String, "b": Schema.String })`,
-            FromJsonSchema.makeTypes(`{ readonly "a": string, readonly "b": string }`)
-          )
-        )
-        assertGeneration(
-          {
-            schema: {
-              "properties": {
-                "a": { "type": "string" }
-              },
-              "required": ["a"],
-              "additionalProperties": false,
-              "allOf": [
-                { "$ref": "#/definitions/B" }
-              ]
-            },
-            options: {
-              definitions: {
-                "B": {
-                  "properties": {
-                    "b": { "$ref": "#/definitions/C" }
-                  },
-                  "required": ["b"],
-                  "additionalProperties": false
-                },
-                "C": {
                   "type": "string"
                 }
               }
             }
           },
           FromJsonSchema.makeGeneration(
-            `Schema.Struct({ "a": Schema.String, "b": Schema.String })`,
-            FromJsonSchema.makeTypes(`{ readonly "a": string, readonly "b": string }`)
+            `Schema.Struct({ "a": Schema.String })`,
+            FromJsonSchema.makeTypes(`{ readonly "a": string }`)
           )
         )
+        // prevent stack overflow
         assertGeneration(
           {
             schema: {
               "properties": {
-                "a": { "type": "string" }
+                "a": { "$ref": "#/definitions/A" }
               },
               "required": ["a"],
               "additionalProperties": false,
-              "allOf": [
-                { "$ref": "#/definitions/B/definitions/C" }
-              ]
-            },
-            options: {
-              definitions: {
+              "definitions": {
+                "A": { "$ref": "#/definitions/A" }
+              }
+            }
+          },
+          FromJsonSchema.makeGeneration(
+            `Schema.Struct({ "a": Schema.Unknown })`,
+            FromJsonSchema.makeTypes(`{ readonly "a": unknown }`)
+          )
+        )
+        // nested inline definitions
+        assertGeneration(
+          {
+            schema: {
+              "properties": {
+                "a": { "$ref": "#/definitions/B/definitions/C" }
+              },
+              "required": ["a"],
+              "additionalProperties": false,
+              "definitions": {
                 "B": {
                   "properties": {
                     "b": { "type": "string" }
@@ -2418,10 +2999,39 @@ describe("FromJsonSchema", () => {
                   "required": ["b"],
                   "definitions": {
                     "C": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          FromJsonSchema.makeGeneration(
+            `Schema.Struct({ "a": Schema.String })`,
+            FromJsonSchema.makeTypes(`{ readonly "a": string }`)
+          )
+        )
+        assertGeneration(
+          {
+            schema: {
+              "properties": {
+                "a": { "$ref": "#/definitions/B/definitions/C/properties/b" }
+              },
+              "required": ["a"],
+              "additionalProperties": false,
+              "definitions": {
+                "B": {
+                  "properties": {
+                    "b": { "type": "string" }
+                  },
+                  "required": ["b"],
+                  "additionalProperties": false,
+                  "definitions": {
+                    "C": {
                       "properties": {
-                        "c": { "type": "string" }
+                        "b": { "type": "string" }
                       },
-                      "required": ["c"],
+                      "required": ["b"],
                       "additionalProperties": false
                     }
                   }
@@ -2430,8 +3040,8 @@ describe("FromJsonSchema", () => {
             }
           },
           FromJsonSchema.makeGeneration(
-            `Schema.Struct({ "a": Schema.String, "c": Schema.String })`,
-            FromJsonSchema.makeTypes(`{ readonly "a": string, readonly "c": string }`)
+            `Schema.Struct({ "a": Schema.String })`,
+            FromJsonSchema.makeTypes(`{ readonly "a": string }`)
           )
         )
       })
@@ -2556,34 +3166,34 @@ const schema1 = Schema.Struct({ "a": A });`
     assertRoundtrip({ schema: Schema.Null })
 
     assertRoundtrip({ schema: Schema.String })
-    assertRoundtrip({ schema: Schema.String.annotate({ title: "title", description: "lorem" }) })
+    assertRoundtrip({ schema: Schema.String.annotate({ title: "title", description: "a" }) })
     assertRoundtrip({ schema: Schema.String.check(Schema.isMinLength(1)) })
     assertRoundtrip({ schema: Schema.String.check(Schema.isMaxLength(10)) })
     assertRoundtrip({ schema: Schema.String.check(Schema.isLength(5)) })
-    assertRoundtrip({ schema: Schema.String.annotate({ description: "lorem" }).check(Schema.isMinLength(1)) })
-    assertRoundtrip({ schema: Schema.String.check(Schema.isMinLength(1)).annotate({ description: "lorem" }) })
-    assertRoundtrip({ schema: Schema.String.check(Schema.isMinLength(1, { description: "lorem" })) })
+    assertRoundtrip({ schema: Schema.String.annotate({ description: "a" }).check(Schema.isMinLength(1)) })
+    assertRoundtrip({ schema: Schema.String.check(Schema.isMinLength(1)).annotate({ description: "a" }) })
+    assertRoundtrip({ schema: Schema.String.check(Schema.isMinLength(1, { description: "a" })) })
     assertRoundtrip({ schema: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(10)) })
     assertRoundtrip({
-      schema: Schema.String.annotate({ description: "lorem" }).check(
+      schema: Schema.String.annotate({ description: "a" }).check(
         Schema.isMinLength(1),
         Schema.isMaxLength(10)
       )
     })
     assertRoundtrip({
       schema: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(10)).annotate({
-        description: "lorem"
+        description: "a"
       })
     })
     assertRoundtrip({
-      schema: Schema.String.check(Schema.isMinLength(1, { description: "lorem" }), Schema.isMaxLength(10))
+      schema: Schema.String.check(Schema.isMinLength(1, { description: "a" }), Schema.isMaxLength(10))
     })
     assertRoundtrip({
-      schema: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(10, { description: "lorem" }))
+      schema: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(10, { description: "a" }))
     })
 
     assertRoundtrip({ schema: Schema.Number })
-    assertRoundtrip({ schema: Schema.Number.annotate({ description: "lorem" }) })
+    assertRoundtrip({ schema: Schema.Number.annotate({ description: "a" }) })
     assertRoundtrip({ schema: Schema.Number.check(Schema.isGreaterThan(1)) })
     assertRoundtrip({ schema: Schema.Number.check(Schema.isGreaterThanOrEqualTo(1)) })
     assertRoundtrip({ schema: Schema.Number.check(Schema.isLessThan(1)) })
@@ -2592,10 +3202,10 @@ const schema1 = Schema.Struct({ "a": A });`
     assertRoundtrip({ schema: Schema.Number.check(Schema.isMultipleOf(10)) })
 
     assertRoundtrip({ schema: Schema.Boolean })
-    assertRoundtrip({ schema: Schema.Boolean.annotate({ description: "lorem" }) })
+    assertRoundtrip({ schema: Schema.Boolean.annotate({ description: "a" }) })
 
     assertRoundtrip({ schema: Schema.Int })
-    assertRoundtrip({ schema: Schema.Int.annotate({ description: "lorem" }) })
+    assertRoundtrip({ schema: Schema.Int.annotate({ description: "a" }) })
 
     assertRoundtrip({ schema: Schema.Struct({ a: Schema.String }) })
     assertRoundtrip({ schema: Schema.Struct({ a: Schema.optionalKey(Schema.String) }) })
@@ -2945,6 +3555,48 @@ const schema1 = Schema.Struct({ "a": A });`
   })
 
   describe("generateCode", () => {
+    it("smoke test", () => {
+      const generation = generateCode(
+        "draft-07",
+        [
+          {
+            identifier: "A",
+            schema: {
+              "type": "string",
+              "description": "A string schema"
+            }
+          }
+        ],
+        {
+          "B": {
+            "type": "string",
+            "description": "A string definition"
+          }
+        },
+        {}
+      )
+      const code = toCode(generation)
+      strictEqual(
+        code,
+        `import * as Schema from "effect/schema/Schema"
+
+/** A string definition */
+export type B = string
+export type BEncoded = B
+
+/** A string definition */
+export const B = Schema.String.annotate({ "description": "A string definition" }).annotate({ "identifier": "B" })
+
+/** A string schema */
+export type A = string
+export type AEncoded = A
+
+/** A string schema */
+export const A = Schema.String.annotate({ "description": "A string schema" })
+`
+      )
+    })
+
     it("recursion & external reference", () => {
       const generation = generateCode(
         "draft-07",
@@ -2983,96 +3635,20 @@ const schema1 = Schema.Struct({ "a": A });`
           }
         }
       )
-      deepStrictEqual(
-        generation,
-        {
-          definitionGenerations: [
-            {
-              ref: "B",
-              generation: FromJsonSchema.makeGeneration(
-                `Schema.Struct({ "b": Schema.suspend((): Schema.Codec<B, BEncoded> => B), "c": C }).annotate({ "identifier": "B" })`,
-                FromJsonSchema.makeTypes(
-                  `{ readonly "b": B, readonly "c": typeof C["Type"] }`,
-                  `{ readonly "b": BEncoded, readonly "c": typeof C["Encoded"] }`,
-                  `typeof C["DecodingServices"]`,
-                  `typeof C["EncodingServices"]`
-                ),
-                undefined,
-                new Set([`import { C } from "my-lib"`])
-              )
-            }
-          ],
-          schemaGenerations: [{
-            identifier: "A",
-            generation: FromJsonSchema.makeGeneration(
-              `Schema.Struct({ "a": B })`,
-              FromJsonSchema.makeTypes(`{ readonly "a": B }`, `{ readonly "a": BEncoded }`)
-            )
-          }],
-          importDeclarations: new Set([`import * as Schema from "effect/schema/Schema"`, `import { C } from "my-lib"`])
-        }
-      )
       const code = toCode(generation)
-      // console.log(code)
-
       strictEqual(
         code,
-        `// Imports
-import * as Schema from "effect/schema/Schema"
+        `import * as Schema from "effect/schema/Schema"
 import { C } from "my-lib"
-
-// Definitions
-export type B = { readonly "b": B, readonly "c": typeof C["Type"] };
-export type BEncoded = { readonly "b": BEncoded, readonly "c": typeof C["Encoded"] };
-export const B = Schema.Struct({ "b": Schema.suspend((): Schema.Codec<B, BEncoded> => B), "c": C }).annotate({ "identifier": "B" });
-
-
-// Schemas
-export const A = Schema.Struct({ "a": B });`
+export type B = { readonly "b": B, readonly "c": typeof C["Type"] }
+export type BEncoded = { readonly "b": BEncoded, readonly "c": typeof C["Encoded"] }
+export const B = Schema.Struct({ "b": Schema.suspend((): Schema.Codec<B, BEncoded> => B), "c": C }).annotate({ "identifier": "B" })
+export type A = { readonly "a": B }
+export type AEncoded = { readonly "a": BEncoded }
+export const A = Schema.Struct({ "a": B })
+`
       )
     })
-  })
-
-  it("open api", () => {
-    const generation = generateCode(
-      "openapi-3.1",
-      [
-        {
-          identifier: "A",
-          schema: {
-            "properties": {
-              "a": {
-                "$ref": "#/components/schemas/B"
-              }
-            },
-            "required": ["a"],
-            "additionalProperties": false
-          }
-        }
-      ],
-      {
-        "B": {
-          "type": "string"
-        }
-      }
-    )
-    const code = toCode(generation)
-    // console.log(code)
-
-    strictEqual(
-      code,
-      `// Imports
-import * as Schema from "effect/schema/Schema"
-
-// Definitions
-export type B = string;
-export type BEncoded = B;
-export const B = Schema.String.annotate({ "identifier": "B" });
-
-
-// Schemas
-export const A = Schema.Struct({ "a": B });`
-    )
   })
 })
 
@@ -3111,7 +3687,8 @@ function generateCode(
         FromJsonSchema.makeTypes(ref, `${ref}Encoded`)
       )
     },
-    definitions
+    definitions,
+    extractJsDocs: true
   }
   const schemaGenerations = schemas.map(({ identifier, schema }) => ({
     identifier,
@@ -3134,24 +3711,23 @@ function generateCode(
 }
 
 function toCode(generation: CodeGeneration): string {
-  return `// Imports
-${[...generation.importDeclarations].join("\n")}
-
-// Definitions
-${
+  return [...generation.importDeclarations].map((i) => i + "\n").join("") +
     generation.definitionGenerations.map((d) => {
       const identifier = d.ref.replace(/[/~]/g, "$")
-      let out = `export type ${identifier} = ${d.generation.types.Type};\n`
-      if (d.generation.types.Encoded !== d.generation.types.Type) {
-        out += `export type ${identifier}Encoded = ${d.generation.types.Encoded};\n`
-      } else {
-        out += `export type ${identifier}Encoded = ${identifier};\n`
-      }
-      out += `export const ${identifier} = ${d.generation.code};\n`
-      return out
-    }).join("\n")
-  }
+      return render(identifier, d.generation)
+    }).join("") +
+    generation.schemaGenerations.map((s) => {
+      return render(s.identifier, s.generation)
+    }).join("")
+}
 
-// Schemas
-${generation.schemaGenerations.map((s) => `export const ${s.identifier} = ${s.generation.code};`).join("\n")}`
+function render(identifier: string, generation: FromJsonSchema.Generation): string {
+  let out = `${generation.jsDocs ?? ""}export type ${identifier} = ${generation.types.Type}\n`
+  if (generation.types.Encoded !== generation.types.Type) {
+    out += `export type ${identifier}Encoded = ${generation.types.Encoded}\n`
+  } else {
+    out += `export type ${identifier}Encoded = ${identifier}\n`
+  }
+  out += `${generation.jsDocs ?? ""}export const ${identifier} = ${generation.code}\n`
+  return out
 }
