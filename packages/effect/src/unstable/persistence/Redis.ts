@@ -4,6 +4,8 @@
 import * as Cache from "../../Cache.ts"
 import * as Effect from "../../Effect.ts"
 import { constant, identity } from "../../Function.ts"
+import * as Equal from "../../interfaces/Equal.ts"
+import * as Hash from "../../interfaces/Hash.ts"
 import * as Schema from "../../schema/Schema.ts"
 import * as ServiceMap from "../../ServiceMap.ts"
 
@@ -96,45 +98,37 @@ export interface Script<
   readonly lua: string
   readonly params: (...params: Config["params"]) => ReadonlyArray<unknown>
   readonly numberOfKeys: (...params: Config["params"]) => number
+
+  /**
+   * Set the return type of the script.
+   */
+  withReturnType<Result>(): Script<{
+    params: Config["params"]
+    result: Result
+  }>
 }
 
-const variance = {
-  Params: (_: never) => _
+const ScriptProto = {
+  [ScriptTypeId]: {
+    params: identity,
+    result: identity
+  },
+  withReturnType() {
+    return this
+  },
+  [Equal.symbol](that: unknown): boolean {
+    return this === that
+  },
+  [Hash.symbol](): number {
+    return Hash.random(this)
+  }
 }
 
 /**
  * @since 4.0.0
  * @category Scripting
  */
-export const script: {
-  <A>(): <Params extends ReadonlyArray<any>>(
-    f: (...params: Params) => ReadonlyArray<unknown>,
-    options: {
-      readonly lua: string
-      readonly numberOfKeys: number | ((...params: Params) => number)
-    }
-  ) => Script<{
-    params: Params
-    result: A
-  }>
-  <Params extends ReadonlyArray<any>>(
-    f: (...params: Params) => ReadonlyArray<unknown>,
-    options: {
-      readonly lua: string
-      readonly numberOfKeys: number | ((...params: Params) => number)
-    }
-  ): Script<{
-    params: Params
-    result: void
-  }>
-} = function() {
-  if (arguments.length === 0) {
-    return scriptImpl
-  }
-  return scriptImpl(arguments[0], arguments[1]) as any
-}
-
-const scriptImpl = <Params extends ReadonlyArray<any>>(
+export const script = <Params extends ReadonlyArray<any>>(
   f: (...params: Params) => ReadonlyArray<unknown>,
   options: {
     readonly lua: string
@@ -142,10 +136,10 @@ const scriptImpl = <Params extends ReadonlyArray<any>>(
   }
 ): Script<{
   params: Params
-  result: any
-}> => ({
-  ...options,
-  [ScriptTypeId]: variance as any,
-  params: f,
-  numberOfKeys: typeof options.numberOfKeys === "number" ? constant(options.numberOfKeys) : options.numberOfKeys
-})
+  result: void
+}> =>
+  Object.assign(Object.create(ScriptProto), {
+    ...options,
+    params: f,
+    numberOfKeys: typeof options.numberOfKeys === "number" ? constant(options.numberOfKeys) : options.numberOfKeys
+  })

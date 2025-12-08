@@ -593,7 +593,7 @@ redis.call("RPUSH", key_failed, payload)
   }
 )
 
-const takeRedis = Redis.script<Arr.NonEmptyArray<string> | null>()(
+const takeRedis = Redis.script(
   (
     ...args: [keyQueue: string, keyPending: string, prefix: string, workerId: string, batchSize: number, pttl: number]
   ) => args,
@@ -622,15 +622,16 @@ return payloads
 `,
     numberOfKeys: 2
   }
-)
+).withReturnType<Arr.NonEmptyArray<string> | null>()
 
 const expireAllRedis = Redis.script(
   (keys: ReadonlyArray<string>, ttl: number) => [...keys, ttl],
   {
     numberOfKeys: (keys) => keys.length,
     lua: `
+local ttl = ARGV[1]
 for i, key in ipairs(KEYS) do
-  redis.call("PEXPIRE", key, ARGV[1])
+  redis.call("PEXPIRE", key, ttl)
 end
 `
   }
