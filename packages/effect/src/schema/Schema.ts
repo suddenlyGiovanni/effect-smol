@@ -846,7 +846,7 @@ export function make<S extends Top>(ast: S["ast"]): S {
  * @category Guards
  * @since 4.0.0
  */
-export function isSchema(u: unknown): u is Schema<unknown> {
+export function isSchema(u: unknown): u is Top {
   return Predicate.hasProperty(u, TypeId) && u[TypeId] === TypeId
 }
 
@@ -3484,7 +3484,7 @@ export const isSymbolString: (annotations?: Annotations.Filter) => AST.Filter<st
 /**
  * Returns a RegExp for validating an RFC 4122 UUID.
  *
- * Optionally specify a version 1-8. If no version is specified, all versions are supported.
+ * Optionally specify a version 1-8. If no version is specified (`undefined`), all versions are supported.
  */
 const getUUIDRegExp = (version?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8): globalThis.RegExp => {
   if (version) {
@@ -3498,6 +3498,7 @@ const getUUIDRegExp = (version?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8): globalThis.RegE
 /**
  * Validates that a string is a valid Universally Unique Identifier (UUID).
  * Optionally specify a version (1-8) to validate against a specific UUID version.
+ * If no version is specified (`undefined`), all versions are supported.
  *
  * **JSON Schema**
  *
@@ -3512,15 +3513,23 @@ const getUUIDRegExp = (version?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8): globalThis.RegE
  * @category String checks
  * @since 4.0.0
  */
-export function isUUID(version?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8) {
-  const re = getUUIDRegExp(version)
-  return isPattern(re, {
-    expected: version ? `a UUID v${version}` : "a UUID",
-    jsonSchemaConstraint: () => ({
-      pattern: re.source,
-      format: "uuid"
-    })
-  })
+export function isUUID(version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | undefined, annotations?: Annotations.Filter) {
+  const regExp = getUUIDRegExp(version)
+  return isPattern(
+    regExp,
+    Annotations.combine({
+      expected: version ? `a UUID v${version}` : "a UUID",
+      meta: {
+        _tag: "isUUID",
+        regExp,
+        version
+      },
+      jsonSchemaConstraint: () => ({
+        pattern: regExp.source,
+        format: "uuid"
+      })
+    }, annotations)
+  )
 }
 
 /**
@@ -3904,7 +3913,7 @@ export function isFinite(annotations?: Annotations.Filter) {
  * @category Order checks
  * @since 4.0.0
  */
-export function deriveIsGreaterThan<T>(options: {
+export function makeIsGreaterThan<T>(options: {
   readonly order: Order.Order<T>
   readonly annotate?: ((exclusiveMinimum: T) => Annotations.Filter) | undefined
   readonly format?: (value: T) => string | undefined
@@ -3916,6 +3925,10 @@ export function deriveIsGreaterThan<T>(options: {
       (input) => greaterThan(input, exclusiveMinimum),
       Annotations.combine({
         expected: `a value greater than ${fmt(exclusiveMinimum)}`,
+        meta: {
+          _tag: "isGreaterThan",
+          exclusiveMinimum
+        },
         ...options.annotate?.(exclusiveMinimum)
       }, annotations)
     )
@@ -3926,7 +3939,7 @@ export function deriveIsGreaterThan<T>(options: {
  * @category Order checks
  * @since 4.0.0
  */
-export function deriveIsGreaterThanOrEqualTo<T>(options: {
+export function makeIsGreaterThanOrEqualTo<T>(options: {
   readonly order: Order.Order<T>
   readonly annotate?: ((exclusiveMinimum: T) => Annotations.Filter) | undefined
   readonly format?: (value: T) => string | undefined
@@ -3938,6 +3951,10 @@ export function deriveIsGreaterThanOrEqualTo<T>(options: {
       (input) => greaterThanOrEqualTo(input, minimum),
       Annotations.combine({
         expected: `a value greater than or equal to ${fmt(minimum)}`,
+        meta: {
+          _tag: "isGreaterThanOrEqualTo",
+          minimum
+        },
         ...options.annotate?.(minimum)
       }, annotations)
     )
@@ -3948,7 +3965,7 @@ export function deriveIsGreaterThanOrEqualTo<T>(options: {
  * @category Order checks
  * @since 4.0.0
  */
-export function deriveIsLessThan<T>(options: {
+export function makeIsLessThan<T>(options: {
   readonly order: Order.Order<T>
   readonly annotate?: ((exclusiveMaximum: T) => Annotations.Filter) | undefined
   readonly format?: (value: T) => string | undefined
@@ -3960,6 +3977,10 @@ export function deriveIsLessThan<T>(options: {
       (input) => lessThan(input, exclusiveMaximum),
       Annotations.combine({
         expected: `a value less than ${fmt(exclusiveMaximum)}`,
+        meta: {
+          _tag: "isLessThan",
+          exclusiveMaximum
+        },
         ...options.annotate?.(exclusiveMaximum)
       }, annotations)
     )
@@ -3970,7 +3991,7 @@ export function deriveIsLessThan<T>(options: {
  * @category Order checks
  * @since 4.0.0
  */
-export function deriveIsLessThanOrEqualTo<T>(options: {
+export function makeIsLessThanOrEqualTo<T>(options: {
   readonly order: Order.Order<T>
   readonly annotate?: ((exclusiveMaximum: T) => Annotations.Filter) | undefined
   readonly format?: (value: T) => string | undefined
@@ -3982,6 +4003,10 @@ export function deriveIsLessThanOrEqualTo<T>(options: {
       (input) => lessThanOrEqualTo(input, maximum),
       Annotations.combine({
         expected: `a value less than or equal to ${fmt(maximum)}`,
+        meta: {
+          _tag: "isLessThanOrEqualTo",
+          maximum
+        },
         ...options.annotate?.(maximum)
       }, annotations)
     )
@@ -3992,7 +4017,7 @@ export function deriveIsLessThanOrEqualTo<T>(options: {
  * @category Order checks
  * @since 4.0.0
  */
-export function deriveIsBetween<T>(deriveOptions: {
+export function makeIsBetween<T>(deriveOptions: {
   readonly order: Order.Order<T>
   readonly annotate?:
     | ((options: {
@@ -4023,12 +4048,10 @@ export function deriveIsBetween<T>(deriveOptions: {
         expected: `a value between ${fmt(options.minimum)}${options.exclusiveMinimum ? " (excluded)" : ""} and ${
           fmt(options.maximum)
         }${options.exclusiveMaximum ? " (excluded)" : ""}`,
-        jsonSchemaConstraint: () => ({
-          minimum: options.exclusiveMinimum ? options.minimum : undefined,
-          maximum: options.exclusiveMaximum ? options.maximum : undefined,
-          exclusiveMinimum: options.exclusiveMinimum,
-          exclusiveMaximum: options.exclusiveMaximum
-        }),
+        meta: {
+          _tag: "isBetween",
+          ...options
+        },
         ...deriveOptions.annotate?.(options)
       }, annotations)
     )
@@ -4039,7 +4062,7 @@ export function deriveIsBetween<T>(deriveOptions: {
  * @category Numeric checks
  * @since 4.0.0
  */
-export function deriveIsMultipleOf<T>(options: {
+export function makeIsMultipleOf<T>(options: {
   readonly remainder: (input: T, divisor: T) => T
   readonly zero: NoInfer<T>
   readonly annotate?: ((divisor: T) => Annotations.Filter) | undefined
@@ -4051,6 +4074,10 @@ export function deriveIsMultipleOf<T>(options: {
       (input) => options.remainder(input, divisor) === options.zero,
       Annotations.combine({
         expected: `a value that is a multiple of ${fmt(divisor)}`,
+        meta: {
+          _tag: "isMultipleOf",
+          divisor
+        },
         ...options.annotate?.(divisor)
       }, annotations)
     )
@@ -4073,14 +4100,10 @@ export function deriveIsMultipleOf<T>(options: {
  * @category Number checks
  * @since 4.0.0
  */
-export const isGreaterThan = deriveIsGreaterThan({
+export const isGreaterThan = makeIsGreaterThan({
   order: Order.number,
   annotate: (exclusiveMinimum) => ({
     jsonSchemaConstraint: () => ({ exclusiveMinimum }),
-    meta: {
-      _tag: "isGreaterThan",
-      exclusiveMinimum
-    },
     arbitraryConstraint: {
       number: {
         min: exclusiveMinimum,
@@ -4106,14 +4129,10 @@ export const isGreaterThan = deriveIsGreaterThan({
  * @category Number checks
  * @since 4.0.0
  */
-export const isGreaterThanOrEqualTo = deriveIsGreaterThanOrEqualTo({
+export const isGreaterThanOrEqualTo = makeIsGreaterThanOrEqualTo({
   order: Order.number,
   annotate: (minimum) => ({
     jsonSchemaConstraint: () => ({ minimum }),
-    meta: {
-      _tag: "isGreaterThanOrEqualTo",
-      minimum
-    },
     arbitraryConstraint: {
       number: {
         min: minimum
@@ -4138,14 +4157,10 @@ export const isGreaterThanOrEqualTo = deriveIsGreaterThanOrEqualTo({
  * @category Number checks
  * @since 4.0.0
  */
-export const isLessThan = deriveIsLessThan({
+export const isLessThan = makeIsLessThan({
   order: Order.number,
   annotate: (exclusiveMaximum) => ({
     jsonSchemaConstraint: () => ({ exclusiveMaximum }),
-    meta: {
-      _tag: "isLessThan",
-      exclusiveMaximum
-    },
     arbitraryConstraint: {
       number: {
         max: exclusiveMaximum,
@@ -4171,14 +4186,10 @@ export const isLessThan = deriveIsLessThan({
  * @category Number checks
  * @since 4.0.0
  */
-export const isLessThanOrEqualTo = deriveIsLessThanOrEqualTo({
+export const isLessThanOrEqualTo = makeIsLessThanOrEqualTo({
   order: Order.number,
   annotate: (maximum) => ({
     jsonSchemaConstraint: () => ({ maximum }),
-    meta: {
-      _tag: "isLessThanOrEqualTo",
-      maximum
-    },
     arbitraryConstraint: {
       number: {
         max: maximum
@@ -4205,7 +4216,7 @@ export const isLessThanOrEqualTo = deriveIsLessThanOrEqualTo({
  * @category Number checks
  * @since 4.0.0
  */
-export const isBetween = deriveIsBetween({
+export const isBetween = makeIsBetween({
   order: Order.number,
   annotate: (options) => {
     return {
@@ -4223,10 +4234,6 @@ export const isBetween = deriveIsBetween({
         }
         return out
       },
-      meta: {
-        _tag: "isBetween",
-        ...options
-      },
       arbitraryConstraint: {
         number: {
           min: options.minimum,
@@ -4238,82 +4245,6 @@ export const isBetween = deriveIsBetween({
     }
   }
 })
-
-/**
- * Validates that a number is positive (greater than zero).
- *
- * **JSON Schema**
- *
- * This check corresponds to the `exclusiveMinimum: 0` constraint in JSON Schema.
- *
- * **Arbitrary**
- *
- * When generating test data with fast-check, this applies a `min` constraint
- * with `minExcluded: true` set to 0 to ensure generated numbers are positive.
- *
- * @category Number checks
- * @since 4.0.0
- */
-export function isPositive(annotations?: Annotations.Filter) {
-  return isGreaterThan(0, annotations)
-}
-
-/**
- * Validates that a number is negative (less than zero).
- *
- * **JSON Schema**
- *
- * This check corresponds to the `exclusiveMaximum: 0` constraint in JSON Schema.
- *
- * **Arbitrary**
- *
- * When generating test data with fast-check, this applies a `max` constraint
- * with `maxExcluded: true` set to 0 to ensure generated numbers are negative.
- *
- * @category Number checks
- * @since 4.0.0
- */
-export function isNegative(annotations?: Annotations.Filter) {
-  return isLessThan(0, annotations)
-}
-
-/**
- * Validates that a number is non-negative (greater than or equal to zero).
- *
- * **JSON Schema**
- *
- * This check corresponds to the `minimum: 0` constraint in JSON Schema.
- *
- * **Arbitrary**
- *
- * When generating test data with fast-check, this applies a `min` constraint
- * set to 0 to ensure generated numbers are non-negative.
- *
- * @category Number checks
- * @since 4.0.0
- */
-export function isNonNegative(annotations?: Annotations.Filter) {
-  return isGreaterThanOrEqualTo(0, annotations)
-}
-
-/**
- * Validates that a number is non-positive (less than or equal to zero).
- *
- * **JSON Schema**
- *
- * This check corresponds to the `maximum: 0` constraint in JSON Schema.
- *
- * **Arbitrary**
- *
- * When generating test data with fast-check, this applies a `max` constraint
- * set to 0 to ensure generated numbers are non-positive.
- *
- * @category Number checks
- * @since 4.0.0
- */
-export function isNonPositive(annotations?: Annotations.Filter) {
-  return isLessThanOrEqualTo(0, annotations)
-}
 
 /**
  * Validates that a number is a multiple of the specified divisor.
@@ -4330,7 +4261,7 @@ export function isNonPositive(annotations?: Annotations.Filter) {
  * @category Number checks
  * @since 4.0.0
  */
-export const isMultipleOf = deriveIsMultipleOf({
+export const isMultipleOf = makeIsMultipleOf({
   remainder,
   zero: 0,
   annotate: (divisor) => ({
@@ -4480,6 +4411,30 @@ export function isValidDate(annotations?: Annotations.Filter) {
 }
 
 /**
+ * Validates that a Date is greater than the specified value (exclusive).
+ *
+ * **Arbitrary**
+ *
+ * When generating test data with fast-check, this applies a `min` constraint
+ * with `minExcluded: true` to ensure generated Date objects are greater than the
+ * specified value.
+ *
+ * @category Date checks
+ * @since 4.0.0
+ */
+export const isGreaterThanDate = makeIsGreaterThan({
+  order: Order.Date,
+  annotate: (exclusiveMinimum) => ({
+    arbitraryConstraint: {
+      date: {
+        min: exclusiveMinimum,
+        minExcluded: true
+      }
+    }
+  })
+})
+
+/**
  * Validates that a Date is greater than or equal to the specified date
  * (inclusive).
  *
@@ -4497,16 +4452,36 @@ export function isValidDate(annotations?: Annotations.Filter) {
  * @category Date checks
  * @since 4.0.0
  */
-export const isGreaterThanOrEqualToDate = deriveIsGreaterThanOrEqualTo({
+export const isGreaterThanOrEqualToDate = makeIsGreaterThanOrEqualTo({
   order: Order.Date,
   annotate: (minimum) => ({
-    meta: {
-      _tag: "isGreaterThanOrEqualToDate",
-      minimum
-    },
     arbitraryConstraint: {
       date: {
         min: minimum
+      }
+    }
+  })
+})
+
+/**
+ * Validates that a Date is less than the specified value (exclusive).
+ *
+ * **Arbitrary**
+ *
+ * When generating test data with fast-check, this applies a `max` constraint
+ * with `maxExcluded: true` to ensure generated Date objects are less than the
+ * specified value.
+ *
+ * @category Date checks
+ * @since 4.0.0
+ */
+export const isLessThanDate = makeIsLessThan({
+  order: Order.Date,
+  annotate: (exclusiveMaximum) => ({
+    arbitraryConstraint: {
+      date: {
+        max: exclusiveMaximum,
+        maxExcluded: true
       }
     }
   })
@@ -4530,13 +4505,9 @@ export const isGreaterThanOrEqualToDate = deriveIsGreaterThanOrEqualTo({
  * @category Date checks
  * @since 4.0.0
  */
-export const isLessThanOrEqualToDate = deriveIsLessThanOrEqualTo({
+export const isLessThanOrEqualToDate = makeIsLessThanOrEqualTo({
   order: Order.Date,
   annotate: (maximum) => ({
-    meta: {
-      _tag: "isLessThanOrEqualToDate",
-      maximum
-    },
     arbitraryConstraint: {
       date: {
         max: maximum
@@ -4562,13 +4533,9 @@ export const isLessThanOrEqualToDate = deriveIsLessThanOrEqualTo({
  * @category Date checks
  * @since 4.0.0
  */
-export const isBetweenDate = deriveIsBetween({
+export const isBetweenDate = makeIsBetween({
   order: Order.Date,
   annotate: (options) => ({
-    meta: {
-      _tag: "isBetweenDate",
-      ...options
-    },
     arbitraryConstraint: {
       date: {
         min: options.minimum,
@@ -4579,14 +4546,32 @@ export const isBetweenDate = deriveIsBetween({
 })
 
 /**
+ * Validates that a BigInt is greater than the specified value (exclusive).
+ *
+ * **Arbitrary**
+ *
+ * When generating test data with fast-check, this applies a `min` constraint
+ * with `minExcluded: true` to ensure generated BigInts are greater than the
+ * specified value.
+ *
+ * @category BigInt checks
+ * @since 4.0.0
+ */
+export const isGreaterThanBigInt = makeIsGreaterThan({
+  order: Order.bigint,
+  annotate: (exclusiveMinimum) => ({
+    arbitraryConstraint: {
+      bigint: {
+        min: exclusiveMinimum,
+        minExcluded: true
+      }
+    }
+  })
+})
+
+/**
  * Validates that a BigInt is greater than or equal to the specified value
  * (inclusive).
- *
- * **JSON Schema**
- *
- * This check does not have a direct JSON Schema equivalent, as JSON Schema
- * does not natively support BigInt. It would need to be represented as a
- * string with validation.
  *
  * **Arbitrary**
  *
@@ -4597,13 +4582,9 @@ export const isBetweenDate = deriveIsBetween({
  * @category BigInt checks
  * @since 4.0.0
  */
-export const isGreaterThanOrEqualToBigInt = deriveIsGreaterThanOrEqualTo({
+export const isGreaterThanOrEqualToBigInt = makeIsGreaterThanOrEqualTo({
   order: Order.bigint,
   annotate: (minimum) => ({
-    meta: {
-      _tag: "isGreaterThanOrEqualToBigInt",
-      minimum
-    },
     arbitraryConstraint: {
       bigint: {
         min: minimum
@@ -4613,14 +4594,32 @@ export const isGreaterThanOrEqualToBigInt = deriveIsGreaterThanOrEqualTo({
 })
 
 /**
+ * Validates that a BigInt is less than the specified value (exclusive).
+ *
+ * **Arbitrary**
+ *
+ * When generating test data with fast-check, this applies a `max` constraint
+ * with `maxExcluded: true` to ensure generated BigInts are less than the
+ * specified value.
+ *
+ * @category BigInt checks
+ * @since 4.0.0
+ */
+export const isLessThanBigInt = makeIsLessThan({
+  order: Order.bigint,
+  annotate: (exclusiveMaximum) => ({
+    arbitraryConstraint: {
+      bigint: {
+        max: exclusiveMaximum,
+        maxExcluded: true
+      }
+    }
+  })
+})
+
+/**
  * Validates that a BigInt is less than or equal to the specified value
  * (inclusive).
- *
- * **JSON Schema**
- *
- * This check does not have a direct JSON Schema equivalent, as JSON Schema
- * does not natively support BigInt. It would need to be represented as a
- * string with validation.
  *
  * **Arbitrary**
  *
@@ -4631,13 +4630,9 @@ export const isGreaterThanOrEqualToBigInt = deriveIsGreaterThanOrEqualTo({
  * @category BigInt checks
  * @since 4.0.0
  */
-export const isLessThanOrEqualToBigInt = deriveIsLessThanOrEqualTo({
+export const isLessThanOrEqualToBigInt = makeIsLessThanOrEqualTo({
   order: Order.bigint,
   annotate: (maximum) => ({
-    meta: {
-      _tag: "isLessThanOrEqualToBigInt",
-      maximum
-    },
     arbitraryConstraint: {
       bigint: {
         max: maximum
@@ -4650,12 +4645,6 @@ export const isLessThanOrEqualToBigInt = deriveIsLessThanOrEqualTo({
  * Validates that a BigInt is within a specified range. The range boundaries can
  * be inclusive or exclusive based on the provided options.
  *
- * **JSON Schema**
- *
- * This check does not have a direct JSON Schema equivalent, as JSON Schema
- * does not natively support BigInt. It would need to be represented as a
- * string with validation.
- *
  * **Arbitrary**
  *
  * When generating test data with fast-check, this applies `min` and `max`
@@ -4665,13 +4654,9 @@ export const isLessThanOrEqualToBigInt = deriveIsLessThanOrEqualTo({
  * @category BigInt checks
  * @since 4.0.0
  */
-export const isBetweenBigInt = deriveIsBetween({
+export const isBetweenBigInt = makeIsBetween({
   order: Order.bigint,
   annotate: (options) => ({
-    meta: {
-      _tag: "isBetweenBigInt",
-      ...options
-    },
     arbitraryConstraint: {
       bigint: {
         min: options.minimum,
@@ -4680,48 +4665,6 @@ export const isBetweenBigInt = deriveIsBetween({
     }
   })
 })
-
-/**
- * Validates that a BigInt is non-negative (greater than or equal to zero).
- *
- * **JSON Schema**
- *
- * This check does not have a direct JSON Schema equivalent, as JSON Schema
- * does not natively support BigInt. It would need to be represented as a
- * string with validation.
- *
- * **Arbitrary**
- *
- * When generating test data with fast-check, this applies a `min` constraint
- * set to 0n to ensure generated BigInt values are non-negative.
- *
- * @category BigInt checks
- * @since 4.0.0
- */
-export function isNonNegativeBigInt(annotations?: Annotations.Filter) {
-  return isGreaterThanOrEqualToBigInt(0n, annotations)
-}
-
-/**
- * Validates that a BigInt is non-positive (less than or equal to zero).
- *
- * **JSON Schema**
- *
- * This check does not have a direct JSON Schema equivalent, as JSON Schema
- * does not natively support BigInt. It would need to be represented as a
- * string with validation.
- *
- * **Arbitrary**
- *
- * When generating test data with fast-check, this applies a `max` constraint
- * set to 0n to ensure generated BigInt values are non-positive.
- *
- * @category BigInt checks
- * @since 4.0.0
- */
-export function isNonPositiveBigInt(annotations?: Annotations.Filter) {
-  return isLessThanOrEqualToBigInt(0n, annotations)
-}
 
 /**
  * Validates that a value has at least the specified length. Works with strings
@@ -6317,7 +6260,7 @@ export interface DurationFromNanos extends decodeTo<Duration, BigInt> {}
  * @category Duration
  * @since 4.0.0
  */
-export const DurationFromNanos: DurationFromNanos = BigInt.check(isNonNegativeBigInt()).pipe(
+export const DurationFromNanos: DurationFromNanos = BigInt.check(isGreaterThanOrEqualToBigInt(0n)).pipe(
   decodeTo(Duration, Transformation.durationFromNanos)
 )
 
@@ -6342,14 +6285,14 @@ export interface DurationFromMillis extends decodeTo<Duration, Number> {}
  * @category Duration
  * @since 4.0.0
  */
-export const DurationFromMillis: DurationFromMillis = Number.check(isNonNegative()).pipe(
+export const DurationFromMillis: DurationFromMillis = Number.check(isGreaterThanOrEqualTo(0)).pipe(
   decodeTo(Duration, Transformation.durationFromMillis)
 )
 
 /**
  * @since 4.0.0
  */
-export interface UnknownFromJsonString extends decodeTo<Unknown, String> {}
+export interface UnknownFromJsonString extends fromJsonString<Unknown> {}
 
 /**
  * A transformation schema that decodes a JSON-encoded string into an `unknown` value.
@@ -6373,9 +6316,7 @@ export interface UnknownFromJsonString extends decodeTo<Unknown, String> {}
  *
  * @since 4.0.0
  */
-export const UnknownFromJsonString: UnknownFromJsonString = String.pipe(
-  decodeTo(Unknown, Transformation.fromJsonString)
-)
+export const UnknownFromJsonString = fromJsonString(Unknown)
 
 /**
  * @since 4.0.0
@@ -6445,6 +6386,8 @@ export interface fromJsonString<S extends Top> extends decodeTo<S, String> {}
  */
 export function fromJsonString<S extends Top>(schema: S): fromJsonString<S> {
   return String.annotate({
+    "contentMediaType": "application/json",
+    "contentSchema": schema.ast, // TODO: dry
     jsonSchema: (ctx) => {
       switch (ctx.target) {
         case "draft-07":

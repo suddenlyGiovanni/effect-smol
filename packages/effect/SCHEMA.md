@@ -1880,7 +1880,7 @@ import type { Annotations } from "effect/schema"
 import { Schema } from "effect/schema"
 
 // Create a filter factory for values greater than a given value
-export const deriveGreaterThan = <T>(options: {
+export const makeGreaterThan = <T>(options: {
   readonly order: Order.Order<T>
   readonly annotate?: ((exclusiveMinimum: T) => Annotations.Filter) | undefined
   readonly format?: (value: T) => string | undefined
@@ -1909,7 +1909,7 @@ import { Schema } from "effect/schema"
 const int = Schema.refine(Schema.isInt().pipe(Schema.isBranded("Int")))
 
 // Constrain to positive numbers and add "Positive" brand
-const positive = Schema.refine(Schema.isPositive().pipe(Schema.isBranded("Positive")))
+const positive = Schema.refine(Schema.isGreaterThan(0).pipe(Schema.isBranded("Positive")))
 
 // Compose both refinements to get a PositiveInt
 export const PositiveInt = Schema.Number.pipe(int, positive)
@@ -6595,6 +6595,7 @@ To make the examples easier to follow, we define a helper function that prints f
 
 ```ts
 // utils.ts
+// utils.ts
 import { Exit } from "effect"
 import { Issue, Schema } from "effect/schema"
 import i18next from "i18next"
@@ -6628,7 +6629,7 @@ export function getLogIssues(options?: {
     console.log(
       String(
         Schema.decodeUnknownExit(schema)(input, { errors: "all" }).pipe(
-          Exit.mapError((err) => Issue.makeStandardSchemaV1(options).format(err.issue).issues)
+          Exit.mapError((err) => Issue.makeFormatterStandardSchemaV1(options)(err.issue).issues)
         )
       )
     )
@@ -6639,7 +6640,6 @@ export function getLogIssues(options?: {
 **Example** (Using hooks to translate common messages)
 
 ```ts
-import type { Annotations } from "effect/schema"
 import { Schema } from "effect/schema"
 import { getLogIssues, t } from "./utils.js"
 
@@ -6675,7 +6675,7 @@ const logIssues = getLogIssues({
   },
   // Format custom check errors (like isMinLength or user-defined validations)
   checkHook: (issue) => {
-    const meta = issue.filter.annotations?.meta as Annotations.Meta | undefined
+    const meta = issue.filter.annotations?.meta
     if (meta) {
       switch (meta._tag) {
         case "isMinLength": {
@@ -7239,10 +7239,6 @@ Schema.Number.check(Schema.isGreaterThan(5))
 Schema.Number.check(Schema.isGreaterThanOrEqualTo(5))
 Schema.Number.check(Schema.isLessThan(5))
 Schema.Number.check(Schema.isLessThanOrEqualTo(5))
-Schema.Number.check(Schema.isPositive())
-Schema.Number.check(Schema.isNonNegative())
-Schema.Number.check(Schema.isNegative())
-Schema.Number.check(Schema.isNonPositive())
 Schema.Number.check(Schema.isMultipleOf(5))
 ```
 
@@ -7264,12 +7260,12 @@ import { Schema } from "effect/schema"
 
 const options = { order: Order.bigint }
 
-const isBetween = Schema.deriveIsBetween(options)
-const isGreaterThan = Schema.deriveIsGreaterThan(options)
-const isGreaterThanOrEqualTo = Schema.deriveIsGreaterThanOrEqualTo(options)
-const isLessThan = Schema.deriveIsLessThan(options)
-const isLessThanOrEqualTo = Schema.deriveIsLessThanOrEqualTo(options)
-const isMultipleOf = Schema.deriveIsMultipleOf({
+const isBetween = Schema.makeIsBetween(options)
+const isGreaterThan = Schema.makeIsGreaterThan(options)
+const isGreaterThanOrEqualTo = Schema.makeIsGreaterThanOrEqualTo(options)
+const isLessThan = Schema.makeIsLessThan(options)
+const isLessThanOrEqualTo = Schema.makeIsLessThanOrEqualTo(options)
+const isMultipleOf = Schema.makeIsMultipleOf({
   remainder: BigInt.remainder,
   zero: 0n
 })
