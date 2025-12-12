@@ -5,12 +5,12 @@ Releases are snapshot only
 - [x] Port Channel apis
 - [ ] Port Stream / Sink apis
 - [x] Port worker modules
-- [ ] Port command execution modules
+- [x] Port command execution modules
 - [ ] Port platform-browser
 - [x] Add CLI modules
 - [ ] Add opentelemetry package
 - [x] Port SubscriptionRef
-- [ ] RateLimiter with persistence
+- [x] RateLimiter with persistence
 - [x] Reduce nesting of modules
 - [x] Effect.fn call site trace
 
@@ -468,7 +468,7 @@ The exports under each section are organized as they are in Effect 3.0. The cate
 |            `count`            |   -    |                          |          |
 |             `die`             |  Done  |          `die`           |          |
 |           `dieSync`           |   -    |                          |          |
-|            `drain`            |   -    |                          |          |
+|            `drain`            |  Done  |         `drain`          |          |
 |            `drop`             |   -    |                          |          |
 |          `dropUntil`          |   -    |                          |          |
 |       `dropUntilEffect`       |   -    |                          |          |

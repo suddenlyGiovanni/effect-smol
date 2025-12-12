@@ -1,0 +1,270 @@
+import { assert, describe, it } from "@effect/vitest"
+import * as Effect from "effect/Effect"
+import * as Layer from "effect/Layer"
+import type * as PlatformError from "effect/platform/PlatformError"
+import * as Sink from "effect/stream/Sink"
+import * as Stream from "effect/stream/Stream"
+import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
+
+const MockExecutorLayer = Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, {
+  spawn: Effect.fnUntraced(function*(command) {
+    // For piped commands, flatten to get the first command info
+    let cmd = command
+    while (cmd._tag === "PipedCommand") {
+      cmd = cmd.left
+    }
+    const executable = cmd._tag === "StandardCommand"
+      ? cmd.command
+      : "templated"
+    const output = new TextEncoder().encode(`mock output for ${executable}`)
+    return ChildProcessSpawner.makeHandle({
+      pid: ChildProcessSpawner.ProcessId(12345),
+      stdin: Sink.forEach<Uint8Array, void, never, never>((_chunk) => Effect.void),
+      stdout: Stream.fromIterable([output]),
+      stderr: Stream.fromIterable([new TextEncoder().encode("")]),
+      all: Stream.fromIterable([output]),
+      exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(0)),
+      isRunning: Effect.succeed(false),
+      kill: () => Effect.void,
+      getInputFd: () => Sink.drain,
+      getOutputFd: () => Stream.empty
+    })
+  })
+})
+
+describe("ChildProcess", () => {
+  describe("make", () => {
+    it("template literal form should create a templated command", () => {
+      const cmd = ChildProcess.make`echo hello`
+      assert.strictEqual(cmd._tag, "TemplatedCommand")
+      assert.isTrue(ChildProcess.isTemplatedCommand(cmd))
+      // Templates are stored unparsed
+      if (cmd._tag === "TemplatedCommand") {
+        assert.strictEqual(cmd.templates.length, 1)
+      }
+    })
+
+    it("array form should create a standard command", () => {
+      const cmd = ChildProcess.make("node", ["--version"])
+      assert.strictEqual(cmd._tag, "StandardCommand")
+      assert.isTrue(ChildProcess.isStandardCommand(cmd))
+      assert.strictEqual(cmd.command, "node")
+      assert.deepStrictEqual(cmd.args, ["--version"])
+    })
+
+    it("options form should pass options to templated command", () => {
+      const cmd = ChildProcess.make({ cwd: "/tmp" })`ls -la`
+      assert.strictEqual(cmd._tag, "TemplatedCommand")
+      assert.strictEqual(cmd.options.cwd, "/tmp")
+    })
+
+    it("array form with options should work", () => {
+      const cmd = ChildProcess.make("git", ["status"], { cwd: "/app" })
+      assert.strictEqual(cmd._tag, "StandardCommand")
+      assert.strictEqual(cmd.command, "git")
+      assert.deepStrictEqual(cmd.args, ["status"])
+      assert.strictEqual(cmd.options.cwd, "/app")
+    })
+  })
+
+  describe("spawn", () => {
+    it.effect("should spawn a templated command", () =>
+      Effect.gen(function*() {
+        const cmd = ChildProcess.make`echo hello`
+        const handle = yield* ChildProcess.spawn(cmd)
+        assert.strictEqual(handle.pid, ChildProcessSpawner.ProcessId(12345))
+      }).pipe(Effect.scoped, Effect.provide(MockExecutorLayer)))
+
+    it.effect("should spawn a standard command", () =>
+      Effect.gen(function*() {
+        const cmd = ChildProcess.make("node", ["--version"])
+        const handle = yield* ChildProcess.spawn(cmd)
+        assert.strictEqual(handle.pid, ChildProcessSpawner.ProcessId(12345))
+      }).pipe(Effect.scoped, Effect.provide(MockExecutorLayer)))
+
+    it.effect("should return a process handle", () =>
+      Effect.gen(function*() {
+        const cmd = ChildProcess.make`long-running-process`
+        const handle = yield* ChildProcess.spawn(cmd)
+        assert.strictEqual(handle.pid, ChildProcessSpawner.ProcessId(12345))
+      }).pipe(Effect.scoped, Effect.provide(MockExecutorLayer)))
+
+    it.effect("should allow streaming stdout", () =>
+      Effect.gen(function*() {
+        const cmd = ChildProcess.make("cat", ["file.txt"])
+        const handle = yield* ChildProcess.spawn(cmd)
+        const chunks = yield* Stream.runCollect(handle.stdout)
+        assert.isTrue(chunks.length > 0)
+      }).pipe(Effect.scoped, Effect.provide(MockExecutorLayer)))
+
+    it.effect("should allow waiting for exit code", () =>
+      Effect.gen(function*() {
+        const cmd = ChildProcess.make`echo test`
+        const handle = yield* ChildProcess.spawn(cmd)
+        const exitCode = yield* handle.exitCode
+        assert.strictEqual(exitCode, ChildProcessSpawner.ExitCode(0))
+      }).pipe(Effect.scoped, Effect.provide(MockExecutorLayer)))
+  })
+
+  describe("pipeTo", () => {
+    it("should create a piped command", () => {
+      const pipeline = ChildProcess.make`cat file.txt`.pipe(
+        ChildProcess.pipeTo(ChildProcess.make`grep pattern`),
+        ChildProcess.pipeTo(ChildProcess.make`wc -l`)
+      )
+      assert.strictEqual(pipeline._tag, "PipedCommand")
+    })
+
+    it.effect("should allow spawning a pipeline", () =>
+      Effect.gen(function*() {
+        const pipeline = ChildProcess.make`cat file.txt`.pipe(
+          ChildProcess.pipeTo(ChildProcess.make`grep pattern`)
+        )
+        const handle = yield* ChildProcess.spawn(pipeline)
+        assert.strictEqual(handle.pid, ChildProcessSpawner.ProcessId(12345))
+      }).pipe(Effect.scoped, Effect.provide(MockExecutorLayer)))
+  })
+
+  describe("guards", () => {
+    it("isCommand should detect commands", () => {
+      const cmd = ChildProcess.make`echo hello`
+      assert.isTrue(ChildProcess.isCommand(cmd))
+      assert.isFalse(ChildProcess.isCommand({ _tag: "Other" }))
+      assert.isFalse(ChildProcess.isCommand(null))
+    })
+
+    it("isStandardCommand should detect standard commands", () => {
+      const standard = ChildProcess.make("echo", ["hello"])
+      const templated = ChildProcess.make`echo hello`
+      const piped = ChildProcess.make`cat file`.pipe(
+        ChildProcess.pipeTo(ChildProcess.make`grep pattern`)
+      )
+      assert.isTrue(ChildProcess.isStandardCommand(standard))
+      assert.isFalse(ChildProcess.isStandardCommand(templated))
+      assert.isFalse(ChildProcess.isStandardCommand(piped))
+    })
+
+    it("isTemplatedCommand should detect templated commands", () => {
+      const standard = ChildProcess.make("echo", ["hello"])
+      const templated = ChildProcess.make`echo hello`
+      const piped = ChildProcess.make`cat file`.pipe(
+        ChildProcess.pipeTo(ChildProcess.make`grep pattern`)
+      )
+      assert.isFalse(ChildProcess.isTemplatedCommand(standard))
+      assert.isTrue(ChildProcess.isTemplatedCommand(templated))
+      assert.isFalse(ChildProcess.isTemplatedCommand(piped))
+    })
+
+    it("isPipedCommand should detect piped commands", () => {
+      const single = ChildProcess.make`echo hello`
+      const piped = ChildProcess.make`cat file`.pipe(
+        ChildProcess.pipeTo(ChildProcess.make`grep pattern`)
+      )
+      assert.isFalse(ChildProcess.isPipedCommand(single))
+      assert.isTrue(ChildProcess.isPipedCommand(piped))
+    })
+  })
+
+  describe("additionalFds", () => {
+    describe("parseFdName", () => {
+      it("should parse valid fd names", () => {
+        assert.strictEqual(ChildProcess.parseFdName("fd3"), 3)
+        assert.strictEqual(ChildProcess.parseFdName("fd4"), 4)
+        assert.strictEqual(ChildProcess.parseFdName("fd10"), 10)
+        assert.strictEqual(ChildProcess.parseFdName("fd100"), 100)
+      })
+
+      it("should reject invalid fd names", () => {
+        assert.isUndefined(ChildProcess.parseFdName("stdin"))
+        assert.isUndefined(ChildProcess.parseFdName("stdout"))
+        assert.isUndefined(ChildProcess.parseFdName("stderr"))
+        assert.isUndefined(ChildProcess.parseFdName("fd0"))
+        assert.isUndefined(ChildProcess.parseFdName("fd1"))
+        assert.isUndefined(ChildProcess.parseFdName("fd2"))
+        assert.isUndefined(ChildProcess.parseFdName("invalid"))
+        assert.isUndefined(ChildProcess.parseFdName("fd"))
+        assert.isUndefined(ChildProcess.parseFdName(""))
+      })
+    })
+
+    describe("fdName", () => {
+      it("should create fd names from numbers", () => {
+        assert.strictEqual(ChildProcess.fdName(3), "fd3")
+        assert.strictEqual(ChildProcess.fdName(4), "fd4")
+        assert.strictEqual(ChildProcess.fdName(10), "fd10")
+      })
+    })
+
+    describe("command options", () => {
+      it("should accept additionalFds option with output fd", () => {
+        const cmd = ChildProcess.make("my-program", [], {
+          additionalFds: { fd3: { type: "output" } }
+        })
+        assert.strictEqual(cmd._tag, "StandardCommand")
+        assert.isDefined(cmd.options.additionalFds)
+        assert.strictEqual(cmd.options.additionalFds!.fd3.type, "output")
+      })
+
+      it("should accept additionalFds option with input fd", () => {
+        const cmd = ChildProcess.make("my-program", [], {
+          additionalFds: { fd3: { type: "input" } }
+        })
+        assert.strictEqual(cmd._tag, "StandardCommand")
+        assert.isDefined(cmd.options.additionalFds)
+        assert.strictEqual(cmd.options.additionalFds!.fd3.type, "input")
+      })
+
+      it("should accept multiple additional fds", () => {
+        const cmd = ChildProcess.make("my-program", [], {
+          additionalFds: {
+            fd3: { type: "output" },
+            fd4: { type: "input" },
+            fd5: { type: "output" }
+          }
+        })
+        assert.strictEqual(cmd._tag, "StandardCommand")
+        assert.isDefined(cmd.options.additionalFds)
+        assert.strictEqual(cmd.options.additionalFds!.fd3.type, "output")
+        assert.strictEqual(cmd.options.additionalFds!.fd4.type, "input")
+        assert.strictEqual(cmd.options.additionalFds!.fd5.type, "output")
+      })
+
+      it("should accept additionalFds with streams", () => {
+        const inputStream = Stream.fromIterable([new TextEncoder().encode("test")])
+        const cmd = ChildProcess.make("my-program", [], {
+          additionalFds: { fd3: { type: "input", stream: inputStream } }
+        })
+        assert.strictEqual(cmd._tag, "StandardCommand")
+        assert.isDefined(cmd.options.additionalFds)
+        assert.strictEqual(cmd.options.additionalFds!.fd3.type, "input")
+        assert.propertyVal(cmd.options.additionalFds!.fd3, "stream", inputStream)
+      })
+
+      it("should accept additionalFds with sinks", () => {
+        const outputSink: Sink.Sink<
+          Uint8Array<ArrayBufferLike>,
+          Uint8Array<ArrayBufferLike>,
+          never,
+          PlatformError.PlatformError
+        > = Sink.succeed(new Uint8Array())
+        const cmd = ChildProcess.make("my-program", [], {
+          additionalFds: { fd3: { type: "output", sink: outputSink } }
+        })
+        assert.strictEqual(cmd._tag, "StandardCommand")
+        assert.isDefined(cmd.options.additionalFds)
+        assert.strictEqual(cmd.options.additionalFds!.fd3.type, "output")
+        assert.propertyVal(cmd.options.additionalFds!.fd3, "sink", outputSink)
+      })
+    })
+
+    describe("ChildProcessHandle additionalFds", () => {
+      it.effect("should have additionalFds accessor on handle", () =>
+        Effect.gen(function*() {
+          const cmd = ChildProcess.make`echo hello`
+          const handle = yield* ChildProcess.spawn(cmd)
+          assert.isDefined(handle.getInputFd)
+          assert.isDefined(handle.getOutputFd)
+        }).pipe(Effect.scoped, Effect.provide(MockExecutorLayer)))
+    })
+  })
+})

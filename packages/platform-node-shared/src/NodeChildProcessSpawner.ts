@@ -1,0 +1,1180 @@
+/**
+ * Node.js implementation of `ChildProcessSpawner`.
+ *
+ * @since 4.0.0
+ */
+import type * as Arr from "effect/collections/Array"
+import * as Predicate from "effect/data/Predicate"
+import * as Deferred from "effect/Deferred"
+import * as Effect from "effect/Effect"
+import * as Exit from "effect/Exit"
+import { identity } from "effect/Function"
+import * as Layer from "effect/Layer"
+import * as FileSystem from "effect/platform/FileSystem"
+import * as Path from "effect/platform/Path"
+import type * as PlatformError from "effect/platform/PlatformError"
+import type * as Scope from "effect/Scope"
+import * as Sink from "effect/stream/Sink"
+import * as Stream from "effect/stream/Stream"
+import * as ChildProcess from "effect/unstable/process/ChildProcess"
+import type { ChildProcessHandle } from "effect/unstable/process/ChildProcessSpawner"
+import { ChildProcessSpawner, ExitCode, makeHandle, ProcessId } from "effect/unstable/process/ChildProcessSpawner"
+import * as NodeChildProcess from "node:child_process"
+import * as NodeJSStream from "node:stream"
+import { parseTemplates } from "./internal/process.ts"
+import { handleErrnoException } from "./internal/utils.ts"
+import * as NodeSink from "./NodeSink.ts"
+import * as NodeStream from "./NodeStream.ts"
+
+const toError = (error: unknown): Error =>
+  error instanceof globalThis.Error
+    ? error
+    : new globalThis.Error(String(error))
+
+const toPlatformError = (
+  method: string,
+  error: NodeJS.ErrnoException,
+  command: ChildProcess.Command
+): PlatformError.PlatformError => {
+  const { commands } = flattenCommand(command)
+  const commandStr = commands.reduce((acc, curr) => {
+    const cmd = `${curr.command} ${curr.args.join(" ")}`
+    return acc.length === 0 ? cmd : `${acc} | ${cmd}`
+  }, "")
+  return handleErrnoException("ChildProcess", method)(error, [commandStr])
+}
+
+type ExitCodeWithSignal = readonly [code: number | null, signal: NodeJS.Signals | null]
+type ExitSignal = Deferred.Deferred<ExitCodeWithSignal>
+
+const make = Effect.gen(function*() {
+  const fs = yield* FileSystem.FileSystem
+  const path = yield* Path.Path
+
+  const resolveCommand = Effect.fnUntraced(function*(
+    command: ChildProcess.StandardCommand | ChildProcess.TemplatedCommand
+  ) {
+    if (ChildProcess.isStandardCommand(command)) return command
+    const parsed = yield* Effect.orDie(Effect.try({
+      try: () => parseTemplates(command.templates, command.expressions),
+      catch: identity
+    }))
+    return ChildProcess.make(parsed[0], parsed.slice(1), command.options)
+  })
+
+  const resolveWorkingDirectory = Effect.fnUntraced(
+    function*(options: ChildProcess.CommandOptions) {
+      if (Predicate.isUndefined(options.cwd)) return undefined
+      // Validate that the specified directory is accessible
+      yield* fs.access(options.cwd)
+      return path.resolve(options.cwd)
+    }
+  )
+
+  const resolveEnvironment = (options: ChildProcess.CommandOptions) => {
+    return options.extendEnv
+      ? { ...globalThis.process.env, ...options.env }
+      : options.env
+  }
+
+  const inputToStdioOption = (input: ChildProcess.CommandInput | undefined): NodeChildProcess.IOType | undefined =>
+    Stream.isStream(input) ? "pipe" : input
+
+  const outputToStdioOption = (input: ChildProcess.CommandOutput | undefined): NodeChildProcess.IOType | undefined =>
+    Sink.isSink(input) ? "pipe" : input
+
+  const resolveStdinOption = (options: ChildProcess.CommandOptions): ChildProcess.StdinConfig => {
+    const defaultConfig: ChildProcess.StdinConfig = { stream: "pipe", encoding: "utf-8", endOnDone: true }
+    if (Predicate.isUndefined(options.stdin)) {
+      return defaultConfig
+    }
+    if (typeof options.stdin === "string") {
+      return { ...defaultConfig, stream: options.stdin }
+    }
+    if (Stream.isStream(options.stdin)) {
+      return { ...defaultConfig, stream: options.stdin }
+    }
+    return {
+      stream: options.stdin.stream,
+      encoding: options.stdin.encoding ?? defaultConfig.encoding,
+      endOnDone: options.stdin.endOnDone ?? defaultConfig.endOnDone
+    }
+  }
+
+  const resolveOutputOption = (
+    options: ChildProcess.CommandOptions,
+    streamName: "stdout" | "stderr"
+  ): ChildProcess.StdoutConfig => {
+    const option = options[streamName]
+    if (Predicate.isUndefined(option)) {
+      return { stream: "pipe" }
+    }
+    if (typeof option === "string") {
+      return { stream: option }
+    }
+    if (Sink.isSink(option)) {
+      return { stream: option }
+    }
+    return { stream: option.stream }
+  }
+
+  interface ResolvedAdditionalFd {
+    readonly fd: number
+    readonly config: ChildProcess.AdditionalFdConfig
+  }
+
+  const resolveAdditionalFds = (
+    options: ChildProcess.CommandOptions
+  ): ReadonlyArray<ResolvedAdditionalFd> => {
+    if (Predicate.isUndefined(options.additionalFds)) {
+      return []
+    }
+    const result: Array<ResolvedAdditionalFd> = []
+    for (const [name, config] of Object.entries(options.additionalFds)) {
+      const fd = ChildProcess.parseFdName(name)
+      if (Predicate.isNotUndefined(fd)) {
+        result.push({ fd, config })
+      }
+    }
+    // Sort by fd number to ensure correct ordering
+    return result.sort((a, b) => a.fd - b.fd)
+  }
+
+  const buildStdioArray = (
+    stdinConfig: ChildProcess.StdinConfig,
+    stdoutConfig: ChildProcess.StdoutConfig,
+    stderrConfig: ChildProcess.StderrConfig,
+    additionalFds: ReadonlyArray<ResolvedAdditionalFd>
+  ): NodeChildProcess.StdioOptions => {
+    const stdio: Array<NodeChildProcess.IOType | undefined> = [
+      inputToStdioOption(stdinConfig.stream),
+      outputToStdioOption(stdoutConfig.stream),
+      outputToStdioOption(stderrConfig.stream)
+    ]
+
+    if (additionalFds.length === 0) {
+      return stdio as NodeChildProcess.StdioOptions
+    }
+
+    // Find the maximum fd number to size the array correctly
+    const maxFd = additionalFds.reduce((max, { fd }) => Math.max(max, fd), 2)
+
+    // Fill gaps with "ignore"
+    for (let i = 3; i <= maxFd; i++) {
+      stdio[i] = "ignore"
+    }
+
+    // Set up additional fds as "pipe"
+    for (const { fd } of additionalFds) {
+      stdio[fd] = "pipe"
+    }
+
+    return stdio as NodeChildProcess.StdioOptions
+  }
+
+  const setupAdditionalFds = Effect.fnUntraced(function*(
+    command: ChildProcess.StandardCommand,
+    childProcess: NodeChildProcess.ChildProcess,
+    additionalFds: ReadonlyArray<ResolvedAdditionalFd>
+  ) {
+    if (additionalFds.length === 0) {
+      return {
+        getInputFd: () => Sink.drain,
+        getOutputFd: () => Stream.empty
+      }
+    }
+
+    const inputSinks = new Map<number, Sink.Sink<void, Uint8Array, never, PlatformError.PlatformError>>()
+    const outputStreams = new Map<number, Stream.Stream<Uint8Array, PlatformError.PlatformError>>()
+
+    for (const { config, fd } of additionalFds) {
+      const nodeStream = childProcess.stdio[fd]
+
+      switch (config.type) {
+        case "input": {
+          // Create a sink to write to for input file descriptors
+          let sink: Sink.Sink<void, Uint8Array, never, PlatformError.PlatformError> = Sink.drain
+          if (Predicate.isNotNullish(nodeStream) && "write" in nodeStream) {
+            sink = NodeSink.fromWritable({
+              evaluate: () => nodeStream as NodeJS.WritableStream,
+              onError: (error) => toPlatformError(`fromWritable(fd${fd})`, toError(error), command)
+            })
+          }
+
+          // If user provided a stream, pipe it into the sink
+          if (Predicate.isNotUndefined(config.stream)) {
+            yield* Effect.forkScoped(Stream.run(config.stream, sink))
+          }
+
+          inputSinks.set(fd, sink)
+
+          break
+        }
+        case "output": {
+          // Create a stream to read from for output file descriptors
+          let stream: Stream.Stream<Uint8Array, PlatformError.PlatformError> = Stream.empty
+          if (Predicate.isNotNull(nodeStream) && Predicate.isNotUndefined(nodeStream) && "read" in nodeStream) {
+            stream = NodeStream.fromReadable({
+              evaluate: () => nodeStream as NodeJS.ReadableStream,
+              onError: (error) => toPlatformError(`fromReadable(fd${fd})`, toError(error), command)
+            })
+          }
+
+          // If user provided a sink, transduce the stream through it
+          if (Predicate.isNotUndefined(config.sink)) {
+            stream = Stream.transduce(stream, config.sink)
+          }
+
+          outputStreams.set(fd, stream)
+
+          break
+        }
+      }
+    }
+
+    return {
+      getInputFd: (fd: number) => inputSinks.get(fd) ?? Sink.drain,
+      getOutputFd: (fd: number) => outputStreams.get(fd) ?? Stream.empty
+    }
+  })
+
+  const setupChildStdin = Effect.fnUntraced(function*(
+    command: ChildProcess.StandardCommand,
+    childProcess: NodeChildProcess.ChildProcess,
+    config: ChildProcess.StdinConfig
+  ) {
+    // If the child process has a standard input stream, connect it to the
+    // sink that will attached to the process handle
+    let sink: Sink.Sink<void, unknown, never, PlatformError.PlatformError> = Sink.drain
+    if (Predicate.isNotNull(childProcess.stdin)) {
+      sink = NodeSink.fromWritable({
+        evaluate: () => childProcess.stdin!,
+        onError: (error) => toPlatformError("fromWritable(stdin)", toError(error), command),
+        endOnDone: config.endOnDone,
+        encoding: config.encoding
+      })
+    }
+
+    // If the user provided a `Stream`, run it into the stdin sink
+    if (Stream.isStream(config.stream)) {
+      yield* Effect.forkScoped(Stream.run(config.stream, sink))
+    }
+
+    return sink
+  })
+
+  /**
+   * Given that `NodeStream.fromReadable` uses `.read` to read data from the
+   * provided `Readable` stream, consumers would race to read data from the
+   * `handle.stdout` and `handle.stderr` streams if they were also simultaneously
+   * reading from the `handle.all` stream.
+   *
+   * To solve this, we leverage the fact that NodeJS `Readable` streams can be
+   * piped to multiple destinations simultaneously. The logic for the solution
+   * is as follows:
+   *
+   *   1. Pipe each original stream to two `PassThrough` streams:
+   *     - One dedicated PassThrough for individual access (.stdout / .stderr)
+   *     - One shared PassThrough for combined access (.all)
+   *   2. Create Effect streams from the PassThrough streams (not the originals)
+   *
+   * **Diagram**
+   *
+   *                                 ┌─────────────┐
+   *                           ┌────►│ passthrough │────► Effect stdout Stream
+   *                           │     └─────────────┘
+   *   childProcess.stdout ────┤
+   *                           │     ┌─────────────┐
+   *                           └────►│ passthrough │────► Effect all Stream
+   *                           ┌────►│             │
+   *   childProcess.stderr ────┤     └─────────────┘
+   *                           │     ┌─────────────┐
+   *                           └────►│ passthrough │────► Effect stderr Stream
+   *                                 └─────────────┘
+   */
+  const setupChildOutputStreams = (
+    command: ChildProcess.StandardCommand,
+    childProcess: NodeChildProcess.ChildProcess,
+    stdoutConfig: ChildProcess.StdoutConfig,
+    stderrConfig: ChildProcess.StderrConfig
+  ): {
+    stdout: Stream.Stream<Uint8Array, PlatformError.PlatformError>
+    stderr: Stream.Stream<Uint8Array, PlatformError.PlatformError>
+    all: Stream.Stream<Uint8Array, PlatformError.PlatformError>
+  } => {
+    const nodeStdout = childProcess.stdout
+    const nodeStderr = childProcess.stderr
+
+    // Create PassThrough streams for individual access to stdout and stderr.
+    // We pipe the original Node.js streams to these PassThroughs so that
+    // the data can be consumed by both the individual streams AND the
+    // combined stream (.all) simultaneously.
+    const stdoutPassThrough = Predicate.isNotNull(nodeStdout)
+      ? new NodeJSStream.PassThrough()
+      : null
+    const stderrPassThrough = Predicate.isNotNull(nodeStderr)
+      ? new NodeJSStream.PassThrough()
+      : null
+
+    // Create PassThrough for combined output (.all)
+    const combinedPassThrough = new NodeJSStream.PassThrough()
+
+    // Track stream endings for the combined stream
+    const totalStreams = (Predicate.isNotNull(nodeStdout) ? 1 : 0) +
+      (Predicate.isNotNull(nodeStderr) ? 1 : 0)
+
+    let endedCount = 0
+    const onStreamEnd = () => {
+      endedCount++
+      if (endedCount >= totalStreams) {
+        combinedPassThrough.end()
+      }
+    }
+
+    // Pipe stdout to both its own PassThrough and the combined PassThrough
+    if (Predicate.isNotNull(nodeStdout) && Predicate.isNotNull(stdoutPassThrough)) {
+      nodeStdout.pipe(stdoutPassThrough)
+      nodeStdout.pipe(combinedPassThrough, { end: false })
+      nodeStdout.once("end", onStreamEnd)
+    }
+
+    // Pipe stderr to both its own PassThrough and the combined PassThrough
+    if (Predicate.isNotNull(nodeStderr) && Predicate.isNotNull(stderrPassThrough)) {
+      nodeStderr.pipe(stderrPassThrough)
+      nodeStderr.pipe(combinedPassThrough, { end: false })
+      nodeStderr.once("end", onStreamEnd)
+    }
+
+    // Handle edge case: no streams available
+    if (totalStreams === 0) {
+      combinedPassThrough.end()
+    }
+
+    // Create Effect stream for stdout from its PassThrough
+    let stdout: Stream.Stream<Uint8Array, PlatformError.PlatformError> = Stream.empty
+    if (Predicate.isNotNull(stdoutPassThrough)) {
+      stdout = NodeStream.fromReadable({
+        evaluate: () => stdoutPassThrough,
+        onError: (error) => toPlatformError("fromReadable(stdout)", toError(error), command)
+      })
+      // Apply user-provided Sink if configured
+      if (Sink.isSink(stdoutConfig.stream)) {
+        stdout = Stream.transduce(stdout, stdoutConfig.stream)
+      }
+    }
+
+    // Create Effect stream for stderr from its PassThrough
+    let stderr: Stream.Stream<Uint8Array, PlatformError.PlatformError> = Stream.empty
+    if (Predicate.isNotNull(stderrPassThrough)) {
+      stderr = NodeStream.fromReadable({
+        evaluate: () => stderrPassThrough,
+        onError: (error) => toPlatformError("fromReadable(stderr)", toError(error), command)
+      })
+      // Apply user-provided Sink if configured
+      if (Sink.isSink(stderrConfig.stream)) {
+        stderr = Stream.transduce(stderr, stderrConfig.stream)
+      }
+    }
+
+    // Create Effect stream for combined output from the combined PassThrough
+    const all: Stream.Stream<Uint8Array, PlatformError.PlatformError> = NodeStream.fromReadable({
+      evaluate: () => combinedPassThrough,
+      onError: (error) => toPlatformError("fromReadable(all)", toError(error), command)
+    })
+
+    return { stdout, stderr, all }
+  }
+
+  const spawn = Effect.fnUntraced(
+    function*(
+      command: ChildProcess.StandardCommand,
+      spawnOptions: NodeChildProcess.SpawnOptions
+    ) {
+      const deferred = yield* Deferred.make<ExitCodeWithSignal>()
+
+      return yield* Effect.callback<
+        readonly [NodeChildProcess.ChildProcess, ExitSignal],
+        PlatformError.PlatformError
+      >((resume) => {
+        const handle = NodeChildProcess.spawn(
+          command.command,
+          command.args,
+          spawnOptions
+        )
+        handle.on("error", (error) => {
+          resume(Effect.fail(toPlatformError("spawn", error, command)))
+        })
+        handle.on("exit", (...args) => {
+          Deferred.doneUnsafe(deferred, Exit.succeed(args))
+        })
+        handle.on("spawn", () => {
+          resume(Effect.succeed([handle, deferred]))
+        })
+        return Effect.sync(() => {
+          handle.kill("SIGTERM")
+        })
+      })
+    }
+  )
+
+  const killProcessGroup = Effect.fnUntraced(function*(
+    command: ChildProcess.StandardCommand,
+    childProcess: NodeChildProcess.ChildProcess,
+    signal: NodeJS.Signals
+  ) {
+    if (globalThis.process.platform === "win32") {
+      return yield* Effect.callback<void, PlatformError.PlatformError>((resume) => {
+        NodeChildProcess.exec(`taskkill /pid ${childProcess.pid} /T /F`, (error) => {
+          if (error) {
+            resume(Effect.fail(toPlatformError("kill", toError(error), command)))
+          } else {
+            resume(Effect.void)
+          }
+        })
+      })
+    }
+    return yield* Effect.try({
+      try: () => {
+        globalThis.process.kill(-childProcess.pid!, signal)
+      },
+      catch: (error) => toPlatformError("kill", toError(error), command)
+    })
+  })
+
+  const killProcess = Effect.fnUntraced(function*(
+    command: ChildProcess.StandardCommand,
+    childProcess: NodeChildProcess.ChildProcess,
+    signal: NodeJS.Signals
+  ) {
+    const killed = childProcess.kill(signal)
+    if (!killed) {
+      const error = new globalThis.Error("Failed to kill child process")
+      return yield* Effect.fail(toPlatformError("kill", error, command))
+    }
+    return yield* Effect.void
+  })
+
+  const withTimeout = (
+    childProcess: NodeChildProcess.ChildProcess,
+    command: ChildProcess.StandardCommand,
+    options: ChildProcess.KillOptions | undefined
+  ) =>
+  <A, E, R>(
+    kill: (
+      command: ChildProcess.StandardCommand,
+      childProcess: NodeChildProcess.ChildProcess,
+      signal: NodeJS.Signals
+    ) => Effect.Effect<A, E, R>
+  ) => {
+    const killSignal = options?.killSignal ?? "SIGTERM"
+    return Predicate.isUndefined(options?.forceKillAfter)
+      ? kill(command, childProcess, killSignal)
+      : Effect.timeoutOrElse(kill(command, childProcess, killSignal), {
+        duration: options.forceKillAfter,
+        onTimeout: () => kill(command, childProcess, "SIGKILL")
+      })
+  }
+
+  /**
+   * Get the appropriate source stream from a process handle based on the
+   * `from` pipe option.
+   */
+  const getSourceStream = (
+    handle: ChildProcessHandle,
+    from: ChildProcess.PipeFromOption | undefined
+  ): Stream.Stream<Uint8Array, PlatformError.PlatformError> => {
+    const fromOption = from ?? "stdout"
+    switch (fromOption) {
+      case "stdout":
+        return handle.stdout
+      case "stderr":
+        return handle.stderr
+      case "all":
+        return handle.all
+      default: {
+        // Handle fd3, fd4, etc.
+        const fd = ChildProcess.parseFdName(fromOption)
+        if (Predicate.isNotUndefined(fd)) {
+          return handle.getOutputFd(fd)
+        }
+        // Fallback to stdout for invalid fd names
+        return handle.stdout
+      }
+    }
+  }
+
+  const spawnCommand: (
+    command: ChildProcess.Command
+  ) => Effect.Effect<
+    ChildProcessHandle,
+    PlatformError.PlatformError,
+    Scope.Scope
+  > = Effect.fnUntraced(function*(cmd) {
+    switch (cmd._tag) {
+      case "StandardCommand":
+      case "TemplatedCommand": {
+        const command = yield* resolveCommand(cmd)
+
+        const stdinConfig = resolveStdinOption(command.options)
+        const stdoutConfig = resolveOutputOption(command.options, "stdout")
+        const stderrConfig = resolveOutputOption(command.options, "stderr")
+        const resolvedAdditionalFds = resolveAdditionalFds(command.options)
+
+        const cwd = yield* resolveWorkingDirectory(command.options)
+        const env = resolveEnvironment(command.options)
+        const stdio = buildStdioArray(stdinConfig, stdoutConfig, stderrConfig, resolvedAdditionalFds)
+
+        const [childProcess, exitSignal] = yield* Effect.acquireRelease(
+          spawn(command, { cwd, env, stdio, shell: command.options.shell }),
+          Effect.fnUntraced(function*([childProcess, exitSignal]) {
+            const exited = yield* Deferred.isDone(exitSignal)
+            const killWithTimeout = withTimeout(childProcess, command, command.options)
+            if (exited) {
+              // Process already exited, check if children need cleanup
+              const [code] = yield* Deferred.await(exitSignal)
+              if (code !== 0 && Predicate.isNotNull(code)) {
+                // Non-zero exit code ,attempt to clean up process group
+                return yield* Effect.ignore(killWithTimeout(killProcessGroup))
+              }
+              return yield* Effect.void
+            }
+            // Process is still running, kill it
+            return yield* Effect.ignore(
+              killWithTimeout((command, childProcess, signal) =>
+                Effect.catch(
+                  killProcessGroup(command, childProcess, signal),
+                  () => killProcess(command, childProcess, signal)
+                )
+              )
+            )
+          })
+        )
+
+        const pid = ProcessId(childProcess.pid!)
+        const stdin = yield* setupChildStdin(command, childProcess, stdinConfig)
+        const { all, stderr, stdout } = setupChildOutputStreams(command, childProcess, stdoutConfig, stderrConfig)
+        const { getInputFd, getOutputFd } = yield* setupAdditionalFds(command, childProcess, resolvedAdditionalFds)
+        const isRunning = Effect.map(Deferred.isDone(exitSignal), (done) => !done)
+        const exitCode = Effect.flatMap(Deferred.await(exitSignal), ([code, signal]) => {
+          if (Predicate.isNotNull(code)) {
+            return Effect.succeed(ExitCode(code))
+          }
+          // If code is `null`, then `signal` must be defined. See the NodeJS
+          // documentation for the `"exit"` event on a `child_process`.
+          // https://nodejs.org/api/child_process.html#child_process_event_exit
+          const error = new globalThis.Error(`Process interrupted due to receipt of signal: '${signal}'`)
+          return Effect.fail(toPlatformError("exitCode", error, command))
+        })
+        const kill = (options?: ChildProcess.KillOptions | undefined) => {
+          const killWithTimeout = withTimeout(childProcess, command, options)
+          return killWithTimeout((command, childProcess, signal) =>
+            Effect.catch(
+              killProcessGroup(command, childProcess, signal),
+              () => killProcess(command, childProcess, signal)
+            )
+          )
+        }
+
+        return makeHandle({
+          pid,
+          exitCode,
+          isRunning,
+          kill,
+          stdin,
+          stdout,
+          stderr,
+          all,
+          getInputFd,
+          getOutputFd
+        })
+      }
+      case "PipedCommand": {
+        const { commands, pipeOptions } = flattenCommand(cmd)
+        const [root, ...pipeline] = commands
+
+        let handle = spawnCommand(root)
+
+        for (let i = 0; i < pipeline.length; i++) {
+          const command = pipeline[i]
+          const options = pipeOptions[i] ?? {}
+          const stdinConfig = resolveStdinOption(command.options)
+
+          // Get the appropriate stream from the source based on `from` option
+          const sourceStream = Stream.unwrap(
+            Effect.map(handle, (h) => getSourceStream(h, options.from))
+          )
+
+          // Determine where to pipe: stdin or custom fd
+          const toOption = options.to ?? "stdin"
+
+          if (toOption === "stdin") {
+            // Pipe to stdin (default behavior)
+            handle = spawnCommand(ChildProcess.make(command.command, command.args, {
+              ...command.options,
+              stdin: { ...stdinConfig, stream: sourceStream }
+            }))
+          } else {
+            // Pipe to custom fd (fd3, fd4, etc.)
+            const fd = ChildProcess.parseFdName(toOption)
+            if (Predicate.isNotUndefined(fd)) {
+              const fdName = ChildProcess.fdName(fd) as `fd${number}`
+              const existingFds = command.options.additionalFds ?? {}
+              handle = spawnCommand(ChildProcess.make(command.command, command.args, {
+                ...command.options,
+                additionalFds: {
+                  ...existingFds,
+                  [fdName]: { type: "input" as const, stream: sourceStream }
+                }
+              }))
+            } else {
+              // Invalid fd name, fall back to stdin
+              handle = spawnCommand(ChildProcess.make(command.command, command.args, {
+                ...command.options,
+                stdin: { ...stdinConfig, stream: sourceStream }
+              }))
+            }
+          }
+        }
+
+        return yield* handle
+      }
+    }
+  })
+
+  return ChildProcessSpawner.of({
+    spawn: spawnCommand
+  })
+})
+
+/**
+ * Layer providing the `NodeChildProcessSpawner` implementation.
+ *
+ * @since 4.0.0
+ * @category Layers
+ */
+export const layer: Layer.Layer<
+  ChildProcessSpawner,
+  never,
+  FileSystem.FileSystem | Path.Path
+> = Layer.effect(ChildProcessSpawner, make)
+
+// =============================================================================
+// Internal Helpers
+// =============================================================================
+
+/**
+ * Result of flattening a pipeline of commands.
+ *
+ * @since 4.0.0
+ * @category Models
+ */
+export interface FlattenedPipeline {
+  readonly commands: Arr.NonEmptyReadonlyArray<ChildProcess.StandardCommand>
+  readonly pipeOptions: ReadonlyArray<ChildProcess.PipeOptions>
+}
+
+/**
+ * Flattens a `Command` into an array of `StandardCommand`s along with pipe
+ * options for each connection.
+ *
+ * @since 4.0.0
+ * @category Utilities
+ */
+export const flattenCommand = (
+  command: ChildProcess.Command
+): FlattenedPipeline => {
+  const commands: Array<ChildProcess.StandardCommand> = []
+  const pipeOptions: Array<ChildProcess.PipeOptions> = []
+
+  const flatten = (cmd: ChildProcess.Command): void => {
+    switch (cmd._tag) {
+      case "StandardCommand": {
+        commands.push(cmd)
+        break
+      }
+      case "TemplatedCommand": {
+        const parsed = parseTemplates(
+          cmd.templates,
+          cmd.expressions
+        )
+        commands.push(ChildProcess.make(
+          parsed[0],
+          parsed.slice(1),
+          cmd.options
+        ))
+        break
+      }
+      case "PipedCommand": {
+        // Recursively flatten left side first
+        flatten(cmd.left)
+        // Store the pipe options for this connection
+        pipeOptions.push(cmd.options)
+        // Then flatten right side
+        flatten(cmd.right)
+        break
+      }
+    }
+  }
+
+  flatten(command)
+
+  // The commands array is guaranteed to be non-empty since we always have at
+  // least one command in the input. We validate this at runtime and return a
+  // properly typed tuple.
+  if (commands.length === 0) {
+    // This should never happen given a valid Command input
+    throw new Error("flattenCommand produced empty commands array")
+  }
+
+  const [first, ...rest] = commands
+  const nonEmptyCommands: Arr.NonEmptyReadonlyArray<ChildProcess.StandardCommand> = [first, ...rest]
+
+  return { commands: nonEmptyCommands, pipeOptions }
+}
+//
+// const collectOutput = (
+//   readable: Readable,
+//   maxBuffer?: number
+// ): Effect.Effect<Uint8Array, SpawnError, Scope.Scope> =>
+//   Effect.gen(function*() {
+//     const chunks: Array<Uint8Array> = []
+//     let totalBytes = 0
+//
+//     yield* Effect.callback<void, SpawnError>((resume) => {
+//       readable.on("data", (chunk: Buffer) => {
+//         const uint8 = new Uint8Array(chunk)
+//         chunks.push(uint8)
+//         totalBytes += uint8.length
+//
+//         if (maxBuffer && totalBytes > maxBuffer) {
+//           readable.destroy()
+//           resume(
+//             Effect.fail(
+//               new SpawnError({
+//                 executable: "",
+//                 args: [],
+//                 cause: new Error(`Output exceeded maxBuffer limit of ${maxBuffer} bytes`)
+//               })
+//             )
+//           )
+//         }
+//       })
+//
+//       readable.on("end", () => {
+//         resume(Effect.void)
+//       })
+//
+//       readable.on("error", (error) => {
+//         resume(
+//           Effect.fail(
+//             new SpawnError({
+//               executable: "",
+//               args: [],
+//               cause: error
+//             })
+//           )
+//         )
+//       })
+//
+//       return Effect.sync(() => {
+//         readable.destroy()
+//       })
+//     })
+//
+//     // Concatenate all chunks
+//     if (chunks.length === 0) {
+//       return new Uint8Array(0)
+//     }
+//
+//     const result = new Uint8Array(totalBytes)
+//     let offset = 0
+//     for (const chunk of chunks) {
+//       result.set(chunk, offset)
+//       offset += chunk.length
+//     }
+//
+//     return result
+//   })
+//
+// interface ExitInfo {
+//   readonly exitCode: number | undefined
+//   readonly signal: string | undefined
+// }
+//
+// const waitForExit = (
+//   childProcess: CP.ChildProcess,
+//   executable: string,
+//   args: ReadonlyArray<string>,
+//   timeout?: Duration.Duration
+// ): Effect.Effect<ExitInfo, SpawnError | KilledError | TimeoutError, Scope.Scope> => {
+//   const exitEffect = Effect.callback<ExitInfo, SpawnError | KilledError>((resume) => {
+//     childProcess.on("exit", (code, signal) => {
+//       if (signal) {
+//         resume(
+//           Effect.fail(
+//             new KilledError({
+//               executable,
+//               args: [...args],
+//               signal
+//             })
+//           )
+//         )
+//       } else {
+//         resume(
+//           Effect.succeed({
+//             exitCode: code ?? undefined,
+//             signal: signal ?? undefined
+//           })
+//         )
+//       }
+//     })
+//
+//     childProcess.on("error", (error) => {
+//       resume(
+//         Effect.fail(
+//           new SpawnError({
+//             executable,
+//             args: [...args],
+//             cause: error
+//           })
+//         )
+//       )
+//     })
+//
+//     return Effect.sync(() => {
+//       childProcess.kill()
+//     })
+//   })
+//
+//   if (timeout) {
+//     return pipe(
+//       exitEffect,
+//       Effect.timeoutOrElse({
+//         duration: timeout,
+//         onTimeout: () =>
+//           Effect.fail(
+//             new TimeoutError({
+//               executable,
+//               args: [...args],
+//               timeout
+//             })
+//           )
+//       })
+//     )
+//   }
+//
+//   return exitEffect
+// }
+//
+// // =============================================================================
+// // Single Command Execution
+// // =============================================================================
+//
+// const execResolvedCommand = (
+//   cmd: ResolvedCommand
+// ): Effect.Effect<ChildProcessResult, ChildProcessError, Scope.Scope> =>
+//   Effect.gen(function*() {
+//     const startTime = Date.now()
+//     const { args, executable, options } = cmd
+//
+//     // Build spawn options
+//     const spawnOptions: CP.SpawnOptions = {
+//       cwd: options.cwd,
+//       env: options.env
+//         ? { ...globalThis.process.env, ...options.env }
+//         : globalThis.process.env,
+//       shell: options.shell ?? false,
+//       stdio: ["pipe", "pipe", "pipe"]
+//     }
+//
+//     // Spawn the process
+//     const childProcess = yield* Effect.try({
+//       try: () => CP.spawn(executable, [...args], spawnOptions),
+//       catch: (error) =>
+//         new SpawnError({
+//           executable,
+//           args: [...args],
+//           cause: error
+//         })
+//     })
+//
+//     // Collect stdout
+//     const stdoutEffect = childProcess.stdout
+//       ? collectOutput(childProcess.stdout)
+//       : Effect.succeed(new Uint8Array(0))
+//
+//     // Collect stderr
+//     const stderrEffect = childProcess.stderr
+//       ? collectOutput(childProcess.stderr)
+//       : Effect.succeed(new Uint8Array(0))
+//
+//     // Wait for process to exit - run concurrently with output collection
+//     const timeout = options.timeout ? Duration.fromDurationInputUnsafe(options.timeout) : undefined
+//     const [stdout, stderr, exitInfo] = yield* Effect.all(
+//       [stdoutEffect, stderrEffect, waitForExit(childProcess, executable, args, timeout)],
+//       { concurrency: "unbounded" }
+//     )
+//
+//     const duration = Duration.millis(Date.now() - startTime)
+//
+//     // Check for non-zero exit code
+//     if (exitInfo.exitCode !== 0 && exitInfo.exitCode !== undefined) {
+//       return yield* Effect.fail(
+//         new ExitCodeError({
+//           executable,
+//           args: [...args],
+//           exitCode: exitInfo.exitCode,
+//           stdout: options.encoding === "utf8" ? new TextDecoder().decode(stdout) : stdout,
+//           stderr: options.encoding === "utf8" ? new TextDecoder().decode(stderr) : stderr
+//         })
+//       )
+//     }
+//
+//     return {
+//       executable,
+//       args,
+//       exitCode: exitInfo.exitCode ?? 0,
+//       stdout: options.encoding === "utf8" ? new TextDecoder().decode(stdout) : stdout,
+//       stderr: options.encoding === "utf8" ? new TextDecoder().decode(stderr) : stderr,
+//       duration
+//     }
+//   })
+//
+// // =============================================================================
+// // Pipeline Execution
+// // =============================================================================
+//
+// /**
+//  * Execute a pipeline of resolved commands, connecting outputs to inputs based on pipeStdio settings.
+//  */
+// const execPipeline = (
+//   commands: ReadonlyArray<ResolvedCommand>,
+//   pipeStdioSettings: ReadonlyArray<PipeStdio>
+// ): Effect.Effect<ChildProcessResult, ChildProcessError, Scope.Scope> =>
+//   Effect.gen(function*() {
+//     if (commands.length === 0) {
+//       return yield* Effect.fail(
+//         new SpawnError({
+//           executable: "",
+//           args: [],
+//           cause: new Error("Pipeline must have at least one command")
+//         })
+//       )
+//     }
+//
+//     if (commands.length === 1) {
+//       return yield* execResolvedCommand(commands[0])
+//     }
+//
+//     const startTime = Date.now()
+//
+//     // Spawn all processes
+//     const processes: Array<CP.ChildProcess> = []
+//     for (const cmd of commands) {
+//       const spawnOptions: CP.SpawnOptions = {
+//         cwd: cmd.options.cwd,
+//         env: cmd.options.env
+//           ? { ...globalThis.process.env, ...cmd.options.env }
+//           : globalThis.process.env,
+//         shell: cmd.options.shell ?? false,
+//         stdio: ["pipe", "pipe", "pipe"]
+//       }
+//
+//       const childProcess = yield* Effect.try({
+//         try: () => CP.spawn(cmd.executable, [...cmd.args], spawnOptions),
+//         catch: (error) =>
+//           new SpawnError({
+//             executable: cmd.executable,
+//             args: [...cmd.args],
+//             cause: error
+//           })
+//       })
+//
+//       processes.push(childProcess)
+//     }
+//
+//     // Connect processes based on pipeStdio settings
+//     for (let i = 0; i < processes.length - 1; i++) {
+//       const current = processes[i]
+//       const next = processes[i + 1]
+//       const pipeStdio = pipeStdioSettings[i] ?? "stdout"
+//
+//       if (next.stdin) {
+//         if (pipeStdio === "stdout" || pipeStdio === "both") {
+//           if (current.stdout) {
+//             current.stdout.pipe(next.stdin)
+//           }
+//         }
+//         if (pipeStdio === "stderr" || pipeStdio === "both") {
+//           if (current.stderr) {
+//             // For "both", we need to handle merging streams
+//             // For "stderr" only, pipe stderr to stdin
+//             if (pipeStdio === "stderr") {
+//               current.stderr.pipe(next.stdin)
+//             } else {
+//               // For "both", we already piped stdout above, now also pipe stderr
+//               current.stderr.on("data", (chunk) => {
+//                 next.stdin?.write(chunk)
+//               })
+//             }
+//           }
+//         }
+//       }
+//     }
+//
+//     // Collect stderr from all processes
+//     const stderrChunks: Array<Uint8Array> = []
+//     for (const proc of processes) {
+//       if (proc.stderr) {
+//         proc.stderr.on("data", (chunk: Buffer) => {
+//           stderrChunks.push(new Uint8Array(chunk))
+//         })
+//       }
+//     }
+//
+//     // Collect stdout from the last process
+//     const lastProcess = processes[processes.length - 1]
+//     const lastCmd = commands[commands.length - 1]
+//     const stdoutEffect = lastProcess.stdout
+//       ? collectOutput(lastProcess.stdout)
+//       : Effect.succeed(new Uint8Array(0))
+//
+//     // Wait for last process to exit - run concurrently with output collection
+//     const timeout = lastCmd.options.timeout ? Duration.fromDurationInputUnsafe(lastCmd.options.timeout) : undefined
+//     const [stdout, exitInfo] = yield* Effect.all(
+//       [stdoutEffect, waitForExit(lastProcess, lastCmd.executable, lastCmd.args, timeout)],
+//       { concurrency: "unbounded" }
+//     )
+//
+//     // Combine all stderr
+//     const totalStderrBytes = stderrChunks.reduce((acc, chunk) => acc + chunk.length, 0)
+//     const stderr = new Uint8Array(totalStderrBytes)
+//     let offset = 0
+//     for (const chunk of stderrChunks) {
+//       stderr.set(chunk, offset)
+//       offset += chunk.length
+//     }
+//
+//     const duration = Duration.millis(Date.now() - startTime)
+//
+//     // Check for non-zero exit code
+//     if (exitInfo.exitCode !== 0 && exitInfo.exitCode !== undefined) {
+//       return yield* Effect.fail(
+//         new ExitCodeError({
+//           executable: lastCmd.executable,
+//           args: [...lastCmd.args],
+//           exitCode: exitInfo.exitCode,
+//           stdout: lastCmd.options.encoding === "utf8" ? new TextDecoder().decode(stdout) : stdout,
+//           stderr: lastCmd.options.encoding === "utf8" ? new TextDecoder().decode(stderr) : stderr
+//         })
+//       )
+//     }
+//
+//     return {
+//       executable: lastCmd.executable,
+//       args: lastCmd.args,
+//       exitCode: exitInfo.exitCode ?? 0,
+//       stdout: lastCmd.options.encoding === "utf8" ? new TextDecoder().decode(stdout) : stdout,
+//       stderr: lastCmd.options.encoding === "utf8" ? new TextDecoder().decode(stderr) : stderr,
+//       duration
+//     }
+//   })
+//
+// // =============================================================================
+// // Spawn Implementation
+// // =============================================================================
+//
+// const spawnResolvedCommand = (
+//   cmd: ResolvedCommand
+// ): Effect.Effect<ChildProcessHandle, SpawnError> =>
+//   Effect.gen(function*() {
+//     const { args, executable, options } = cmd
+//
+//     // TODO: fix
+//     const spawnOptions: CP.SpawnOptions = {
+//       cwd: options.cwd,
+//       env: options.extendEnv
+//         ? { ...globalThis.process.env, ...options.env }
+//         : options.env,
+//       shell: options.shell ?? false,
+//       stdio: ["pipe", "pipe", "pipe"]
+//     }
+//
+//     const childProcess = CP.spawn(executable, [...args], spawnOptions)
+//
+//     const stdin: Sink.Sink<void, Uint8Array, never, SpawnError> = childProcess.stdin
+//       ? NodeSink.fromWritable<SpawnError, Uint8Array>({
+//         evaluate: () => childProcess.stdin as Writable,
+//         onError: (error) =>
+//           new SpawnError({
+//             executable,
+//             args: [...args],
+//             cause: error
+//           })
+//       })
+//       : Sink.fail(
+//         new SpawnError({
+//           executable,
+//           args: [...args],
+//           cause: new Error("stdin not available")
+//         })
+//       )
+//
+//     const stdout: Stream.Stream<Uint8Array, SpawnError> = childProcess.stdout
+//       ? NodeStream.fromReadable<Uint8Array, SpawnError>({
+//         evaluate: () => childProcess.stdout as Readable,
+//         onError: (error) =>
+//           new SpawnError({
+//             executable,
+//             args: [...args],
+//             cause: error
+//           })
+//       })
+//       : Stream.fail(
+//         new SpawnError({
+//           executable,
+//           args: [...args],
+//           cause: new Error("stdout not available")
+//         })
+//       )
+//
+//     const stderr: Stream.Stream<Uint8Array, SpawnError> = childProcess.stderr
+//       ? NodeStream.fromReadable<Uint8Array, SpawnError>({
+//         evaluate: () => childProcess.stderr as Readable,
+//         onError: (error) =>
+//           new SpawnError({
+//             executable,
+//             args: [...args],
+//             cause: error
+//           })
+//       })
+//       : Stream.fail(
+//         new SpawnError({
+//           executable,
+//           args: [...args],
+//           cause: new Error("stderr not available")
+//         })
+//       )
+//
+//     const exitCode: Effect.Effect<number, ChildProcessError> = Effect.scoped(
+//       Effect.flatMap(
+//         waitForExit(childProcess, executable, args, undefined),
+//         (info) => Effect.succeed(info.exitCode ?? 0)
+//       )
+//     )
+//
+//     const kill = (signal?: string): Effect.Effect<void> =>
+//       Effect.sync(() => {
+//         childProcess.kill(signal as NodeJS.Signals | undefined)
+//       })
+//
+//     return {
+//       pid: childProcess.pid !== undefined ? Option.some(childProcess.pid) : Option.none(),
+//       stdin,
+//       stdout,
+//       stderr,
+//       exitCode,
+//       kill
+//     }
+//   })
+//
