@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest"
-import { Fiber, Schedule, Scope, ServiceMap } from "effect"
+import { Duration, Fiber, Schedule, Scope, ServiceMap } from "effect"
 import * as Cause from "effect/Cause"
 import { Data, Filter, Option, Result } from "effect/data"
 import * as Effect from "effect/Effect"
@@ -710,6 +710,62 @@ describe("Effect", () => {
         )
         assert.strictEqual(n, 1)
         assert.strictEqual(result, "boom")
+      }))
+
+    it.effect("retry/schedule - CurrentMetadata", () =>
+      Effect.gen(function*() {
+        const metadata: Array<Schedule.Metadata> = []
+        yield* pipe(
+          Effect.gen(function*() {
+            const meta = yield* Schedule.CurrentMetadata
+            metadata.push(meta)
+          }),
+          Effect.flip,
+          Effect.retry(Schedule.recurs(3)),
+          Effect.flip
+        )
+        assert.deepStrictEqual(metadata, [
+          {
+            elapsed: 0,
+            elapsedSincePrevious: 0,
+            attempt: 0,
+            input: undefined,
+            output: undefined,
+            now: 0,
+            start: 0,
+            duration: Duration.zero
+          },
+          {
+            elapsed: 0,
+            elapsedSincePrevious: 0,
+            attempt: 1,
+            input: undefined,
+            output: 0,
+            now: 0,
+            start: 0,
+            duration: Duration.zero
+          },
+          {
+            elapsed: 0,
+            elapsedSincePrevious: 0,
+            attempt: 2,
+            input: undefined,
+            output: 1,
+            now: 0,
+            start: 0,
+            duration: Duration.zero
+          },
+          {
+            elapsed: 0,
+            elapsedSincePrevious: 0,
+            attempt: 3,
+            input: undefined,
+            output: 2,
+            now: 0,
+            start: 0,
+            duration: Duration.zero
+          }
+        ])
       }))
   })
 
