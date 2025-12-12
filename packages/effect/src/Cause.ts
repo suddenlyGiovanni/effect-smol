@@ -46,8 +46,8 @@ import type { Inspectable } from "./interfaces/Inspectable.ts"
 import type { Pipeable } from "./interfaces/Pipeable.ts"
 import * as core from "./internal/core.ts"
 import * as effect from "./internal/effect.ts"
+import type { StackFrame } from "./References.ts"
 import * as ServiceMap from "./ServiceMap.ts"
-import type { Span } from "./Tracer.ts"
 import type { NoInfer } from "./types/Types.ts"
 
 /**
@@ -229,7 +229,7 @@ export declare namespace Cause {
     readonly [FailureTypeId]: typeof FailureTypeId
     readonly _tag: Tag
     readonly annotations: ReadonlyMap<string, unknown>
-    annotate<I, S>(tag: ServiceMap.Service<I, S>, value: S, options?: {
+    annotate(annotations: ServiceMap.ServiceMap<never> | ReadonlyMap<string, unknown>, options?: {
       readonly overwrite?: boolean | undefined
     }): this
   }
@@ -925,34 +925,20 @@ export interface UnknownError extends YieldableError {
 export const UnknownError: new(cause: unknown, message?: string) => UnknownError = effect.UnknownError
 
 /**
- * Adds annotations to a `Cause` using a `ServiceMap.Service` to store metadata
+ * Adds annotations to a `Cause` using a `ServiceMap` to store metadata
  * that can be retrieved later for debugging or tracing purposes.
- *
- * @example
- * ```ts
- * import { Cause, ServiceMap } from "effect"
- *
- * // Define a custom annotation key
- * class UserId extends ServiceMap.Service<UserId, string>()("UserId") {}
- *
- * // Create a cause and add an annotation
- * const originalCause = Cause.fail("Something went wrong")
- * const annotatedCause = Cause.annotate(originalCause, UserId, "user123")
- * ```
  *
  * @category Annotations
  * @since 4.0.0
  */
 export const annotate: {
-  <I, S>(
-    key: ServiceMap.Service<I, S>,
-    value: NoInfer<S>,
+  (
+    annotations: ServiceMap.ServiceMap<never>,
     options?: { readonly overwrite?: boolean | undefined }
   ): <E>(self: Cause<E>) => Cause<E>
-  <E, I, S>(
+  <E>(
     self: Cause<E>,
-    key: ServiceMap.Service<I, S>,
-    value: NoInfer<S>,
+    annotations: ServiceMap.ServiceMap<never>,
     options?: { readonly overwrite?: boolean | undefined }
   ): Cause<E>
 } = core.causeAnnotate
@@ -974,12 +960,12 @@ export const failureAnnotations: <E>(self: Failure<E>) => ServiceMap.ServiceMap<
 export const annotations: <E>(self: Cause<E>) => ServiceMap.ServiceMap<never> = effect.causeAnnotations
 
 /**
- * Represents the span captured at the point of failure.
+ * Represents the stack frame captured at the point of failure.
  *
  * @category Annotations
  * @since 4.0.0
  */
-export class CurrentSpan extends ServiceMap.Service<CurrentSpan, Span>()("effect/Cause/CurrentSpan") {}
+export class StackTrace extends ServiceMap.Service<StackTrace, StackFrame>()("effect/Cause/StackTrace") {}
 
 /**
  * Represents the span captured at the point of interruption.
@@ -987,22 +973,6 @@ export class CurrentSpan extends ServiceMap.Service<CurrentSpan, Span>()("effect
  * @category Annotations
  * @since 4.0.0
  */
-export class InterruptorSpan extends ServiceMap.Service<InterruptorSpan, Span>()("effect/Cause/InterruptorSpan") {}
-
-/**
- * Represents the trace captured at the point an Effect.fn was called.
- *
- * @category Annotations
- * @since 4.0.0
- */
-export class FnCallsiteTrace extends ServiceMap.Service<FnCallsiteTrace, Error>()("effect/Cause/FnCallsiteTrace") {}
-
-/**
- * Represents the trace captured at the point an Effect.fn was defined.
- *
- * @category Annotations
- * @since 4.0.0
- */
-export class FnDefinitionTrace extends ServiceMap.Service<FnDefinitionTrace, Error>()(
-  "effect/Cause/FnDefinitionTrace"
-) {}
+export class InterruptorStackTrace
+  extends ServiceMap.Service<InterruptorStackTrace, StackFrame>()("effect/Cause/InterruptorStackTrace")
+{}
