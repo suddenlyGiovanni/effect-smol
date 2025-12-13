@@ -467,7 +467,7 @@ function makeStandardResult<A>(exit: Exit_.Exit<StandardSchemaV1.Result<A>>): St
  *   age: Schema.Number.check(Schema.isBetween({ minimum: 0, maximum: 150 }))
  * })
  *
- * const standardSchema = Schema.asStandardSchemaV1(PersonSchema, {
+ * const standardSchema = Schema.toStandardSchemaV1(PersonSchema, {
  *   leafHook
  * })
  *
@@ -488,7 +488,7 @@ function makeStandardResult<A>(exit: Exit_.Exit<StandardSchemaV1.Result<A>>): St
  * @category Standard Schema
  * @since 4.0.0
  */
-export function asStandardSchemaV1<
+export function toStandardSchemaV1<
   S extends Top & { readonly DecodingServices: never }
 >(
   self: S,
@@ -556,9 +556,9 @@ function getDefinitionsNamespace(target: JsonSchema.Target): string {
   }
 }
 
-function makeStandardJSONSchemaV1(self: Top, target: StandardJSONSchemaV1.Target): JsonSchema {
+function toBaseStandardJSONSchemaV1(self: Top, target: StandardJSONSchemaV1.Target): JsonSchema {
   if (isTarget(target)) {
-    const { definitions, schema } = makeJsonSchema(self, { target })
+    const { definitions, schema } = toJsonSchema(self, { target })
     if (Object.keys(definitions).length > 0) {
       schema[getDefinitionsNamespace(target)] = definitions
     }
@@ -576,13 +576,13 @@ function makeStandardJSONSchemaV1(self: Top, target: StandardJSONSchemaV1.Target
  * @since 4.0.0
  * @experimental
  */
-export function asStandardJSONSchemaV1<S extends Top>(self: S): StandardJSONSchemaV1<S["Encoded"], S["Type"]> & S {
+export function toStandardJSONSchemaV1<S extends Top>(self: S): StandardJSONSchemaV1<S["Encoded"], S["Type"]> & S {
   const jsonSchema: StandardJSONSchemaV1.Props<S["Encoded"], S["Type"]>["jsonSchema"] = {
     input(options) {
-      return makeStandardJSONSchemaV1(self, options.target)
+      return toBaseStandardJSONSchemaV1(self, options.target)
     },
     output(options) {
-      return makeStandardJSONSchemaV1(typeCodec(self), options.target)
+      return toBaseStandardJSONSchemaV1(typeCodec(self), options.target)
     }
   }
   if ("~standard" in self) {
@@ -2288,13 +2288,13 @@ export interface UniqueArray<S extends Top> extends Array$<S> {}
  * Returns a new array schema that ensures all elements are unique.
  *
  * The equivalence used to determine uniqueness is the one provided by
- * `Schema.makeEquivalence(item)`.
+ * `Schema.toEquivalence(item)`.
  *
  * @category Constructors
  * @since 4.0.0
  */
 export function UniqueArray<S extends Top>(item: S): UniqueArray<S> {
-  return Array(item).check(isUnique(makeEquivalence(item)))
+  return Array(item).check(isUnique(toEquivalence(item)))
 }
 
 /**
@@ -3142,7 +3142,7 @@ export function getTag(tag: PropertyKey, ast: AST.AST): PropertyKey | undefined 
  * @since 4.0.0
  * @experimental
  */
-export type asTaggedUnion<
+export type toTaggedUnion<
   Tag extends PropertyKey,
   Members extends ReadonlyArray<Top & { readonly Type: { readonly [K in Tag]: PropertyKey } }>
 > = Union<Members> & TaggedUnionUtils<Tag, Members>
@@ -3151,10 +3151,10 @@ export type asTaggedUnion<
  * @since 4.0.0
  * @experimental
  */
-export function asTaggedUnion<const Tag extends PropertyKey>(tag: Tag) {
+export function toTaggedUnion<const Tag extends PropertyKey>(tag: Tag) {
   return <const Members extends ReadonlyArray<Top & { readonly Type: { readonly [K in Tag]: PropertyKey } }>>(
     self: Union<Members>
-  ): asTaggedUnion<Tag, Members> => {
+  ): toTaggedUnion<Tag, Members> => {
     const cases: Record<PropertyKey, unknown> = {}
     const guards: Record<PropertyKey, (u: unknown) => boolean> = {}
     const isAnyOf = (keys: ReadonlyArray<PropertyKey>) => (value: Members[number]["Type"]) => keys.includes(value[tag])
@@ -3237,7 +3237,7 @@ export function TaggedUnion<const CasesByTag extends Record<string, Struct.Field
     members.push(cases[key] = TaggedStruct(key, casesByTag[key]))
   }
   const union = Union(members)
-  const { guards, isAnyOf, match } = asTaggedUnion("_tag")(union)
+  const { guards, isAnyOf, match } = toTaggedUnion("_tag")(union)
   return makeProto(union.ast, { cases, isAnyOf, guards, match })
 }
 
@@ -6361,7 +6361,7 @@ export interface fromJsonString<S extends Top> extends decodeTo<S, String> {}
  * const original = Schema.Struct({ a: Schema.String })
  * const schema = Schema.fromJsonString(original)
  *
- * const jsonSchema = Schema.makeJsonSchema(schema, { target: "draft-2020-12" })
+ * const jsonSchema = Schema.toJsonSchema(schema, { target: "draft-2020-12" })
  *
  * console.log(JSON.stringify(jsonSchema, null, 2))
  * // Output:
@@ -7278,7 +7278,7 @@ export type LazyArbitrary<T> = (fc: typeof FastCheck) => FastCheck.Arbitrary<T>
  * @category Arbitrary
  * @since 4.0.0
  */
-export function makeArbitraryLazy<S extends Top>(schema: S): LazyArbitrary<S["Type"]> {
+export function toArbitraryLazy<S extends Top>(schema: S): LazyArbitrary<S["Type"]> {
   const lawc = InternalArbitrary.memoized(schema.ast)
   return (fc) => lawc(fc, {})
 }
@@ -7287,8 +7287,8 @@ export function makeArbitraryLazy<S extends Top>(schema: S): LazyArbitrary<S["Ty
  * @category Arbitrary
  * @since 4.0.0
  */
-export function makeArbitrary<S extends Top>(schema: S): FastCheck.Arbitrary<S["Type"]> {
-  return makeArbitraryLazy(schema)(FastCheck)
+export function toArbitrary<S extends Top>(schema: S): FastCheck.Arbitrary<S["Type"]> {
+  return toArbitraryLazy(schema)(FastCheck)
 }
 
 // -----------------------------------------------------------------------------
@@ -7310,61 +7310,51 @@ export function overrideFormatter<S extends Top>(formatter: () => Formatter<S["T
   }
 }
 
-type FormatterOverride<A extends AST.AST> = (ast: A, visit: (ast: AST.AST) => Formatter<any>) => Formatter<any>
-
 /**
  * @category Formatter
  * @since 4.0.0
  */
-export function makeFormatterCompiler(options: {
-  readonly onDeclaration?:
-    | FormatterOverride<AST.Declaration>
+export function toFormatter<T>(schema: Schema<T>, options?: {
+  readonly onBefore?:
+    | ((ast: AST.AST, recur: (ast: AST.AST) => Formatter<any>) => Formatter<any> | undefined)
     | undefined
-  readonly onNull?: FormatterOverride<AST.Null> | undefined
-  readonly onUndefined?: FormatterOverride<AST.Undefined> | undefined
-  readonly onVoid?: FormatterOverride<AST.Void> | undefined
-  readonly onNever?: FormatterOverride<AST.Never> | undefined
-  readonly onUnknown?: FormatterOverride<AST.Unknown> | undefined
-  readonly onAny?: FormatterOverride<AST.Any> | undefined
-  readonly onString?: FormatterOverride<AST.String> | undefined
-  readonly onNumber?: FormatterOverride<AST.Number> | undefined
-  readonly onBoolean?: FormatterOverride<AST.Boolean> | undefined
-  readonly onSymbol?: FormatterOverride<AST.Symbol> | undefined
-  readonly onBigInt?: FormatterOverride<AST.BigInt> | undefined
-  readonly onUniqueSymbol?: FormatterOverride<AST.UniqueSymbol> | undefined
-  readonly onObjectKeyword?: FormatterOverride<AST.ObjectKeyword> | undefined
-  readonly onEnum?: FormatterOverride<AST.Enum> | undefined
-  readonly onLiteral?: FormatterOverride<AST.Literal> | undefined
-  readonly onTemplateLiteral?: FormatterOverride<AST.TemplateLiteral> | undefined
-  readonly onArrays?: FormatterOverride<AST.Arrays> | undefined
-  readonly onObjects?: FormatterOverride<AST.Objects> | undefined
-  readonly onUnion?:
-    | ((
-      ast: AST.Union,
-      visit: (ast: AST.AST) => Formatter<any>,
-      getCandidates: (input: unknown) => ReadonlyArray<AST.AST>
-    ) => Formatter<any>)
-    | undefined
-  readonly onSuspend?: FormatterOverride<AST.Suspend> | undefined
-}): <T>(schema: Schema<T>) => Formatter<T> {
-  const visit = memoize((ast: AST.AST): (t: any) => string => {
+}): Formatter<T> {
+  return recur(schema.ast)
+
+  function recur(ast: AST.AST): Formatter<T> {
     // ---------------------------------------------
     // handle annotation
     // ---------------------------------------------
-    const annotation = Annotations.resolve(ast)?.["formatter"] as
-      | Annotations.Formatter.Override<any, ReadonlyArray<any>>
-      | undefined
-    if (annotation) {
-      return annotation(AST.isDeclaration(ast) ? ast.typeParameters.map(visit) : [])
+    const annotation = Annotations.resolve(ast)?.["formatter"]
+    if (typeof annotation === "function") {
+      return annotation(AST.isDeclaration(ast) ? ast.typeParameters.map(recur) : [])
     }
+    // ---------------------------------------------
+    // handle onBefore
+    // ---------------------------------------------
+    if (options?.onBefore) {
+      const onBefore = options.onBefore(ast, recur)
+      if (onBefore !== undefined) {
+        return onBefore
+      }
+    }
+    // ---------------------------------------------
+    // handle base case
+    // ---------------------------------------------
+    return on(ast)
+  }
+
+  function on(ast: AST.AST): Formatter<any> {
     switch (ast._tag) {
+      default:
+        return format
       case "Never":
-        if (options.onNever) return options.onNever(ast, visit)
-        throw new globalThis.Error("required `formatter` annotation", { cause: ast })
+        return () => "never"
+      case "Void":
+        return () => "void"
       case "Arrays": {
-        if (options.onArrays) return options.onArrays(ast, visit)
-        const elements = ast.elements.map(visit)
-        const rest = ast.rest.map(visit)
+        const elements = ast.elements.map(recur)
+        const rest = ast.rest.map(recur)
         return (t) => {
           const out: Array<string> = []
           let i = 0
@@ -7401,9 +7391,8 @@ export function makeFormatterCompiler(options: {
         }
       }
       case "Objects": {
-        if (options.onObjects) return options.onObjects(ast, visit)
-        const propertySignatures = ast.propertySignatures.map((ps) => visit(ps.type))
-        const indexSignatures = ast.indexSignatures.map((is) => visit(is.type))
+        const propertySignatures = ast.propertySignatures.map((ps) => recur(ps.type))
+        const indexSignatures = ast.indexSignatures.map((is) => recur(is.type))
         if (ast.propertySignatures.length === 0 && ast.indexSignatures.length === 0) {
           return format
         }
@@ -7441,42 +7430,25 @@ export function makeFormatterCompiler(options: {
       }
       case "Union": {
         const getCandidates = (t: any) => AST.getCandidates(t, ast.types)
-        if (options.onUnion) return options.onUnion(ast, visit, getCandidates)
         return (t) => {
           const candidates = getCandidates(t)
           const refinements = candidates.map(Parser.refinement)
           for (let i = 0; i < candidates.length; i++) {
             const is = refinements[i]
             if (is(t)) {
-              return visit(candidates[i])(t)
+              return recur(candidates[i])(t)
             }
           }
           return format(t)
         }
       }
       case "Suspend": {
-        if (options.onSuspend) return options.onSuspend(ast, visit)
-        const get = AST.memoizeThunk(() => visit(ast.thunk()))
+        const get = AST.memoizeThunk(() => recur(ast.thunk()))
         return (t) => get()(t)
       }
-      case "Void":
-        if (options.onVoid) return options.onVoid(ast, visit)
-        return () => "void"
-      default: {
-        const handler: any = options[`on${ast._tag}`]
-        if (handler) return handler(ast, visit)
-        return format
-      }
     }
-  })
-  return (schema) => visit(schema.ast)
+  }
 }
-
-/**
- * @category Formatter
- * @since 4.0.0
- */
-export const makeFormatter = makeFormatterCompiler({})
 
 // -----------------------------------------------------------------------------
 // Equivalence APIs
@@ -7501,7 +7473,7 @@ export function overrideEquivalence<S extends Top>(equivalence: () => Equivalenc
  * @category Equivalence
  * @since 4.0.0
  */
-export function makeEquivalence<T>(schema: Schema<T>): Equivalence.Equivalence<T> {
+export function toEquivalence<T>(schema: Schema<T>): Equivalence.Equivalence<T> {
   return InternalEquivalence.memoized(schema.ast)
 }
 
@@ -7512,7 +7484,7 @@ export function makeEquivalence<T>(schema: Schema<T>): Equivalence.Equivalence<T
 /**
  * @since 4.0.0
  */
-export interface MakeJsonSchemaOptions {
+export interface ToJsonSchemaOptions {
   /**
    * The target of the JSON Schema.
    */
@@ -7619,7 +7591,7 @@ export function getMetaSchemaUri(target: JsonSchema.Source) {
  * @category JsonSchema
  * @since 4.0.0
  */
-export function makeJsonSchema<S extends Top>(schema: S, options: MakeJsonSchemaOptions): JsonSchema.Document {
+export function toJsonSchema<S extends Top>(schema: S, options: ToJsonSchemaOptions): JsonSchema.Document {
   return InternalJsonSchema.make(schema, options)
 }
 
@@ -7700,7 +7672,7 @@ type XmlEncoderOptions = {
  * @category Serializer
  * @since 4.0.0
  */
-export function makeEncoderXml<T, E, RD, RE>(
+export function toEncoderXml<T, E, RD, RE>(
   codec: Codec<T, E, RD, RE>,
   options?: XmlEncoderOptions
 ) {
@@ -8101,7 +8073,7 @@ const parseTagName = (name: string): { safe: string; changed: boolean } => {
  * @category Optic
  * @since 4.0.0
  */
-export function makeIso<S extends Top>(schema: S): Optic_.Iso<S["Type"], S["Iso"]> {
+export function toIso<S extends Top>(schema: S): Optic_.Iso<S["Type"], S["Iso"]> {
   const serializer = toSerializerIso(schema)
   return Optic_.makeIso(Parser.encodeSync(serializer), Parser.decodeSync(serializer))
 }
@@ -8110,7 +8082,7 @@ export function makeIso<S extends Top>(schema: S): Optic_.Iso<S["Type"], S["Iso"
  * @category Optic
  * @since 4.0.0
  */
-export function makeIsoSource<S extends Top>(_: S): Optic_.Iso<S["Type"], S["Type"]> {
+export function toIsoSource<S extends Top>(_: S): Optic_.Iso<S["Type"], S["Type"]> {
   return Optic_.id()
 }
 
@@ -8203,7 +8175,7 @@ export type JsonPatch = ReadonlyArray<JsonPatchOperation>
  * @category JsonPatch Differ
  * @since 4.0.0
  */
-export function makeDifferJsonPatch<T, E>(codec: Codec<T, E>): Differ<T, JsonPatch> {
+export function toDifferJsonPatch<T, E>(codec: Codec<T, E>): Differ<T, JsonPatch> {
   const serializer = toSerializerJson(codec)
   const get = Parser.encodeSync(serializer)
   const set = Parser.decodeSync(serializer)
