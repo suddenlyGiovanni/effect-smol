@@ -29,7 +29,7 @@ Ultimately, the intent is to eliminate the need for two separate paths like in v
 
 ### 3. Encoding / Decoding
 
-- **Default JSON codec generator**: `Schema.toSerializerJson(schema)` does round‑trip‑safe network serialization (Maps → pairs, Options → arrays, Dates → ISO strings, etc.).
+- **Default JSON codec generator**: `Schema.toCodecJson(schema)` does round‑trip‑safe network serialization (Maps → pairs, Options → arrays, Dates → ISO strings, etc.).
 - **Explicit helpers**: `Schema.UnknownFromJsonString`, `Schema.fromJsonString`.
 
 ### 4. Schema Algebra Goodies
@@ -272,7 +272,7 @@ const DateSchema = Schema.Date
 // Encoded: Date (same as Type in this case)
 
 // After applying serializer
-const SerializedDate = Schema.toSerializerJson(DateSchema)
+const SerializedDate = Schema.toCodecJson(DateSchema)
 // Type: Date (preserved)
 // Encoded: unknown (represents any JSON-safe value)
 // At runtime, Date will be encoded as a string, but the type is `unknown`
@@ -314,9 +314,9 @@ export const Date = Schema.instanceOf(globalThis.Date, {
 
 ## Using Serializers
 
-### Basic Usage: `toSerializerJson`
+### Basic Usage: `toCodecJson`
 
-The most common serializer is `toSerializerJson`, which converts a schema into a JSON-capable version.
+The most common serializer is `toCodecJson`, which converts a schema into a JSON-capable version.
 
 **Example** (Round-tripping a `ReadonlySet<Date>` through JSON)
 
@@ -327,7 +327,7 @@ import { Schema } from "effect/schema"
 const schema = Schema.ReadonlySet(Schema.Date)
 
 // Ask for a JSON-capable schema
-const serializer = Schema.toSerializerJson(schema)
+const serializer = Schema.toCodecJson(schema)
 
 // A sample value to send
 const data = new Set([new Date("2021-01-01"), new Date("2021-01-02")])
@@ -360,9 +360,9 @@ This schema automatically picks JSON formats based on its parts:
 >
 > The default JSON formats aim for portability and round-trip behavior. They may not match domain-specific formats used by public APIs.
 
-### How `toSerializerJson` Works
+### How `toCodecJson` Works
 
-When you call `Schema.toSerializerJson(schema)`, the library:
+When you call `Schema.toCodecJson(schema)`, the library:
 
 1. **Walks the AST**: Recursively traverses the schema's abstract syntax tree
 2. **Finds annotations**: Looks for `serializerJson` or `serializer` annotations
@@ -384,7 +384,7 @@ const PersonSchema = Schema.Struct({
   tags: Schema.ReadonlySet(Schema.String)
 })
 
-const serializer = Schema.toSerializerJson(PersonSchema)
+const serializer = Schema.toCodecJson(PersonSchema)
 
 const person = {
   name: "John",
@@ -503,7 +503,7 @@ const DateFromEpochMillis = Schema.Date.pipe(
 const schema = Schema.ReadonlySet(DateFromEpochMillis)
 
 // Request a JSON-capable schema
-const serializer = Schema.toSerializerJson(schema)
+const serializer = Schema.toCodecJson(schema)
 
 const data = new Set([new Date("2021-01-01"), new Date("2021-01-02")])
 
@@ -545,7 +545,7 @@ const PersonSchema = Schema.instanceOf(Person, {
     )
 })
 
-const serializer = Schema.toSerializerJson(PersonSchema)
+const serializer = Schema.toCodecJson(PersonSchema)
 
 const person = new Person("John", 30)
 
@@ -599,8 +599,8 @@ const schema = Schema.Struct({
   createdAt: Schema.Date
 })
 
-const json = Schema.toSerializerJson(schema)
-const stringTree = Schema.toSerializerStringTree(schema)
+const json = Schema.toCodecJson(schema)
+const stringTree = Schema.toCodecStringTree(schema)
 
 const value = {
   name: "John",
@@ -647,7 +647,7 @@ const schema = Schema.Struct({
   b: Schema.Number
 })
 
-const stringTree = Schema.toSerializerStringTree(schema)
+const stringTree = Schema.toCodecStringTree(schema)
 
 console.log(
   Schema.encodeUnknownSync(stringTree)({
@@ -670,7 +670,7 @@ const schema = Schema.Struct({
   b: Schema.Number
 })
 
-const stringTree = Schema.toSerializerStringTree(schema, { keepDeclarations: true })
+const stringTree = Schema.toCodecStringTree(schema, { keepDeclarations: true })
 
 console.log(
   Schema.encodeUnknownSync(stringTree)({
@@ -684,7 +684,7 @@ console.log(
 ## 🆕 XML Encoder
 
 `Schema.toEncoderXml` lets you serialize values to XML.
-It uses the `toSerializerStringTree` serializer internally.
+It uses the `toCodecStringTree` serializer internally.
 
 **Example**
 
@@ -740,7 +740,7 @@ console.log(
 
 ## ISO Serializer
 
-The ISO serializer (`toSerializerIso`) converts schemas to their `Iso` representation. This is useful when you want to build isomorphic transformations or optics.
+The ISO serializer (`toCodecIso`) converts schemas to their `Iso` representation. This is useful when you want to build isomorphic transformations or optics.
 
 **Example** (Using the ISO serializer with a Class)
 
@@ -753,7 +753,7 @@ class Person extends Schema.Class<Person>("Person")({
   age: Schema.Number
 }) {}
 
-const isoSerializer = Schema.toSerializerIso(Person)
+const isoSerializer = Schema.toCodecIso(Person)
 
 // The Iso type represents the "focus" of the schema.
 // For Class schemas, the Iso type is the struct representation
@@ -778,7 +778,7 @@ ISO serializers are mainly used internally for building optics and reusable tran
 
 ### Serializer Composition
 
-Serializers compose automatically through nested structures. When you call `toSerializerJson` on a complex schema, it recursively applies serialization to all nested fields.
+Serializers compose automatically through nested structures. When you call `toCodecJson` on a complex schema, it recursively applies serialization to all nested fields.
 
 **Example** (Complex nested structure)
 
@@ -797,7 +797,7 @@ const schema = Schema.Struct({
   timestamp: Schema.Date
 })
 
-const serializer = Schema.toSerializerJson(schema)
+const serializer = Schema.toCodecJson(schema)
 
 const data = {
   users: [
@@ -832,7 +832,7 @@ console.log(JSON.stringify(serialized, null, 2))
 
 ### Priority: Custom Encodings vs Serializers
 
-`Schema.toSerializerJson` respects **explicit encodings** you add to a schema. If you choose a custom representation, that choice takes priority over default serializers.
+`Schema.toCodecJson` respects **explicit encodings** you add to a schema. If you choose a custom representation, that choice takes priority over default serializers.
 
 **Example** (Custom encoding takes priority over default Date handling)
 
@@ -856,7 +856,7 @@ const schema = Schema.Struct({
   date2: Schema.Date
 })
 
-const serializer = Schema.toSerializerJson(schema)
+const serializer = Schema.toCodecJson(schema)
 
 const data = { date1: new Date("2021-01-01"), date2: new Date("2021-01-01") }
 
@@ -873,7 +873,7 @@ When sending data over the network, use serializers to support round-trip conver
 
 ```ts
 // ✅ Good: Use serializer for network - supports round-trip conversion
-const serializer = Schema.toSerializerJson(mySchema)
+const serializer = Schema.toCodecJson(mySchema)
 
 // First encode to a JSON-safe value
 const encoded = Schema.encodeUnknownSync(serializer)(data)
@@ -922,7 +922,7 @@ Let serializers handle nested structures automatically:
 const schema = Schema.Struct({
   dates: Schema.Array(Schema.Date)
 })
-const serializer = Schema.toSerializerJson(schema)
+const serializer = Schema.toCodecJson(schema)
 
 // ❌ Bad: Manual transformation for each field
 const manual = {
@@ -934,9 +934,9 @@ const manual = {
 
 Choose the serializer that matches your use case:
 
-- **`toSerializerJson`**: For JSON APIs, storage, and general serialization
-- **`toSerializerStringTree`**: For form data and string-only systems
-- **`toSerializerIso`**: For isomorphic transformations and optics
+- **`toCodecJson`**: For JSON APIs, storage, and general serialization
+- **`toCodecStringTree`**: For form data and string-only systems
+- **`toCodecIso`**: For isomorphic transformations and optics
 
 ## Common Patterns
 
@@ -955,7 +955,7 @@ const UserSchema = Schema.Struct({
 })
 
 // Create serializer for network usage
-const UserSerializer = Schema.toSerializerJson(UserSchema)
+const UserSerializer = Schema.toCodecJson(UserSchema)
 
 // Encode for sending
 const sendUser = (user: (typeof UserSchema)["Type"]) =>
@@ -994,7 +994,7 @@ const FormSchema = Schema.Struct({
 })
 
 // Use StringTree for form data (everything becomes a string)
-const formSerializer = Schema.toSerializerStringTree(FormSchema)
+const formSerializer = Schema.toCodecStringTree(FormSchema)
 
 // Convert to URLSearchParams for submission
 const toFormData = (data: (typeof FormSchema)["Type"]) => {
@@ -1024,7 +1024,7 @@ const StorageSchema = Schema.Struct({
   lastUpdated: Schema.Date
 })
 
-const storageSerializer = Schema.toSerializerJson(StorageSchema)
+const storageSerializer = Schema.toCodecJson(StorageSchema)
 
 // Save to localStorage
 const save = (data: (typeof StorageSchema)["Type"]) =>
@@ -2943,7 +2943,7 @@ class Person extends Schema.Opaque<Person>()(
   })
 ) {
   // Create a custom serializer using the class itself
-  static readonly serializer = Schema.toSerializerJson(this)
+  static readonly serializer = Schema.toCodecJson(this)
 }
 
 console.log(
@@ -4926,7 +4926,7 @@ console.log(String(Schema.decodeUnknownExit(schema)(formData)))
 // Success({"a":"1","b":{"c":"2","d":"3"}})
 ```
 
-If you want to decode values that are not strings, use `Schema.toSerializerStringTree` with the `keepDeclarations: true` option. This serializer preserves values such as numbers and `Blob` objects when compatible with the schema.
+If you want to decode values that are not strings, use `Schema.toCodecStringTree` with the `keepDeclarations: true` option. This serializer preserves values such as numbers and `Blob` objects when compatible with the schema.
 
 **Example** (Parsing non-string values)
 
@@ -4934,7 +4934,7 @@ If you want to decode values that are not strings, use `Schema.toSerializerStrin
 import { Schema } from "effect/schema"
 
 const schema = Schema.fromFormData(
-  Schema.toSerializerStringTree(
+  Schema.toCodecStringTree(
     Schema.Struct({
       a: Schema.Int
     }),
@@ -5000,7 +5000,7 @@ console.log(String(Schema.decodeUnknownExit(schema)(urlSearchParams)))
 // Success({"a":"1","b":{"c":"2","d":"3"}})
 ```
 
-If you want to decode values that are not strings, use `Schema.toSerializerStringTree` with the `keepDeclarations: true` option. This serializer preserves values such as numbers or declarations when compatible with the schema.
+If you want to decode values that are not strings, use `Schema.toCodecStringTree` with the `keepDeclarations: true` option. This serializer preserves values such as numbers or declarations when compatible with the schema.
 
 **Example** (Parsing non-string values)
 
@@ -5008,7 +5008,7 @@ If you want to decode values that are not strings, use `Schema.toSerializerStrin
 import { Schema } from "effect/schema"
 
 const schema = Schema.fromURLSearchParams(
-  Schema.toSerializerStringTree(
+  Schema.toCodecStringTree(
     Schema.Struct({
       a: Schema.Int
     }),
@@ -6177,7 +6177,7 @@ interface Context {
   readonly constraints?: Annotation.Constraints["constraints"] | undefined
 }
 
-export interface Override<T, TypeParameters extends ReadonlyArray<Schema.Top>> {
+export interface ToArbitrary<T, TypeParameters extends ReadonlyArray<Schema.Top>> {
   (
     /* Arbitraries for any type parameters of the schema (if present) */
     typeParameters: { readonly [K in keyof TypeParameters]: FastCheck.Arbitrary<TypeParameters[K]["Type"]> }
@@ -6204,7 +6204,7 @@ Example Output:
 
 // Add an override to restrict numbers to integers 10..20
 const schema = Schema.Number.annotate({
-  arbitrary: () => (fc) => fc.integer({ min: 10, max: 20 }) // custom generator
+  toArbitrary: () => (fc) => fc.integer({ min: 10, max: 20 }) // custom generator
 })
 
 console.log(FastCheck.sample(Schema.toArbitrary(schema), 3))
@@ -6263,7 +6263,7 @@ import { FastCheck } from "effect/testing"
  */
 function fake<A>(
   gen: (f: typeof faker, ctx: Annotations.Arbitrary.Context) => A
-): Annotations.Arbitrary.Override<A, readonly []> {
+): Annotations.Arbitrary.ToArbitrary<A, readonly []> {
   return () => (fc, ctx) =>
     fc.nat().map((seed) => {
       faker.seed(seed)
@@ -6273,15 +6273,15 @@ function fake<A>(
 
 /** Leaf fields use Faker through the `arbitrary` override */
 const FirstName = Schema.String.annotate({
-  arbitrary: fake((f) => f.person.firstName())
+  toArbitrary: fake((f) => f.person.firstName())
 })
 
 const LastName = Schema.String.annotate({
-  arbitrary: fake((f) => f.person.lastName())
+  toArbitrary: fake((f) => f.person.lastName())
 })
 
 const Age = Schema.Int.check(Schema.isBetween({ minimum: 18, maximum: 80 })).annotate({
-  arbitrary: fake((f, ctx) => {
+  toArbitrary: fake((f, ctx) => {
     // Use the constraints from the schema to generate a random age
     const min = ctx.constraints?.number?.min ?? 0
     const max = ctx.constraints?.number?.max ?? Number.MAX_SAFE_INTEGER
@@ -6347,7 +6347,7 @@ class MyClass {
 }
 
 const schema = Schema.instanceOf(MyClass, {
-  equivalence: () => (x, y) => x.a === y.a
+  toEquivalence: () => (x, y) => x.a === y.a
 })
 
 const equivalence = Schema.toEquivalence(schema)
@@ -6355,7 +6355,7 @@ const equivalence = Schema.toEquivalence(schema)
 
 ### Overrides
 
-You can override the derived equivalence for a schema using `ToEquivalence.override`. This is useful when the default derivation does not fit your requirements.
+You can override the derived equivalence for a schema using `overrideToEquivalence`. This is useful when the default derivation does not fit your requirements.
 
 **Example** (Overriding equivalence for a struct)
 
@@ -6366,7 +6366,7 @@ import { Schema } from "effect/schema"
 const schema = Schema.Struct({
   a: Schema.String,
   b: Schema.Number
-}).pipe(Schema.overrideEquivalence(() => Equivalence.make((x, y) => x.a === y.a)))
+}).pipe(Schema.overrideToEquivalence(() => Equivalence.make((x, y) => x.a === y.a)))
 
 const equivalence = Schema.toEquivalence(schema)
 ```
@@ -6770,7 +6770,7 @@ if (r._tag === "Failure") {
   const failures = r.cause.failures
   if (failures[0]?._tag === "Fail") {
     const failureResult = Issue.makeStandardSchemaV1().format(failures[0].error)
-    const serializer = Schema.toSerializerJson(Schema.StandardSchemaV1FailureResult)
+    const serializer = Schema.toCodecJson(Schema.StandardSchemaV1FailureResult)
     console.dir(Schema.encodeSync(serializer)(failureResult), { depth: null })
   }
 }
@@ -7004,18 +7004,18 @@ import { Schema } from "effect/schema"
 
 function encodingJsonSchema<T, E, RD>(schema: Schema.Codec<T, E, RD, never>) {
   return Schema.toStandardSchemaV1(
-    Schema.flip(Schema.toSerializerJson(schema)).annotate({
+    Schema.flip(Schema.toCodecJson(schema)).annotate({
       direction: "encoding"
     })
   )
 }
 
 function decodingJsonSchema<T, E, RE>(schema: Schema.Codec<T, E, never, RE>) {
-  return Schema.toStandardSchemaV1(Schema.toSerializerJson(schema))
+  return Schema.toStandardSchemaV1(Schema.toCodecJson(schema))
 }
 
 function decodingStringSchema<T, E, RE>(schema: Schema.Codec<T, E, never, RE>) {
-  return Schema.toStandardSchemaV1(Schema.toSerializerStringTree(schema))
+  return Schema.toStandardSchemaV1(Schema.toCodecStringTree(schema))
 }
 
 function mapJsonSchema(schema: Schema.Top) {
@@ -7424,8 +7424,8 @@ v4
 ```ts
 import { Schema } from "effect/schema"
 
-// encodedCodec<Schema.String>
-const schema = Schema.encodedCodec(Schema.String)
+// toEncoded<Schema.String>
+const schema = Schema.toEncoded(Schema.String)
 ```
 
 ### typeSchema
@@ -7444,8 +7444,8 @@ v4
 ```ts
 import { Schema } from "effect/schema"
 
-// typeCodec<Schema.String>
-const schema = Schema.typeCodec(Schema.String)
+// toType<Schema.String>
+const schema = Schema.toType(Schema.String)
 ```
 
 ### Decoding / Encoding API Renames
@@ -7476,14 +7476,14 @@ The following APIs have been removed:
 
 v4
 
-Use `Schema.decode*` + `Schema.typeCodec` instead.
+Use `Schema.decode*` + `Schema.toType` instead.
 
 **Example** (Migrating from `validateSync`)
 
 ```ts
 import { Schema } from "effect/schema"
 
-const validateSync = Schema.decodeSync(Schema.typeCodec(Schema.String))
+const validateSync = Schema.decodeSync(Schema.toType(Schema.String))
 ```
 
 Reason: the "validate" term was confusing for the users that don't know the difference between validation and decoding.
@@ -7940,7 +7940,7 @@ import { Getter, Schema } from "effect/schema"
 function f<S extends Schema.Top>(schema: S, defaultValue: () => S["Type"]) {
   return Schema.Struct({
     a: Schema.optional(schema).pipe(
-      Schema.decodeTo(Schema.typeCodec(schema), {
+      Schema.decodeTo(Schema.toType(schema), {
         decode: Getter.withDefault(defaultValue),
         encode: Getter.required()
       })
@@ -7971,7 +7971,7 @@ import { Getter, Schema } from "effect/schema"
 function f<S extends Schema.Top>(schema: S, defaultValue: () => S["Type"]) {
   return Schema.Struct({
     a: Schema.optionalKey(schema).pipe(
-      Schema.decodeTo(Schema.typeCodec(schema), {
+      Schema.decodeTo(Schema.toType(schema), {
         decode: Getter.withDefault(defaultValue),
         encode: Getter.required()
       })
@@ -8003,7 +8003,7 @@ import { Getter, Schema } from "effect/schema"
 function f<S extends Schema.Top>(schema: S) {
   return Schema.Struct({
     a: Schema.optional(Schema.NullOr(schema)).pipe(
-      Schema.decodeTo(Schema.optional(Schema.typeCodec(schema)), {
+      Schema.decodeTo(Schema.optional(Schema.toType(schema)), {
         decode: Getter.transformOptional(Option.filter(Predicate.isNotNull)),
         encode: Getter.passthrough()
       })
@@ -8035,7 +8035,7 @@ import { Getter, Schema } from "effect/schema"
 function f<S extends Schema.Top>(schema: S) {
   return Schema.Struct({
     a: Schema.optionalKey(Schema.NullOr(schema)).pipe(
-      Schema.decodeTo(Schema.optionalKey(Schema.typeCodec(schema)), {
+      Schema.decodeTo(Schema.optionalKey(Schema.toType(schema)), {
         decode: Getter.transformOptional(Option.filter(Predicate.isNotNull)),
         encode: Getter.passthrough()
       })
@@ -8067,7 +8067,7 @@ import { Getter, Schema } from "effect/schema"
 function f<S extends Schema.Top>(schema: S, defaultValue: () => S["Type"]) {
   return Schema.Struct({
     a: Schema.optional(Schema.NullOr(schema)).pipe(
-      Schema.decodeTo(Schema.UndefinedOr(Schema.typeCodec(schema)), {
+      Schema.decodeTo(Schema.UndefinedOr(Schema.toType(schema)), {
         decode: Getter.transformOptional((o) =>
           o.pipe(Option.filter(Predicate.isNotNull), Option.orElseSome(defaultValue))
         ),
@@ -8101,7 +8101,7 @@ import { Getter, Schema } from "effect/schema"
 function f<S extends Schema.Top>(schema: S, defaultValue: () => S["Type"]) {
   return Schema.Struct({
     a: Schema.optionalKey(Schema.NullOr(schema)).pipe(
-      Schema.decodeTo(Schema.typeCodec(schema), {
+      Schema.decodeTo(Schema.toType(schema), {
         decode: Getter.transformOptional((o) =>
           o.pipe(Option.filter(Predicate.isNotNull), Option.orElseSome(defaultValue))
         ),
@@ -8240,9 +8240,9 @@ console.log(Schema.encodeSync(manual)("a"))
 function pluck<P extends PropertyKey>(key: P) {
   return <S extends Schema.Top>(
     schema: Schema.Struct<{ [K in P]: S }>
-  ): Schema.decodeTo<Schema.typeCodec<S>, Schema.Struct<{ [K in P]: S }>> => {
+  ): Schema.decodeTo<Schema.toType<S>, Schema.Struct<{ [K in P]: S }>> => {
     return schema.mapFields(Struct.pick([key])).pipe(
-      Schema.decodeTo(Schema.typeCodec(schema.fields[key]), {
+      Schema.decodeTo(Schema.toType(schema.fields[key]), {
         decode: Getter.transform((whole: any) => whole[key]),
         encode: Getter.transform((value) => ({ [key]: value }) as any)
       })

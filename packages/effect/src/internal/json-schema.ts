@@ -67,7 +67,7 @@ function recur(
     const identifier = getIdentifier(ast)
     if (identifier !== undefined) {
       const $ref = { $ref: getPointer(target) + escapeJsonPointer(identifier) }
-      const encoded = AST.encodedAST(ast)
+      const encoded = AST.toEncoded(ast)
       if (Object.hasOwn(options.definitions, identifier)) {
         if (AST.isSuspend(ast) || encodedMap.get(encoded) === identifier) {
           return $ref
@@ -109,7 +109,7 @@ function recur(
   // handle encoding
   // ---------------------------------------------
   if (ast.encoding) {
-    return recur(AST.encodedAST(ast), path, options, ignoreIdentifier, ignoreAnnotation)
+    return recur(AST.toEncoded(ast), path, options, ignoreIdentifier, ignoreAnnotation)
   }
   let out = flattenArrayJsonSchema(base(ast, path, options, false))
   // ---------------------------------------------
@@ -409,18 +409,20 @@ function getConstraint<T>(
   target: Schema.JsonSchema.Target,
   type?: Schema.JsonSchema.Type
 ): Schema.JsonSchema | undefined {
-  const annotation = check.annotations?.jsonSchemaConstraint as Annotations.JsonSchema.Constraint | undefined
+  const annotation = check.annotations?.toJsonSchemaConstraint as
+    | Annotations.JsonSchema.ToJsonSchemaConstraint
+    | undefined
   if (annotation) return annotation({ target, type })
 }
 
 function getAnnotation(
   annotations: Annotations.Annotations | undefined
-): Annotations.JsonSchema.Override<ReadonlyArray<Schema.Top>> | undefined {
-  return annotations?.jsonSchema as any
+): Annotations.JsonSchema.ToJsonSchema<ReadonlyArray<Schema.Top>> | undefined {
+  return annotations?.toJsonSchema as any
 }
 
 function isOptional(ast: AST.AST): boolean {
-  const encoded = AST.encodedAST(ast)
+  const encoded = AST.toEncoded(ast)
   return AST.isOptional(encoded) || AST.containsUndefined(encoded)
 }
 

@@ -472,7 +472,7 @@ export class Complete<A, E> extends Data.TaggedClass("Complete")<{
       },
       {
         title: "Complete",
-        serializerJson: ([exit]) =>
+        toCodecJson: ([exit]) =>
           Schema.link<Complete<Success["Encoded"], Error["Encoded"]>>()(
             Schema.Struct({
               _tag: Schema.Literal("Complete"),
@@ -526,8 +526,8 @@ const AnyOrVoid = Schema.Union([Schema.Any, Schema.Void])
  * @since 4.0.0
  * @category Result
  */
-export const ResultEncoded: Schema.Codec<ResultEncoded<any, any>> = Schema.encodedCodec(
-  Schema.toSerializerJson(
+export const ResultEncoded: Schema.Codec<ResultEncoded<any, any>> = Schema.toEncoded(
+  Schema.toCodecJson(
     Result({
       success: AnyOrVoid,
       error: AnyOrVoid

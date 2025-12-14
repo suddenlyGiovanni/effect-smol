@@ -582,7 +582,7 @@ export function toStandardJSONSchemaV1<S extends Top>(self: S): StandardJSONSche
       return toBaseStandardJSONSchemaV1(self, options.target)
     },
     output(options) {
-      return toBaseStandardJSONSchemaV1(typeCodec(self), options.target)
+      return toBaseStandardJSONSchemaV1(toType(self), options.target)
     }
   }
   if ("~standard" in self) {
@@ -1018,14 +1018,14 @@ export const readonlyKey = Struct_.lambda<readonlyKeyLambda>((self) => self.sche
 /**
  * @since 4.0.0
  */
-export interface typeCodec<S extends Top> extends
+export interface toType<S extends Top> extends
   Bottom<
     S["Type"],
     S["Type"],
     never,
     never,
     S["ast"],
-    typeCodec<S>,
+    toType<S>,
     S["~type.make.in"],
     S["Iso"],
     S["~type.parameters"],
@@ -1040,27 +1040,27 @@ export interface typeCodec<S extends Top> extends
   readonly "~rebuild.out": this
 }
 
-interface typeCodecLambda extends Lambda {
-  <S extends Top>(self: S): typeCodec<S>
-  readonly "~lambda.out": this["~lambda.in"] extends Top ? typeCodec<this["~lambda.in"]> : never
+interface toTypeLambda extends Lambda {
+  <S extends Top>(self: S): toType<S>
+  readonly "~lambda.out": this["~lambda.in"] extends Top ? toType<this["~lambda.in"]> : never
 }
 
 /**
  * @since 4.0.0
  */
-export const typeCodec = Struct_.lambda<typeCodecLambda>((schema) => makeProto(AST.typeAST(schema.ast), { schema }))
+export const toType = Struct_.lambda<toTypeLambda>((schema) => makeProto(AST.toType(schema.ast), { schema }))
 
 /**
  * @since 4.0.0
  */
-export interface encodedCodec<S extends Top> extends
+export interface toEncoded<S extends Top> extends
   Bottom<
     S["Encoded"],
     S["Encoded"],
     never,
     never,
     AST.AST,
-    encodedCodec<S>,
+    toEncoded<S>,
     S["Encoded"],
     S["Encoded"],
     ReadonlyArray<Top>,
@@ -1075,17 +1075,15 @@ export interface encodedCodec<S extends Top> extends
   readonly "~rebuild.out": this
 }
 
-interface encodedCodecLambda extends Lambda {
-  <S extends Top>(self: S): encodedCodec<S>
-  readonly "~lambda.out": this["~lambda.in"] extends Top ? encodedCodec<this["~lambda.in"]> : never
+interface toEncodedLambda extends Lambda {
+  <S extends Top>(self: S): toEncoded<S>
+  readonly "~lambda.out": this["~lambda.in"] extends Top ? toEncoded<this["~lambda.in"]> : never
 }
 
 /**
  * @since 4.0.0
  */
-export const encodedCodec = Struct_.lambda<encodedCodecLambda>((schema) =>
-  makeProto(AST.encodedAST(schema.ast), { schema })
-)
+export const toEncoded = Struct_.lambda<toEncodedLambda>((schema) => makeProto(AST.toEncoded(schema.ast), { schema }))
 
 const FlipTypeId = "~effect/schema/Schema/flip"
 
@@ -1694,7 +1692,7 @@ export function encodeKeys<
       {
         [
           K in keyof S["fields"] as K extends keyof M ? M[K] extends PropertyKey ? M[K] : K : K
-        ]: encodedCodec<S["fields"][K]>
+        ]: toEncoded<S["fields"][K]>
       }
     >
   > {
@@ -1702,7 +1700,7 @@ export function encodeKeys<
     const reverseMapping: any = {}
     for (const k in self.fields) {
       if (Object.hasOwn(mapping, k)) {
-        fields[mapping[k]!] = encodedCodec(self.fields[k])
+        fields[mapping[k]!] = toEncoded(self.fields[k])
         reverseMapping[mapping[k]!] = k
       } else {
         fields[k] = self.fields[k]
@@ -1730,8 +1728,8 @@ export function extendTo<S extends Struct<Struct.Fields>, const Fields extends S
 ) {
   return (
     self: S
-  ): decodeTo<Struct<Simplify<{ [K in keyof S["fields"]]: typeCodec<S["fields"][K]> } & Fields>>, S> => {
-    const f = Record_.map(self.fields, typeCodec)
+  ): decodeTo<Struct<Simplify<{ [K in keyof S["fields"]]: toType<S["fields"][K]> } & Fields>>, S> => {
+    const f = Record_.map(self.fields, toType)
     const to = Struct({ ...f, ...fields })
     return self.pipe(decodeTo(
       to,
@@ -2851,8 +2849,8 @@ export function decode<S extends Top, RD = never, RE = never>(transformation: {
   readonly decode: Getter.Getter<S["Type"], S["Type"], RD>
   readonly encode: Getter.Getter<S["Type"], S["Type"], RE>
 }) {
-  return (self: S): decodeTo<typeCodec<S>, S, RD, RE> => {
-    return self.pipe(decodeTo(typeCodec(self), transformation))
+  return (self: S): decodeTo<toType<S>, S, RD, RE> => {
+    return self.pipe(decodeTo(toType(self), transformation))
   }
 }
 
@@ -2890,8 +2888,8 @@ export function encode<S extends Top, RD = never, RE = never>(transformation: {
   readonly decode: Getter.Getter<S["Encoded"], S["Encoded"], RD>
   readonly encode: Getter.Getter<S["Encoded"], S["Encoded"], RE>
 }) {
-  return (self: S): decodeTo<S, encodedCodec<S>, RD, RE> => {
-    return encodedCodec(self).pipe(decodeTo(self, transformation))
+  return (self: S): decodeTo<S, toEncoded<S>, RD, RE> => {
+    return toEncoded(self).pipe(decodeTo(self, transformation))
   }
 }
 
@@ -2949,7 +2947,7 @@ export function withConstructorDefault<S extends Top & WithoutConstructorDefault
 /**
  * @since 4.0.0
  */
-export interface withDecodingDefaultKey<S extends Top> extends decodeTo<S, optionalKey<encodedCodec<S>>> {}
+export interface withDecodingDefaultKey<S extends Top> extends decodeTo<S, optionalKey<toEncoded<S>>> {}
 
 /**
  * @since 4.0.0
@@ -2973,7 +2971,7 @@ export function withDecodingDefaultKey<S extends Top>(
 ) {
   const encode = options?.encodingStrategy === "omit" ? Getter.omit() : Getter.passthrough()
   return (self: S): withDecodingDefaultKey<S> => {
-    return optionalKey(encodedCodec(self)).pipe(decodeTo(self, {
+    return optionalKey(toEncoded(self)).pipe(decodeTo(self, {
       decode: Getter.withDefault(defaultValue),
       encode
     }))
@@ -2983,7 +2981,7 @@ export function withDecodingDefaultKey<S extends Top>(
 /**
  * @since 4.0.0
  */
-export interface withDecodingDefault<S extends Top> extends decodeTo<S, optional<encodedCodec<S>>> {}
+export interface withDecodingDefault<S extends Top> extends decodeTo<S, optional<toEncoded<S>>> {}
 
 /**
  * **Options**
@@ -3000,7 +2998,7 @@ export function withDecodingDefault<S extends Top>(
 ) {
   const encode = options?.encodingStrategy === "omit" ? Getter.omit() : Getter.passthrough()
   return (self: S): withDecodingDefault<S> => {
-    return optional(encodedCodec(self)).pipe(decodeTo(self, {
+    return optional(toEncoded(self)).pipe(decodeTo(self, {
       decode: Getter.withDefault(defaultValue),
       encode
     }))
@@ -3167,7 +3165,7 @@ export function toTaggedUnion<const Tag extends PropertyKey>(tag: Tag) {
         const value = getTag(tag, ast)
         if (value) {
           cases[value] = schema
-          guards[value] = is(typeCodec(schema))
+          guards[value] = is(toType(schema))
         }
       } else {
         throw new globalThis.Error("No literal found")
@@ -3398,11 +3396,11 @@ export function isTrimmed(annotations?: Annotations.Filter) {
     (s: string) => s.trim() === s,
     Annotations.combine({
       expected: "a string with no leading or trailing whitespace",
-      jsonSchemaConstraint: () => ({ pattern: TRIMMED_PATTERN }),
+      toJsonSchemaConstraint: () => ({ pattern: TRIMMED_PATTERN }),
       meta: {
         _tag: "isTrimmed"
       },
-      arbitraryConstraint: {
+      toArbitraryConstraint: {
         string: {
           patterns: [TRIMMED_PATTERN]
         }
@@ -3526,7 +3524,7 @@ export function isUUID(version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | undefined, annot
         regExp,
         version
       },
-      jsonSchemaConstraint: () => ({
+      toJsonSchemaConstraint: () => ({
         pattern: regExp.source,
         format: "uuid"
       })
@@ -3647,12 +3645,12 @@ export function isStartsWith(startsWith: string, annotations?: Annotations.Filte
     (s: string) => s.startsWith(startsWith),
     Annotations.combine({
       expected: `a string starting with ${formatted}`,
-      jsonSchemaConstraint: () => ({ pattern: `^${startsWith}` }),
+      toJsonSchemaConstraint: () => ({ pattern: `^${startsWith}` }),
       meta: {
         _tag: "isStartsWith",
         startsWith
       },
-      arbitraryConstraint: {
+      toArbitraryConstraint: {
         string: {
           patterns: [`^${startsWith}`]
         }
@@ -3683,12 +3681,12 @@ export function isEndsWith(endsWith: string, annotations?: Annotations.Filter) {
     (s: string) => s.endsWith(endsWith),
     Annotations.combine({
       expected: `a string ending with ${formatted}`,
-      jsonSchemaConstraint: () => ({ pattern: `${endsWith}$` }),
+      toJsonSchemaConstraint: () => ({ pattern: `${endsWith}$` }),
       meta: {
         _tag: "isEndsWith",
         endsWith
       },
-      arbitraryConstraint: {
+      toArbitraryConstraint: {
         string: {
           patterns: [`${endsWith}$`]
         }
@@ -3719,12 +3717,12 @@ export function isIncludes(includes: string, annotations?: Annotations.Filter) {
     (s: string) => s.includes(includes),
     Annotations.combine({
       expected: `a string including ${formatted}`,
-      jsonSchemaConstraint: () => ({ pattern: includes }),
+      toJsonSchemaConstraint: () => ({ pattern: includes }),
       meta: {
         _tag: "isIncludes",
         includes
       },
-      arbitraryConstraint: {
+      toArbitraryConstraint: {
         string: {
           patterns: [includes]
         }
@@ -3756,11 +3754,11 @@ export function isUppercased(annotations?: Annotations.Filter) {
     (s: string) => s.toUpperCase() === s,
     Annotations.combine({
       expected: "a string with all characters in uppercase",
-      jsonSchemaConstraint: () => ({ pattern: UPPERCASED_PATTERN }),
+      toJsonSchemaConstraint: () => ({ pattern: UPPERCASED_PATTERN }),
       meta: {
         _tag: "isUppercased"
       },
-      arbitraryConstraint: {
+      toArbitraryConstraint: {
         string: {
           patterns: [UPPERCASED_PATTERN]
         }
@@ -3792,11 +3790,11 @@ export function isLowercased(annotations?: Annotations.Filter) {
     (s: string) => s.toLowerCase() === s,
     Annotations.combine({
       expected: "a string with all characters in lowercase",
-      jsonSchemaConstraint: () => ({ pattern: LOWERCASED_PATTERN }),
+      toJsonSchemaConstraint: () => ({ pattern: LOWERCASED_PATTERN }),
       meta: {
         _tag: "isLowercased"
       },
-      arbitraryConstraint: {
+      toArbitraryConstraint: {
         string: {
           patterns: [LOWERCASED_PATTERN]
         }
@@ -3828,11 +3826,11 @@ export function isCapitalized(annotations?: Annotations.Filter) {
     (s: string) => s.charAt(0).toUpperCase() === s.charAt(0),
     Annotations.combine({
       expected: "a string with the first character in uppercase",
-      jsonSchemaConstraint: () => ({ pattern: CAPITALIZED_PATTERN }),
+      toJsonSchemaConstraint: () => ({ pattern: CAPITALIZED_PATTERN }),
       meta: {
         _tag: "isCapitalized"
       },
-      arbitraryConstraint: {
+      toArbitraryConstraint: {
         string: {
           patterns: [CAPITALIZED_PATTERN]
         }
@@ -3864,11 +3862,11 @@ export function isUncapitalized(annotations?: Annotations.Filter) {
     (s: string) => s.charAt(0).toLowerCase() === s.charAt(0),
     Annotations.combine({
       expected: "a string with the first character in lowercase",
-      jsonSchemaConstraint: () => ({ pattern: UNCAPITALIZED_PATTERN }),
+      toJsonSchemaConstraint: () => ({ pattern: UNCAPITALIZED_PATTERN }),
       meta: {
         _tag: "isUncapitalized"
       },
-      arbitraryConstraint: {
+      toArbitraryConstraint: {
         string: {
           patterns: [UNCAPITALIZED_PATTERN]
         }
@@ -3901,7 +3899,7 @@ export function isFinite(annotations?: Annotations.Filter) {
       meta: {
         _tag: "isFinite"
       },
-      arbitraryConstraint: {
+      toArbitraryConstraint: {
         number: {
           noDefaultInfinity: true,
           noNaN: true
@@ -4105,8 +4103,8 @@ export function makeIsMultipleOf<T>(options: {
 export const isGreaterThan = makeIsGreaterThan({
   order: Order.number,
   annotate: (exclusiveMinimum) => ({
-    jsonSchemaConstraint: () => ({ exclusiveMinimum }),
-    arbitraryConstraint: {
+    toJsonSchemaConstraint: () => ({ exclusiveMinimum }),
+    toArbitraryConstraint: {
       number: {
         min: exclusiveMinimum,
         minExcluded: true
@@ -4134,8 +4132,8 @@ export const isGreaterThan = makeIsGreaterThan({
 export const isGreaterThanOrEqualTo = makeIsGreaterThanOrEqualTo({
   order: Order.number,
   annotate: (minimum) => ({
-    jsonSchemaConstraint: () => ({ minimum }),
-    arbitraryConstraint: {
+    toJsonSchemaConstraint: () => ({ minimum }),
+    toArbitraryConstraint: {
       number: {
         min: minimum
       }
@@ -4162,8 +4160,8 @@ export const isGreaterThanOrEqualTo = makeIsGreaterThanOrEqualTo({
 export const isLessThan = makeIsLessThan({
   order: Order.number,
   annotate: (exclusiveMaximum) => ({
-    jsonSchemaConstraint: () => ({ exclusiveMaximum }),
-    arbitraryConstraint: {
+    toJsonSchemaConstraint: () => ({ exclusiveMaximum }),
+    toArbitraryConstraint: {
       number: {
         max: exclusiveMaximum,
         maxExcluded: true
@@ -4191,8 +4189,8 @@ export const isLessThan = makeIsLessThan({
 export const isLessThanOrEqualTo = makeIsLessThanOrEqualTo({
   order: Order.number,
   annotate: (maximum) => ({
-    jsonSchemaConstraint: () => ({ maximum }),
-    arbitraryConstraint: {
+    toJsonSchemaConstraint: () => ({ maximum }),
+    toArbitraryConstraint: {
       number: {
         max: maximum
       }
@@ -4222,7 +4220,7 @@ export const isBetween = makeIsBetween({
   order: Order.number,
   annotate: (options) => {
     return {
-      jsonSchemaConstraint: () => {
+      toJsonSchemaConstraint: () => {
         const out: Record<string, unknown> = {}
         if (options.exclusiveMinimum) {
           out.exclusiveMinimum = options.minimum
@@ -4236,7 +4234,7 @@ export const isBetween = makeIsBetween({
         }
         return out
       },
-      arbitraryConstraint: {
+      toArbitraryConstraint: {
         number: {
           min: options.minimum,
           max: options.maximum,
@@ -4268,7 +4266,7 @@ export const isMultipleOf = makeIsMultipleOf({
   zero: 0,
   annotate: (divisor) => ({
     expected: `a value that is a multiple of ${divisor}`,
-    jsonSchemaConstraint: () => ({ multipleOf: Math.abs(divisor) })
+    toJsonSchemaConstraint: () => ({ multipleOf: Math.abs(divisor) })
   })
 })
 
@@ -4293,11 +4291,11 @@ export function isInt(annotations?: Annotations.Filter) {
     (n: number) => globalThis.Number.isSafeInteger(n),
     Annotations.combine({
       expected: "an integer",
-      jsonSchemaConstraint: () => ({ type: "integer" }),
+      toJsonSchemaConstraint: () => ({ type: "integer" }),
       meta: {
         _tag: "isInt"
       },
-      arbitraryConstraint: {
+      toArbitraryConstraint: {
         number: {
           isInteger: true
         }
@@ -4331,7 +4329,7 @@ export function isInt32(annotations?: Annotations.Filter) {
     ],
     Annotations.combine({
       expected: "a 32-bit integer",
-      jsonSchemaConstraint: (ctx) =>
+      toJsonSchemaConstraint: (ctx) =>
         ctx.target === "openapi-3.1" ?
           { format: "int32" } :
           undefined,
@@ -4367,7 +4365,7 @@ export function isUint32(annotations?: Annotations.Filter) {
     ],
     Annotations.combine({
       expected: "a 32-bit unsigned integer",
-      jsonSchemaConstraint: (ctx) =>
+      toJsonSchemaConstraint: (ctx) =>
         ctx.target === "openapi-3.1" ?
           { format: "uint32" } :
           undefined,
@@ -4403,7 +4401,7 @@ export function isValidDate(annotations?: Annotations.Filter) {
       meta: {
         _tag: "isValidDate"
       },
-      arbitraryConstraint: {
+      toArbitraryConstraint: {
         date: {
           noInvalidDate: true
         }
@@ -4427,7 +4425,7 @@ export function isValidDate(annotations?: Annotations.Filter) {
 export const isGreaterThanDate = makeIsGreaterThan({
   order: Order.Date,
   annotate: (exclusiveMinimum) => ({
-    arbitraryConstraint: {
+    toArbitraryConstraint: {
       date: {
         min: exclusiveMinimum,
         minExcluded: true
@@ -4457,7 +4455,7 @@ export const isGreaterThanDate = makeIsGreaterThan({
 export const isGreaterThanOrEqualToDate = makeIsGreaterThanOrEqualTo({
   order: Order.Date,
   annotate: (minimum) => ({
-    arbitraryConstraint: {
+    toArbitraryConstraint: {
       date: {
         min: minimum
       }
@@ -4480,7 +4478,7 @@ export const isGreaterThanOrEqualToDate = makeIsGreaterThanOrEqualTo({
 export const isLessThanDate = makeIsLessThan({
   order: Order.Date,
   annotate: (exclusiveMaximum) => ({
-    arbitraryConstraint: {
+    toArbitraryConstraint: {
       date: {
         max: exclusiveMaximum,
         maxExcluded: true
@@ -4510,7 +4508,7 @@ export const isLessThanDate = makeIsLessThan({
 export const isLessThanOrEqualToDate = makeIsLessThanOrEqualTo({
   order: Order.Date,
   annotate: (maximum) => ({
-    arbitraryConstraint: {
+    toArbitraryConstraint: {
       date: {
         max: maximum
       }
@@ -4538,7 +4536,7 @@ export const isLessThanOrEqualToDate = makeIsLessThanOrEqualTo({
 export const isBetweenDate = makeIsBetween({
   order: Order.Date,
   annotate: (options) => ({
-    arbitraryConstraint: {
+    toArbitraryConstraint: {
       date: {
         min: options.minimum,
         max: options.maximum
@@ -4562,7 +4560,7 @@ export const isBetweenDate = makeIsBetween({
 export const isGreaterThanBigInt = makeIsGreaterThan({
   order: Order.bigint,
   annotate: (exclusiveMinimum) => ({
-    arbitraryConstraint: {
+    toArbitraryConstraint: {
       bigint: {
         min: exclusiveMinimum,
         minExcluded: true
@@ -4587,7 +4585,7 @@ export const isGreaterThanBigInt = makeIsGreaterThan({
 export const isGreaterThanOrEqualToBigInt = makeIsGreaterThanOrEqualTo({
   order: Order.bigint,
   annotate: (minimum) => ({
-    arbitraryConstraint: {
+    toArbitraryConstraint: {
       bigint: {
         min: minimum
       }
@@ -4610,7 +4608,7 @@ export const isGreaterThanOrEqualToBigInt = makeIsGreaterThanOrEqualTo({
 export const isLessThanBigInt = makeIsLessThan({
   order: Order.bigint,
   annotate: (exclusiveMaximum) => ({
-    arbitraryConstraint: {
+    toArbitraryConstraint: {
       bigint: {
         max: exclusiveMaximum,
         maxExcluded: true
@@ -4635,7 +4633,7 @@ export const isLessThanBigInt = makeIsLessThan({
 export const isLessThanOrEqualToBigInt = makeIsLessThanOrEqualTo({
   order: Order.bigint,
   annotate: (maximum) => ({
-    arbitraryConstraint: {
+    toArbitraryConstraint: {
       bigint: {
         max: maximum
       }
@@ -4659,7 +4657,7 @@ export const isLessThanOrEqualToBigInt = makeIsLessThanOrEqualTo({
 export const isBetweenBigInt = makeIsBetween({
   order: Order.bigint,
   annotate: (options) => ({
-    arbitraryConstraint: {
+    toArbitraryConstraint: {
       bigint: {
         min: options.minimum,
         max: options.maximum
@@ -4692,7 +4690,7 @@ export function isMinLength(minLength: number, annotations?: Annotations.Filter)
     (input) => input.length >= minLength,
     Annotations.combine({
       expected: `a value with a length of at least ${minLength}`,
-      jsonSchemaConstraint: (ctx) => {
+      toJsonSchemaConstraint: (ctx) => {
         switch (ctx.type) {
           case "string":
             return { minLength }
@@ -4705,7 +4703,7 @@ export function isMinLength(minLength: number, annotations?: Annotations.Filter)
         minLength
       },
       [Annotations.STRUCTURAL_ANNOTATION_KEY]: true,
-      arbitraryConstraint: {
+      toArbitraryConstraint: {
         string: {
           minLength
         },
@@ -4762,7 +4760,7 @@ export function isMaxLength(maxLength: number, annotations?: Annotations.Filter)
     (input) => input.length <= maxLength,
     Annotations.combine({
       expected: `a value with a length of at most ${maxLength}`,
-      jsonSchemaConstraint: (ctx) => {
+      toJsonSchemaConstraint: (ctx) => {
         switch (ctx.type) {
           case "string":
             return { maxLength }
@@ -4775,7 +4773,7 @@ export function isMaxLength(maxLength: number, annotations?: Annotations.Filter)
         maxLength
       },
       [Annotations.STRUCTURAL_ANNOTATION_KEY]: true,
-      arbitraryConstraint: {
+      toArbitraryConstraint: {
         string: {
           maxLength
         },
@@ -4812,7 +4810,7 @@ export function isLength(length: number, annotations?: Annotations.Filter) {
     (input) => input.length === length,
     Annotations.combine({
       expected: `a value with a length of ${length}`,
-      jsonSchemaConstraint: (ctx) => {
+      toJsonSchemaConstraint: (ctx) => {
         switch (ctx.type) {
           case "string":
             return { minLength: length, maxLength: length }
@@ -4825,7 +4823,7 @@ export function isLength(length: number, annotations?: Annotations.Filter) {
         length
       },
       [Annotations.STRUCTURAL_ANNOTATION_KEY]: true,
-      arbitraryConstraint: {
+      toArbitraryConstraint: {
         string: {
           minLength: length,
           maxLength: length
@@ -4868,7 +4866,7 @@ export function isMinSize(minSize: number, annotations?: Annotations.Filter) {
         minSize
       },
       [Annotations.STRUCTURAL_ANNOTATION_KEY]: true,
-      arbitraryConstraint: {
+      toArbitraryConstraint: {
         array: {
           minLength: minSize
         }
@@ -4906,7 +4904,7 @@ export function isMaxSize(maxSize: number, annotations?: Annotations.Filter) {
         maxSize
       },
       [Annotations.STRUCTURAL_ANNOTATION_KEY]: true,
-      arbitraryConstraint: {
+      toArbitraryConstraint: {
         array: {
           maxLength: maxSize
         }
@@ -4944,7 +4942,7 @@ export function isSize(size: number, annotations?: Annotations.Filter) {
         size
       },
       [Annotations.STRUCTURAL_ANNOTATION_KEY]: true,
-      arbitraryConstraint: {
+      toArbitraryConstraint: {
         array: {
           minLength: size,
           maxLength: size
@@ -4979,13 +4977,13 @@ export function isMinProperties(minProperties: number, annotations?: Annotations
     (input) => Reflect.ownKeys(input).length >= minProperties,
     Annotations.combine({
       expected: `an object with at least ${minProperties} properties`,
-      jsonSchemaConstraint: () => ({ minProperties }),
+      toJsonSchemaConstraint: () => ({ minProperties }),
       meta: {
         _tag: "isMinProperties",
         minProperties
       },
       [Annotations.STRUCTURAL_ANNOTATION_KEY]: true,
-      arbitraryConstraint: {
+      toArbitraryConstraint: {
         array: {
           minLength: minProperties
         }
@@ -5018,13 +5016,13 @@ export function isMaxProperties(maxProperties: number, annotations?: Annotations
     (input) => Reflect.ownKeys(input).length <= maxProperties,
     Annotations.combine({
       expected: `an object with at most ${maxProperties} properties`,
-      jsonSchemaConstraint: () => ({ maxProperties }),
+      toJsonSchemaConstraint: () => ({ maxProperties }),
       meta: {
         _tag: "isMaxProperties",
         maxProperties
       },
       [Annotations.STRUCTURAL_ANNOTATION_KEY]: true,
-      arbitraryConstraint: {
+      toArbitraryConstraint: {
         array: {
           maxLength: maxProperties
         }
@@ -5058,13 +5056,13 @@ export function isPropertiesLength(length: number, annotations?: Annotations.Fil
     (input) => Reflect.ownKeys(input).length === length,
     Annotations.combine({
       expected: `an object with exactly ${length} properties`,
-      jsonSchemaConstraint: () => ({ minProperties: length, maxProperties: length }),
+      toJsonSchemaConstraint: () => ({ minProperties: length, maxProperties: length }),
       meta: {
         _tag: "isPropertiesLength",
         length
       },
       [Annotations.STRUCTURAL_ANNOTATION_KEY]: true,
-      arbitraryConstraint: {
+      toArbitraryConstraint: {
         array: {
           minLength: length,
           maxLength: length
@@ -5096,12 +5094,12 @@ export function isUnique<T>(equivalence?: Equivalence.Equivalence<T>, annotation
     (input) => Arr.dedupeWith(input, equivalence).length === input.length,
     Annotations.combine({
       expected: "an array with unique items",
-      jsonSchemaConstraint: () => ({ uniqueItems: true }),
+      toJsonSchemaConstraint: () => ({ uniqueItems: true }),
       meta: {
         _tag: "isUnique",
         equivalence
       },
-      arbitraryConstraint: {
+      toArbitraryConstraint: {
         array: {
           comparator: equivalence
         }
@@ -5247,7 +5245,7 @@ export function Option<A extends Top>(value: A): Option<A> {
     },
     {
       expected: "Option",
-      serializer: ([value]) =>
+      "toCodec*": ([value]) =>
         link<Option_.Option<A["Encoded"]>>()(
           Union([Struct({ _tag: Literal("Some"), value }), Struct({ _tag: Literal("None") })]),
           Transformation.transform({
@@ -5255,15 +5253,15 @@ export function Option<A extends Top>(value: A): Option<A> {
             encode: (o) => (Option_.isSome(o) ? { _tag: "Some", value: o.value } as const : { _tag: "None" } as const)
           })
         ),
-      arbitrary: ([value]) => (fc, ctx) => {
+      toArbitrary: ([value]) => (fc, ctx) => {
         return fc.oneof(
           ctx?.isSuspend ? { maxDepth: 2, depthIdentifier: "Option" } : {},
           fc.constant(Option_.none()),
           value.map(Option_.some)
         )
       },
-      equivalence: ([value]) => Option_.getEquivalence(value),
-      formatter: ([value]) =>
+      toEquivalence: ([value]) => Option_.getEquivalence(value),
+      toFormatter: ([value]) =>
         Option_.match({
           onNone: () => "none()",
           onSome: (t) => `some(${value(t)})`
@@ -5276,7 +5274,7 @@ export function Option<A extends Top>(value: A): Option<A> {
 /**
  * @since 4.0.0
  */
-export interface OptionFromNullOr<S extends Top> extends decodeTo<Option<typeCodec<S>>, NullOr<S>> {}
+export interface OptionFromNullOr<S extends Top> extends decodeTo<Option<toType<S>>, NullOr<S>> {}
 
 /**
  * Decodes a nullable, required value `T` to a required `Option<T>` value.
@@ -5294,7 +5292,7 @@ export interface OptionFromNullOr<S extends Top> extends decodeTo<Option<typeCod
  */
 export function OptionFromNullOr<S extends Top>(schema: S): OptionFromNullOr<S> {
   return NullOr(schema).pipe(decodeTo(
-    Option(typeCodec(schema)),
+    Option(toType(schema)),
     Transformation.optionFromNullOr()
   ))
 }
@@ -5302,7 +5300,7 @@ export function OptionFromNullOr<S extends Top>(schema: S): OptionFromNullOr<S> 
 /**
  * @since 4.0.0
  */
-export interface OptionFromOptionalKey<S extends Top> extends decodeTo<Option<typeCodec<S>>, optionalKey<S>> {}
+export interface OptionFromOptionalKey<S extends Top> extends decodeTo<Option<toType<S>>, optionalKey<S>> {}
 
 /**
  * Decodes an optional value `A` to a required `Option<A>` value.
@@ -5320,7 +5318,7 @@ export interface OptionFromOptionalKey<S extends Top> extends decodeTo<Option<ty
  */
 export function OptionFromOptionalKey<S extends Top>(schema: S): OptionFromOptionalKey<S> {
   return optionalKey(schema).pipe(decodeTo(
-    Option(typeCodec(schema)),
+    Option(toType(schema)),
     Transformation.optionFromOptionalKey()
   ))
 }
@@ -5328,7 +5326,7 @@ export function OptionFromOptionalKey<S extends Top>(schema: S): OptionFromOptio
 /**
  * @since 4.0.0
  */
-export interface OptionFromOptional<S extends Top> extends decodeTo<Option<typeCodec<S>>, optional<S>> {}
+export interface OptionFromOptional<S extends Top> extends decodeTo<Option<toType<S>>, optional<S>> {}
 
 /**
  * Decodes an optional or `undefined` value `A` to an required `Option<A>`
@@ -5348,7 +5346,7 @@ export interface OptionFromOptional<S extends Top> extends decodeTo<Option<typeC
  */
 export function OptionFromOptional<S extends Top>(schema: S): OptionFromOptional<S> {
   return optional(schema).pipe(decodeTo(
-    Option(typeCodec(schema)),
+    Option(toType(schema)),
     Transformation.optionFromOptional<any>()
   ))
 }
@@ -5410,7 +5408,7 @@ export function Result<A extends Top, E extends Top>(
     },
     {
       expected: "Result",
-      serializer: ([success, failure]) =>
+      "toCodec*": ([success, failure]) =>
         link<Result_.Result<A["Encoded"], E["Encoded"]>>()(
           Union([
             Struct({ _tag: Literal("Success"), success }),
@@ -5424,15 +5422,15 @@ export function Result<A extends Top, E extends Top>(
                 : { _tag: "Failure", failure: r.failure } as const
           })
         ),
-      arbitrary: ([success, failure]) => (fc, ctx) => {
+      toArbitrary: ([success, failure]) => (fc, ctx) => {
         return fc.oneof(
           ctx?.isSuspend ? { maxDepth: 2, depthIdentifier: "Result" } : {},
           success.map(Result_.succeed),
           failure.map(Result_.fail)
         )
       },
-      equivalence: ([success, failure]) => Result_.getEquivalence(success, failure),
-      formatter: ([success, failure]) =>
+      toEquivalence: ([success, failure]) => Result_.getEquivalence(success, failure),
+      toFormatter: ([success, failure]) =>
         Result_.match({
           onSuccess: (t) => `success(${success(t)})`,
           onFailure: (t) => `failure(${failure(t)})`
@@ -5513,7 +5511,7 @@ export function Redacted<S extends Top>(value: S, options?: {
     },
     {
       expected: "Redacted",
-      serializerJson: ([value]) =>
+      toCodecJson: ([value]) =>
         link<Redacted_.Redacted<S["Encoded"]>>()(
           value,
           {
@@ -5524,9 +5522,9 @@ export function Redacted<S extends Top>(value: S, options?: {
             )
           }
         ),
-      arbitrary: ([value]) => () => value.map((a) => Redacted_.make(a, { label: options?.label })),
-      formatter: () => globalThis.String,
-      equivalence: ([value]) => Redacted_.getEquivalence(value)
+      toArbitrary: ([value]) => () => value.map((a) => Redacted_.make(a, { label: options?.label })),
+      toFormatter: () => globalThis.String,
+      toEquivalence: ([value]) => Redacted_.getEquivalence(value)
     }
   )
   return makeProto(schema.ast, { value })
@@ -5598,7 +5596,7 @@ export function CauseFailure<E extends Top, D extends Top>(error: E, defect: D):
     },
     {
       expected: "Cause.Failure",
-      serializer: ([error, defect]) =>
+      "toCodec*": ([error, defect]) =>
         link<Cause_.Failure<E["Encoded"]>>()(
           Union([
             TaggedStruct("Fail", { error }),
@@ -5619,7 +5617,7 @@ export function CauseFailure<E extends Top, D extends Top>(error: E, defect: D):
             encode: identity
           })
         ),
-      arbitrary: ([error, defect]) => (fc, ctx) => {
+      toArbitrary: ([error, defect]) => (fc, ctx) => {
         return fc.oneof(
           ctx?.isSuspend ? { maxDepth: 2, depthIdentifier: "Cause.Failure" } : {},
           fc.constant(Cause_.failureInterrupt()),
@@ -5628,7 +5626,7 @@ export function CauseFailure<E extends Top, D extends Top>(error: E, defect: D):
           defect.map((d) => Cause_.failureDie(d))
         )
       },
-      equivalence: ([error, defect]) => (a, b) => {
+      toEquivalence: ([error, defect]) => (a, b) => {
         if (a._tag !== b._tag) return false
         switch (a._tag) {
           case "Fail":
@@ -5639,7 +5637,7 @@ export function CauseFailure<E extends Top, D extends Top>(error: E, defect: D):
             return Equal.equals(a.fiberId, (b as Cause_.Interrupt).fiberId)
         }
       },
-      formatter: ([error, defect]) => (t) => {
+      toFormatter: ([error, defect]) => (t) => {
         switch (t._tag) {
           case "Fail":
             return `Fail(${error(t.error)})`
@@ -5694,7 +5692,7 @@ export function Cause<E extends Top, D extends Top>(error: E, defect: D): Cause<
     },
     {
       expected: "Cause",
-      serializer: ([failures]) =>
+      "toCodec*": ([failures]) =>
         link<Cause_.Cause<E["Encoded"]>>()(
           failures,
           Transformation.transform({
@@ -5702,9 +5700,9 @@ export function Cause<E extends Top, D extends Top>(error: E, defect: D): Cause<
             encode: ({ failures }) => failures
           })
         ),
-      arbitrary: ([failures]) => () => failures.map(Cause_.fromFailures),
-      equivalence: ([failures]) => (a, b) => failures(a.failures, b.failures),
-      formatter: ([failures]) => (t) => `Cause(${failures(t.failures)})`
+      toArbitrary: ([failures]) => () => failures.map(Cause_.fromFailures),
+      toEquivalence: ([failures]) => (a, b) => failures(a.failures, b.failures),
+      toFormatter: ([failures]) => (t) => `Cause(${failures(t.failures)})`
     }
   )
   return makeProto(schema.ast, { error, defect })
@@ -5732,8 +5730,8 @@ const ErrorJsonEncoded = Struct({
  */
 export const Error: Error = instanceOf(globalThis.Error, {
   expected: "Error",
-  serializerJson: () => link<globalThis.Error>()(ErrorJsonEncoded, Transformation.errorFromErrorJsonEncoded),
-  arbitrary: () => (fc) => fc.string().map((message) => new globalThis.Error(message))
+  toCodecJson: () => link<globalThis.Error>()(ErrorJsonEncoded, Transformation.errorFromErrorJsonEncoded),
+  toArbitrary: () => (fc) => fc.string().map((message) => new globalThis.Error(message))
 })
 
 /**
@@ -5777,7 +5775,7 @@ export const Defect: Defect = Union([
   Any.pipe(decodeTo(
     Unknown.annotate({
       serializerJson: () => link<unknown>()(Any, defectTransformation),
-      arbitrary: () => (fc) => fc.json()
+      toArbitrary: () => (fc) => fc.json()
     }),
     defectTransformation
   ))
@@ -5848,7 +5846,7 @@ export function Exit<A extends Top, E extends Top, D extends Top>(value: A, erro
     },
     {
       expected: "Exit",
-      serializer: ([value, cause]) =>
+      "toCodec*": ([value, cause]) =>
         link<Exit_.Exit<A["Encoded"], E["Encoded"]>>()(
           Union([
             TaggedStruct("Success", { value }),
@@ -5863,13 +5861,13 @@ export function Exit<A extends Top, E extends Top, D extends Top>(value: A, erro
                 : { _tag: "Failure", cause: exit.cause } as const
           })
         ),
-      arbitrary: ([value, cause]) => (fc, ctx) =>
+      toArbitrary: ([value, cause]) => (fc, ctx) =>
         fc.oneof(
           ctx?.isSuspend ? { maxDepth: 2, depthIdentifier: "Exit" } : {},
           value.map((v) => Exit_.succeed(v)),
           cause.map((cause) => Exit_.failCause(cause))
         ),
-      equivalence: ([value, cause]) => (a, b) => {
+      toEquivalence: ([value, cause]) => (a, b) => {
         if (a._tag !== b._tag) return false
         switch (a._tag) {
           case "Success":
@@ -5878,7 +5876,7 @@ export function Exit<A extends Top, E extends Top, D extends Top>(value: A, erro
             return cause(a.cause, (b as Exit_.Failure<E["Type"], D["Type"]>).cause)
         }
       },
-      formatter: ([value, cause]) => (t) => {
+      toFormatter: ([value, cause]) => (t) => {
         switch (t._tag) {
           case "Success":
             return `Exit.Success(${value(t.value)})`
@@ -5942,7 +5940,7 @@ export function ReadonlyMap<Key extends Top, Value extends Top>(key: Key, value:
     },
     {
       expected: "ReadonlyMap",
-      serializer: ([key, value]) =>
+      "toCodec*": ([key, value]) =>
         link<globalThis.Map<Key["Encoded"], Value["Encoded"]>>()(
           Array(Tuple([key, value])),
           Transformation.transform({
@@ -5950,15 +5948,15 @@ export function ReadonlyMap<Key extends Top, Value extends Top>(key: Key, value:
             encode: (map) => [...map.entries()]
           })
         ),
-      arbitrary: ([key, value]) => (fc, ctx) => {
+      toArbitrary: ([key, value]) => (fc, ctx) => {
         return fc.oneof(
           ctx?.isSuspend ? { maxDepth: 2, depthIdentifier: "ReadonlyMap" } : {},
           fc.constant([]),
           fc.array(fc.tuple(key, value), ctx?.constraints?.array)
         ).map((as) => new globalThis.Map(as))
       },
-      equivalence: ([key, value]) => Equal.makeCompareMap(key, value),
-      formatter: ([key, value]) => (t) => {
+      toEquivalence: ([key, value]) => Equal.makeCompareMap(key, value),
+      toFormatter: ([key, value]) => (t) => {
         const size = t.size
         if (size === 0) {
           return "ReadonlyMap(0) {}"
@@ -6018,7 +6016,7 @@ export function ReadonlySet<Value extends Top>(value: Value): ReadonlySet$<Value
     },
     {
       expected: "ReadonlySet",
-      serializer: ([value]) =>
+      "toCodec*": ([value]) =>
         link<globalThis.Set<Value["Encoded"]>>()(
           Array(value),
           Transformation.transform({
@@ -6026,15 +6024,15 @@ export function ReadonlySet<Value extends Top>(value: Value): ReadonlySet$<Value
             encode: (set) => [...set.values()]
           })
         ),
-      arbitrary: ([value]) => (fc, ctx) => {
+      toArbitrary: ([value]) => (fc, ctx) => {
         return fc.oneof(
           ctx?.isSuspend ? { maxDepth: 2, depthIdentifier: "ReadonlySet" } : {},
           fc.constant([]),
           fc.array(value, ctx?.constraints?.array)
         ).map((as) => new globalThis.Set(as))
       },
-      equivalence: ([value]) => Equal.makeCompareSet(value),
-      formatter: ([value]) => (t) => {
+      toEquivalence: ([value]) => Equal.makeCompareSet(value),
+      toFormatter: ([value]) => (t) => {
         const size = t.size
         if (size === 0) {
           return "ReadonlySet(0) {}"
@@ -6066,9 +6064,9 @@ export const URL: URL = instanceOf(
   globalThis.URL,
   {
     expected: "URL",
-    serializerJson: () => link<globalThis.URL>()(String, Transformation.urlFromString),
-    arbitrary: () => (fc) => fc.webUrl().map((s) => new globalThis.URL(s)),
-    equivalence: () => (a, b) => a.toString() === b.toString()
+    toCodecJson: () => link<globalThis.URL>()(String, Transformation.urlFromString),
+    toArbitrary: () => (fc) => fc.webUrl().map((s) => new globalThis.URL(s)),
+    toEquivalence: () => (a, b) => a.toString() === b.toString()
   }
 )
 
@@ -6084,7 +6082,7 @@ export const RegExp: RegExp = instanceOf(
   globalThis.RegExp,
   {
     expected: "RegExp",
-    serializerJson: () =>
+    toCodecJson: () =>
       link<globalThis.RegExp>()(
         Struct({
           source: String,
@@ -6103,7 +6101,7 @@ export const RegExp: RegExp = instanceOf(
             })
         })
       ),
-    arbitrary: () => (fc) =>
+    toArbitrary: () => (fc) =>
       fc
         .tuple(
           fc.constantFrom(
@@ -6125,7 +6123,7 @@ export const RegExp: RegExp = instanceOf(
             .map((flags) => flags.join(""))
         )
         .map(([source, flags]) => new globalThis.RegExp(source, flags)),
-    equivalence: () => (a, b) => a.source === b.source && a.flags === b.flags
+    toEquivalence: () => (a, b) => a.source === b.source && a.flags === b.flags
   }
 )
 
@@ -6167,7 +6165,7 @@ export const Date: Date = instanceOf(
   globalThis.Date,
   {
     expected: "Date",
-    serializerJson: () =>
+    toCodecJson: () =>
       link<globalThis.Date>()(
         String,
         Transformation.transform({
@@ -6175,7 +6173,7 @@ export const Date: Date = instanceOf(
           encode: formatDate
         })
       ),
-    arbitrary: () => (fc, ctx) => fc.date(ctx?.constraints?.date)
+    toArbitrary: () => (fc, ctx) => fc.date(ctx?.constraints?.date)
   }
 )
 
@@ -6212,7 +6210,7 @@ export const Duration: Duration = declare(
   Duration_.isDuration,
   {
     expected: "Duration",
-    serializerJson: () =>
+    toCodecJson: () =>
       link<Duration_.Duration>()(
         Union([Number, BigInt, Literal("Infinity")]),
         Transformation.transform({
@@ -6233,14 +6231,14 @@ export const Duration: Duration = declare(
           }
         })
       ),
-    arbitrary: () => (fc) =>
+    toArbitrary: () => (fc) =>
       fc.oneof(
         fc.constant(Duration_.infinity),
         fc.bigInt({ min: 0n }).map(Duration_.nanos),
         fc.maxSafeNat().map(Duration_.millis)
       ),
-    formatter: () => globalThis.String,
-    equivalence: () => Duration_.Equivalence
+    toFormatter: () => globalThis.String,
+    toEquivalence: () => Duration_.Equivalence
   }
 )
 
@@ -6390,7 +6388,7 @@ export function fromJsonString<S extends Top>(schema: S): fromJsonString<S> {
   return String.annotate({
     "contentMediaType": "application/json",
     "contentSchema": schema.ast, // TODO: dry
-    jsonSchema: (ctx) => {
+    toJsonSchema: (ctx) => {
       switch (ctx.target) {
         case "draft-07":
           return {
@@ -6479,7 +6477,7 @@ export interface fromFormData<S extends Top> extends decodeTo<S, FormData> {}
  * ```
  *
  * If you want to decode values that are not strings, use
- * `Schema.toSerializerStringTree` with the `keepDeclarations: true` option.
+ * `Schema.toCodecStringTree` with the `keepDeclarations: true` option.
  * This serializer preserves values such as numbers and `Blob` objects when
  * compatible with the schema.
  *
@@ -6489,7 +6487,7 @@ export interface fromFormData<S extends Top> extends decodeTo<S, FormData> {}
  * import { Schema } from "effect/schema"
  *
  * const schema = Schema.fromFormData(
- *   Schema.toSerializerStringTree(
+ *   Schema.toCodecStringTree(
  *     Schema.Struct({
  *       a: Schema.Int
  *     }),
@@ -6575,7 +6573,7 @@ export interface fromURLSearchParams<S extends Top> extends decodeTo<S, URLSearc
  * ```
  *
  * If you want to decode values that are not strings, use
- * `Schema.toSerializerStringTree`. This serializer preserves values such as
+ * `Schema.toCodecStringTree`. This serializer preserves values such as
  * numbers when compatible with the schema.
  *
  * **Example** (Parsing non-string values)
@@ -6584,7 +6582,7 @@ export interface fromURLSearchParams<S extends Top> extends decodeTo<S, URLSearc
  * import { Schema } from "effect/schema"
  *
  * const schema = Schema.fromURLSearchParams(
- *   Schema.toSerializerStringTree(
+ *   Schema.toCodecStringTree(
  *     Schema.Struct({
  *       a: Schema.Int
  *     })
@@ -6752,13 +6750,13 @@ export interface Uint8Array extends instanceOf<globalThis.Uint8Array<ArrayBuffer
  * @since 4.0.0
  */
 export const Uint8Array: Uint8Array = instanceOf(globalThis.Uint8Array<ArrayBufferLike>, {
-  serializerJson: () =>
+  toCodecJson: () =>
     link<globalThis.Uint8Array<ArrayBufferLike>>()(
       String,
       Transformation.uint8ArrayFromString
     ),
   expected: "Uint8Array",
-  arbitrary: () => (fc) => fc.uint8Array()
+  toArbitrary: () => (fc) => fc.uint8Array()
 })
 
 /**
@@ -6852,7 +6850,7 @@ export const DateTimeUtc: DateTimeUtc = declare(
   (u) => DateTime.isDateTime(u) && DateTime.isUtc(u),
   {
     expected: "DateTimeUtc",
-    serializerJson: () =>
+    toCodecJson: () =>
       link<DateTime.Utc>()(
         String,
         {
@@ -6860,10 +6858,10 @@ export const DateTimeUtc: DateTimeUtc = declare(
           encode: Getter.transform(DateTime.formatIso)
         }
       ),
-    arbitrary: () => (fc, ctx) =>
+    toArbitrary: () => (fc, ctx) =>
       fc.date({ noInvalidDate: true, ...ctx?.constraints?.date }).map((date) => DateTime.fromDateUnsafe(date)),
-    formatter: () => (utc) => utc.toString(),
-    equivalence: () => DateTime.Equivalence
+    toFormatter: () => (utc) => utc.toString(),
+    toEquivalence: () => DateTime.Equivalence
   }
 )
 
@@ -7141,9 +7139,9 @@ function getClassSchemaFactory<S extends Top>(
           Annotations.combine({
             identifier,
             [AST.ClassTypeId]: ([from]: readonly [AST.AST]) => new AST.Link(from, transformation),
-            serializer: ([from]) => new AST.Link(from.ast, transformation),
-            arbitrary: ([from]) => () => from.map((args) => new self(args)),
-            formatter: ([from]) => (t: Self) => `${self.identifier}(${from(t)})`
+            "toCodec*": ([from]) => new AST.Link(from.ast, transformation),
+            toArbitrary: ([from]) => () => from.map((args) => new self(args)),
+            toFormatter: ([from]) => (t: Self) => `${self.identifier}(${from(t)})`
           }, annotations)
         )
       )
@@ -7304,9 +7302,9 @@ export function toArbitrary<S extends Top>(schema: S): FastCheck.Arbitrary<S["Ty
  * @category Formatter
  * @since 4.0.0
  */
-export function overrideFormatter<S extends Top>(formatter: () => Formatter<S["Type"]>) {
+export function overrideToFormatter<S extends Top>(toFormatter: () => Formatter<S["Type"]>) {
   return (self: S): S["~rebuild.out"] => {
-    return self.annotate({ formatter })
+    return self.annotate({ toFormatter })
   }
 }
 
@@ -7325,7 +7323,7 @@ export function toFormatter<T>(schema: Schema<T>, options?: {
     // ---------------------------------------------
     // handle annotation
     // ---------------------------------------------
-    const annotation = Annotations.resolve(ast)?.["formatter"]
+    const annotation = Annotations.resolve(ast)?.["toFormatter"]
     if (typeof annotation === "function") {
       return annotation(AST.isDeclaration(ast) ? ast.typeParameters.map(recur) : [])
     }
@@ -7463,9 +7461,9 @@ export function toFormatter<T>(schema: Schema<T>, options?: {
  * @category Equivalence
  * @since 4.0.0
  */
-export function overrideEquivalence<S extends Top>(equivalence: () => Equivalence.Equivalence<S["Type"]>) {
+export function overrideToEquivalence<S extends Top>(toEquivalence: () => Equivalence.Equivalence<S["Type"]>) {
   return (self: S): S["~rebuild.out"] => {
-    return self.annotate({ equivalence })
+    return self.annotate({ toEquivalence })
   }
 }
 
@@ -7597,7 +7595,7 @@ export function toJsonSchema<S extends Top>(schema: S, options: ToJsonSchemaOpti
  * @category Serializer
  * @since 4.0.0
  */
-export function toSerializerJson<T, E, RD, RE>(schema: Codec<T, E, RD, RE>): Codec<T, unknown, RD, RE> {
+export function toCodecJson<T, E, RD, RE>(schema: Codec<T, E, RD, RE>): Codec<T, unknown, RD, RE> {
   return make(serializerJson(schema.ast))
 }
 
@@ -7605,8 +7603,8 @@ export function toSerializerJson<T, E, RD, RE>(schema: Codec<T, E, RD, RE>): Cod
  * @category Serializer
  * @since 4.0.0
  */
-export function toSerializerIso<S extends Top>(schema: S): Codec<S["Type"], S["Iso"]> {
-  return make(serializerIso(AST.typeAST(schema.ast)))
+export function toCodecIso<S extends Top>(schema: S): Codec<S["Type"], S["Iso"]> {
+  return make(serializerIso(AST.toType(schema.ast)))
 }
 
 /**
@@ -7633,19 +7631,19 @@ export type StringTree = Getter.Tree<string | undefined>
  * @category Serializer
  * @since 4.0.0
  */
-export function toSerializerStringTree<T, E, RD, RE>(schema: Codec<T, E, RD, RE>): Codec<T, StringTree, RD, RE>
-export function toSerializerStringTree<T, E, RD, RE>(
+export function toCodecStringTree<T, E, RD, RE>(schema: Codec<T, E, RD, RE>): Codec<T, StringTree, RD, RE>
+export function toCodecStringTree<T, E, RD, RE>(
   schema: Codec<T, E, RD, RE>,
   options: { readonly keepDeclarations: true }
 ): Codec<T, unknown, RD, RE>
-export function toSerializerStringTree<T, E, RD, RE>(
+export function toCodecStringTree<T, E, RD, RE>(
   schema: Codec<T, E, RD, RE>,
   options?: { readonly keepDeclarations?: boolean | undefined }
 ): Codec<T, unknown, RD, RE> {
   if (options?.keepDeclarations === true) {
-    return make(serializerEnsureArray(serializerStringTreeKeepDeclarations(schema.ast)))
+    return make(toCodecEnsureArray(serializerStringTreeKeepDeclarations(schema.ast)))
   } else {
-    return make(serializerEnsureArray(serializerStringTree(schema.ast)))
+    return make(toCodecEnsureArray(serializerStringTree(schema.ast)))
   }
 }
 
@@ -7671,9 +7669,94 @@ export function toEncoderXml<T, E, RD, RE>(
   options?: XmlEncoderOptions
 ) {
   const rootName = Annotations.resolveIdentifier(codec.ast) ?? Annotations.resolveTitle(codec.ast)
-  const serialize = encodeEffect(toSerializerStringTree(codec))
+  const serialize = encodeEffect(toCodecStringTree(codec))
   return (t: T): Effect.Effect<string, SchemaError, RE> =>
     serialize(t).pipe(Effect.map((stringTree) => stringTreeToXml(stringTree, { rootName, ...options })))
+}
+
+function stringTreeToXml(value: StringTree, options: XmlEncoderOptions): string {
+  const rootName = options.rootName ?? "root"
+  const arrayItemName = options.arrayItemName ?? "item"
+  const pretty = options.pretty ?? true
+  const indent = options.indent ?? "  "
+  const sortKeys = options.sortKeys ?? true
+
+  const seen = new Set<object>()
+  const lines: Array<string> = []
+
+  recur(rootName, value, 0)
+  return lines.join(pretty ? "\n" : "")
+
+  function push(depth: number, text: string): void {
+    lines.push(pretty ? indent.repeat(depth) + text : text)
+  }
+
+  function recur(tagName: string, node: StringTree, depth: number, originalNameForMeta?: string): void {
+    const { attrs, safe } = xml.tagInfo(tagName, originalNameForMeta)
+
+    if (node === undefined) {
+      push(depth, `<${safe}${attrs}/>`)
+    } else if (typeof node === "string") {
+      push(depth, `<${safe}${attrs}>${xml.escapeText(node)}</${safe}>`)
+    } else if (typeof node !== "object" || node === null) {
+      push(depth, `<${safe}${attrs}>${xml.escapeText(format(node))}</${safe}>`)
+    } else {
+      if (seen.has(node)) throw new globalThis.Error("Cycle detected while serializing to XML.", { cause: node })
+      seen.add(node)
+      try {
+        if (globalThis.Array.isArray(node)) {
+          if (node.length === 0) {
+            push(depth, `<${safe}${attrs}/>`)
+            return
+          }
+          push(depth, `<${safe}${attrs}>`)
+          for (const item of node) recur(arrayItemName, item, depth + 1)
+          push(depth, `</${safe}>`)
+          return
+        }
+
+        const obj = node as Record<string, StringTree>
+        const keys = Object.keys(obj)
+        if (sortKeys) keys.sort()
+
+        if (keys.length === 0) {
+          push(depth, `<${safe}${attrs}/>`)
+          return
+        }
+
+        push(depth, `<${safe}${attrs}>`)
+        for (const k of keys) {
+          recur(xml.parseTagName(k).safe, obj[k], depth + 1, k)
+        }
+        push(depth, `</${safe}>`)
+      } finally {
+        seen.delete(node)
+      }
+    }
+  }
+}
+
+const xml = {
+  escapeText(s: string): string {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+  },
+  escapeAttribute(s: string): string {
+    return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+  },
+  parseTagName(name: string): { safe: string; changed: boolean } {
+    const original = name
+    let safe = name
+    if (!/^[A-Za-z_]/.test(safe)) safe = "_" + safe
+    safe = safe.replace(/[^A-Za-z0-9._-]/g, "_")
+    if (/^xml/i.test(safe)) safe = "_" + safe
+    return { safe, changed: safe !== original }
+  },
+  tagInfo(name: string, original?: string): { safe: string; attrs: string } {
+    const { changed, safe } = xml.parseTagName(name)
+    const needsMeta = changed || (original && original !== name)
+    const attrs = needsMeta ? ` data-name="${xml.escapeAttribute(original ?? name)}"` : ""
+    return { safe, attrs }
+  }
 }
 
 function makeReorder(getPriority: (ast: AST.AST) => number) {
@@ -7681,13 +7764,13 @@ function makeReorder(getPriority: (ast: AST.AST) => number) {
     // Create a map of original indices for O(1) lookup
     const indexMap = new Map<AST.AST, number>()
     for (let i = 0; i < types.length; i++) {
-      indexMap.set(AST.encodedAST(types[i]), i)
+      indexMap.set(AST.toEncoded(types[i]), i)
     }
 
     // Create a sorted copy of the types array
     const sortedTypes = [...types].sort((a, b) => {
-      a = AST.encodedAST(a)
-      b = AST.encodedAST(b)
+      a = AST.toEncoded(a)
+      b = AST.toEncoded(b)
       const pa = getPriority(a)
       const pb = getPriority(b)
       if (pa !== pb) return pa - pb
@@ -7721,10 +7804,10 @@ function serializerJsonBase(ast: AST.AST): AST.AST {
     case "Unknown":
     case "ObjectKeyword":
     case "Declaration": {
-      const getLink = ast.annotations?.serializerJson ?? ast.annotations?.serializer
+      const getLink = ast.annotations?.toCodecJson ?? ast.annotations?.["toCodec*"]
       if (Predicate.isFunction(getLink)) {
         const tps = AST.isDeclaration(ast)
-          ? ast.typeParameters.map((tp) => make(serializerJson(AST.encodedAST(tp))))
+          ? ast.typeParameters.map((tp) => make(serializerJson(AST.toEncoded(tp))))
           : []
         const link = getLink(tps)
         const to = serializerJson(link.to)
@@ -7790,7 +7873,7 @@ const serializerJson = AST.serializer((ast) => {
 function serializerIsoBase(ast: AST.AST): AST.AST {
   switch (ast._tag) {
     case "Declaration": {
-      const getLink = ast.annotations?.serializerIso ?? ast.annotations?.serializer
+      const getLink = ast.annotations?.toCodecIso ?? ast.annotations?.["toCodec*"]
       if (Predicate.isFunction(getLink)) {
         const link = getLink(ast.typeParameters.map((tp) => make(serializerIso(tp))))
         const to = serializerIso(link.to)
@@ -7840,10 +7923,10 @@ function serializerTree(
     case "Unknown":
     case "ObjectKeyword":
     case "Declaration": {
-      const getLink = ast.annotations?.serializerJson ?? ast.annotations?.serializer
+      const getLink = ast.annotations?.toCodecJson ?? ast.annotations?.["toCodec*"]
       if (Predicate.isFunction(getLink)) {
         const tps = AST.isDeclaration(ast)
-          ? ast.typeParameters.map((tp) => make(recur(AST.encodedAST(tp))))
+          ? ast.typeParameters.map((tp) => make(recur(AST.toEncoded(tp))))
           : []
         const link = getLink(tps)
         const to = recur(link.to)
@@ -7932,24 +8015,11 @@ const serializerStringTreeKeepDeclarations = AST.serializer((ast) => {
 
 const SERIALIZER_ENSURE_ARRAY = "~effect/schema/Schema/SERIALIZER_ENSURE_ARRAY"
 
-function serializerEnsureArrayBase(ast: AST.AST): AST.AST {
-  switch (ast._tag) {
-    case "Declaration":
-    case "Arrays":
-    case "Objects":
-    case "Union":
-    case "Suspend":
-      return ast.recur(serializerEnsureArray)
-    default:
-      return ast
-  }
-}
-
-const serializerEnsureArray = AST.serializer((ast) => {
+const toCodecEnsureArray = AST.serializer((ast) => {
   if (AST.isUnion(ast) && ast.annotations?.[SERIALIZER_ENSURE_ARRAY]) {
     return ast
   }
-  const out = serializerEnsureArrayBase(ast)
+  const out = onSerializerEnsureArray(ast)
   if (AST.isArrays(out)) {
     const ensure = new AST.Union(
       [
@@ -7971,92 +8041,17 @@ const serializerEnsureArray = AST.serializer((ast) => {
   return out
 })
 
-function stringTreeToXml(value: StringTree, options: XmlEncoderOptions): string {
-  const opts: { [P in keyof XmlEncoderOptions]-?: Exclude<XmlEncoderOptions[P], undefined> } = {
-    rootName: options.rootName ?? "root",
-    arrayItemName: options.arrayItemName ?? "item",
-    pretty: options.pretty ?? true,
-    indent: options.indent ?? "  ",
-    sortKeys: options.sortKeys ?? true
+function onSerializerEnsureArray(ast: AST.AST): AST.AST {
+  switch (ast._tag) {
+    default:
+      return ast
+    case "Declaration":
+    case "Arrays":
+    case "Objects":
+    case "Union":
+    case "Suspend":
+      return ast.recur(toCodecEnsureArray)
   }
-
-  const seen = new Set<{ readonly [x: string]: StringTree } | ReadonlyArray<StringTree>>()
-  const lines: Array<string> = []
-  const push = (depth: number, text: string) => lines.push(opts.pretty ? opts.indent.repeat(depth) + text : text)
-
-  const tagInfo = (name: string, original?: string) => {
-    const { changed, safe } = parseTagName(name)
-    const needsMeta = changed || (original && original !== name)
-    const attrs = needsMeta ? ` data-name="${escapeAttribute(original ?? name)}"` : ""
-    return { safe, attrs }
-  }
-
-  const render = (tagName: string, node: StringTree, depth: number, originalNameForMeta?: string): void => {
-    if (node === undefined) {
-      const { attrs, safe } = tagInfo(tagName, originalNameForMeta)
-      push(depth, `<${safe}${attrs}/>`)
-      return
-    }
-
-    if (typeof node === "string") {
-      const { attrs, safe } = tagInfo(tagName, originalNameForMeta)
-      push(depth, `<${safe}${attrs}>${escapeText(node)}</${safe}>`)
-      return
-    }
-
-    if (seen.has(node)) throw new globalThis.Error("Cycle detected while serializing to XML.", { cause: node })
-    seen.add(node)
-    try {
-      // this try / catch is necessary because if there are cycles, the encoder will throw an error
-      if (globalThis.Array.isArray(node)) {
-        const { attrs, safe: safeParent } = tagInfo(tagName, originalNameForMeta)
-        if (node.length === 0) {
-          push(depth, `<${safeParent}${attrs}/>`)
-        } else {
-          push(depth, `<${safeParent}${attrs}>`)
-          for (const item of node) render(opts.arrayItemName, item, depth + 1)
-          push(depth, `</${safeParent}>`)
-        }
-      } else if (Predicate.isObject(node)) {
-        const obj = node as { readonly [x: string]: StringTree }
-        const { attrs, safe } = tagInfo(tagName, originalNameForMeta)
-        const keys = Object.keys(obj)
-        if (opts.sortKeys) keys.sort()
-        if (keys.length === 0) {
-          push(depth, `<${safe}${attrs}/>`)
-          return
-        }
-        push(depth, `<${safe}${attrs}>`)
-        for (const k of keys) {
-          const { safe: childSafe } = parseTagName(k)
-          render(childSafe, obj[k], depth + 1, k)
-        }
-        push(depth, `</${safe}>`)
-      } else {
-        const { attrs, safe } = tagInfo(tagName, originalNameForMeta)
-        push(depth, `<${safe}${attrs}>${escapeText(format(node))}</${safe}>`)
-      }
-    } finally {
-      seen.delete(node)
-    }
-  }
-
-  render(opts.rootName, value, 0)
-  return opts.pretty ? lines.join("\n") : lines.join("")
-}
-
-const escapeText = (s: string): string => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-
-const escapeAttribute = (s: string): string =>
-  s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-
-const parseTagName = (name: string): { safe: string; changed: boolean } => {
-  const original = name
-  let safe = name
-  if (!/^[A-Za-z_]/.test(safe)) safe = "_" + safe
-  safe = safe.replace(/[^A-Za-z0-9._-]/g, "_")
-  if (/^xml/i.test(safe)) safe = "_" + safe
-  return { safe, changed: safe !== original }
 }
 
 // -----------------------------------------------------------------------------
@@ -8068,7 +8063,7 @@ const parseTagName = (name: string): { safe: string; changed: boolean } => {
  * @since 4.0.0
  */
 export function toIso<S extends Top>(schema: S): Optic_.Iso<S["Type"], S["Iso"]> {
-  const serializer = toSerializerIso(schema)
+  const serializer = toCodecIso(schema)
   return Optic_.makeIso(Parser.encodeSync(serializer), Parser.decodeSync(serializer))
 }
 
@@ -8084,7 +8079,7 @@ export function toIsoSource<S extends Top>(_: S): Optic_.Iso<S["Type"], S["Type"
  * @category Optic
  * @since 4.0.0
  */
-export function makeIsoFocus<S extends Top>(_: S): Optic_.Iso<S["Iso"], S["Iso"]> {
+export function toIsoFocus<S extends Top>(_: S): Optic_.Iso<S["Iso"], S["Iso"]> {
   return Optic_.id()
 }
 
@@ -8092,14 +8087,14 @@ export function makeIsoFocus<S extends Top>(_: S): Optic_.Iso<S["Iso"], S["Iso"]
  * @category Optic
  * @since 4.0.0
  */
-export interface overrideIso<S extends Top, Iso> extends
+export interface overrideToCodecIso<S extends Top, Iso> extends
   Bottom<
     S["Type"],
     S["Encoded"],
     S["DecodingServices"],
     S["EncodingServices"],
     S["ast"],
-    overrideIso<S, Iso>,
+    overrideToCodecIso<S, Iso>,
     S["~type.make.in"],
     Iso,
     S["~type.parameters"],
@@ -8124,17 +8119,17 @@ export interface overrideIso<S extends Top, Iso> extends
  * @category Optic
  * @since 4.0.0
  */
-export function overrideIso<S extends Top, Iso>(
+export function overrideToCodecIso<S extends Top, Iso>(
   to: Codec<Iso>,
   transformation: {
     readonly decode: Getter.Getter<S["Type"], Iso>
     readonly encode: Getter.Getter<Iso, S["Type"]>
   }
 ) {
-  return (schema: S): overrideIso<S, Iso> => {
+  return (schema: S): overrideToCodecIso<S, Iso> => {
     return makeProto(
       AST.annotate(schema.ast, {
-        serializerIso: () => new AST.Link(to.ast, Transformation.make(transformation))
+        toCodecIso: () => new AST.Link(to.ast, Transformation.make(transformation))
       }),
       { schema }
     )
@@ -8169,8 +8164,8 @@ export type JsonPatch = ReadonlyArray<JsonPatchOperation>
  * @category JsonPatch Differ
  * @since 4.0.0
  */
-export function toDifferJsonPatch<T, E>(codec: Codec<T, E>): Differ<T, JsonPatch> {
-  const serializer = toSerializerJson(codec)
+export function toDifferJsonPatch<T, E>(schema: Codec<T, E>): Differ<T, JsonPatch> {
+  const serializer = toCodecJson(schema)
   const get = Parser.encodeSync(serializer)
   const set = Parser.decodeSync(serializer)
   return {
