@@ -2919,18 +2919,18 @@ export const repeat: {
     schedule: Schedule.Schedule<SO, Types.NoInfer<OutDone>, SE, SR>
   ): <OutElem, OutErr, InElem, InErr, InDone, Env>(
     self: Channel<OutElem, OutErr | SE, OutDone, InElem, InErr, InDone, Env | SR>
-  ) => Channel<OutElem, OutErr | SE, OutDone, InElem, InErr, InDone, Exclude<Env, Schedule.CurrentMetadata> | SR>
+  ) => Channel<OutElem, OutErr | SE, OutDone, InElem, InErr, InDone, Env | SR>
   <OutElem, OutErr, OutDone, InElem, InErr, InDone, Env, SO, SE, SR>(
     self: Channel<OutElem, OutErr, OutDone, InElem, InErr, InDone, Env>,
     schedule: Schedule.Schedule<SO, OutDone, SE, SR>
-  ): Channel<OutElem, OutErr | SE, OutDone, InElem, InErr, InDone, Exclude<Env, Schedule.CurrentMetadata> | SR>
+  ): Channel<OutElem, OutErr | SE, OutDone, InElem, InErr, InDone, Env | SR>
 } = dual(2, <OutElem, OutErr, OutDone, InElem, InErr, InDone, Env, SO, SE, SR>(
   self: Channel<OutElem, OutErr, OutDone, InElem, InErr, InDone, Env>,
   schedule: Schedule.Schedule<SO, OutDone, SE, SR>
-): Channel<OutElem, OutErr | SE, OutDone, InElem, InErr, InDone, Exclude<Env, Schedule.CurrentMetadata> | SR> =>
+): Channel<OutElem, OutErr | SE, OutDone, InElem, InErr, InDone, Env | SR> =>
   Schedule.toStepWithMetadata(schedule).pipe(
     Effect.map((step) => {
-      let meta = Schedule.metadataEmpty()
+      let meta = Schedule.CurrentMetadata.defaultValue()
       const loop: Channel<
         OutElem,
         OutErr | SE,
@@ -2938,7 +2938,7 @@ export const repeat: {
         InElem,
         InErr,
         InDone,
-        Exclude<Env, Schedule.CurrentMetadata> | SR
+        Env | SR
       > = concatWith(
         provideServiceEffect(self, Schedule.CurrentMetadata, Effect.sync(() => meta)),
         (done) =>
@@ -4186,18 +4186,18 @@ export const retry: {
     schedule: Schedule.Schedule<SO, Types.NoInfer<OutErr>, SE, SR>
   ): <OutElem, OutDone, InElem, InErr, InDone, Env>(
     self: Channel<OutElem, OutErr | SE, OutDone, InElem, InErr, InDone, Env | SR>
-  ) => Channel<OutElem, OutErr | SE, OutDone, InElem, InErr, InDone, Exclude<Env, Schedule.CurrentMetadata> | SR>
+  ) => Channel<OutElem, OutErr | SE, OutDone, InElem, InErr, InDone, Env | SR>
   <OutElem, OutErr, OutDone, InElem, InErr, InDone, Env, SO, SE, SR>(
     self: Channel<OutElem, OutErr, OutDone, InElem, InErr, InDone, Env>,
     schedule: Schedule.Schedule<SO, OutErr, SE, SR>
-  ): Channel<OutElem, OutErr | SE, OutDone, InElem, InErr, InDone, Exclude<Env, Schedule.CurrentMetadata> | SR>
+  ): Channel<OutElem, OutErr | SE, OutDone, InElem, InErr, InDone, Env | SR>
 } = dual(2, <OutElem, OutErr, OutDone, InElem, InErr, InDone, Env, SO, SE, SR>(
   self: Channel<OutElem, OutErr, OutDone, InElem, InErr, InDone, Env>,
   schedule: Schedule.Schedule<SO, OutErr, SE, SR>
-): Channel<OutElem, OutErr | SE, OutDone, InElem, InErr, InDone, Exclude<Env, Schedule.CurrentMetadata> | SR> =>
+): Channel<OutElem, OutErr | SE, OutDone, InElem, InErr, InDone, Env | SR> =>
   suspend(() => {
     let step: ((input: OutErr) => Pull.Pull<Schedule.Metadata<SO, OutErr>, SE, SO, SR>) | undefined = undefined
-    let meta = Schedule.metadataEmpty()
+    let meta = Schedule.CurrentMetadata.defaultValue()
     const selfWithMeta = provideServiceEffect(self, Schedule.CurrentMetadata, Effect.sync(() => meta))
     const withReset = onFirst(selfWithMeta, () => {
       step = undefined
@@ -4210,7 +4210,7 @@ export const retry: {
       InElem,
       InErr,
       InDone,
-      Exclude<Env, Schedule.CurrentMetadata> | SR
+      Env | SR
     > = catch_(
       withReset,
       Effect.fnUntraced(
@@ -5531,9 +5531,9 @@ export const provideServiceEffect: {
   service: Effect.Effect<NoInfer<S>, ES, RS>
 ): Channel<OutElem, OutErr | ES, OutDone, InElem, InErr, InDone, Exclude<Env, I> | RS> =>
   fromTransform((upstream, scope) =>
-    Effect.map(
-      Effect.provideServiceEffect(toTransform(self)(upstream, scope), key, service),
-      Effect.provideServiceEffect(key, service)
+    Effect.flatMap(
+      service,
+      (s) => toTransform(provideService(self, key, s))(upstream, scope)
     )
   ))
 
@@ -5585,10 +5585,10 @@ export const updateServices: {
   f: (services: ServiceMap.ServiceMap<R2>) => ServiceMap.ServiceMap<Env>
 ): Channel<OutElem, InElem, OutErr, InErr, OutDone, InDone, R2> =>
   fromTransform((upstream, scope) =>
-    Effect.map(
-      Effect.updateServices(toTransform(self)(upstream, scope), f),
-      Effect.updateServices(f)
-    )
+    Effect.servicesWith((services) => {
+      const toProvide = f(services)
+      return toTransform(provideServices(self, toProvide))(upstream, scope)
+    })
   ))
 
 /**
