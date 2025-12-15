@@ -150,6 +150,7 @@ export interface Declaration<T, TypeParameters extends ReadonlyArray<Schema.Top>
    * @internal
    */
   readonly "~sentinels"?: ReadonlyArray<AST.Sentinel> | undefined
+  readonly typeConstructor?: string | undefined
 }
 
 /** @internal */
@@ -339,9 +340,11 @@ export interface Issue extends Annotations {
 }
 
 /**
+ * This MUST NOT be extended with custom meta.
+ *
  * @since 4.0.0
  */
-export interface MetaRegistry {
+export interface BuiltInMetaRegistry {
   // String Meta
   readonly isNumberString: {
     readonly _tag: "isNumberString"
@@ -421,12 +424,6 @@ export interface MetaRegistry {
   }
   readonly isInt: {
     readonly _tag: "isInt"
-  }
-  readonly isInt32: {
-    readonly _tag: "isInt32"
-  }
-  readonly isUint32: {
-    readonly _tag: "isUint32"
   }
   readonly isMultipleOf: {
     readonly _tag: "isMultipleOf"
@@ -532,6 +529,18 @@ export interface MetaRegistry {
     readonly size: number
   }
 }
+
+/**
+ * @since 4.0.0
+ */
+export type BuiltInMeta = BuiltInMetaRegistry[keyof BuiltInMetaRegistry]
+
+/**
+ * This MAY be extended with custom meta.
+ *
+ * @since 4.0.0
+ */
+export interface MetaRegistry extends BuiltInMetaRegistry {}
 
 /**
  * @since 4.0.0
