@@ -4733,7 +4733,7 @@ class ClockImpl implements Clock.Clock {
 
 const performanceNowNanos = (function() {
   const bigint1e6 = BigInt(1_000_000)
-  if (typeof performance === "undefined") {
+  if (typeof performance === "undefined" || typeof performance.now === "undefined") {
     return () => BigInt(Date.now()) * bigint1e6
   } else if (typeof performance.timeOrigin === "number" && performance.timeOrigin === 0) {
     return () => BigInt(Math.round(performance.now() * 1_000_000))
