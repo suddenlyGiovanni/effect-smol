@@ -10,7 +10,7 @@ import { WorkerError } from "effect/unstable/workers/WorkerError"
 
 /**
  * @since 1.0.0
- * @category layers
+ * @category Layers
  */
 export const layer = (
   spawn: (id: number) => Worker | SharedWorker | MessagePort
@@ -22,7 +22,7 @@ export const layer = (
 
 /**
  * @since 1.0.0
- * @category layers
+ * @category Layers
  */
 export const layerPlatform: Layer.Layer<Worker.WorkerPlatform> = Layer.succeed(Worker.WorkerPlatform)(
   Worker.makePlatform<globalThis.SharedWorker | globalThis.Worker | MessagePort>()({
