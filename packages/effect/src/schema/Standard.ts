@@ -4,8 +4,10 @@
 import * as Arr from "../collections/Array.ts"
 import { format, formatPropertyKey } from "../data/Formatter.ts"
 import * as Option from "../data/Option.ts"
+import * as Predicate from "../data/Predicate.ts"
 import * as Rec from "../data/Record.ts"
 import * as RegEx from "../RegExp.ts"
+import type * as Types from "../types/Types.ts"
 import * as Annotations from "./Annotations.ts"
 import * as AST from "./AST.ts"
 import * as Getter from "./Getter.ts"
@@ -176,7 +178,7 @@ export interface TemplateLiteral {
  */
 export interface Element {
   readonly isOptional: boolean
-  readonly ast: StandardSchema
+  readonly type: StandardSchema
 }
 
 /**
@@ -187,6 +189,7 @@ export interface Arrays {
   readonly annotations?: Annotations.Annotations | undefined
   readonly elements: ReadonlyArray<Element>
   readonly rest: ReadonlyArray<StandardSchema>
+  readonly checks: ReadonlyArray<Check<ArraysMeta>>
 }
 
 /**
@@ -342,6 +345,16 @@ export type DateMeta = Annotations.BuiltInMetaRegistry[
 /**
  * @since 4.0.0
  */
+export type ArraysMeta =
+  | Annotations.BuiltInMetaRegistry[
+    | "isMinLength"
+    | "isMaxLength"
+  ]
+  | { readonly _tag: "isUnique" }
+
+/**
+ * @since 4.0.0
+ */
 export type Document = {
   readonly schema: StandardSchema
   readonly definitions: Record<string, StandardSchema>
@@ -456,7 +469,8 @@ const IsSymbolString$ = Schema.Struct({
 }).annotate({ identifier: "IsSymbolString" })
 
 const IsTrimmed$ = Schema.Struct({
-  _tag: Schema.tag("isTrimmed")
+  _tag: Schema.tag("isTrimmed"),
+  regExp: Schema.RegExp
 }).annotate({ identifier: "IsTrimmed" })
 
 const IsUUID$ = Schema.Struct({
@@ -482,33 +496,40 @@ const IsBase64Url$ = Schema.Struct({
 
 const IsStartsWith$ = Schema.Struct({
   _tag: Schema.tag("isStartsWith"),
-  startsWith: Schema.String
+  startsWith: Schema.String,
+  regExp: Schema.RegExp
 }).annotate({ identifier: "IsStartsWith" })
 
 const IsEndsWith$ = Schema.Struct({
   _tag: Schema.tag("isEndsWith"),
-  endsWith: Schema.String
+  endsWith: Schema.String,
+  regExp: Schema.RegExp
 }).annotate({ identifier: "IsEndsWith" })
 
 const IsIncludes$ = Schema.Struct({
   _tag: Schema.tag("isIncludes"),
-  includes: Schema.String
+  includes: Schema.String,
+  regExp: Schema.RegExp
 }).annotate({ identifier: "IsIncludes" })
 
 const IsUppercased$ = Schema.Struct({
-  _tag: Schema.tag("isUppercased")
+  _tag: Schema.tag("isUppercased"),
+  regExp: Schema.RegExp
 }).annotate({ identifier: "IsUppercased" })
 
 const IsLowercased$ = Schema.Struct({
-  _tag: Schema.tag("isLowercased")
+  _tag: Schema.tag("isLowercased"),
+  regExp: Schema.RegExp
 }).annotate({ identifier: "IsLowercased" })
 
 const IsCapitalized$ = Schema.Struct({
-  _tag: Schema.tag("isCapitalized")
+  _tag: Schema.tag("isCapitalized"),
+  regExp: Schema.RegExp
 }).annotate({ identifier: "IsCapitalized" })
 
 const IsUncapitalized$ = Schema.Struct({
-  _tag: Schema.tag("isUncapitalized")
+  _tag: Schema.tag("isUncapitalized"),
+  regExp: Schema.RegExp
 }).annotate({ identifier: "IsUncapitalized" })
 
 const IsMinLength$ = Schema.Struct({
@@ -760,8 +781,18 @@ export const TemplateLiteral$ = Schema.Struct({
  */
 export const Element$ = Schema.Struct({
   isOptional: Schema.Boolean,
-  ast: Schema$ref
+  type: Schema$ref
 }).annotate({ identifier: "Element" })
+
+const IsUnique$ = Schema.Struct({
+  _tag: Schema.tag("isUnique")
+}).annotate({ identifier: "IsUnique" })
+
+const ArraysMeta$ = Schema.Union([
+  IsMinLength$,
+  IsMaxLength$,
+  IsUnique$
+]).annotate({ identifier: "ArraysMeta" })
 
 /**
  * @since 4.0.0
@@ -770,7 +801,8 @@ export const Arrays$ = Schema.Struct({
   _tag: Schema.tag("Arrays"),
   annotations: Schema.optionalKey(Annotations$),
   elements: Schema.Array(Element$),
-  rest: Schema.Array(Schema$ref)
+  rest: Schema.Array(Schema$ref),
+  checks: Schema.Array(makeCheck(ArraysMeta$, "Arrays"))
 }).annotate({ identifier: "Arrays" })
 
 /**
@@ -915,6 +947,13 @@ export const Document$ = Schema.Struct({
 /**
  * @since 4.0.0
  */
+export function fromSchema(schema: Schema.Top): Document {
+  return fromAST(schema.ast)
+}
+
+/**
+ * @since 4.0.0
+ */
 export function fromAST(ast: AST.AST): Document {
   const visited = new Set<AST.AST>()
   const definitions: Record<string, StandardSchema> = {}
@@ -935,14 +974,14 @@ export function fromAST(ast: AST.AST): Document {
         return { _tag: "Suspend", $ref }
       }
     }
-    const out: StandardSchema = on(ast)
+    const out = on(ast)
     if (ast.annotations) {
-      return { ...out, annotations: ast.annotations }
+      out.annotations = ast.annotations
     }
     return out
   }
 
-  function on(ast: AST.AST): StandardSchema {
+  function on(ast: AST.AST): Types.Mutable<StandardSchema> {
     visited.add(ast)
     switch (ast._tag) {
       case "Suspend": {
@@ -1002,21 +1041,22 @@ export function fromAST(ast: AST.AST): Document {
       case "Arrays":
         return {
           _tag: ast._tag,
-          elements: ast.elements.map((e) => ({ isOptional: AST.isOptional(e), ast: recur(e) })),
-          rest: ast.rest.map((r) => recur(r))
+          elements: ast.elements.map((e) => ({ isOptional: AST.isOptional(e), type: recur(e) })),
+          rest: ast.rest.map((r) => recur(r)),
+          checks: fromASTChecks(ast.checks)
         }
       case "Objects":
         return {
           _tag: ast._tag,
           propertySignatures: ast.propertySignatures.map((ps) => {
-            const out: PropertySignature = {
+            const out: Types.Mutable<PropertySignature> = {
               name: ps.name,
               type: recur(ps.type),
               isOptional: AST.isOptional(ps.type),
               isMutable: AST.isMutable(ps.type)
             }
             if (ps.type.context?.annotations) {
-              return { ...out, annotations: ps.type.context.annotations }
+              out.annotations = ps.type.context.annotations
             }
             return out
           }),
@@ -1044,9 +1084,9 @@ function fromASTChecks(
       case "Filter": {
         const meta = c.annotations?.meta
         if (meta) {
-          const out: Check<any> = { _tag: "Filter", meta }
+          const out: Types.Mutable<Check<any>> = { _tag: "Filter", meta }
           if (c.annotations) {
-            return { ...out, annotations: c.annotations }
+            out.annotations = c.annotations
           }
           return out
         }
@@ -1055,12 +1095,12 @@ function fromASTChecks(
       case "FilterGroup": {
         const checks = fromASTChecks(c.checks)
         if (Arr.isArrayNonEmpty(checks)) {
-          const out: Check<any> = {
+          const out: Types.Mutable<Check<any>> = {
             _tag: "FilterGroup",
             checks
           }
           if (c.annotations) {
-            return { ...out, annotations: c.annotations }
+            out.annotations = c.annotations
           }
           return out
         }
@@ -1077,16 +1117,13 @@ const decodeUnknownSync = Schema.decodeUnknownSync(serializerJson)
 /**
  * @since 4.0.0
  */
-export interface JsonDocument {
-  readonly schema: Schema.JsonSchema
-  readonly definitions: Record<string, Schema.JsonSchema>
-}
-
-/**
- * @since 4.0.0
- */
-export function toJson(document: Document): JsonDocument {
-  return encodeUnknownSync(document) as JsonDocument
+export function toJson(document: Document): Schema.JsonSchema.Document<"draft-2020-12"> {
+  const json = encodeUnknownSync(document) as Pick<Schema.JsonSchema.Document, "schema" | "definitions">
+  return {
+    source: "draft-2020-12",
+    schema: json.schema,
+    definitions: json.definitions
+  }
 }
 
 /**
@@ -1233,7 +1270,7 @@ export function toSchema<S extends Schema.Top = Schema.Top>(
       }
       case "Arrays": {
         const elements = schema.elements.map((e) => {
-          const s = recur(e.ast)
+          const s = recur(e.type)
           return e.isOptional ? Schema.optionalKey(s) : s
         })
         const rest = schema.rest.map(recur)
@@ -1267,8 +1304,16 @@ export function toSchema<S extends Schema.Top = Schema.Top>(
 
         return Schema.Struct(fields)
       }
-      case "Union":
+      case "Union": {
+        if (schema.types.length === 0) return Schema.Never
+        if (schema.types.every((t) => t._tag === "Literal")) {
+          if (schema.types.length === 1) {
+            return Schema.Literal(schema.types[0].literal)
+          }
+          return Schema.Literals(schema.types.map((t) => t.literal))
+        }
         return Schema.Union(schema.types.map(recur), { mode: schema.mode })
+      }
     }
   }
 }
@@ -1280,14 +1325,14 @@ function toSchemaChecks(top: Schema.Top, schema: StandardSchema): Schema.Top {
     case "String":
     case "Number":
     case "BigInt":
-    case "Declaration": {
+    case "Arrays": {
       const checks = schema.checks.map(toSchemaCheck)
       return Arr.isArrayNonEmpty(checks) ? top.check(...checks) : top
     }
   }
 }
 
-function toSchemaCheck(check: Check<Annotations.BuiltInMeta>): AST.Check<any> {
+function toSchemaCheck(check: Check<StringMeta | NumberMeta | BigIntMeta | ArraysMeta>): AST.Check<any> {
   switch (check._tag) {
     case "Filter":
       return toSchemaFilter(check)
@@ -1297,7 +1342,7 @@ function toSchemaCheck(check: Check<Annotations.BuiltInMeta>): AST.Check<any> {
   }
 }
 
-function toSchemaFilter(filter: Filter<Annotations.BuiltInMeta>): AST.Check<any> {
+function toSchemaFilter(filter: Filter<StringMeta | NumberMeta | BigIntMeta | ArraysMeta>): AST.Check<any> {
   const a = filter.annotations
   switch (filter.meta._tag) {
     // String Meta
@@ -1371,76 +1416,87 @@ function toSchemaFilter(filter: Filter<Annotations.BuiltInMeta>): AST.Check<any>
       return Schema.isBetweenBigInt(filter.meta, a)
 
     // Date Meta
-    case "isValidDate":
-      return Schema.isValidDate(a)
-    case "isGreaterThanDate":
-      return Schema.isGreaterThanDate(filter.meta.exclusiveMinimum, a)
-    case "isGreaterThanOrEqualToDate":
-      return Schema.isGreaterThanOrEqualToDate(filter.meta.minimum, a)
-    case "isLessThanDate":
-      return Schema.isLessThanDate(filter.meta.exclusiveMaximum, a)
-    case "isLessThanOrEqualToDate":
-      return Schema.isLessThanOrEqualToDate(filter.meta.maximum, a)
-    case "isBetweenDate":
-      return Schema.isBetweenDate(filter.meta, a)
+    // case "isValidDate":
+    //   return Schema.isValidDate(a)
+    // case "isGreaterThanDate":
+    //   return Schema.isGreaterThanDate(filter.meta.exclusiveMinimum, a)
+    // case "isGreaterThanOrEqualToDate":
+    //   return Schema.isGreaterThanOrEqualToDate(filter.meta.minimum, a)
+    // case "isLessThanDate":
+    //   return Schema.isLessThanDate(filter.meta.exclusiveMaximum, a)
+    // case "isLessThanOrEqualToDate":
+    //   return Schema.isLessThanOrEqualToDate(filter.meta.maximum, a)
+    // case "isBetweenDate":
+    //   return Schema.isBetweenDate(filter.meta, a)
 
     // Object Meta
-    case "isMinProperties":
-      return Schema.isMinProperties(filter.meta.minProperties, a)
-    case "isMaxProperties":
-      return Schema.isMaxProperties(filter.meta.maxProperties, a)
-    case "isPropertiesLength":
-      return Schema.isPropertiesLength(filter.meta.length, a)
+    // case "isMinProperties":
+    //   return Schema.isMinProperties(filter.meta.minProperties, a)
+    // case "isMaxProperties":
+    //   return Schema.isMaxProperties(filter.meta.maxProperties, a)
+    // case "isPropertiesLength":
+    //   return Schema.isPropertiesLength(filter.meta.length, a)
 
     // Arrays Meta
     case "isUnique":
-      return Schema.isUnique(undefined, a) // TODO: equivalence parameter?
-    case "isMinSize":
-      return Schema.isMinSize(filter.meta.minSize, a)
-    case "isMaxSize":
-      return Schema.isMaxSize(filter.meta.maxSize, a)
-    case "isSize":
-      return Schema.isSize(filter.meta.size, a)
+      return Schema.isUnique(undefined, a)
+      // case "isMinSize":
+      //   return Schema.isMinSize(filter.meta.minSize, a)
+      // case "isMaxSize":
+      //   return Schema.isMaxSize(filter.meta.maxSize, a)
+      // case "isSize":
+      //   return Schema.isSize(filter.meta.size, a)
+      // TODO: equivalence parameter?
   }
 }
+
+const unsupportedJsonSchema: Schema.JsonSchema = { not: {} }
 
 /**
  * Return a Draft 2020-12 JSON Schema Document.
  *
  * @since 4.0.0
  */
-export function toJsonSchema(document: Document): Schema.JsonSchema.Document {
+export function toJsonSchema(document: Document): Schema.JsonSchema.Document<"draft-2020-12"> {
   return {
     source: "draft-2020-12",
     schema: recur(document.schema),
     definitions: Rec.map(document.definitions, (d) => recur(d))
   }
 
-  function recur(ast: StandardSchema): Schema.JsonSchema {
-    let jsonSchema: Schema.JsonSchema = on(ast)
-    jsonSchema = mergeJsonSchemaAnnotations(jsonSchema, ast.annotations)
-    if ((ast._tag === "String" || ast._tag === "Number") && ast.checks.length > 0) {
-      jsonSchema = applyChecks(jsonSchema, ast.checks, ast._tag)
+  function recur(ss: StandardSchema): Schema.JsonSchema {
+    let s: Schema.JsonSchema = on(ss)
+    if (s === unsupportedJsonSchema) return unsupportedJsonSchema
+    const a = collectJsonSchemaAnnotations(ss.annotations)
+    if (a) {
+      s = { ...s, ...a }
     }
-    return jsonSchema
+    if ("checks" in ss) {
+      const checks = collectJsonSchemaChecks(ss.checks)
+      for (const check of checks) {
+        s = appendJsonSchema(s, check)
+      }
+    }
+    return normalizeJsonSchemaOutput(s)
   }
 
   function on(schema: StandardSchema): Schema.JsonSchema {
     switch (schema._tag) {
+      case "Unknown":
+      case "Any":
+        return {}
+      case "Undefined":
+      case "Void":
+      case "BigInt":
+      case "Symbol":
+      case "UniqueSymbol":
+        return unsupportedJsonSchema
       case "Declaration":
-        return {} // TODO
+        return unsupportedJsonSchema // TODO
       case "Suspend":
         return { $ref: `#/$defs/${escapeJsonPointer(schema.$ref)}` }
       case "Null":
         return { type: "null" }
-      case "Undefined":
-      case "Void":
-      case "Unknown":
-      case "Any":
-      case "BigInt":
-      case "Symbol":
-      case "UniqueSymbol":
-        return {}
       case "Never":
         return { not: {} }
       case "String": {
@@ -1498,12 +1554,12 @@ export function toJsonSchema(document: Document): Schema.JsonSchema.Document {
       case "Arrays": {
         const out: Schema.JsonSchema = { type: "array" }
         let minItems = schema.elements.length
-        const items: Array<Schema.JsonSchema> = schema.elements.map((e) => {
-          if (e.isOptional) minItems--
-          return recur(e.ast)
+        const prefixItems: Array<Schema.JsonSchema> = schema.elements.map((e) => {
+          if (e.isOptional || containsUndefined(e.type)) minItems--
+          return recur(e.type)
         })
-        if (items.length > 0) {
-          out.prefixItems = items
+        if (prefixItems.length > 0) {
+          out.prefixItems = prefixItems
           out.minItems = minItems
         }
         if (schema.rest.length > 0) {
@@ -1554,14 +1610,111 @@ export function toJsonSchema(document: Document): Schema.JsonSchema.Document {
         return out
       }
       case "Union": {
-        const types = schema.types.map((t) => recur(t)).filter((t) => Object.keys(t).length > 0)
+        const types = schema.types.map((t) => recur(t)).filter((t) => t !== unsupportedJsonSchema)
         if (types.length === 0) {
-          return { not: {} }
+          // anyOf MUST be a non-empty array
+          return unsupportedJsonSchema
         }
-        const result = schema.mode === "anyOf" ? { anyOf: types } : { oneOf: types }
-        return flattenArrayJsonSchema(result)
+        return schema.mode === "anyOf" ? { anyOf: types } : { oneOf: types }
       }
     }
+  }
+}
+
+function normalizeJsonSchemaOutput(s: Schema.JsonSchema): Schema.JsonSchema {
+  if (Array.isArray(s.anyOf)) {
+    if (s.anyOf.length === 1) {
+      if (Object.keys(s).length === 1) {
+        return s.anyOf[0]
+      }
+    }
+  }
+  return s
+}
+
+function collectJsonSchemaChecks(checks: ReadonlyArray<Check<any>>): Array<Schema.JsonSchema> {
+  return checks.map(recur).filter((c) => c !== undefined)
+
+  function recur(check: Check<any>): Schema.JsonSchema | undefined {
+    switch (check._tag) {
+      case "Filter":
+        return filterToJsonSchema(check)
+      case "FilterGroup": {
+        const checks = check.checks.map(recur).filter((c) => c !== undefined)
+        if (checks.length === 0) return undefined
+        let out = { allOf: checks }
+        const a = collectJsonSchemaAnnotations(check.annotations)
+        if (a) {
+          out = { ...out, ...a }
+        }
+        return out
+      }
+    }
+  }
+}
+
+function filterToJsonSchema(filter: Filter<any>): Schema.JsonSchema | undefined {
+  const meta = filter.meta as StringMeta | Exclude<NumberMeta, { _tag: "isFinite" }>
+  if (!meta) return undefined
+
+  let out = on(meta)
+  const a = collectJsonSchemaAnnotations(filter.annotations)
+  if (a) {
+    out = { ...out, ...a }
+  }
+  return out
+
+  function on(meta: StringMeta | Exclude<NumberMeta, { _tag: "isFinite" }>): Schema.JsonSchema {
+    switch (meta._tag) {
+      case "isMinLength":
+        return { minLength: meta.minLength }
+      case "isMaxLength":
+        return { maxLength: meta.maxLength }
+      case "isLength":
+        return { allOf: [{ minLength: meta.length }, { maxLength: meta.length }] }
+      case "isPattern":
+      case "isUUID":
+      case "isULID":
+      case "isBase64":
+      case "isBase64Url":
+      case "isStartsWith":
+      case "isEndsWith":
+      case "isIncludes":
+      case "isUppercased":
+      case "isLowercased":
+      case "isCapitalized":
+      case "isUncapitalized":
+      case "isTrimmed":
+      case "isNumberString":
+      case "isBigIntString":
+      case "isSymbolString":
+        return { pattern: meta.regExp.source }
+      case "isInt":
+        return { type: "integer" }
+      case "isMultipleOf":
+        return { multipleOf: meta.divisor }
+      case "isGreaterThanOrEqualTo":
+        return { minimum: meta.minimum }
+      case "isLessThanOrEqualTo":
+        return { maximum: meta.maximum }
+      case "isGreaterThan":
+        return { exclusiveMinimum: meta.exclusiveMinimum }
+      case "isLessThan":
+        return { exclusiveMaximum: meta.exclusiveMaximum }
+      case "isBetween":
+        return { minimum: meta.minimum, maximum: meta.maximum }
+    }
+  }
+}
+
+function containsUndefined(schema: StandardSchema): boolean {
+  switch (schema._tag) {
+    case "Undefined":
+      return true
+    case "Union":
+      return schema.types.some(containsUndefined)
+    default:
+      return false
   }
 }
 
@@ -1569,7 +1722,7 @@ function escapeJsonPointer(identifier: string): string {
   return identifier.replace(/~/g, "~0").replace(/\//g, "~1")
 }
 
-function getJsonSchemaAnnotations(
+function collectJsonSchemaAnnotations(
   annotations: Annotations.Annotations | undefined
 ): Schema.JsonSchema | undefined {
   if (annotations) {
@@ -1583,183 +1736,18 @@ function getJsonSchemaAnnotations(
   }
 }
 
-function mergeJsonSchemaAnnotations(
-  jsonSchema: Schema.JsonSchema,
-  annotations: Annotations.Annotations | undefined
-): Schema.JsonSchema {
-  const a = getJsonSchemaAnnotations(annotations)
-  if (a) {
-    return combineJsonSchema(jsonSchema, a)
-  }
-  return jsonSchema
-}
+function appendJsonSchema(a: Schema.JsonSchema, b: Schema.JsonSchema): Schema.JsonSchema {
+  const members = Array.isArray(b.allOf) && Object.keys(b).length === 1 ? b.allOf : [b]
 
-function combineJsonSchema(a: Schema.JsonSchema, b: Schema.JsonSchema): Schema.JsonSchema {
-  if ("$ref" in a) {
-    return { allOf: [a, b] }
-  } else {
-    const hasIntersection = Object.keys(a).filter((key) => key !== "type").some((key) => Object.hasOwn(b, key))
-    if (hasIntersection) {
-      if (Array.isArray(a.allOf)) {
-        return { ...a, allOf: [...a.allOf, b] }
-      } else {
-        return { ...a, allOf: [b] }
-      }
-    } else {
-      return { ...a, ...b }
-    }
-  }
-}
-
-function flattenArrayJsonSchema(js: Schema.JsonSchema): Schema.JsonSchema {
-  if (Object.keys(js).length === 1) {
-    if (Array.isArray(js.anyOf) && js.anyOf.length === 1) {
-      return js.anyOf[0]
-    } else if (Array.isArray(js.oneOf) && js.oneOf.length === 1) {
-      return js.oneOf[0]
-    } else if (Array.isArray(js.allOf) && js.allOf.length === 1) {
-      return js.allOf[0]
-    }
-  }
-  return js
-}
-
-function checkToJsonSchemaFragment(
-  check: Check<any>,
-  tag: "String" | "Number" | "BigInt"
-): Schema.JsonSchema {
-  if (check._tag === "FilterGroup") {
-    const merged = check.checks
-      .map((c) => checkToJsonSchemaFragment(c, tag))
-      .filter((js) => Object.keys(js).length > 0)
-      .reduce<Schema.JsonSchema>((acc, js) => combineJsonSchema(acc, js), {})
-
-    return mergeJsonSchemaAnnotations(merged, check.annotations)
+  if (Array.isArray(a.allOf)) {
+    return { ...a, allOf: [...a.allOf, ...members] }
   }
 
-  if (!check.meta) {
-    return getJsonSchemaAnnotations(check.annotations) ?? {}
+  if (typeof a.$ref === "string") {
+    return { allOf: [a, ...members] }
   }
 
-  const meta = check.meta
-  const fragment: Schema.JsonSchema = {}
-
-  switch (tag) {
-    case "String": {
-      switch (meta._tag) {
-        case "isMinLength":
-          fragment.minLength = meta.minLength
-          break
-        case "isMaxLength":
-          fragment.maxLength = meta.maxLength
-          break
-        case "isLength":
-          fragment.minLength = meta.length
-          fragment.maxLength = meta.length
-          break
-        case "isPattern":
-          fragment.pattern = meta.regExp.source
-          break
-        case "isUUID":
-          fragment.format = "uuid"
-          break
-        case "isULID":
-          fragment.pattern = "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
-          break
-        case "isBase64":
-          fragment.contentEncoding = "base64"
-          break
-        case "isBase64Url":
-          fragment.contentEncoding = "base64url"
-          break
-      }
-      break
-    }
-    case "Number": {
-      switch (meta._tag) {
-        case "isInt":
-          fragment.type = "integer"
-          break
-        case "isMultipleOf":
-          fragment.multipleOf = meta.divisor
-          break
-        case "isGreaterThanOrEqualTo":
-          fragment.minimum = meta.minimum
-          break
-        case "isLessThanOrEqualTo":
-          fragment.maximum = meta.maximum
-          break
-        case "isGreaterThan":
-          fragment.exclusiveMinimum = meta.exclusiveMinimum
-          break
-        case "isLessThan":
-          fragment.exclusiveMaximum = meta.exclusiveMaximum
-          break
-        case "isBetween":
-          fragment.minimum = meta.minimum
-          fragment.maximum = meta.maximum
-          break
-      }
-      break
-    }
-    case "BigInt": {
-      switch (meta._tag) {
-        case "isGreaterThanOrEqualToBigInt":
-          fragment.minimum = meta.minimum
-          break
-        case "isLessThanOrEqualToBigInt":
-          fragment.maximum = meta.maximum
-          break
-        case "isGreaterThanBigInt":
-          fragment.exclusiveMinimum = meta.exclusiveMinimum
-          break
-        case "isLessThanBigInt":
-          fragment.exclusiveMaximum = meta.exclusiveMaximum
-          break
-        case "isBetweenBigInt":
-          fragment.minimum = meta.minimum
-          fragment.maximum = meta.maximum
-          break
-      }
-      break
-    }
-  }
-
-  return mergeJsonSchemaAnnotations(fragment, check.annotations)
-}
-
-function applyChecks(
-  jsonSchema: Schema.JsonSchema,
-  checks: ReadonlyArray<Check<any>>,
-  tag: "String" | "Number" | "BigInt"
-): Schema.JsonSchema {
-  return checks.reduce((acc, check) => {
-    const fragment = checkToJsonSchemaFragment(check, tag)
-    if (Object.keys(fragment).length === 0) return acc
-
-    if (
-      typeof acc.type === "string" &&
-      typeof fragment.type === "string" &&
-      fragment.type !== acc.type
-    ) {
-      const { type, ...rest } = fragment
-      const updated = { ...acc, type }
-      return Object.keys(rest).length > 0 ? combineJsonSchema(updated, rest) : updated
-    }
-
-    return combineJsonSchema(acc, fragment)
-  }, jsonSchema)
-}
-
-function containsUndefined(schema: StandardSchema): boolean {
-  switch (schema._tag) {
-    case "Undefined":
-      return true
-    case "Union":
-      return schema.types.some(containsUndefined)
-    default:
-      return false
-  }
+  return { ...a, allOf: members }
 }
 
 function getPartPattern(part: StandardSchema): string {
@@ -1816,6 +1804,7 @@ export function toCode(document: Document, options?: {
       case "String":
       case "Number":
       case "BigInt":
+      case "Arrays":
         return b + toCodeAnnotate(schema.annotations) + toCodeChecks(schema.checks)
     }
   }
@@ -1858,7 +1847,7 @@ export function toCode(document: Document, options?: {
       case "TemplateLiteral":
         return `Schema.TemplateLiteral([${schema.parts.map((p) => recur(p)).join(", ")}])`
       case "Arrays": {
-        const elements = schema.elements.map((e) => toCodeIsOptional(e.isOptional, recur(e.ast)))
+        const elements = schema.elements.map((e) => toCodeIsOptional(e.isOptional, recur(e.type)))
         const rest = schema.rest.map((r) => recur(r))
         if (Arr.isArrayNonEmpty(rest)) {
           if (elements.length === 0 && rest.length === 1) {
@@ -1886,6 +1875,13 @@ export function toCode(document: Document, options?: {
         return `Schema.Struct({ ${propertySignatures.join(", ")} })`
       }
       case "Union": {
+        if (schema.types.length === 0) return "Schema.Never"
+        if (schema.types.every((t) => t._tag === "Literal")) {
+          if (schema.types.length === 1) {
+            return `Schema.Literal(${format(schema.types[0].literal)})`
+          }
+          return `Schema.Literals([${schema.types.map((t) => format(t.literal)).join(", ")}])`
+        }
         const mode = schema.mode === "anyOf" ? "" : `, { mode: "oneOf" }`
         return `Schema.Union([${schema.types.map((t) => recur(t)).join(", ")}]${mode})`
       }
@@ -1926,12 +1922,12 @@ function toCodeIsMutable(isMutable: boolean, code: string): string {
   return isMutable ? `Schema.mutableKey(${code})` : code
 }
 
-function toCodeChecks(checks: ReadonlyArray<Check<Annotations.BuiltInMeta>>): string {
+function toCodeChecks(checks: ReadonlyArray<Check<StringMeta | NumberMeta | BigIntMeta | ArraysMeta>>): string {
   if (checks.length === 0) return ""
   return `.check(${checks.map((c) => toCodeCheck(c)).join(", ")})`
 }
 
-function toCodeCheck(check: Check<Annotations.BuiltInMeta>): string {
+function toCodeCheck(check: Check<StringMeta | NumberMeta | BigIntMeta | ArraysMeta>): string {
   switch (check._tag) {
     case "Filter":
       return toCodeFilter(check)
@@ -1943,7 +1939,7 @@ function toCodeCheck(check: Check<Annotations.BuiltInMeta>): string {
   }
 }
 
-function toCodeFilter(filter: Filter<Annotations.BuiltInMeta>): string {
+function toCodeFilter(filter: Filter<StringMeta | NumberMeta | BigIntMeta | ArraysMeta>): string {
   const a = toCodeAnnotations(filter.annotations)
   const ca = a === "" ? "" : `, ${a}`
   switch (filter.meta._tag) {
@@ -2005,46 +2001,47 @@ function toCodeFilter(filter: Filter<Annotations.BuiltInMeta>): string {
       return `Schema.isBetween(${filter.meta.minimum}, ${filter.meta.maximum}${ca})`
     // BigInt Meta
     case "isGreaterThanBigInt":
-      return `Schema.isGreaterThanBigInt(${filter.meta.exclusiveMinimum}${ca})`
+      return `Schema.isGreaterThanBigInt(${filter.meta.exclusiveMinimum}n${ca})`
     case "isGreaterThanOrEqualToBigInt":
-      return `Schema.isGreaterThanOrEqualToBigInt(${filter.meta.minimum}${ca})`
+      return `Schema.isGreaterThanOrEqualToBigInt(${filter.meta.minimum}n${ca})`
     case "isLessThanBigInt":
-      return `Schema.isLessThanBigInt(${filter.meta.exclusiveMaximum}${ca})`
+      return `Schema.isLessThanBigInt(${filter.meta.exclusiveMaximum}n${ca})`
     case "isLessThanOrEqualToBigInt":
-      return `Schema.isLessThanOrEqualToBigInt(${filter.meta.maximum}${ca})`
+      return `Schema.isLessThanOrEqualToBigInt(${filter.meta.maximum}n${ca})`
     case "isBetweenBigInt":
-      return `Schema.isBetweenBigInt(${filter.meta.minimum}, ${filter.meta.maximum}${ca})`
+      return `Schema.isBetweenBigInt(${filter.meta.minimum}n, ${filter.meta.maximum}n${ca})`
     // Date Meta
-    case "isValidDate":
-      return `Schema.isValidDate(${ca})`
-    case "isGreaterThanDate":
-      return `Schema.isGreaterThanDate(${filter.meta.exclusiveMinimum}${ca})`
-    case "isGreaterThanOrEqualToDate":
-      return `Schema.isGreaterThanOrEqualToDate(${filter.meta.minimum}${ca})`
-    case "isLessThanDate":
-      return `Schema.isLessThanDate(${filter.meta.exclusiveMaximum}${ca})`
-    case "isLessThanOrEqualToDate":
-      return `Schema.isLessThanOrEqualToDate(${filter.meta.maximum}${ca})`
-    case "isBetweenDate":
-      return `Schema.isBetweenDate(${filter.meta.minimum}, ${filter.meta.maximum}${ca})`
+    // case "isValidDate":
+    //   return `Schema.isValidDate(${ca})`
+    // case "isGreaterThanDate":
+    //   return `Schema.isGreaterThanDate(${filter.meta.exclusiveMinimum}${ca})`
+    // case "isGreaterThanOrEqualToDate":
+    //   return `Schema.isGreaterThanOrEqualToDate(${filter.meta.minimum}${ca})`
+    // case "isLessThanDate":
+    //   return `Schema.isLessThanDate(${filter.meta.exclusiveMaximum}${ca})`
+    // case "isLessThanOrEqualToDate":
+    //   return `Schema.isLessThanOrEqualToDate(${filter.meta.maximum}${ca})`
+    // case "isBetweenDate":
+    //   return `Schema.isBetweenDate(${filter.meta.minimum}, ${filter.meta.maximum}${ca})`
 
     // Object Meta
-    case "isMinProperties":
-      return `Schema.isMinProperties(${filter.meta.minProperties}${ca})`
-    case "isMaxProperties":
-      return `Schema.isMaxProperties(${filter.meta.maxProperties}${ca})`
-    case "isPropertiesLength":
-      return `Schema.isPropertiesLength(${filter.meta.length}${ca})`
+    // case "isMinProperties":
+    //   return `Schema.isMinProperties(${filter.meta.minProperties}${ca})`
+    // case "isMaxProperties":
+    //   return `Schema.isMaxProperties(${filter.meta.maxProperties}${ca})`
+    // case "isPropertiesLength":
+    //   return `Schema.isPropertiesLength(${filter.meta.length}${ca})`
 
     // Arrays Meta
     case "isUnique":
-      return `Schema.isUnique(undefined, ${a})` // TODO: equivalence parameter?
-    case "isMinSize":
-      return `Schema.isMinSize(${filter.meta.minSize}${ca})`
-    case "isMaxSize":
-      return `Schema.isMaxSize(${filter.meta.maxSize}${ca})`
-    case "isSize":
-      return `Schema.isSize(${filter.meta.size}${ca})`
+      return `Schema.isUnique(undefined, ${a})`
+      // case "isMinSize":
+      //   return `Schema.isMinSize(${filter.meta.minSize}${ca})`
+      // case "isMaxSize":
+      //   return `Schema.isMaxSize(${filter.meta.maxSize}${ca})`
+      // case "isSize":
+      //   return `Schema.isSize(${filter.meta.size}${ca})`
+      // TODO: equivalence parameter?
   }
 }
 
@@ -2109,5 +2106,278 @@ export function rewriteToOpenApi3_1(document: Schema.JsonSchema.Document): Schem
     source: "openapi-3.1",
     schema: rewrite(document.schema),
     definitions: Rec.map(document.definitions, (d) => rewrite(d))
+  }
+}
+
+/**
+ * @since 4.0.0
+ */
+export function fromJsonSchema(document: Schema.JsonSchema.Document<"draft-2020-12">): Document {
+  return {
+    schema: recur(document.schema),
+    definitions: Rec.map(document.definitions, (d) => recur(d))
+  }
+
+  function recur(u: unknown): StandardSchema {
+    if (u === true) return { _tag: "Unknown" }
+    if (u === false) return { _tag: "Never" }
+    if (Predicate.isObject(u)) {
+      const normalized = normalizeJsonSchemaInput(u)
+      const out = on(normalized)
+      const a = collectAnnotations(normalized)
+      if (a !== undefined) {
+        out.annotations = a
+      }
+      if (Array.isArray(normalized.allOf)) {
+        const allOf = normalized.allOf.map(recur)
+        const checks = allOf.flatMap((s): ReadonlyArray<Check<any>> => {
+          switch (s._tag) {
+            case "String":
+            case "Number":
+            case "Arrays":
+              return s.checks
+            default:
+              return []
+          }
+        })
+        switch (out._tag) {
+          case "String":
+          case "Number":
+          case "Arrays": {
+            out.checks = checks
+            return out
+          }
+          default:
+            return out
+        }
+      }
+      return out
+    }
+    return { _tag: "Unknown" }
+  }
+
+  function on(s: Schema.JsonSchema): Types.Mutable<StandardSchema> {
+    if (Predicate.isObject(s)) {
+      if ("enum" in s && Array.isArray(s.enum)) {
+        switch (s.enum.length) {
+          case 0:
+            return { _tag: "Never" }
+          case 1:
+            return { _tag: "Literal", literal: s.enum[0] }
+          default:
+            return {
+              _tag: "Union",
+              types: s.enum.map((e) => ({ _tag: "Literal", literal: e })),
+              mode: "anyOf"
+            }
+        }
+      }
+      switch (s.type) {
+        case "null":
+          return { _tag: "Null" }
+        case "boolean":
+          return { _tag: "Boolean" }
+        case "number":
+          return { _tag: "Number", checks: collectNumberChecks(s) }
+        case "integer":
+          return {
+            _tag: "Number",
+            checks: [{ _tag: "Filter", meta: { _tag: "isInt" } }, ...collectNumberChecks(s)]
+          }
+        case "string":
+          return { _tag: "String", checks: collectStringChecks(s) }
+        case "array":
+          return {
+            _tag: "Arrays",
+            elements: collectElements(s),
+            rest: collectRest(s),
+            checks: collectArraysChecks(s)
+          }
+        case "object": {
+          const propertySignatures = collectProperties(s)
+          const indexSignatures = collectIndexSignatures(s)
+          return { _tag: "Objects", propertySignatures, indexSignatures }
+        }
+      }
+      if ("anyOf" in s && Array.isArray(s.anyOf)) {
+        return { _tag: "Union", types: s.anyOf.map((e) => recur(e)), mode: "anyOf" }
+      }
+    }
+    return { _tag: "Unknown" }
+  }
+
+  function collectStringChecks(s: Schema.JsonSchema): Array<Check<StringMeta>> {
+    const checks: Array<Check<StringMeta>> = []
+    if (typeof s.minLength === "number") {
+      checks.push({
+        _tag: "Filter",
+        meta: { _tag: "isMinLength", minLength: s.minLength },
+        annotations: collectAnnotations(s)
+      })
+    }
+    if (typeof s.maxLength === "number") {
+      checks.push({
+        _tag: "Filter",
+        meta: { _tag: "isMaxLength", maxLength: s.maxLength },
+        annotations: collectAnnotations(s)
+      })
+    }
+    if (typeof s.pattern === "string") {
+      checks.push({
+        _tag: "Filter",
+        meta: { _tag: "isPattern", regExp: new RegExp(s.pattern) },
+        annotations: collectAnnotations(s)
+      })
+    }
+    return checks
+  }
+
+  function collectNumberChecks(s: Schema.JsonSchema): Array<Check<NumberMeta>> {
+    const checks: Array<Check<NumberMeta>> = []
+    if (typeof s.exclusiveMinimum === "number") {
+      checks.push({
+        _tag: "Filter",
+        meta: { _tag: "isGreaterThan", exclusiveMinimum: s.exclusiveMinimum },
+        annotations: collectAnnotations(s)
+      })
+    }
+    if (typeof s.minimum === "number") {
+      checks.push({
+        _tag: "Filter",
+        meta: { _tag: "isGreaterThanOrEqualTo", minimum: s.minimum },
+        annotations: collectAnnotations(s)
+      })
+    }
+    if (typeof s.maximum === "number") {
+      checks.push({
+        _tag: "Filter",
+        meta: { _tag: "isLessThanOrEqualTo", maximum: s.maximum },
+        annotations: collectAnnotations(s)
+      })
+    }
+    if (typeof s.exclusiveMaximum === "number") {
+      checks.push({
+        _tag: "Filter",
+        meta: { _tag: "isLessThan", exclusiveMaximum: s.exclusiveMaximum },
+        annotations: collectAnnotations(s)
+      })
+    }
+    if (typeof s.multipleOf === "number") {
+      checks.push({
+        _tag: "Filter",
+        meta: { _tag: "isMultipleOf", divisor: s.multipleOf },
+        annotations: collectAnnotations(s)
+      })
+    }
+    return checks
+  }
+
+  function collectArraysChecks(s: Schema.JsonSchema): Array<Check<ArraysMeta>> {
+    const checks: Array<Check<ArraysMeta>> = []
+    const elementsLength = Array.isArray(s.prefixItems) ? s.prefixItems.length : 0
+    if (typeof s.minItems === "number" && s.minItems > elementsLength) {
+      checks.push({
+        _tag: "Filter",
+        meta: { _tag: "isMinLength", minLength: s.minItems },
+        annotations: collectAnnotations(s)
+      })
+    }
+    if (typeof s.maxItems === "number") {
+      checks.push({
+        _tag: "Filter",
+        meta: { _tag: "isMaxLength", maxLength: s.maxItems },
+        annotations: collectAnnotations(s)
+      })
+    }
+    if (s.uniqueItems === true) {
+      checks.push({
+        _tag: "Filter",
+        meta: { _tag: "isUnique" },
+        annotations: collectAnnotations(s)
+      })
+    }
+    return checks
+  }
+
+  function collectElements(s: Schema.JsonSchema): Array<Element> {
+    if (Array.isArray(s.prefixItems)) {
+      const minItems = typeof s.minItems === "number" ? s.minItems : s.prefixItems.length
+      return s.prefixItems.map((item, index) => ({ type: recur(item), isOptional: index >= minItems }))
+    }
+    return []
+  }
+
+  function collectRest(s: Schema.JsonSchema): Array<StandardSchema> {
+    if (s.items !== undefined && s.items !== false) {
+      return [recur(s.items)]
+    }
+    return []
+  }
+
+  function collectProperties(s: Schema.JsonSchema): Array<PropertySignature> {
+    const required = new Set(Array.isArray(s.required) ? s.required : [])
+    return Predicate.isObject(s.properties) ?
+      Object.entries(s.properties).map(([key, value]) => ({
+        name: key,
+        type: recur(value),
+        isOptional: !required.has(key),
+        isMutable: false
+      })) :
+      []
+  }
+
+  function collectIndexSignatures(s: Schema.JsonSchema): Array<IndexSignature> {
+    const indexSignatures: Array<IndexSignature> = []
+    if (Predicate.isObject(s.additionalProperties)) {
+      indexSignatures.push({
+        parameter: { _tag: "String", checks: [] },
+        type: recur(s.additionalProperties)
+      })
+    }
+    return indexSignatures
+  }
+}
+
+const filtersKeysByType = Object.entries({
+  string: ["minLength", "maxLength", "pattern", "format", "contentMediaType", "contentSchema"],
+  number: ["minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf"],
+  object: [
+    "properties",
+    "required",
+    "additionalProperties",
+    "patternProperties",
+    "propertyNames",
+    "minProperties",
+    "maxProperties"
+  ],
+  array: ["items", "prefixItems", "additionalItems", "minItems", "maxItems", "uniqueItems"]
+})
+
+function normalizeJsonSchemaInput(s: Schema.JsonSchema): Schema.JsonSchema {
+  if (s.type === undefined) {
+    for (const [type, keys] of filtersKeysByType) {
+      if (keys.some((key) => s[key] !== undefined)) {
+        s = { ...s, type }
+      }
+    }
+  }
+  return s
+}
+
+function collectAnnotations(u: unknown): Annotations.Annotations | undefined {
+  if (Predicate.isObject(u)) {
+    const as: Types.Mutable<Annotations.Annotations> = {}
+    if (typeof u.title === "string") as.title = u.title
+    if (typeof u.description === "string") as.description = u.description
+    if (u.default !== undefined) as.default = u.default
+    if (Array.isArray(u.examples)) {
+      as.examples = u.examples
+    } else if (u.example !== undefined) {
+      // OpenAPI 3.0 uses `example` (singular). Only use it if defined
+      as.examples = [u.example]
+    }
+    if (typeof u.format === "string") as.format = u.format
+    if (Object.keys(as).length === 0) return undefined
+    return as
   }
 }

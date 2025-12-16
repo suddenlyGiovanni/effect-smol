@@ -3470,7 +3470,8 @@ export function isTrimmed(annotations?: Annotations.Filter) {
       expected: "a string with no leading or trailing whitespace",
       toJsonSchemaConstraint: () => ({ pattern: TRIMMED_PATTERN }),
       meta: {
-        _tag: "isTrimmed"
+        _tag: "isTrimmed",
+        regExp: new globalThis.RegExp(TRIMMED_PATTERN)
       },
       toArbitraryConstraint: {
         string: {
@@ -3725,7 +3726,8 @@ export function isStartsWith(startsWith: string, annotations?: Annotations.Filte
       toJsonSchemaConstraint: () => ({ pattern: `^${startsWith}` }),
       meta: {
         _tag: "isStartsWith",
-        startsWith
+        startsWith,
+        regExp: new globalThis.RegExp(`^${startsWith}`)
       },
       toArbitraryConstraint: {
         string: {
@@ -3762,7 +3764,8 @@ export function isEndsWith(endsWith: string, annotations?: Annotations.Filter) {
       toJsonSchemaConstraint: () => ({ pattern: `${endsWith}$` }),
       meta: {
         _tag: "isEndsWith",
-        endsWith
+        endsWith,
+        regExp: new globalThis.RegExp(`${endsWith}$`)
       },
       toArbitraryConstraint: {
         string: {
@@ -3799,7 +3802,8 @@ export function isIncludes(includes: string, annotations?: Annotations.Filter) {
       toJsonSchemaConstraint: () => ({ pattern: includes }),
       meta: {
         _tag: "isIncludes",
-        includes
+        includes,
+        regExp: new globalThis.RegExp(includes)
       },
       toArbitraryConstraint: {
         string: {
@@ -3836,7 +3840,8 @@ export function isUppercased(annotations?: Annotations.Filter) {
       expected: "a string with all characters in uppercase",
       toJsonSchemaConstraint: () => ({ pattern: UPPERCASED_PATTERN }),
       meta: {
-        _tag: "isUppercased"
+        _tag: "isUppercased",
+        regExp: new globalThis.RegExp(UPPERCASED_PATTERN)
       },
       toArbitraryConstraint: {
         string: {
@@ -3873,7 +3878,8 @@ export function isLowercased(annotations?: Annotations.Filter) {
       expected: "a string with all characters in lowercase",
       toJsonSchemaConstraint: () => ({ pattern: LOWERCASED_PATTERN }),
       meta: {
-        _tag: "isLowercased"
+        _tag: "isLowercased",
+        regExp: new globalThis.RegExp(LOWERCASED_PATTERN)
       },
       toArbitraryConstraint: {
         string: {
@@ -3910,7 +3916,8 @@ export function isCapitalized(annotations?: Annotations.Filter) {
       expected: "a string with the first character in uppercase",
       toJsonSchemaConstraint: () => ({ pattern: CAPITALIZED_PATTERN }),
       meta: {
-        _tag: "isCapitalized"
+        _tag: "isCapitalized",
+        regExp: new globalThis.RegExp(CAPITALIZED_PATTERN)
       },
       toArbitraryConstraint: {
         string: {
@@ -3947,7 +3954,8 @@ export function isUncapitalized(annotations?: Annotations.Filter) {
       expected: "a string with the first character in lowercase",
       toJsonSchemaConstraint: () => ({ pattern: UNCAPITALIZED_PATTERN }),
       meta: {
-        _tag: "isUncapitalized"
+        _tag: "isUncapitalized",
+        regExp: new globalThis.RegExp(UNCAPITALIZED_PATTERN)
       },
       toArbitraryConstraint: {
         string: {
@@ -7697,8 +7705,8 @@ export declare namespace JsonSchema {
   /**
    * @since 4.0.0
    */
-  export interface Document {
-    readonly source: Source
+  export interface Document<S extends Source = Source> {
+    readonly source: S
     readonly schema: JsonSchema
     readonly definitions: Definitions
   }
@@ -8286,9 +8294,9 @@ export function overrideToCodecIso<S extends Top, Iso>(
  * @since 4.0.0
  */
 export type JsonPatchOperation =
-  | { op: "add"; path: string; value: unknown } // path may end with "-" to append to arrays
+  | { op: "add"; path: string; value: JsonValue } // path may end with "-" to append to arrays
   | { op: "remove"; path: string }
-  | { op: "replace"; path: string; value: unknown }
+  | { op: "replace"; path: string; value: JsonValue }
 
 /**
  * A JSON Patch document is an array of operations
@@ -8303,7 +8311,7 @@ export type JsonPatch = ReadonlyArray<JsonPatchOperation>
  * @since 4.0.0
  */
 export function toDifferJsonPatch<T, E>(schema: Codec<T, E>): Differ<T, JsonPatch> {
-  const serializer = toCodecJson(schema)
+  const serializer = toCodecJson(schema) as Codec<T, JsonValue, never, never> // TODO: remove this cast
   const get = Parser.encodeSync(serializer)
   const set = Parser.decodeSync(serializer)
   return {
@@ -8349,6 +8357,12 @@ export type StringTree = Tree<string | undefined>
  * @since 4.0.0
  */
 export type JsonValue = Tree<null | number | boolean | string>
+
+/**
+ * @category Tree
+ * @since 4.0.0
+ */
+export interface JsonObject extends TreeRecord<null | number | boolean | string> {}
 
 /**
  * @category Tree
