@@ -395,6 +395,8 @@ export function revealCodec<T, E, RD, RE>(codec: Codec<T, E, RD, RE>) {
   return codec
 }
 
+const SchemaErrorTypeId = "~effect/schema/Schema/SchemaError"
+
 /**
  * A `SchemaError` is returned when schema decoding or encoding fails.
  *
@@ -406,6 +408,7 @@ export function revealCodec<T, E, RD, RE>(codec: Codec<T, E, RD, RE>) {
  * @since 4.0.0
  */
 export class SchemaError {
+  readonly [SchemaErrorTypeId] = SchemaErrorTypeId
   readonly _tag = "SchemaError"
   readonly name: string = "SchemaError"
   readonly issue: Issue.Issue
@@ -418,6 +421,13 @@ export class SchemaError {
   toString() {
     return `SchemaError(${this.message})`
   }
+}
+
+/**
+ * @since 4.0.0
+ */
+export function isSchemaError(u: unknown): u is SchemaError {
+  return Predicate.hasProperty(u, SchemaErrorTypeId)
 }
 
 function makeStandardResult<A>(exit: Exit_.Exit<StandardSchemaV1.Result<A>>): StandardSchemaV1.Result<A> {
@@ -7183,6 +7193,7 @@ function makeClass<
   annotations?: Annotations.Declaration<Self, readonly [S]>
 ): any {
   const getClassSchema = getClassSchemaFactory(struct, identifier, annotations)
+  const ClassTypeId = getClassTypeId(identifier) // HMR support
 
   return class extends Inherited {
     constructor(...[input, options]: ReadonlyArray<any>) {
@@ -7199,6 +7210,11 @@ function makeClass<
     }
 
     static readonly [TypeId] = TypeId
+
+    get [ClassTypeId]() {
+      return ClassTypeId
+    }
+
     static readonly [immerable] = true
 
     declare static readonly "~rebuild.out": decodeTo<declareConstructor<Self, S["Encoded"], readonly [S], S["Iso"]>, S>
@@ -7272,6 +7288,10 @@ function getClassTransformation(self: new(...args: ReadonlyArray<any>) => any) {
   )
 }
 
+function getClassTypeId(identifier: string) {
+  return `~effect/schema/Schema/Class/${identifier}`
+}
+
 function getClassSchemaFactory<S extends Top>(
   from: S,
   identifier: string,
@@ -7287,7 +7307,8 @@ function getClassSchemaFactory<S extends Top>(
         new AST.Declaration(
           [from.ast],
           () => (input, ast) => {
-            return input instanceof self ?
+            return input instanceof self ||
+                Predicate.hasProperty(input, getClassTypeId(identifier)) ?
               Effect.succeed(input) :
               Effect.fail(new Issue.InvalidType(ast, Option_.some(input)))
           },
