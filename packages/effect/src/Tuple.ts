@@ -15,10 +15,10 @@ import type { Apply, Lambda } from "./Struct.ts"
  *
  * @example
  * ```ts
- * import * as assert from "node:assert"
  * import { make } from "effect/Tuple"
+ * import * as assert from "node:assert"
  *
- * assert.deepStrictEqual(make(1, 'hello', true), [1, 'hello', true])
+ * assert.deepStrictEqual(make(1, "hello", true), [1, "hello", true])
  * ```
  *
  * @category Constructors
@@ -35,7 +35,7 @@ type Indices<T extends ReadonlyArray<unknown>> = Exclude<Partial<T>["length"], T
  * ```ts
  * import { Tuple } from "effect"
  *
- * console.log(Tuple.get([1, true, 'hello'], 2))
+ * console.log(Tuple.get([1, true, "hello"], 2))
  * // 'hello'
  * ```
  *
@@ -190,10 +190,8 @@ type Evolved<T, E> = { [I in keyof T]: I extends keyof E ? (E[I] extends (...a: 
  *
  * @example
  * ```ts
- * import { Tuple } from "effect"
- *
  * // Transform specific elements by index
- * const original = ["hello", 42, true]
+ * const evolveOriginal = ["hello", 42, true]
  * const transformers = {
  *   0: (s: string) => s.toUpperCase(),
  *   1: (n: number) => n * 2
@@ -219,10 +217,8 @@ export const evolve: {
  *
  * @example
  * ```ts
- * import { Tuple } from "effect"
- *
  * // Example demonstrates index remapping concept
- * const original = ["a", "b", "c"]
+ * const renameOriginal = ["a", "b", "c"]
  * const mapping = { 0: "2", 1: "0" }
  * // Result would remap indices according to the mapping
  * ```
@@ -253,10 +249,8 @@ export const renameIndices: {
  *
  * @example
  * ```ts
- * import { Tuple } from "effect"
- *
  * // Used with lambda functions for transforming all elements
- * const tuple = [1, 2, 3] as const
+ * const mapTuple = [1, 2, 3] as const
  * // Map applies transformation to each element
  * ```
  *
@@ -285,10 +279,8 @@ export const map: {
  *
  * @example
  * ```ts
- * import { Tuple } from "effect"
- *
  * // Transform only elements at specified indices
- * const tuple = [1, 2, 3] as const
+ * const pickTuple = [1, 2, 3] as const
  * const indices = [0, 2]
  * // Transforms elements at index 0 and 2 only
  * ```
@@ -325,10 +317,8 @@ export const mapPick: {
  *
  * @example
  * ```ts
- * import { Tuple } from "effect"
- *
  * // Transform all elements except those at specified indices
- * const tuple = [1, 2, 3] as const
+ * const omitTuple = [1, 2, 3] as const
  * const indicesToOmit = [1]
  * // Transforms all elements except index 1
  * ```
@@ -365,10 +355,13 @@ export const mapOmit: {
  *
  * @example
  * ```ts
- * import { Tuple, Equivalence } from "effect"
+ * import { Equivalence, Tuple } from "effect"
  *
  * // Creates an equivalence for tuples with string and number elements
- * const equivalence = Tuple.getEquivalence([Equivalence.strict<string>(), Equivalence.strict<number>()])
+ * const equivalence = Tuple.getEquivalence([
+ *   Equivalence.strict<string>(),
+ *   Equivalence.strict<number>()
+ * ])
  * ```
  *
  * @category Equivalence
@@ -382,8 +375,8 @@ export const getEquivalence = Equivalence.tuple
  * @example
  * ```ts
  * import { Tuple } from "effect"
- * import * as S from "effect/String"
  * import * as N from "effect/Number"
+ * import * as S from "effect/String"
  *
  * // Creates an order for tuples with string and number elements
  * const tupleOrder = Tuple.getOrder([S.Order, N.Order])
@@ -402,19 +395,18 @@ export {
    *
    * @example
    * ```ts
-   * import * as assert from "node:assert"
    * import { isTupleOf } from "effect/Tuple"
+   * import * as assert from "node:assert"
    *
-   * assert.deepStrictEqual(isTupleOf([1, 2, 3], 3), true);
-   * assert.deepStrictEqual(isTupleOf([1, 2, 3], 2), false);
-   * assert.deepStrictEqual(isTupleOf([1, 2, 3], 4), false);
+   * assert.deepStrictEqual(isTupleOf([1, 2, 3], 3), true)
+   * assert.deepStrictEqual(isTupleOf([1, 2, 3], 2), false)
+   * assert.deepStrictEqual(isTupleOf([1, 2, 3], 4), false)
    *
-   * const arr: number[] = [1, 2, 3];
+   * const arr: Array<number> = [1, 2, 3]
    * if (isTupleOf(arr, 3)) {
-   *   console.log(arr);
+   *   console.log(arr)
    *   // ^? [number, number, number]
    * }
-   *
    * ```
    * @category Guards
    * @since 3.3.0
@@ -427,19 +419,18 @@ export {
    *
    * @example
    * ```ts
-   * import * as assert from "node:assert"
    * import { isTupleOfAtLeast } from "effect/Tuple"
+   * import * as assert from "node:assert"
    *
-   * assert.deepStrictEqual(isTupleOfAtLeast([1, 2, 3], 3), true);
-   * assert.deepStrictEqual(isTupleOfAtLeast([1, 2, 3], 2), true);
-   * assert.deepStrictEqual(isTupleOfAtLeast([1, 2, 3], 4), false);
+   * assert.deepStrictEqual(isTupleOfAtLeast([1, 2, 3], 3), true)
+   * assert.deepStrictEqual(isTupleOfAtLeast([1, 2, 3], 2), true)
+   * assert.deepStrictEqual(isTupleOfAtLeast([1, 2, 3], 4), false)
    *
-   * const arr: number[] = [1, 2, 3, 4];
+   * const arr: Array<number> = [1, 2, 3, 4]
    * if (isTupleOfAtLeast(arr, 3)) {
-   *   console.log(arr);
+   *   console.log(arr)
    *   // ^? [number, number, number, ...number[]]
    * }
-   *
    * ```
    * @category Guards
    * @since 3.3.0
@@ -460,10 +451,12 @@ export {
  * **Example**
  *
  * ```ts
- * import { Tuple } from "effect"
- * import { Number, String } from "effect"
+ * import { Number, String, Tuple } from "effect"
  *
- * const C = Tuple.getCombiner<readonly [number, string]>([Number.ReducerSum, String.ReducerConcat])
+ * const C = Tuple.getCombiner<readonly [number, string]>([
+ *   Number.ReducerSum,
+ *   String.ReducerConcat
+ * ])
  * ```
  *
  * @since 4.0.0
@@ -496,10 +489,12 @@ export function getCombiner<A extends ReadonlyArray<unknown>>(
  * **Example**
  *
  * ```ts
- * import { Tuple } from "effect"
- * import { Number, String } from "effect"
+ * import { Number, String, Tuple } from "effect"
  *
- * const R = Tuple.getReducer<readonly [number, string]>([Number.ReducerSum, String.ReducerConcat])
+ * const R = Tuple.getReducer<readonly [number, string]>([
+ *   Number.ReducerSum,
+ *   String.ReducerConcat
+ * ])
  * ```
  *
  * @since 4.0.0

@@ -16,8 +16,7 @@ import { hasProperty } from "./Predicate.ts"
  *
  * @example
  * ```ts
- * import { Pull } from "effect"
- * import { Effect } from "effect"
+ * import { Effect, Pull } from "effect"
  *
  * // A Pull that emits a single value
  * const pullValue: Pull.Pull<number> = Effect.succeed(42)
@@ -39,8 +38,7 @@ export interface Pull<out A, out E = never, out Done = void, out R = never> exte
  *
  * @example
  * ```ts
- * import { Pull } from "effect"
- * import { Effect } from "effect"
+ * import type { Pull } from "effect"
  *
  * type MyPull = Pull.Pull<number, string, void>
  * type SuccessType = Pull.Success<MyPull> // number
@@ -56,8 +54,7 @@ export type Success<P> = P extends Effect<infer _A, infer _E, infer _R> ? _A : n
  *
  * @example
  * ```ts
- * import { Pull } from "effect"
- * import { Effect } from "effect"
+ * import type { Pull } from "effect"
  *
  * type MyPull = Pull.Pull<number, string, void>
  * type ErrorType = Pull.Error<MyPull> // string
@@ -74,8 +71,7 @@ export type Error<P> = P extends Effect<infer _A, infer _E, infer _R> ? _E exten
  *
  * @example
  * ```ts
- * import { Pull } from "effect"
- * import { Effect } from "effect"
+ * import type { Pull } from "effect"
  *
  * type MyPull = Pull.Pull<number, string, number>
  * type LeftoverType = Pull.Leftover<MyPull> // number
@@ -92,8 +88,7 @@ export type Leftover<P> = P extends Effect<infer _A, infer _E, infer _R> ? _E ex
  *
  * @example
  * ```ts
- * import { Pull } from "effect"
- * import { Effect } from "effect"
+ * import type { Pull } from "effect"
  * import { ServiceMap } from "effect"
  *
  * interface MyService {
@@ -115,7 +110,7 @@ export type ServiceMap<P> = P extends Effect<infer _A, infer _E, infer _R> ? _R 
  *
  * @example
  * ```ts
- * import { Pull } from "effect"
+ * import type { Pull } from "effect"
  *
  * type ErrorUnion = string | Pull.Halt<number> | Error
  * type WithoutHalt = Pull.ExcludeHalt<ErrorUnion> // string | Error
@@ -161,7 +156,7 @@ export class Halt<out L = void> {
  *
  * @example
  * ```ts
- * import { Pull } from "effect"
+ * import type { Pull } from "effect"
  *
  * // Extract leftover type from halt
  * type MyHalt = Pull.Halt<string>
@@ -181,7 +176,7 @@ export declare namespace Halt {
    *
    * @example
    * ```ts
-   * import { Pull } from "effect"
+   * import type { Pull } from "effect"
    *
    * type MyHalt = Pull.Halt<string>
    * type Leftover = Pull.Halt.Extract<MyHalt> // string
@@ -197,7 +192,7 @@ export declare namespace Halt {
    *
    * @example
    * ```ts
-   * import { Pull } from "effect"
+   * import type { Pull } from "effect"
    *
    * type ErrorUnion = string | Pull.Halt<number>
    * type OnlyHalt = Pull.Halt.Only<ErrorUnion> // Pull.Halt<number>
@@ -214,12 +209,12 @@ export declare namespace Halt {
  *
  * @example
  * ```ts
- * import { Pull } from "effect"
- * import { Effect } from "effect"
+ * import { Effect, Pull } from "effect"
  *
  * const pullWithHalt = Pull.halt("stream ended")
- * const recovered = Pull.catchHalt(pullWithHalt, (leftover) =>
- *   Effect.succeed(`Recovered from: ${leftover}`)
+ * const recovered = Pull.catchHalt(
+ *   pullWithHalt,
+ *   (leftover) => Effect.succeed(`Recovered from: ${leftover}`)
  * )
  * ```
  *
@@ -264,8 +259,7 @@ export const isHalt = (u: unknown): u is Halt<unknown> => hasProperty(u, HaltTyp
  *
  * @example
  * ```ts
- * import { Pull } from "effect"
- * import { Cause } from "effect"
+ * import { Cause, Pull } from "effect"
  *
  * const halt = new Pull.Halt("completed")
  * const causeWithHalt = Cause.fail(halt)
@@ -285,8 +279,7 @@ export const isHaltCause = <E>(cause: Cause.Cause<E>): boolean => cause.failures
  *
  * @example
  * ```ts
- * import { Pull } from "effect"
- * import { Cause } from "effect"
+ * import { Cause, Pull } from "effect"
  *
  * const halt = new Pull.Halt("completed")
  * const haltCause = Cause.fail(halt)
@@ -332,8 +325,7 @@ export const filterNoHalt: <E>(
  *
  * @example
  * ```ts
- * import { Pull } from "effect"
- * import { Cause } from "effect"
+ * import { Cause, Pull } from "effect"
  *
  * const halt = new Pull.Halt("stream completed")
  * const causeWithHalt = Cause.fail(halt)
@@ -358,7 +350,6 @@ export const filterHaltLeftover: <E>(
  * @example
  * ```ts
  * import { Pull } from "effect"
- * import { Effect } from "effect"
  *
  * // Create a halt with a string leftover
  * const haltWithMessage = Pull.halt("operation completed")
@@ -378,7 +369,6 @@ export const halt = <L>(leftover: L): Effect<never, Halt<L>> => internalEffect.f
  * @example
  * ```ts
  * import { Pull } from "effect"
- * import { Effect } from "effect"
  *
  * // Use the pre-defined halt with void
  * const completePull = Pull.haltVoid
@@ -397,8 +387,7 @@ export const haltVoid: Effect<never, Halt<void>> = internalEffect.fail(new Halt(
  *
  * @example
  * ```ts
- * import { Cause, Exit } from "effect"
- * import { Pull } from "effect"
+ * import { Cause, Pull } from "effect"
  *
  * const halt = new Pull.Halt("completed")
  * const causeWithHalt = Cause.fail(halt)
@@ -420,8 +409,7 @@ export const haltExitFromCause = <E>(cause: Cause.Cause<E>): Exit.Exit<Halt.Extr
  *
  * @example
  * ```ts
- * import { Effect, Cause } from "effect"
- * import { Pull } from "effect"
+ * import { Effect, Pull } from "effect"
  *
  * const pull = Pull.halt("stream ended")
  *

@@ -23,8 +23,7 @@ import type { Unify } from "./types/Unify.ts"
  * @example
  * ```ts
  * import * as assert from "node:assert"
- * import { Equal } from "effect"
- * import { Data } from "effect"
+ * import { Data, Equal } from "effect"
  *
  * class Person extends Data.Class<{ readonly name: string }> {}
  *
@@ -56,8 +55,7 @@ export const Class: new<A extends Record<string, any> = {}>(
  * @example
  * ```ts
  * import * as assert from "node:assert"
- * import { Equal } from "effect"
- * import { Data } from "effect"
+ * import { Data, Equal } from "effect"
  *
  * class Person extends Data.TaggedClass("Person")<{ readonly name: string }> {}
  *
@@ -108,12 +106,24 @@ export const TaggedClass = <Tag extends string>(
  *
  * // This is equivalent to the union type:
  * type HttpErrorExpanded =
- *   | { readonly _tag: "BadRequest"; readonly status: 400; readonly message: string }
- *   | { readonly _tag: "NotFound"; readonly status: 404; readonly message: string }
- *   | { readonly _tag: "InternalError"; readonly status: 500; readonly details: string }
+ *   | {
+ *     readonly _tag: "BadRequest"
+ *     readonly status: 400
+ *     readonly message: string
+ *   }
+ *   | {
+ *     readonly _tag: "NotFound"
+ *     readonly status: 404
+ *     readonly message: string
+ *   }
+ *   | {
+ *     readonly _tag: "InternalError"
+ *     readonly status: 500
+ *     readonly details: string
+ *   }
  *
  * // Usage with constructors
- * const { BadRequest, NotFound, InternalError } = Data.taggedEnum<HttpError>()
+ * const { BadRequest, InternalError, NotFound } = Data.taggedEnum<HttpError>()
  *
  * const error: HttpError = BadRequest({ status: 400, message: "Invalid request" })
  * console.log(error._tag) // "BadRequest"
@@ -151,7 +161,7 @@ type UntaggedChildren<A> = true extends ChildrenAreTagged<A>
  * import { Data } from "effect"
  *
  * // Basic tagged enum usage
- * const { Success, Failure } = Data.taggedEnum<
+ * const { Failure, Success } = Data.taggedEnum<
  *   | { readonly _tag: "Success"; readonly value: number }
  *   | { readonly _tag: "Failure"; readonly error: string }
  * >()
@@ -172,7 +182,7 @@ export declare namespace TaggedEnum {
    *
    * @example
    * ```ts
-   * import { Data } from "effect"
+   * import type { Data } from "effect"
    *
    * // Define a tagged enum with generic parameters
    * interface MyTaggedEnum<A, B> extends Data.TaggedEnum.WithGenerics<2> {
@@ -206,7 +216,7 @@ export declare namespace TaggedEnum {
    *
    * @example
    * ```ts
-   * import { Data } from "effect"
+   * import type { Data } from "effect"
    *
    * // Define a generic Option type
    * type Option<A> = Data.TaggedEnum<{
@@ -260,7 +270,7 @@ export declare namespace TaggedEnum {
    *
    * @example
    * ```ts
-   * import { Data } from "effect"
+   * import type { Data } from "effect"
    *
    * type Result =
    *   | { readonly _tag: "Success"; readonly value: number }
@@ -296,7 +306,7 @@ export declare namespace TaggedEnum {
    *
    * @example
    * ```ts
-   * import { Data } from "effect"
+   * import type { Data } from "effect"
    *
    * type Result =
    *   | { readonly _tag: "Success"; readonly value: number }
@@ -335,7 +345,7 @@ export declare namespace TaggedEnum {
    *   | { readonly _tag: "BadRequest"; readonly message: string }
    *   | { readonly _tag: "NotFound"; readonly resource: string }
    *
-   * const { BadRequest, NotFound, $is, $match } = Data.taggedEnum<HttpError>()
+   * const { $is, $match, BadRequest, NotFound } = Data.taggedEnum<HttpError>()
    *
    * const error = BadRequest({ message: "Invalid input" })
    *
@@ -416,7 +426,7 @@ export declare namespace TaggedEnum {
    *   readonly taggedEnum: Result<this["A"], this["B"]>
    * }
    *
-   * const { Failure, Success, $is, $match } = Data.taggedEnum<ResultDefinition>()
+   * const { $is, $match, Failure, Success } = Data.taggedEnum<ResultDefinition>()
    *
    * const stringResult = Success({ value: "hello" })
    * const numberResult = Failure({ error: 404 })
@@ -496,8 +506,16 @@ export declare namespace TaggedEnum {
  * import { Data } from "effect"
  *
  * const { BadRequest, NotFound } = Data.taggedEnum<
- *   | { readonly _tag: "BadRequest"; readonly status: 400; readonly message: string }
- *   | { readonly _tag: "NotFound"; readonly status: 404; readonly message: string }
+ *   | {
+ *     readonly _tag: "BadRequest"
+ *     readonly status: 400
+ *     readonly message: string
+ *   }
+ *   | {
+ *     readonly _tag: "NotFound"
+ *     readonly status: 404
+ *     readonly message: string
+ *   }
  * >()
  *
  * const notFound = NotFound({ status: 404, message: "Not Found" })
@@ -622,12 +640,11 @@ function taggedMatch<
  *
  * @example
  * ```ts
- * import { Effect, Exit } from "effect"
- * import { Data } from "effect"
+ * import { Data, Effect } from "effect"
  *
  * class NetworkError extends Data.Error<{ code: number; message: string }> {}
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   yield* new NetworkError({ code: 500, message: "Server error" })
  * })
  *
@@ -651,8 +668,7 @@ export const Error: new<A extends Record<string, any> = {}>(
  *
  * @example
  * ```ts
- * import { Effect, pipe } from "effect"
- * import { Data } from "effect"
+ * import { Data, Effect, pipe } from "effect"
  *
  * class NetworkError extends Data.TaggedError("NetworkError")<{
  *   code: number
@@ -664,14 +680,15 @@ export const Error: new<A extends Record<string, any> = {}>(
  *   message: string
  * }> {}
  *
- * const program = Effect.gen(function* () {
+ * const program = Effect.gen(function*() {
  *   yield* new NetworkError({ code: 500, message: "Server error" })
  * })
  *
  * const result = pipe(
  *   program,
- *   Effect.catchTag("NetworkError", (error) =>
- *     Effect.succeed(`Network error: ${error.message}`)
+ *   Effect.catchTag(
+ *     "NetworkError",
+ *     (error) => Effect.succeed(`Network error: ${error.message}`)
  *   )
  * )
  * ```
