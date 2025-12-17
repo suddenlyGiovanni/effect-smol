@@ -20,7 +20,7 @@ import type { ErrorWithStackTraceLimit } from "./internal/tracer.ts"
 import * as Option from "./Option.ts"
 import type { Pipeable } from "./Pipeable.ts"
 import { hasProperty } from "./Predicate.ts"
-import type * as Types from "./types/Types.ts"
+import type * as Types from "./Types.ts"
 
 const ServiceTypeId = "~effect/ServiceMap/Service" as const
 
@@ -510,8 +510,8 @@ export const make = <I, S>(
  *
  * @example
  * ```ts
- * import * as assert from "node:assert"
  * import { pipe, ServiceMap } from "effect"
+ * import * as assert from "node:assert"
  *
  * const Port = ServiceMap.Service<{ PORT: number }>("Port")
  * const Timeout = ServiceMap.Service<{ TIMEOUT: number }>("Timeout")
@@ -682,8 +682,8 @@ export const getUnsafe: {
  *
  * @example
  * ```ts
- * import * as assert from "node:assert"
  * import { pipe, ServiceMap } from "effect"
+ * import * as assert from "node:assert"
  *
  * const Port = ServiceMap.Service<{ PORT: number }>("Port")
  * const Timeout = ServiceMap.Service<{ TIMEOUT: number }>("Timeout")
@@ -884,8 +884,8 @@ export const mergeAll = <T extends Array<unknown>>(
  *
  * @example
  * ```ts
- * import * as assert from "node:assert"
  * import { Option, pipe, ServiceMap } from "effect"
+ * import * as assert from "node:assert"
  *
  * const Port = ServiceMap.Service<{ PORT: number }>("Port")
  * const Timeout = ServiceMap.Service<{ TIMEOUT: number }>("Timeout")
@@ -924,8 +924,8 @@ export const pick = <S extends ReadonlyArray<Service<any, any>>>(
 /**
  * @example
  * ```ts
- * import * as assert from "node:assert"
  * import { Option, pipe, ServiceMap } from "effect"
+ * import * as assert from "node:assert"
  *
  * const Port = ServiceMap.Service<{ PORT: number }>("Port")
  * const Timeout = ServiceMap.Service<{ TIMEOUT: number }>("Timeout")

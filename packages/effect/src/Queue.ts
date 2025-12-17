@@ -46,7 +46,7 @@ import * as MutableList from "./MutableList.ts"
 import { hasProperty } from "./Predicate.ts"
 import * as Pull from "./Pull.ts"
 import type { Scheduler } from "./Scheduler.ts"
-import type * as Types from "./types/Types.ts"
+import type * as Types from "./Types.ts"
 
 const TypeId = "~effect/Queue"
 const DequeueTypeId = "~effect/Queue/Dequeue"
@@ -249,8 +249,8 @@ const QueueProto = {
  * @category constructors
  * @example
  * ```ts
- * import * as assert from "node:assert"
  * import { Effect, Queue } from "effect"
+ * import * as assert from "node:assert"
  *
  * Effect.gen(function*() {
  *   const queue = yield* Queue.make<number, string | Queue.Done>()

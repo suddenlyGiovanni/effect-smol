@@ -14,16 +14,16 @@
 import type * as Cause from "./Cause.ts"
 import * as core from "./internal/core.ts"
 import * as Predicate from "./Predicate.ts"
-import type * as Types from "./types/Types.ts"
-import type { Unify } from "./types/Unify.ts"
+import type * as Types from "./Types.ts"
+import type { Unify } from "./Unify.ts"
 
 /**
  * Provides a constructor for a Case Class.
  *
  * @example
  * ```ts
- * import * as assert from "node:assert"
  * import { Data, Equal } from "effect"
+ * import * as assert from "node:assert"
  *
  * class Person extends Data.Class<{ readonly name: string }> {}
  *
@@ -54,8 +54,8 @@ export const Class: new<A extends Record<string, any> = {}>(
  *
  * @example
  * ```ts
- * import * as assert from "node:assert"
  * import { Data, Equal } from "effect"
+ * import * as assert from "node:assert"
  *
  * class Person extends Data.TaggedClass("Person")<{ readonly name: string }> {}
  *

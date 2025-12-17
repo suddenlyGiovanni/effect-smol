@@ -13,7 +13,7 @@ import { PipeInspectableProto } from "./internal/core.ts"
 import { redactedRegistry } from "./internal/redacted.ts"
 import type { Pipeable } from "./Pipeable.ts"
 import { hasProperty, isString } from "./Predicate.ts"
-import type { Covariant } from "./types/Types.ts"
+import type { Covariant } from "./Types.ts"
 
 const TypeId = "~effect/data/Redacted"
 
@@ -213,8 +213,8 @@ export const wipeUnsafe = <T>(self: Redacted<T>): boolean => redactedRegistry.de
  *
  * @example
  * ```ts
- * import * as assert from "node:assert"
  * import { Equivalence, Redacted } from "effect"
+ * import * as assert from "node:assert"
  *
  * const API_KEY1 = Redacted.make("1234567890")
  * const API_KEY2 = Redacted.make("1-34567890")
