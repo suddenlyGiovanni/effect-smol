@@ -12,12 +12,12 @@ import * as Option from "./Option.ts"
 import type { Pipeable } from "./Pipeable.ts"
 import * as Predicate from "./Predicate.ts"
 import * as Rec from "./Record.ts"
-import * as AST from "./schema/AST.ts"
-import * as Getter from "./schema/Getter.ts"
-import * as Issue from "./schema/Issue.ts"
-import * as Parser from "./schema/Parser.ts"
-import * as Schema from "./schema/Schema.ts"
-import * as Transformation from "./schema/Transformation.ts"
+import * as Schema from "./Schema.ts"
+import * as AST from "./SchemaAST.ts"
+import * as Getter from "./SchemaGetter.ts"
+import * as Issue from "./SchemaIssue.ts"
+import * as Parser from "./SchemaParser.ts"
+import * as Transformation from "./SchemaTransformation.ts"
 
 const TypeId = "~effect/Config"
 
@@ -472,8 +472,7 @@ export const LogLevel = Schema.Literals(LogLevel_.values)
  * **Example**
  *
  * ```ts
- * import { Config, ConfigProvider, Effect } from "effect"
- * import { Schema } from "effect/schema"
+ * import { Config, ConfigProvider, Effect, Schema } from "effect"
  *
  * const schema = Config.Record(Schema.String, Schema.String)
  * const config = Config.schema(schema, "OTEL_RESOURCE_ATTRIBUTES")

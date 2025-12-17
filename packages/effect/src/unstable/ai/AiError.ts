@@ -76,7 +76,7 @@ import * as Effect from "../../Effect.ts"
 import { format } from "../../Formatter.ts"
 import * as Predicate from "../../Predicate.ts"
 import { redact } from "../../Redactable.ts"
-import * as Schema from "../../schema/Schema.ts"
+import * as Schema from "../../Schema.ts"
 import type * as HttpClientError from "../http/HttpClientError.ts"
 
 const TypeId = "~effect/unstable/ai/AiError" as const
@@ -512,8 +512,7 @@ export class MalformedInput extends Schema.ErrorClass<MalformedInput>(
  *
  * @example
  * ```ts
- * import { Effect } from "effect"
- * import { Schema } from "effect/schema"
+ * import { Effect, Schema } from "effect"
  * import { AiError } from "effect/unstable/ai"
  *
  * const ResponseSchema = Schema.Struct({
@@ -563,8 +562,7 @@ export class MalformedOutput extends Schema.ErrorClass<MalformedOutput>(
    *
    * @example
    * ```ts
-   * import { Effect } from "effect"
-   * import { Schema } from "effect/schema"
+   * import { Effect, Schema } from "effect"
    * import { AiError } from "effect/unstable/ai"
    *
    * const UserSchema = Schema.Struct({
@@ -722,8 +720,7 @@ export type AiError =
  *
  * @example
  * ```ts
- * import { Effect } from "effect"
- * import { Schema } from "effect/schema"
+ * import { Effect, Schema } from "effect"
  * import { AiError } from "effect/unstable/ai"
  *
  * const parseAiError = (data: unknown) =>

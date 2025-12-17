@@ -3,47 +3,47 @@
  */
 
 import type { StandardJSONSchemaV1, StandardSchemaV1 } from "@standard-schema/spec"
-import * as Arr from "../Array.ts"
-import type * as Brand from "../Brand.ts"
-import * as Cause_ from "../Cause.ts"
-import type * as Combiner from "../Combiner.ts"
-import * as Data from "../Data.ts"
-import * as DateTime from "../DateTime.ts"
-import type { Differ } from "../Differ.ts"
-import * as Duration_ from "../Duration.ts"
-import * as Effect from "../Effect.ts"
-import * as Equal from "../Equal.ts"
-import type * as Equivalence from "../Equivalence.ts"
-import * as Exit_ from "../Exit.ts"
-import type { Formatter } from "../Formatter.ts"
-import { format, formatDate, formatPropertyKey } from "../Formatter.ts"
-import { identity, memoize } from "../Function.ts"
-import * as InternalArbitrary from "../internal/arbitrary.ts"
-import * as core from "../internal/core.ts"
-import * as InternalDiffer from "../internal/differ.ts"
-import * as InternalEquivalence from "../internal/equivalence.ts"
-import * as InternalJsonSchema from "../internal/json-schema.ts"
-import { remainder } from "../Number.ts"
-import * as Optic_ from "../Optic.ts"
-import * as Option_ from "../Option.ts"
-import * as Order from "../Order.ts"
-import * as Pipeable from "../Pipeable.ts"
-import * as Predicate from "../Predicate.ts"
-import * as Record_ from "../Record.ts"
-import * as Redacted_ from "../Redacted.ts"
-import * as Request from "../Request.ts"
-import * as Result_ from "../Result.ts"
-import * as Scheduler from "../Scheduler.ts"
-import type { Assign, Lambda, Mutable, Simplify } from "../Struct.ts"
-import * as Struct_ from "../Struct.ts"
-import * as FastCheck from "../testing/FastCheck.ts"
-import type { UnionToIntersection } from "../Types.ts"
-import * as Annotations from "./Annotations.ts"
-import * as AST from "./AST.ts"
-import * as Getter from "./Getter.ts"
-import * as Issue from "./Issue.ts"
-import * as Parser from "./Parser.ts"
-import * as Transformation from "./Transformation.ts"
+import * as Arr from "./Array.ts"
+import type * as Brand from "./Brand.ts"
+import * as Cause_ from "./Cause.ts"
+import type * as Combiner from "./Combiner.ts"
+import * as Data from "./Data.ts"
+import * as DateTime from "./DateTime.ts"
+import type { Differ } from "./Differ.ts"
+import * as Duration_ from "./Duration.ts"
+import * as Effect from "./Effect.ts"
+import * as Equal from "./Equal.ts"
+import type * as Equivalence from "./Equivalence.ts"
+import * as Exit_ from "./Exit.ts"
+import type { Formatter } from "./Formatter.ts"
+import { format, formatDate, formatPropertyKey } from "./Formatter.ts"
+import { identity, memoize } from "./Function.ts"
+import * as InternalArbitrary from "./internal/arbitrary.ts"
+import * as core from "./internal/core.ts"
+import * as InternalDiffer from "./internal/differ.ts"
+import * as InternalEquivalence from "./internal/equivalence.ts"
+import * as InternalJsonSchema from "./internal/json-schema.ts"
+import { remainder } from "./Number.ts"
+import * as Optic_ from "./Optic.ts"
+import * as Option_ from "./Option.ts"
+import * as Order from "./Order.ts"
+import * as Pipeable from "./Pipeable.ts"
+import * as Predicate from "./Predicate.ts"
+import * as Record_ from "./Record.ts"
+import * as Redacted_ from "./Redacted.ts"
+import * as Request from "./Request.ts"
+import * as Result_ from "./Result.ts"
+import * as Scheduler from "./Scheduler.ts"
+import * as Annotations from "./SchemaAnnotations.ts"
+import * as AST from "./SchemaAST.ts"
+import * as Getter from "./SchemaGetter.ts"
+import * as Issue from "./SchemaIssue.ts"
+import * as Parser from "./SchemaParser.ts"
+import * as Transformation from "./SchemaTransformation.ts"
+import type { Assign, Lambda, Mutable, Simplify } from "./Struct.ts"
+import * as Struct_ from "./Struct.ts"
+import * as FastCheck from "./testing/FastCheck.ts"
+import type { UnionToIntersection } from "./Types.ts"
 
 /**
  * Is this schema required or optional?
@@ -145,7 +145,7 @@ export interface Bottom<
   makeUnsafe(input: this["~type.make.in"], options?: MakeOptions): this["Type"]
 }
 
-const TypeId = "~effect/schema/Schema"
+const TypeId = "~effect/Schema/Schema"
 
 const SchemaProto = {
   [TypeId]: TypeId,
@@ -395,7 +395,7 @@ export function revealCodec<T, E, RD, RE>(codec: Codec<T, E, RD, RE>) {
   return codec
 }
 
-const SchemaErrorTypeId = "~effect/schema/Schema/SchemaError"
+const SchemaErrorTypeId = "~effect/Schema/SchemaError"
 
 /**
  * A `SchemaError` is returned when schema decoding or encoding fails.
@@ -448,7 +448,7 @@ function makeStandardResult<A>(exit: Exit_.Exit<StandardSchemaV1.Result<A>>): St
  * **Example** (Creating a standard schema from a regular schema)
  *
  * ```ts
- * import { Schema } from "effect/schema"
+ * import { Schema } from "effect"
  *
  * // Define custom hook functions for error formatting
  * const leafHook = (issue: any) => {
@@ -621,7 +621,7 @@ export function toStandardJSONSchemaV1<S extends Top>(self: S): StandardJSONSche
  * **Example** (Basic Type Guard)
  *
  * ```ts
- * import { Schema } from "effect/schema"
+ * import { Schema } from "effect"
  *
  * const isString = Schema.is(Schema.String)
  *
@@ -652,7 +652,7 @@ export const is = Parser.is
  * **Example** (Basic Usage)
  *
  * ```ts
- * import { Schema } from "effect/schema"
+ * import { Schema } from "effect"
  *
  * const assertString: (u: unknown) => asserts u is string = Schema.asserts(
  *   Schema.String
@@ -900,7 +900,7 @@ interface optionalKeyLambda extends Lambda {
  * **Example** (Creating a struct with optional key)
  *
  * ```ts
- * import { Schema } from "effect/schema"
+ * import { Schema } from "effect"
  *
  * const schema = Schema.Struct({
  *   name: Schema.String,
@@ -951,7 +951,7 @@ interface optionalLambda extends Lambda {
  * **Example** (Creating a struct with optional)
  *
  * ```ts
- * import { Schema } from "effect/schema"
+ * import { Schema } from "effect"
  *
  * const schema = Schema.Struct({
  *   name: Schema.String,
@@ -1096,7 +1096,7 @@ interface toEncodedLambda extends Lambda {
  */
 export const toEncoded = Struct_.lambda<toEncodedLambda>((schema) => makeProto(AST.toEncoded(schema.ast), { schema }))
 
-const FlipTypeId = "~effect/schema/Schema/flip"
+const FlipTypeId = "~effect/Schema/flip"
 
 /**
  * @since 4.0.0
@@ -1481,7 +1481,7 @@ export interface UniqueSymbol<sym extends symbol>
  * **Example**
  *
  * ```ts
- * import { Schema } from "effect/schema"
+ * import { Schema } from "effect"
  *
  * const a = Symbol.for("a")
  * const schema = Schema.UniqueSymbol(a)
@@ -1673,7 +1673,7 @@ interface fieldsAssign<NewFields extends Struct.Fields> extends Lambda {
  *
  * ```ts
  * import { Tuple } from "effect"
- * import { Schema } from "effect/schema"
+ * import { Schema } from "effect"
  *
  * // Add a new field to all members of a union of structs
  * const schema = Schema.Union([
@@ -2845,14 +2845,14 @@ export interface compose<To extends Top, From extends Top> extends decodeTo<To, 
  * **Example** (String to Number with transformation)
  *
  * ```ts
- * import { Getter, Schema } from "effect/schema"
+ * import { SchemaGetter, Schema } from "effect"
  *
  * const NumberFromString = Schema.String.pipe(
  *   Schema.decodeTo(
  *     Schema.Number,
  *     {
- *       decode: Getter.transform((s) => Number(s)),
- *       encode: Getter.transform((n) => String(n))
+ *       decode: SchemaGetter.transform((s) => Number(s)),
+ *       encode: SchemaGetter.transform((n) => String(n))
  *     }
  *   )
  * )
@@ -2915,12 +2915,12 @@ export function decodeTo<To extends Top, From extends Top, RD = never, RE = neve
  * **Example** (Trimming string values during encoding/decoding)
  *
  * ```ts
- * import { Getter, Schema } from "effect/schema"
+ * import { SchemaGetter, Schema } from "effect"
  *
  * const Trimmed = Schema.String.pipe(
  *   Schema.decode({
- *     decode: Getter.transform((s) => s.trim()),
- *     encode: Getter.transform((s) => s.trim())
+ *     decode: SchemaGetter.transform((s) => s.trim()),
+ *     encode: SchemaGetter.transform((s) => s.trim())
  *   })
  * )
  *
@@ -3139,7 +3139,7 @@ export type TaggedStruct<Tag extends AST.LiteralValue, Fields extends Struct.Fie
  * **Example** (Tagged struct as a shorthand for a struct with a `_tag` field)
  *
  * ```ts
- * import { Schema } from "effect/schema"
+ * import { Schema } from "effect"
  *
  * // Defines a struct with a fixed `_tag` field
  * const tagged = Schema.TaggedStruct("A", {
@@ -3156,7 +3156,7 @@ export type TaggedStruct<Tag extends AST.LiteralValue, Fields extends Struct.Fie
  * **Example** (Accessing the literal value of the tag)
  *
  * ```ts
- * import { Schema } from "effect/schema"
+ * import { Schema } from "effect"
  *
  * const tagged = Schema.TaggedStruct("A", {
  *   a: Schema.String
@@ -6469,7 +6469,7 @@ export interface UnknownFromJsonString extends fromJsonString<Unknown> {}
  * **Example**
  *
  * ```ts
- * import { Schema } from "effect/schema"
+ * import { Schema } from "effect"
  *
  * Schema.decodeUnknownSync(Schema.UnknownFromJsonString)(`{"a":1,"b":2}`)
  * // => { a: 1, b: 2 }
@@ -6497,7 +6497,7 @@ export interface fromJsonString<S extends Top> extends decodeTo<S, String> {}
  * **Example**
  *
  * ```ts
- * import { Schema } from "effect/schema"
+ * import { Schema } from "effect"
  *
  * const schema = Schema.Struct({ a: Schema.Number })
  * const schemaFromJsonString = Schema.fromJsonString(schema)
@@ -6515,7 +6515,7 @@ export interface fromJsonString<S extends Top> extends decodeTo<S, String> {}
  * **Example**
  *
  * ```ts
- * import { Schema } from "effect/schema"
+ * import { Schema } from "effect"
  *
  * const original = Schema.Struct({ a: Schema.String })
  * const schema = Schema.fromJsonString(original)
@@ -6596,7 +6596,7 @@ export interface fromFormData<S extends Top> extends decodeTo<S, FormData> {}
  * **Example** (Decoding a flat structure)
  *
  * ```ts
- * import { Schema } from "effect/schema"
+ * import { Schema } from "effect"
  *
  * const schema = Schema.fromFormData(
  *   Schema.Struct({
@@ -6617,7 +6617,7 @@ export interface fromFormData<S extends Top> extends decodeTo<S, FormData> {}
  * **Example** (Nested fields)
  *
  * ```ts
- * import { Schema } from "effect/schema"
+ * import { Schema } from "effect"
  *
  * const schema = Schema.fromFormData(
  *   Schema.Struct({
@@ -6646,7 +6646,7 @@ export interface fromFormData<S extends Top> extends decodeTo<S, FormData> {}
  * **Example** (Parsing non-string values)
  *
  * ```ts
- * import { Schema } from "effect/schema"
+ * import { Schema } from "effect"
  *
  * const schema = Schema.fromFormData(
  *   Schema.toCodecStringTree(
@@ -6698,7 +6698,7 @@ export interface fromURLSearchParams<S extends Top> extends decodeTo<S, URLSearc
  * **Example** (Decoding a flat structure)
  *
  * ```ts
- * import { Schema } from "effect/schema"
+ * import { Schema } from "effect"
  *
  * const schema = Schema.fromURLSearchParams(
  *   Schema.Struct({
@@ -6716,7 +6716,7 @@ export interface fromURLSearchParams<S extends Top> extends decodeTo<S, URLSearc
  * **Example** (Nested fields)
  *
  * ```ts
- * import { Schema } from "effect/schema"
+ * import { Schema } from "effect"
  *
  * const schema = Schema.fromURLSearchParams(
  *   Schema.Struct({
@@ -6741,7 +6741,7 @@ export interface fromURLSearchParams<S extends Top> extends decodeTo<S, URLSearc
  * **Example** (Parsing non-string values)
  *
  * ```ts
- * import { Schema } from "effect/schema"
+ * import { Schema } from "effect"
  *
  * const schema = Schema.fromURLSearchParams(
  *   Schema.toCodecStringTree(
@@ -7292,7 +7292,7 @@ function getClassTransformation(self: new(...args: ReadonlyArray<any>) => any) {
 }
 
 function getClassTypeId(identifier: string) {
-  return `~effect/schema/Schema/Class/${identifier}`
+  return `~effect/Schema/Class/${identifier}`
 }
 
 function getClassSchemaFactory<S extends Top>(
@@ -8183,7 +8183,7 @@ const serializerStringTreeKeepDeclarations = AST.serializer((ast) => {
   return out
 })
 
-const SERIALIZER_ENSURE_ARRAY = "~effect/schema/Schema/SERIALIZER_ENSURE_ARRAY"
+const SERIALIZER_ENSURE_ARRAY = "~effect/Schema/SERIALIZER_ENSURE_ARRAY"
 
 const toCodecEnsureArray = AST.serializer((ast) => {
   if (AST.isUnion(ast) && ast.annotations?.[SERIALIZER_ENSURE_ARRAY]) {

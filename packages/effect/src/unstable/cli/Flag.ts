@@ -8,7 +8,7 @@ import type * as Option from "../../Option.ts"
 import type * as Path from "../../Path.ts"
 import type * as Redacted from "../../Redacted.ts"
 import type * as Result from "../../Result.ts"
-import type * as Schema from "../../schema/Schema.ts"
+import type * as Schema from "../../Schema.ts"
 import type * as CliError from "./CliError.ts"
 import * as Param from "./Param.ts"
 import type * as Primitive from "./Primitive.ts"
@@ -298,7 +298,7 @@ export const fileParse = (
  *
  * @example
  * ```ts
- * import { Schema } from "effect/schema"
+ * import { Schema } from "effect"
  * import { Flag } from "effect/unstable/cli"
  *
  * const ConfigSchema = Schema.Struct({
@@ -810,7 +810,7 @@ export const orElseResult: {
  *
  * @example
  * ```ts
- * import { Schema } from "effect/schema"
+ * import { Schema } from "effect"
  * import { Flag } from "effect/unstable/cli"
  *
  * const isEmail = Schema.isIncludes("@", {

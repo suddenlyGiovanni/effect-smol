@@ -9,7 +9,7 @@
  *
  * @example
  * ```ts
- * import { Schema } from "effect/schema"
+ * import { Schema } from "effect"
  * import { Tool } from "effect/unstable/ai"
  *
  * // Define a simple calculator tool
@@ -30,9 +30,9 @@ import type * as Effect from "../../Effect.ts"
 import { constFalse, constTrue, identity } from "../../Function.ts"
 import { pipeArguments } from "../../Pipeable.ts"
 import * as Predicate from "../../Predicate.ts"
-import * as Annotations from "../../schema/Annotations.ts"
-import * as AST from "../../schema/AST.ts"
-import * as Schema from "../../schema/Schema.ts"
+import * as Schema from "../../Schema.ts"
+import * as Annotations from "../../SchemaAnnotations.ts"
+import * as AST from "../../SchemaAST.ts"
 import * as ServiceMap from "../../ServiceMap.ts"
 import type * as Struct from "../../Struct.ts"
 import type * as Types from "../../Types.ts"
@@ -73,7 +73,7 @@ export type FailureMode = "error" | "return"
  *
  * @example
  * ```ts
- * import { Schema } from "effect/schema"
+ * import { Schema } from "effect"
  * import { Tool } from "effect/unstable/ai"
  *
  * // Create a weather lookup tool
@@ -244,7 +244,7 @@ export interface Tool<
  *
  * @example
  * ```ts
- * import { Schema } from "effect/schema"
+ * import { Schema } from "effect"
  * import { Tool } from "effect/unstable/ai"
  *
  * // Define a web search tool provided by OpenAI
@@ -324,7 +324,7 @@ export interface ProviderDefined<
  *
  * @example
  * ```ts
- * import { Schema } from "effect/schema"
+ * import { Schema } from "effect"
  * import { Tool } from "effect/unstable/ai"
  *
  * const UserDefinedTool = Tool.make("Calculator", {
@@ -368,7 +368,7 @@ export const isUserDefined = (u: unknown): u is Tool<string, any, any> =>
  *
  * @example
  * ```ts
- * import { Schema } from "effect/schema"
+ * import { Schema } from "effect"
  * import { Tool } from "effect/unstable/ai"
  *
  * const UserDefinedTool = Tool.make("Calculator", {
@@ -839,7 +839,7 @@ const constEmptyStruct = Schema.Struct({})
  *
  * @example
  * ```ts
- * import { Schema } from "effect/schema"
+ * import { Schema } from "effect"
  * import { Tool } from "effect/unstable/ai"
  *
  * // Simple tool with no parameters
@@ -926,7 +926,7 @@ export const make = <
  *
  * @example
  * ```ts
- * import { Schema } from "effect/schema"
+ * import { Schema } from "effect"
  * import { Tool } from "effect/unstable/ai"
  *
  * // Web search tool provided by OpenAI
@@ -1075,7 +1075,7 @@ export const getDescription = <Tool extends Any>(tool: Tool): string | undefined
  *
  * @example
  * ```ts
- * import { Schema } from "effect/schema"
+ * import { Schema } from "effect"
  * import { Tool } from "effect/unstable/ai"
  *
  * const weatherTool = Tool.make("get_weather", {

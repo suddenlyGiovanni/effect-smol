@@ -29,8 +29,8 @@
 import type * as DateTime from "../../DateTime.ts"
 import { constFalse, identity } from "../../Function.ts"
 import * as Predicate from "../../Predicate.ts"
-import * as Schema from "../../schema/Schema.ts"
-import * as SchemaTransformation from "../../schema/Transformation.ts"
+import * as Schema from "../../Schema.ts"
+import * as SchemaTransformation from "../../SchemaTransformation.ts"
 import type * as Tool from "./Tool.ts"
 import type * as Toolkit from "./Toolkit.ts"
 
@@ -167,7 +167,7 @@ export type AllPartsEncoded =
  *
  * @example
  * ```ts
- * import { Schema } from "effect/schema"
+ * import { Schema } from "effect"
  * import { Response, Tool, Toolkit } from "effect/unstable/ai"
  *
  * const myToolkit = Toolkit.make(
@@ -1341,7 +1341,7 @@ export const ToolParamsEndPart: Schema.Struct<{
  *
  * @example
  * ```ts
- * import { Schema } from "effect/schema"
+ * import { Schema } from "effect"
  * import { Response } from "effect/unstable/ai"
  *
  * const weatherParams = Schema.Struct({

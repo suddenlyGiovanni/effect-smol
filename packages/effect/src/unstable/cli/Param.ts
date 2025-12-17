@@ -20,7 +20,7 @@ import { type Pipeable, pipeArguments } from "../../Pipeable.ts"
 import * as Predicate from "../../Predicate.ts"
 import type * as Redacted from "../../Redacted.ts"
 import * as Result from "../../Result.ts"
-import * as Schema from "../../schema/Schema.ts"
+import * as Schema from "../../Schema.ts"
 import type { Covariant } from "../../Types.ts"
 import * as CliError from "./CliError.ts"
 import * as Primitive from "./Primitive.ts"
@@ -717,7 +717,7 @@ export const fileParse = <Kind extends ParamKind>(
  *
  * @example
  * ```ts
- * import { Schema } from "effect/schema"
+ * import { Schema } from "effect"
  * import * as Param from "effect/unstable/cli/Param"
  * // @internal - this module is not exported publicly
  *
@@ -1452,7 +1452,7 @@ export const withMetavar: {
  *
  * @example
  * ```ts
- * import { Schema } from "effect/schema"
+ * import { Schema } from "effect"
  * import * as Param from "effect/unstable/cli/Param"
  * // @internal - this module is not exported publicly
  *

@@ -51,7 +51,7 @@ import * as Layer from "../../Layer.ts"
 import * as Option from "../../Option.ts"
 import * as Predicate from "../../Predicate.ts"
 import * as Ref from "../../Ref.ts"
-import * as Schema from "../../schema/Schema.ts"
+import * as Schema from "../../Schema.ts"
 import * as ServiceMap from "../../ServiceMap.ts"
 import * as Stream from "../../Stream.ts"
 import type { NoExcessProperties } from "../../Types.ts"
@@ -249,8 +249,7 @@ export interface Service {
    *
    * @example
    * ```ts
-   * import { Effect } from "effect"
-   * import { Schema } from "effect/schema"
+   * import { Effect, Schema } from "effect"
    * import { Chat } from "effect/unstable/ai"
    *
    * const ContactSchema = Schema.Struct({

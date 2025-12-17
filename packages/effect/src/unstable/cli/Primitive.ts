@@ -21,8 +21,8 @@ import { format } from "../../Formatter.ts"
 import { identity } from "../../Function.ts"
 import * as Path from "../../Path.ts"
 import * as Redacted from "../../Redacted.ts"
-import type { Formatter } from "../../schema/Issue.ts"
-import * as Schema from "../../schema/Schema.ts"
+import * as Schema from "../../Schema.ts"
+import type { Formatter } from "../../SchemaIssue.ts"
 import type * as Struct from "../../Struct.ts"
 import type { Covariant } from "../../Types.ts"
 
@@ -550,8 +550,7 @@ export type FileSchemaOptions = Struct.Simplify<
  *
  * @example
  * ```ts
- * import { Effect } from "effect"
- * import { Schema } from "effect/schema"
+ * import { Effect, Schema } from "effect"
  * import { Primitive } from "effect/unstable/cli"
  *
  * const ConfigSchema = Schema.Struct({

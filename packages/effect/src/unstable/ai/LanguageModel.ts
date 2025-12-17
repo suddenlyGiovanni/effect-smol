@@ -27,8 +27,7 @@
  *
  * @example
  * ```ts
- * import { Effect } from "effect"
- * import { Schema } from "effect/schema"
+ * import { Effect, Schema } from "effect"
  * import { LanguageModel } from "effect/unstable/ai"
  *
  * // Structured output generation
@@ -53,8 +52,8 @@ import * as Effect from "../../Effect.ts"
 import * as Option from "../../Option.ts"
 import * as Predicate from "../../Predicate.ts"
 import * as Queue from "../../Queue.ts"
-import * as SchemaAnnotations from "../../schema/Annotations.ts"
-import * as Schema from "../../schema/Schema.ts"
+import * as Schema from "../../Schema.ts"
+import * as SchemaAnnotations from "../../SchemaAnnotations.ts"
 import * as ServiceMap from "../../ServiceMap.ts"
 import * as Stream from "../../Stream.ts"
 import type { Span } from "../../Tracer.ts"
@@ -369,8 +368,7 @@ export class GenerateTextResponse<Tools extends Record<string, Tool.Any>> {
  *
  * @example
  * ```ts
- * import { Effect } from "effect"
- * import { Schema } from "effect/schema"
+ * import { Effect, Schema } from "effect"
  * import { LanguageModel } from "effect/unstable/ai"
  *
  * const UserSchema = Schema.Struct({
@@ -935,8 +933,7 @@ export const generateText = <
  *
  * @example
  * ```ts
- * import { Effect } from "effect"
- * import { Schema } from "effect/schema"
+ * import { Effect, Schema } from "effect"
  * import { LanguageModel } from "effect/unstable/ai"
  *
  * const EventSchema = Schema.Struct({

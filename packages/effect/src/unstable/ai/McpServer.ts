@@ -9,9 +9,9 @@ import * as Layer from "../../Layer.ts"
 import * as Option from "../../Option.ts"
 import * as Queue from "../../Queue.ts"
 import * as RcMap from "../../RcMap.ts"
-import * as SchemaAnnotations from "../../schema/Annotations.ts"
-import * as AST from "../../schema/AST.ts"
-import * as Schema from "../../schema/Schema.ts"
+import * as Schema from "../../Schema.ts"
+import * as SchemaAnnotations from "../../SchemaAnnotations.ts"
+import * as AST from "../../SchemaAST.ts"
 import * as ServiceMap from "../../ServiceMap.ts"
 import type { Sink } from "../../Sink.ts"
 import type { Stream } from "../../Stream.ts"
@@ -449,8 +449,7 @@ export const layer = (options: {
  * @example
  * ```ts
  * import { NodeRuntime, NodeSink, NodeStream } from "@effect/platform-node"
- * import { Effect, Layer, Logger } from "effect"
- * import { Schema } from "effect/schema"
+ * import { Effect, Layer, Logger, Schema } from "effect"
  * import { McpSchema, McpServer } from "effect/unstable/ai"
  *
  * const idParam = McpSchema.param("id", Schema.Number)

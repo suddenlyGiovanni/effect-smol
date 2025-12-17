@@ -15,9 +15,9 @@ import type { Pipeable } from "../../Pipeable.ts"
 import { hasProperty } from "../../Predicate.ts"
 import type { ReadonlyRecord } from "../../Record.ts"
 import * as Result from "../../Result.ts"
-import * as Issue from "../../schema/Issue.ts"
-import * as Schema from "../../schema/Schema.ts"
-import * as Transformation from "../../schema/Transformation.ts"
+import * as Schema from "../../Schema.ts"
+import * as Issue from "../../SchemaIssue.ts"
+import * as Transformation from "../../SchemaTransformation.ts"
 import * as Tuple from "../../Tuple.ts"
 import * as UndefinedOr from "../../UndefinedOr.ts"
 
@@ -414,7 +414,7 @@ export interface schemaJsonField extends Schema.decodeTo<Schema.UnknownFromJsonS
  * `UrlParams`.
  *
  * ```ts
- * import { Schema } from "effect/schema"
+ * import { Schema } from "effect"
  * import { UrlParams } from "effect/unstable/http"
  *
  * const extractFoo = UrlParams.schemaJsonField("foo").pipe(
@@ -471,7 +471,7 @@ export interface schemaRecord extends
  * **Example**
  *
  * ```ts
- * import { Schema } from "effect/schema"
+ * import { Schema } from "effect"
  * import { UrlParams } from "effect/unstable/http"
  *
  * const toStruct = UrlParams.schemaRecord.pipe(
