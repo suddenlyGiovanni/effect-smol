@@ -1087,16 +1087,40 @@ export const fnUntraced: Effect.fn.Gen = (
 const fnStackCleaner = makeStackCleaner(2)
 
 /** @internal */
-export const fn: Effect.fn.Gen & Effect.fn.NonGen = (
-  body: Function,
-  ...pipeables: Array<any>
-) => {
+export const fn: typeof Effect.fn = function() {
+  const nameFirst = typeof arguments[0] === "string"
+  const name = nameFirst ? arguments[0] : "Effect.fn"
+  const spanOptions = nameFirst ? arguments[1] : undefined
+
   const prevLimit = globalThis.Error.stackTraceLimit
   globalThis.Error.stackTraceLimit = 2
   const defError = new globalThis.Error()
   globalThis.Error.stackTraceLimit = prevLimit
 
-  return function(this: any, ...args: Array<any>) {
+  if (nameFirst) {
+    return (body: Function, ...pipeables: Array<Function>) =>
+      makeFn(name, body, defError, pipeables, nameFirst, spanOptions)
+  }
+
+  return makeFn(
+    name,
+    arguments[1],
+    defError,
+    Array.prototype.slice.call(arguments, 1),
+    nameFirst,
+    spanOptions
+  )
+} as any
+
+const makeFn = (
+  name: string,
+  body: Function,
+  defError: Error,
+  pipeables: Array<Function>,
+  addSpan: boolean,
+  spanOptions: Tracer.SpanOptionsNoTrace | undefined
+) =>
+  function(this: any, ...args: Array<any>) {
     let result = suspend(() => {
       const iter = body.apply(this, arguments)
       return isEffect(iter) ? iter : fromIteratorUnsafe(iter)
@@ -1111,17 +1135,22 @@ export const fn: Effect.fn.Gen & Effect.fn.NonGen = (
     globalThis.Error.stackTraceLimit = 2
     const callError = new globalThis.Error()
     globalThis.Error.stackTraceLimit = prevLimit
-    return updateService(result, CurrentStackFrame, (prev) => ({
-      name: "Effect.fn",
-      stack: fnStackCleaner(() => callError.stack),
-      parent: {
-        name: "Effect.fn (definition)",
-        stack: fnStackCleaner(() => defError.stack),
-        parent: prev
-      }
-    }))
+    return updateService(
+      addSpan ?
+        useSpan(name, spanOptions!, (span) => provideParentSpan(result, span)) :
+        result,
+      CurrentStackFrame,
+      (prev) => ({
+        name,
+        stack: fnStackCleaner(() => callError.stack),
+        parent: {
+          name: `${name} (definition)`,
+          stack: fnStackCleaner(() => defError.stack),
+          parent: prev
+        }
+      })
+    )
   }
-}
 
 /** @internal */
 export const fnUntracedEager: Effect.fn.Gen = (

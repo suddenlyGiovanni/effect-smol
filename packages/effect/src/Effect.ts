@@ -9977,7 +9977,10 @@ export const fnUntraced: fn.Gen = internal.fnUntraced
  * @since 3.12.0
  * @category function
  */
-export const fn: fn.Gen & fn.NonGen = internal.fn
+export const fn: fn.Gen & fn.NonGen & {
+  (name: string, options?: SpanOptionsNoTrace): fn.Gen
+  (name: string, options?: SpanOptionsNoTrace): fn.NonGen
+} = internal.fn
 
 // ========================================================================
 // Clock
