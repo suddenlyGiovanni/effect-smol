@@ -24,6 +24,7 @@ import * as InternalAnnotations from "./internal/schema/annotations.ts"
 import * as InternalArbitrary from "./internal/schema/arbitrary.ts"
 import * as InternalJsonSchema from "./internal/schema/json-schema.ts"
 import * as JsonPatch from "./JsonPatch.ts"
+import type * as JsonSchema from "./JsonSchema.ts"
 import { remainder } from "./Number.ts"
 import * as Optic_ from "./Optic.ts"
 import * as Option_ from "./Option.ts"
@@ -565,7 +566,7 @@ function getDefinitionsNamespace(target: JsonSchema.Target): string {
   }
 }
 
-function toBaseStandardJSONSchemaV1(self: Top, target: StandardJSONSchemaV1.Target): JsonSchema {
+function toBaseStandardJSONSchemaV1(self: Top, target: StandardJSONSchemaV1.Target): JsonSchema.JsonSchema {
   if (isTarget(target)) {
     const { definitions, schema } = toJsonSchema(self, { target })
     if (Object.keys(definitions).length > 0) {
@@ -7657,11 +7658,11 @@ export function toEquivalence<T>(schema: Schema<T>): Equivalence.Equivalence<T> 
 /**
  * @since 4.0.0
  */
-export interface ToJsonSchemaOptions {
+export interface ToJsonSchemaOptions<Target extends JsonSchema.Target> {
   /**
    * The target of the JSON Schema.
    */
-  readonly target: JsonSchema.Target
+  readonly target: Target
   /**
    * Controls how additional properties are handled while resolving the JSON
    * schema.
@@ -7671,7 +7672,7 @@ export interface ToJsonSchemaOptions {
    * - `true`: Allow additional properties
    * - `JsonSchema`: Use the provided JSON Schema for additional properties
    */
-  readonly additionalProperties?: true | false | JsonSchema | undefined
+  readonly additionalProperties?: true | false | JsonSchema.JsonSchema | undefined
   /**
    * Controls how references are handled while resolving the JSON schema.
    *
@@ -7685,70 +7686,12 @@ export interface ToJsonSchemaOptions {
    * A function that is called when a JSON Schema annotation is missing. This
    * will be the default result instead of throwing an error.
    */
-  readonly onMissingJsonSchemaAnnotation?: ((ast: AST.AST) => JsonSchema | undefined) | undefined
+  readonly onMissingJsonSchemaAnnotation?: ((ast: AST.AST) => JsonSchema.JsonSchema | undefined) | undefined
   /**
    * Controls whether to generate descriptions for checks (if the user has not
    * provided them) based on the `expected` annotation of the check.
    */
   readonly generateDescriptions?: boolean | undefined
-}
-
-/**
- * @category Json Schema
- * @since 4.0.0
- */
-export interface JsonSchema {
-  [x: string]: unknown
-}
-
-/**
- * @category JsonSchema
- * @since 4.0.0
- */
-export declare namespace JsonSchema {
-  /**
-   * @since 4.0.0
-   */
-  export type Target = "draft-07" | "draft-2020-12" | "openapi-3.1"
-
-  /**
-   * @since 4.0.0
-   */
-  export type Source = Target | "openapi-3.0"
-
-  /**
-   * @since 4.0.0
-   */
-  export type Type = "string" | "number" | "boolean" | "array" | "object" | "null" | "integer"
-
-  /**
-   * @since 4.0.0
-   */
-  export interface Definitions extends Record<string, JsonSchema> {}
-
-  /**
-   * @since 4.0.0
-   */
-  export interface Document<S extends Source = Source> {
-    readonly source: S
-    readonly schema: JsonSchema
-    readonly definitions: Definitions
-  }
-}
-
-/**
- * @category JsonSchema
- * @since 4.0.0
- */
-export function getMetaSchemaUri(target: JsonSchema.Source) {
-  switch (target) {
-    case "draft-07":
-      return "http://json-schema.org/draft-07/schema"
-    case "draft-2020-12":
-    case "openapi-3.0":
-    case "openapi-3.1":
-      return "https://json-schema.org/draft/2020-12/schema"
-  }
 }
 
 /**
@@ -7759,7 +7702,10 @@ export function getMetaSchemaUri(target: JsonSchema.Source) {
  * @category JsonSchema
  * @since 4.0.0
  */
-export function toJsonSchema<S extends Top>(schema: S, options: ToJsonSchemaOptions): JsonSchema.Document {
+export function toJsonSchema<S extends Top, Target extends JsonSchema.Target>(
+  schema: S,
+  options: ToJsonSchemaOptions<Target>
+): JsonSchema.Document<Target> {
   return InternalJsonSchema.make(schema, options)
 }
 
@@ -8441,6 +8387,16 @@ export interface MutableJsonObject {
 // -----------------------------------------------------------------------------
 
 /**
+ * Return all the typed annotations from the schema.
+ *
+ * @category Schema Resolvers
+ * @since 4.0.0
+ */
+export function resolveInto<S extends Top>(schema: S): S["~annotate.in"] | undefined {
+  return InternalAnnotations.resolve(schema.ast)
+}
+
+/**
  * @since 4.0.0
  */
 export declare namespace Annotations {
@@ -8742,7 +8698,7 @@ export declare namespace Annotations {
      * @since 4.0.0
      */
     export interface Constraint {
-      (context: ConstraintContext): JsonSchema | undefined
+      (context: ConstraintContext): JsonSchema.JsonSchema | undefined
     }
 
     /**
@@ -8750,20 +8706,20 @@ export declare namespace Annotations {
      */
     export interface Context<TypeParameters extends ReadonlyArray<Top>> {
       /** Json Schemas for any type parameters of the schema (if present) */
-      readonly typeParameters: { readonly [K in keyof TypeParameters]: JsonSchema }
+      readonly typeParameters: { readonly [K in keyof TypeParameters]: JsonSchema.JsonSchema }
       /** The target of the JSON Schema */
       readonly target: JsonSchema.Target
       /** The default JSON Schema that would be generated by the AST */
-      readonly jsonSchema: JsonSchema
+      readonly jsonSchema: JsonSchema.JsonSchema
       /** A function that generates a JSON Schema from an AST, respecting the target and the options */
-      readonly make: (ast: AST.AST) => JsonSchema
+      readonly make: (ast: AST.AST) => JsonSchema.JsonSchema
     }
 
     /**
      * @since 4.0.0
      */
     export interface Declaration<TypeParameters extends ReadonlyArray<Top>> {
-      (context: Context<TypeParameters>): JsonSchema
+      (context: Context<TypeParameters>): JsonSchema.JsonSchema
     }
   }
 
@@ -8780,7 +8736,7 @@ export declare namespace Annotations {
    *
    * @since 4.0.0
    */
-  export interface BuiltInMetaRegistry {
+  export interface BuiltInMetaDefinitions {
     // String Meta
     readonly isNumberString: {
       readonly _tag: "isNumberString"
@@ -8977,27 +8933,17 @@ export declare namespace Annotations {
   /**
    * @since 4.0.0
    */
-  export type BuiltInMeta = BuiltInMetaRegistry[keyof BuiltInMetaRegistry]
+  export type BuiltInMeta = BuiltInMetaDefinitions[keyof BuiltInMetaDefinitions]
 
   /**
    * This MAY be extended with custom meta.
    *
    * @since 4.0.0
    */
-  export interface MetaRegistry extends BuiltInMetaRegistry {}
+  export interface MetaDefinitions extends BuiltInMetaDefinitions {}
 
   /**
    * @since 4.0.0
    */
-  export type Meta = MetaRegistry[keyof MetaRegistry]
-}
-
-/**
- * Return all the typed annotations from the schema.
- *
- * @category Schema Resolvers
- * @since 4.0.0
- */
-export function resolveInto<S extends Top>(schema: S): S["~annotate.in"] | undefined {
-  return InternalAnnotations.resolve(schema.ast)
+  export type Meta = MetaDefinitions[keyof MetaDefinitions]
 }
