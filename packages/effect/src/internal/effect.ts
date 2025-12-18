@@ -1104,7 +1104,7 @@ export const fn: typeof Effect.fn = function() {
 
   return makeFn(
     name,
-    arguments[1],
+    arguments[0],
     defError,
     Array.prototype.slice.call(arguments, 1),
     nameFirst,
