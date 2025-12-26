@@ -952,7 +952,8 @@ export const map: {
  *         new CliError.InvalidValue({
  *           option: "email",
  *           value: email,
- *           expected: "valid email format"
+ *           expected: "valid email format",
+ *           kind: "flag"
  *         })
  *       )
  *   )
@@ -1037,7 +1038,8 @@ export const mapTryCatch: {
             new CliError.InvalidValue({
               option: single.name,
               value: String(a),
-              expected: error
+              expected: error,
+              kind: single.kind
             })
         ),
         Effect.map((b) => [leftover, b] as const)
@@ -1371,7 +1373,8 @@ export const filterMap: {
       return yield* new CliError.InvalidValue({
         option: single.name,
         value: String(a),
-        expected: onNone(a)
+        expected: onNone(a),
+        kind: single.kind
       })
     })
   ))
@@ -1486,7 +1489,8 @@ export const withSchema: {
       return new CliError.InvalidValue({
         option: single.name,
         value: String(value),
-        expected: `Schema validation failed: ${error.message}`
+        expected: `Schema validation failed: ${error.message}`,
+        kind: single.kind
       })
     }))
 })
@@ -1597,7 +1601,8 @@ const parsePositional: <A>(
       new CliError.InvalidValue({
         option: name,
         value: arg,
-        expected: error
+        expected: error,
+        kind: "argument"
       })
   )
 
@@ -1633,7 +1638,8 @@ const parseFlag: <A>(
       new CliError.InvalidValue({
         option: name,
         value: arg,
-        expected: error
+        expected: error,
+        kind: "flag"
       })
   )
 
@@ -1675,7 +1681,8 @@ const parsePositionalVariadic: <Kind extends ParamKind, A>(
     return yield* new CliError.InvalidValue({
       option: single.name,
       value: `${count} values`,
-      expected: `at least ${minValue} value${minValue === 1 ? "" : "s"}`
+      expected: `at least ${minValue} value${minValue === 1 ? "" : "s"}`,
+      kind: single.kind
     })
   }
 
@@ -1709,7 +1716,8 @@ const parseOptionVariadic: <Kind extends ParamKind, A>(
       : new CliError.InvalidValue({
         option: single.name,
         value: `${count} occurrences`,
-        expected: `at least ${options.min} value${options.min === 1 ? "" : "s"}`
+        expected: `at least ${options.min} value${options.min === 1 ? "" : "s"}`,
+        kind: single.kind
       })
   }
 
@@ -1717,7 +1725,8 @@ const parseOptionVariadic: <Kind extends ParamKind, A>(
     return yield* new CliError.InvalidValue({
       option: single.name,
       value: `${count} occurrences`,
-      expected: `at most ${options.max} value${options.max === 1 ? "" : "s"}`
+      expected: `at most ${options.max} value${options.max === 1 ? "" : "s"}`,
+      kind: single.kind
     })
   }
 
