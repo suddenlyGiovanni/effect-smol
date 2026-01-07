@@ -8,86 +8,125 @@ import type * as Schema from "../../Schema.ts"
 import * as AST from "../../SchemaAST.ts"
 import type * as SchemaStandard from "../../SchemaStandard.ts"
 import * as InternalAnnotations from "./annotations.ts"
-import { escapeToken, unescapeToken } from "./json-pointer.ts"
+import { escapeToken } from "./json-pointer.ts"
+import * as InternalSchema from "./schema.ts"
 import * as InternalSerializer from "./serializer.ts"
 
 /** @internal */
 export function fromAST(ast: AST.AST): SchemaStandard.Document {
-  const { definitions, schemas } = fromASTs([ast])
-  return { schema: schemas[0], definitions }
+  const { references, schemas } = fromASTs([ast])
+  return { schema: schemas[0], references }
 }
 
 /** @internal */
 export function fromASTs(asts: readonly [AST.AST, ...Array<AST.AST>]): SchemaStandard.MultiDocument {
-  const definitions: Record<string, SchemaStandard.Standard> = {}
+  const references: Record<string, SchemaStandard.Standard> = {}
 
-  const identifierMap = new Map<AST.AST, string>()
-  const identifierCounter = new Map<string, number>()
-  const usedIdentifiers = new Set<string>()
-  const visited = new Set<AST.AST>()
+  const referenceMap = new Map<AST.AST, string>()
+  const uniqueReferences = new Set<string>()
+  const usedReferences = new Set<string>()
+
+  const schemas = Arr.map(asts, recur)
 
   return {
-    schemas: Arr.map(asts, recur),
-    definitions
+    schemas: Arr.map(schemas, compact),
+    references: Rec.map(Rec.filter(references, (_, k) => !isCompactable(k)), compact)
+  }
+
+  function isCompactable($ref: string): boolean {
+    return !usedReferences.has($ref)
+  }
+
+  function compact(s: SchemaStandard.Standard): SchemaStandard.Standard {
+    switch (s._tag) {
+      default:
+        return s
+      case "Declaration":
+        return { ...s, typeParameters: s.typeParameters.map(compact), encodedSchema: compact(s.encodedSchema) }
+      case "Reference": {
+        if (isCompactable(s.$ref)) {
+          return compact(references[s.$ref])
+        }
+        return s
+      }
+      case "Suspend":
+        return { ...s, thunk: compact(s.thunk) }
+      case "String":
+        return { ...s, ...(s.contentSchema ? { contentSchema: compact(s.contentSchema) } : undefined) }
+      case "TemplateLiteral":
+        return { ...s, parts: s.parts.map(compact) }
+      case "Arrays":
+        return { ...s, elements: s.elements.map((e) => ({ ...e, type: compact(e.type) })), rest: s.rest.map(compact) }
+      case "Objects":
+        return {
+          ...s,
+          propertySignatures: s.propertySignatures.map((ps) => ({ ...ps, type: compact(ps.type) })),
+          indexSignatures: s.indexSignatures.map((is) => ({
+            ...is,
+            parameter: compact(is.parameter),
+            type: compact(is.type)
+          }))
+        }
+      case "Union":
+        return { ...s, types: s.types.map(compact) }
+    }
+  }
+
+  function gen(seed: string = "_"): string {
+    let candidate = seed
+    let suffix = 0
+
+    while (uniqueReferences.has(candidate)) {
+      candidate = `${seed}${++suffix}`
+    }
+
+    uniqueReferences.add(candidate)
+    return candidate
   }
 
   function recur(ast: AST.AST): SchemaStandard.Standard {
-    visited.add(ast)
-    const last = getLastEncoding(ast)
-    const identifier = generateUniqueIdentifier(last)
-    if (identifier !== undefined) {
-      if (definitions[identifier] === undefined) {
-        definitions[identifier] = on(last)
-      }
-      return { _tag: "Reference", $ref: identifier }
+    const found = referenceMap.get(ast)
+    if (found !== undefined) {
+      usedReferences.add(found)
+      return { _tag: "Reference", $ref: found }
     }
-    return on(last)
-  }
 
-  function generateUniqueIdentifier(ast: AST.AST): string | undefined {
-    const existing = identifierMap.get(ast)
-    if (existing !== undefined) {
-      usedIdentifiers.add(existing)
-      return existing
-    }
-    const identifier = InternalAnnotations.resolveIdentifier(ast)
-    if (identifier !== undefined) {
-      // Check if base identifier is available
-      if (!usedIdentifiers.has(identifier)) {
-        identifierCounter.set(identifier, 0)
-        identifierMap.set(ast, identifier)
-        usedIdentifiers.add(identifier)
-        return identifier
-      }
-      // Find a unique identifier by incrementing until we find one that doesn't exist
-      let count = (identifierCounter.get(identifier) ?? 0) + 1
-      let out
-      while (usedIdentifiers.has(out = `${identifier}-${count}`)) {
-        count++
-      }
-      identifierCounter.set(identifier, count)
-      identifierMap.set(ast, out)
-      usedIdentifiers.add(out)
-      return out
+    const last = getLastEncoding(ast)
+
+    if (ast === last) {
+      const reference = gen(InternalAnnotations.resolveIdentifier(ast))
+      referenceMap.set(ast, reference)
+      const out = on(ast)
+      references[reference] = out
+      return { _tag: "Reference", $ref: reference }
+    } else {
+      return recur(last)
     }
   }
 
   function getLastEncoding(ast: AST.AST): AST.AST {
-    if (ast.encoding) {
-      return getLastEncoding(ast.encoding[ast.encoding.length - 1].to)
-    }
-    return ast
+    return ast.encoding ? ast.encoding[ast.encoding.length - 1].to : ast
   }
 
-  function on(ast: AST.AST): SchemaStandard.Standard {
-    switch (ast._tag) {
+  function getEncodedSchema(last: AST.Declaration): AST.AST {
+    const getLink = last.annotations?.toCodecJson ?? last.annotations?.toCodec
+    if (Predicate.isFunction(getLink)) {
+      const tps = last.typeParameters.map((tp) => InternalSchema.make(AST.toEncoded(tp)))
+      const link = getLink(tps)
+      return AST.replaceEncoding(last, [link])
+    }
+    return AST.null
+  }
+
+  function on(last: AST.AST): SchemaStandard.Standard {
+    switch (last._tag) {
       case "Declaration":
         return {
           _tag: "Declaration",
-          typeParameters: ast.typeParameters.map(recur),
-          encodedSchema: recur(InternalSerializer.toCodecJson(ast)),
-          checks: fromChecks(ast.checks),
-          ...(ast.annotations ? { annotations: ast.annotations } : undefined)
+          typeParameters: last.typeParameters.map(recur),
+          encodedSchema: recur(getEncodedSchema(last)),
+          checks: fromASTChecks(last.checks),
+          ...fromASTAnnotations(last)
         }
       case "Null":
       case "Undefined":
@@ -97,14 +136,14 @@ export function fromASTs(asts: readonly [AST.AST, ...Array<AST.AST>]): SchemaSta
       case "Any":
       case "Boolean":
       case "Symbol":
-        return { _tag: ast._tag, ...(ast.annotations ? { annotations: ast.annotations } : undefined) }
+        return { _tag: last._tag, ...fromASTAnnotations(last) }
       case "String": {
-        const contentMediaType = ast.annotations?.contentMediaType
-        const contentSchema = ast.annotations?.contentSchema
+        const contentMediaType = last.annotations?.contentMediaType
+        const contentSchema = last.annotations?.contentSchema
         return {
-          _tag: ast._tag,
-          checks: fromChecks(ast.checks),
-          ...(ast.annotations ? { annotations: ast.annotations } : undefined),
+          _tag: last._tag,
+          checks: fromASTChecks(last.checks),
+          ...fromASTAnnotations(last),
           ...(typeof contentMediaType === "string" && AST.isAST(contentSchema)
             ? { contentMediaType, contentSchema: recur(contentSchema) }
             : undefined)
@@ -113,43 +152,43 @@ export function fromASTs(asts: readonly [AST.AST, ...Array<AST.AST>]): SchemaSta
       case "Number":
       case "BigInt":
         return {
-          _tag: ast._tag,
-          checks: fromChecks(ast.checks),
-          ...(ast.annotations ? { annotations: ast.annotations } : undefined)
+          _tag: last._tag,
+          checks: fromASTChecks(last.checks),
+          ...fromASTAnnotations(last)
         }
       case "Literal":
         return {
-          _tag: ast._tag,
-          literal: ast.literal,
-          ...(ast.annotations ? { annotations: ast.annotations } : undefined)
+          _tag: last._tag,
+          literal: last.literal,
+          ...fromASTAnnotations(last)
         }
       case "UniqueSymbol":
         return {
-          _tag: ast._tag,
-          symbol: ast.symbol,
-          ...(ast.annotations ? { annotations: ast.annotations } : undefined)
+          _tag: last._tag,
+          symbol: last.symbol,
+          ...fromASTAnnotations(last)
         }
       case "ObjectKeyword":
         return {
-          _tag: ast._tag,
-          ...(ast.annotations ? { annotations: ast.annotations } : undefined)
+          _tag: last._tag,
+          ...fromASTAnnotations(last)
         }
       case "Enum":
         return {
-          _tag: ast._tag,
-          enums: ast.enums,
-          ...(ast.annotations ? { annotations: ast.annotations } : undefined)
+          _tag: last._tag,
+          enums: last.enums,
+          ...fromASTAnnotations(last)
         }
       case "TemplateLiteral":
         return {
-          _tag: ast._tag,
-          parts: ast.parts.map((p) => recur(p)),
-          ...(ast.annotations ? { annotations: ast.annotations } : undefined)
+          _tag: last._tag,
+          parts: last.parts.map(recur),
+          ...fromASTAnnotations(last)
         }
       case "Arrays":
         return {
-          _tag: ast._tag,
-          elements: ast.elements.map((e) => {
+          _tag: last._tag,
+          elements: last.elements.map((e) => {
             const last = getLastEncoding(e)
             return {
               isOptional: AST.isOptional(last),
@@ -157,14 +196,14 @@ export function fromASTs(asts: readonly [AST.AST, ...Array<AST.AST>]): SchemaSta
               ...(last.context?.annotations ? { annotations: last.context?.annotations } : undefined)
             }
           }),
-          rest: ast.rest.map(recur),
-          checks: fromChecks(ast.checks),
-          ...(ast.annotations ? { annotations: ast.annotations } : undefined)
+          rest: last.rest.map(recur),
+          checks: fromASTChecks(last.checks),
+          ...fromASTAnnotations(last)
         }
       case "Objects":
         return {
-          _tag: ast._tag,
-          propertySignatures: ast.propertySignatures.map((ps) => {
+          _tag: last._tag,
+          propertySignatures: last.propertySignatures.map((ps) => {
             const last = getLastEncoding(ps.type)
             return {
               name: ps.name,
@@ -174,48 +213,57 @@ export function fromASTs(asts: readonly [AST.AST, ...Array<AST.AST>]): SchemaSta
               ...(last.context?.annotations ? { annotations: last.context?.annotations } : undefined)
             }
           }),
-          indexSignatures: ast.indexSignatures.map((is) => ({
+          indexSignatures: last.indexSignatures.map((is) => ({
             parameter: recur(is.parameter),
             type: recur(is.type)
           })),
-          checks: fromChecks(ast.checks),
-          ...(ast.annotations ? { annotations: ast.annotations } : undefined)
+          checks: fromASTChecks(last.checks),
+          ...fromASTAnnotations(last)
         }
       case "Union": {
-        const types = InternalSerializer.jsonReorder(ast.types)
+        const types = InternalSerializer.jsonReorder(last.types)
         return {
-          _tag: ast._tag,
+          _tag: last._tag,
           types: types.map(recur),
-          mode: ast.mode,
-          ...(ast.annotations ? { annotations: ast.annotations } : undefined)
+          mode: last.mode,
+          ...fromASTAnnotations(last)
         }
       }
       case "Suspend": {
-        const thunk = ast.thunk()
-        if (visited.has(thunk)) {
-          const identifier = generateUniqueIdentifier(thunk)
-          if (identifier === undefined) {
-            throw new globalThis.Error("Suspended schema without identifier")
-          }
-          return {
-            _tag: "Suspend",
-            checks: [],
-            thunk: { _tag: "Reference", $ref: identifier },
-            ...(ast.annotations ? { annotations: ast.annotations } : undefined)
-          }
-        }
         return {
           _tag: "Suspend",
           checks: [],
-          thunk: recur(thunk),
-          ...(ast.annotations ? { annotations: ast.annotations } : undefined)
+          thunk: recur(last.thunk()),
+          ...fromASTAnnotations(last)
         }
       }
     }
   }
 }
 
-function fromChecks(
+/** @internal */
+export const fromASTBlacklist: Set<string> = new Set([
+  "toArbitrary",
+  "toArbitraryConstraint",
+  "toEquivalence",
+  "toFormatter",
+  "toCodec",
+  "toCodecJson",
+  "toCodecIso",
+  AST.ClassTypeId
+])
+
+function fromASTAnnotations(ast: AST.AST): { annotations: Schema.Annotations.Annotations } | undefined {
+  if (ast.annotations) {
+    const filtered = Rec.filter(ast.annotations, (_, k) => !fromASTBlacklist.has(k))
+    if (!Rec.isEmptyRecord(filtered)) {
+      return { annotations: filtered }
+    }
+  }
+  return undefined
+}
+
+function fromASTChecks(
   checks: readonly [AST.Check<any>, ...Array<AST.Check<any>>] | undefined
 ): Array<SchemaStandard.Check<any>> {
   if (!checks) return []
@@ -229,7 +277,7 @@ function fromChecks(
         return undefined
       }
       case "FilterGroup": {
-        const checks = fromChecks(c.checks)
+        const checks = fromASTChecks(c.checks)
         if (Arr.isArrayNonEmpty(checks)) {
           return {
             _tag: "FilterGroup",
@@ -250,32 +298,25 @@ export function toJsonSchemaDocument(
 ): JsonSchema.Document<"draft-2020-12"> {
   const { definitions, dialect: source, schemas } = toJsonSchemaMultiDocument({
     schemas: [document.schema],
-    definitions: document.definitions
+    references: document.references
   }, options)
-  return { dialect: source, schema: schemas[0], definitions }
+  const schema = schemas[0]
+  return { dialect: source, schema, definitions }
 }
 
 /** @internal */
 export function toJsonSchemaMultiDocument(
-  document: SchemaStandard.MultiDocument,
+  multiDocument: SchemaStandard.MultiDocument,
   options?: Schema.ToJsonSchemaOptions
 ): JsonSchema.MultiDocument<"draft-2020-12"> {
   const generateDescriptions = options?.generateDescriptions ?? false
-  const referenceStrategy = options?.referenceStrategy ?? "all"
   const additionalProperties = options?.additionalProperties ?? false
 
-  const definitions = Rec.map(document.definitions, (d) => recur(d))
+  const definitions = Rec.map(multiDocument.references, (d) => recur(d))
 
   return {
     dialect: "draft-2020-12",
-    schemas: Arr.map(document.schemas, (s) => {
-      const js = recur(s)
-      if (referenceStrategy === "skip-top-level" && typeof js.$ref === "string") {
-        const resolved = resolve$ref(js.$ref, definitions)
-        return resolved === true ? { not: {} } : resolved === false ? {} : resolved
-      }
-      return js
-    }),
+    schemas: Arr.map(multiDocument.schemas, (s) => recur(s)),
     definitions
   }
 
@@ -606,7 +647,9 @@ export function toJsonSchemaMultiDocument(
   function getParameterPatterns(parameter: SchemaStandard.Standard): Array<string> {
     switch (parameter._tag) {
       default:
-        throw new globalThis.Error("Unsupported index signature parameter")
+        throw new globalThis.Error(`Unsupported index signature parameter: ${parameter._tag}`)
+      case "Reference":
+        return getParameterPatterns(multiDocument.references[parameter.$ref])
       case "String":
         return getPatterns(parameter)
       case "TemplateLiteral":
@@ -645,18 +688,6 @@ function hasCheck(checks: ReadonlyArray<SchemaStandard.Check<SchemaStandard.Meta
         return hasCheck(c.checks, tag)
     }
   })
-}
-
-function resolve$ref($ref: string, definitions: JsonSchema.Definitions): JsonSchema.JsonSchema | boolean {
-  const tokens = $ref.split("/")
-  if (tokens.length > 0) {
-    const identifier = unescapeToken(tokens[tokens.length - 1])
-    const definition = definitions[identifier]
-    if (definition !== undefined) {
-      return definition
-    }
-  }
-  throw new globalThis.Error(`Reference to unknown schema: ${$ref}`)
 }
 
 function appendJsonSchema(a: JsonSchema.JsonSchema, b: JsonSchema.JsonSchema): JsonSchema.JsonSchema {

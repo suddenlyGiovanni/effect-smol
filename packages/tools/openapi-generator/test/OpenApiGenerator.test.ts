@@ -1,8 +1,8 @@
 import { describe, expect, it } from "@effect/vitest"
 import * as Effect from "effect/Effect"
 import type { OpenAPISpec } from "effect/unstable/httpapi/OpenApi"
-import OpenApiFixture from "../../../platform-node/test/fixtures/openapi.json" with { type: "json" }
 import * as OpenApiGenerator from "../src/OpenApiGenerator.js"
+import OpenAiFixture from "./fixtures/openai.json" with { type: "json" }
 
 function assertRuntime(spec: OpenAPISpec) {
   return Effect.gen(function*() {
@@ -38,7 +38,7 @@ function assertTypeOnly(spec: OpenAPISpec) {
 
 describe("OpenApiGenerator", () => {
   describe("schema", () => {
-    it.effect("OpenApiFixture", () => assertRuntime(OpenApiFixture as any))
+    it.effect("OpenAiFixture", () => assertRuntime(OpenAiFixture as any))
 
     it.effect("get operation", () =>
       assertRuntime(
@@ -165,7 +165,48 @@ describe("OpenApiGenerator", () => {
       assertRuntime({
         openapi: "3.1.0",
         info: { title: "Test API", version: "1.0.0" },
-        paths: {},
+        paths: {
+          "/users/{id}": {
+            get: {
+              operationId: "getUser",
+              parameters: [
+                {
+                  name: "id",
+                  in: "path",
+                  schema: {
+                    type: "string"
+                  },
+                  required: true
+                }
+              ],
+              responses: {
+                200: {
+                  description: "User retrieved successfully",
+                  content: {
+                    "application/json": {
+                      schema: {
+                        type: "object",
+                        properties: {
+                          id: {
+                            type: "string"
+                          },
+                          name: {
+                            type: "string"
+                          }
+                        },
+                        required: ["id", "name"],
+                        additionalProperties: false,
+                        description: "User object"
+                      }
+                    }
+                  }
+                }
+              },
+              tags: ["Users"],
+              security: []
+            }
+          }
+        },
         tags: [],
         security: [],
         components: {
@@ -194,7 +235,48 @@ describe("OpenApiGenerator", () => {
       assertRuntime({
         openapi: "3.1.0",
         info: { title: "Test API", version: "1.0.0" },
-        paths: {},
+        paths: {
+          "/users/{id}": {
+            get: {
+              operationId: "getUser",
+              parameters: [
+                {
+                  name: "id",
+                  in: "path",
+                  schema: {
+                    type: "string"
+                  },
+                  required: true
+                }
+              ],
+              responses: {
+                200: {
+                  description: "User retrieved successfully",
+                  content: {
+                    "application/json": {
+                      schema: {
+                        type: "object",
+                        properties: {
+                          id: {
+                            type: "string"
+                          },
+                          name: {
+                            type: "string"
+                          }
+                        },
+                        required: ["id", "name"],
+                        additionalProperties: false,
+                        description: "User object"
+                      }
+                    }
+                  }
+                }
+              },
+              tags: ["Users"],
+              security: []
+            }
+          }
+        },
         tags: [],
         security: [],
         components: {
@@ -222,7 +304,48 @@ describe("OpenApiGenerator", () => {
       assertRuntime({
         openapi: "3.1.0",
         info: { title: "Test API", version: "1.0.0" },
-        paths: {},
+        paths: {
+          "/users/{id}": {
+            get: {
+              operationId: "getUser",
+              parameters: [
+                {
+                  name: "id",
+                  in: "path",
+                  schema: {
+                    type: "string"
+                  },
+                  required: true
+                }
+              ],
+              responses: {
+                200: {
+                  description: "User retrieved successfully",
+                  content: {
+                    "application/json": {
+                      schema: {
+                        type: "object",
+                        properties: {
+                          id: {
+                            type: "string"
+                          },
+                          name: {
+                            type: "string"
+                          }
+                        },
+                        required: ["id", "name"],
+                        additionalProperties: false,
+                        description: "User object"
+                      }
+                    }
+                  }
+                }
+              },
+              tags: ["Users"],
+              security: []
+            }
+          }
+        },
         tags: [],
         security: [],
         components: {
