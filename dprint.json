@@ -1,9 +1,6 @@
 {
   "$schema": "https://dprint.dev/schemas/v0.json",
-  "includes": [
-    "**/*.{ts,tsx,js,jsx,json,md}",
-    "scratchpad/**/*.{ts,tsx,js,jsx,json,md}"
-  ],
+  "includes": ["**/*.{ts,tsx,js,jsx,json,md}"],
   "indentWidth": 2,
   "lineWidth": 120,
   "newLineKind": "lf",
@@ -15,12 +12,11 @@
     "arrowFunction.useParentheses": "force"
   },
   "excludes": [
-    "**/node_modules",
     "**/dist",
+    "**/build",
     "**/docs",
     "**/coverage",
-    "**/.tsbuildinfo",
-    "pnpm-lock.yaml"
+    "!scratchpad/**/*"
   ],
   "plugins": [
     "https://plugins.dprint.dev/typescript-0.93.4.wasm",
