@@ -283,26 +283,49 @@ describe("toJsonSchemaDocument", () => {
         schema: {
           "anyOf": [
             {
-              "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^-?\\d+$"
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": ["Infinity"]
                 }
-              ]
+              },
+              "required": ["_tag"],
+              "additionalProperties": false
             },
             {
-              "type": "integer",
-              "allOf": [
-                {
-                  "minimum": 0
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": ["Nanos"]
+                },
+                "value": {
+                  "type": "string",
+                  "allOf": [
+                    { "pattern": "^-?\\d+$" }
+                  ]
                 }
-              ]
+              },
+              "required": ["_tag", "value"],
+              "additionalProperties": false
             },
             {
-              "type": "string",
-              "enum": [
-                "Infinity"
-              ]
+              "type": "object",
+              "properties": {
+                "_tag": {
+                  "type": "string",
+                  "enum": ["Millis"]
+                },
+                "value": {
+                  "type": "integer",
+                  "allOf": [
+                    { "minimum": 0 }
+                  ]
+                }
+              },
+              "required": ["_tag", "value"],
+              "additionalProperties": false
             }
           ]
         }

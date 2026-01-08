@@ -954,6 +954,69 @@ describe("Serializers", () => {
         )
       })
 
+      it("URLSearchParams", async () => {
+        const schema = Schema.URLSearchParams
+        const asserts = new TestSchema.Asserts(Schema.toCodecJson(schema))
+
+        const encoding = asserts.encoding()
+        await encoding.succeed(
+          new URLSearchParams("a=1&b=two"),
+          "a=1&b=two"
+        )
+
+        const decoding = asserts.decoding()
+        await decoding.succeed(
+          "a=1&b=two",
+          new URLSearchParams("a=1&b=two")
+        )
+      })
+
+      it("File", async () => {
+        const schema = Schema.File
+        const asserts = new TestSchema.Asserts(Schema.toCodecJson(schema))
+
+        const encoding = asserts.encoding()
+        await encoding.succeed(
+          new File(["hi"], "note.txt", { type: "text/plain", lastModified: 123 }),
+          { data: "aGk=", type: "text/plain", name: "note.txt", lastModified: 123 }
+        )
+
+        const decoding = asserts.decoding()
+        await decoding.succeed(
+          { data: "aGk=", type: "text/plain", name: "note.txt", lastModified: 123 },
+          new File(["hi"], "note.txt", { type: "text/plain", lastModified: 123 })
+        )
+      })
+
+      it("FormData", async () => {
+        const schema = Schema.FormData
+        const asserts = new TestSchema.Asserts(Schema.toCodecJson(schema))
+
+        const encoding = asserts.encoding()
+        const formData = new FormData()
+        formData.append("a", "1")
+        formData.append("b", new File(["hi"], "note.txt", { type: "text/plain", lastModified: 123 }))
+        await encoding.succeed(
+          formData,
+          [
+            ["a", { _tag: "String", value: "1" }],
+            ["b", { _tag: "File", value: { data: "aGk=", type: "text/plain", name: "note.txt", lastModified: 123 } }]
+          ]
+        )
+
+        const decoding = asserts.decoding()
+        const expected = new FormData()
+        expected.append("a", "1")
+        expected.append("b", new File(["hi"], "note.txt", { type: "text/plain", lastModified: 123 }))
+        await decoding.succeed(
+          [
+            ["a", { _tag: "String", value: "1" }],
+            ["b", { _tag: "File", value: { data: "aGk=", type: "text/plain", name: "note.txt", lastModified: 123 } }]
+          ],
+          expected
+        )
+      })
+
       it("RegExp", async () => {
         const schema = Schema.RegExp
         const asserts = new TestSchema.Asserts(Schema.toCodecJson(schema))
@@ -995,15 +1058,15 @@ describe("Serializers", () => {
         const asserts = new TestSchema.Asserts(Schema.toCodecJson(schema))
 
         const encoding = asserts.encoding()
-        await encoding.succeed(Duration.infinity, "Infinity")
-        await encoding.succeed(Duration.nanos(1000n), "1000")
-        await encoding.succeed(Duration.millis(1), 1)
-        await encoding.succeed(Duration.zero, 0)
+        await encoding.succeed(Duration.infinity, { _tag: "Infinity" })
+        await encoding.succeed(Duration.nanos(1000n), { _tag: "Nanos", value: "1000" })
+        await encoding.succeed(Duration.millis(1), { _tag: "Millis", value: 1 })
+        await encoding.succeed(Duration.zero, { _tag: "Millis", value: 0 })
 
         const decoding = asserts.decoding()
-        await decoding.succeed("Infinity", Duration.infinity)
-        await decoding.succeed(1, Duration.millis(1))
-        await decoding.succeed("1000", Duration.nanos(1000n))
+        await decoding.succeed({ _tag: "Infinity" }, Duration.infinity)
+        await decoding.succeed({ _tag: "Millis", value: 1 }, Duration.millis(1))
+        await decoding.succeed({ _tag: "Nanos", value: "1000" }, Duration.nanos(1000n))
       })
 
       it("DateTimeUtc", async () => {
