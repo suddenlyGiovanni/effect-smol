@@ -2081,7 +2081,12 @@ function toRuntimeValue(value: undefined | number | boolean | bigint | Date): st
 }
 
 function toRuntimeRegExp(regExp: RegExp): string {
-  return `new RegExp(${format(regExp.source)}, ${format(regExp.flags)})`
+  const args = [format(regExp.source)]
+  const flags = regExp.flags.trim()
+  if (flags !== "") {
+    args.push(format(flags))
+  }
+  return `new RegExp(${args.join(", ")})`
 }
 
 /**
@@ -2144,12 +2149,7 @@ export function fromJsonSchemaMultiDocument(document: JsonSchema.MultiDocument<"
 
     const annotations = collectAnnotations(js)
     if (annotations !== undefined) {
-      if (out._tag === "Reference") {
-        const b = resolveReference(out.$ref)
-        out = { ...b, ...combineAnnotations(b.annotations, annotations) }
-      } else {
-        out = { ...out, annotations }
-      }
+      out = combine(out, { _tag: "Unknown", annotations })
     }
 
     if (Array.isArray(js.allOf)) {
@@ -2204,12 +2204,23 @@ export function fromJsonSchemaMultiDocument(document: JsonSchema.MultiDocument<"
       switch (type) {
         case "null":
           return null_
-        case "string":
+        case "string": {
+          const checks = collectStringChecks(js)
+          if (checks.length > 0) {
+            return { ...string, checks }
+          }
           return string
+        }
         case "number":
-          return number
+          return {
+            _tag: "Number",
+            checks: [{ _tag: "Filter", meta: { _tag: "isFinite" } }, ...collectNumberChecks(js)]
+          }
         case "integer":
-          return integer
+          return {
+            _tag: "Number",
+            checks: [{ _tag: "Filter", meta: { _tag: "isInt" } }, ...collectNumberChecks(js)]
+          }
         case "boolean":
           return boolean
         case "array": {
@@ -2222,24 +2233,36 @@ export function fromJsonSchemaMultiDocument(document: JsonSchema.MultiDocument<"
 
           const rest: Array<Representation> = js.items !== undefined ?
             [recur(js.items)]
-            : typeof js.maxItems === "number"
+            : js.prefixItems !== undefined && typeof js.maxItems === "number"
             ? []
             : [unknown]
 
-          return { _tag: "Arrays", elements, rest, checks: [] }
+          return { _tag: "Arrays", elements, rest, checks: collectArraysChecks(js) }
         }
         case "object": {
           return {
             _tag: "Objects",
             propertySignatures: collectProperties(js),
             indexSignatures: collectIndexSignatures(js),
-            checks: []
+            checks: collectObjectsChecks(js)
           }
         }
       }
     }
 
     return { _tag: "Unknown" }
+  }
+
+  function resolveReference($ref: string): Exclude<Representation, { _tag: "Reference" }> {
+    const definition = definitions[$ref]
+    if (definition !== undefined) {
+      if (definition._tag === "Reference") {
+        return resolveReference(definition.$ref)
+      } else {
+        return definition
+      }
+    }
+    return unknown
   }
 
   function combine(a: Representation, b: Representation): Representation {
@@ -2270,12 +2293,14 @@ export function fromJsonSchemaMultiDocument(document: JsonSchema.MultiDocument<"
         switch (b._tag) {
           case "Unknown":
             return { ...a, ...combineAnnotations(a.annotations, b.annotations) }
-          case "String":
+          case "String": {
+            const checks = combineChecks(a.checks, b.checks, b.annotations)
             return {
               _tag: "String",
-              checks: combineChecks(a.checks, b.checks),
-              ...combineAnnotations(a.annotations, b.annotations)
+              checks: checks ?? a.checks,
+              ...combineAnnotations(a.annotations, checks ? undefined : b.annotations)
             }
+          }
           case "Union":
             return combine(b, a)
           case "Reference":
@@ -2287,12 +2312,14 @@ export function fromJsonSchemaMultiDocument(document: JsonSchema.MultiDocument<"
         switch (b._tag) {
           case "Unknown":
             return { ...a, ...combineAnnotations(a.annotations, b.annotations) }
-          case "Number":
+          case "Number": {
+            const checks = combineNumberChecks(a.checks, b.checks, b.annotations)
             return {
               _tag: "Number",
-              checks: combineChecks(a.checks, b.checks),
-              ...combineAnnotations(a.annotations, b.annotations)
+              checks: checks ?? a.checks,
+              ...combineAnnotations(a.annotations, checks ? undefined : b.annotations)
             }
+          }
           case "Union":
             return combine(b, a)
           case "Reference":
@@ -2332,14 +2359,16 @@ export function fromJsonSchemaMultiDocument(document: JsonSchema.MultiDocument<"
         switch (b._tag) {
           case "Unknown":
             return { ...a, ...combineAnnotations(a.annotations, b.annotations) }
-          case "Arrays":
+          case "Arrays": {
+            const checks = combineArraysChecks(a.checks, b.checks, b.annotations)
             return {
               _tag: "Arrays",
               elements: combineElements(a.elements, b.elements),
               rest: combineRest(a.rest, b.rest),
-              checks: combineChecks(a.checks, b.checks),
-              ...combineAnnotations(a.annotations, b.annotations)
+              checks: checks ?? a.checks,
+              ...combineAnnotations(a.annotations, checks ? undefined : b.annotations)
             }
+          }
           case "Union":
             return combine(b, a)
           case "Reference":
@@ -2351,14 +2380,16 @@ export function fromJsonSchemaMultiDocument(document: JsonSchema.MultiDocument<"
         switch (b._tag) {
           case "Unknown":
             return { ...a, ...combineAnnotations(a.annotations, b.annotations) }
-          case "Objects":
+          case "Objects": {
+            const checks = combineChecks(a.checks, b.checks, b.annotations)
             return {
               _tag: "Objects",
               propertySignatures: combinePropertySignatures(a.propertySignatures, b.propertySignatures),
               indexSignatures: combineIndexSignatures(a.indexSignatures, b.indexSignatures),
-              checks: combineChecks(a.checks, b.checks),
-              ...combineAnnotations(a.annotations, b.annotations)
+              checks: checks ?? a.checks,
+              ...combineAnnotations(a.annotations, checks ? undefined : b.annotations)
             }
+          }
           case "Union":
             return combine(b, a)
           case "Reference":
@@ -2367,18 +2398,58 @@ export function fromJsonSchemaMultiDocument(document: JsonSchema.MultiDocument<"
             return never
         }
       case "Union": {
-        const types = a.types.map((s) => combine(s, b)).filter((s) => s !== never)
-        if (types.length === 0) return never
-        return {
-          _tag: "Union",
-          types: a.types.map((s) => combine(s, b)),
-          mode: "anyOf",
-          ...makeAnnotations(a.annotations)
+        switch (b._tag) {
+          case "Unknown":
+            return { ...a, ...combineAnnotations(a.annotations, b.annotations) }
+          default: {
+            const types = a.types.map((s) => combine(s, b)).filter((s) => s !== never)
+            if (types.length === 0) return never
+            return {
+              _tag: "Union",
+              types: a.types.map((s) => combine(s, b)),
+              mode: "anyOf",
+              ...makeAnnotations(a.annotations)
+            }
+          }
         }
       }
       case "Reference":
         return combine(resolveReference(a.$ref), b)
     }
+  }
+
+  function collectProperties(js: JsonSchema.JsonSchema): Array<PropertySignature> {
+    const properties: Record<string, unknown> = Predicate.isObject(js.properties) ? js.properties : {}
+    const required = Array.isArray(js.required) ? js.required : []
+    required.forEach((key) => {
+      if (!Object.hasOwn(properties, key)) {
+        properties[key] = {}
+      }
+    })
+    return Object.entries(properties).map(([key, v]) => ({
+      name: key,
+      type: recur(v),
+      isOptional: !required.includes(key),
+      isMutable: false
+    }))
+  }
+
+  function collectIndexSignatures(js: JsonSchema.JsonSchema): Array<IndexSignature> {
+    const out: Array<IndexSignature> = []
+
+    if (Predicate.isObject(js.patternProperties)) {
+      for (const [pattern, value] of Object.entries(js.patternProperties)) {
+        out.push({ parameter: recur({ pattern }), type: recur(value) })
+      }
+    }
+
+    if (js.additionalProperties === undefined || js.additionalProperties === true) {
+      out.push({ parameter: string, type: unknown })
+    } else if (Predicate.isObject(js.additionalProperties)) {
+      out.push({ parameter: string, type: recur(js.additionalProperties) })
+    }
+
+    return out
   }
 
   function combineElements(a: ReadonlyArray<Element>, b: ReadonlyArray<Element>): Array<Element> {
@@ -2410,18 +2481,6 @@ export function fromJsonSchemaMultiDocument(document: JsonSchema.MultiDocument<"
       out = [...out, ...b.slice(len)]
     }
     return out
-  }
-
-  function resolveReference($ref: string): Exclude<Representation, { _tag: "Reference" }> {
-    const definition = definitions[$ref]
-    if (definition !== undefined) {
-      if (definition._tag === "Reference") {
-        return resolveReference(definition.$ref)
-      } else {
-        return definition
-      }
-    }
-    return unknown
   }
 
   function combinePropertySignatures(
@@ -2476,70 +2535,145 @@ export function fromJsonSchemaMultiDocument(document: JsonSchema.MultiDocument<"
     }
     return out
   }
+}
 
-  function combineChecks<M>(
-    a: ReadonlyArray<Check<M>>,
-    b: ReadonlyArray<Check<M>>
-  ): Array<Check<M>> {
-    return [...a, ...b]
-  }
-
-  function makeAnnotations(
-    annotations: Schema.Annotations.Annotations | undefined
-  ): { annotations: Schema.Annotations.Annotations } | undefined {
-    return annotations ? { annotations } : undefined
-  }
-
-  function combineAnnotations(
-    a: Schema.Annotations.Annotations | undefined,
-    b: Schema.Annotations.Annotations | undefined
-  ): { annotations: Schema.Annotations.Annotations } | undefined {
-    if (a === undefined) return makeAnnotations(b)
-    if (b === undefined) return makeAnnotations(a)
-    return { annotations: { ...a, ...b } } // TODO: better merge
-  }
-
-  function collectProperties(js: JsonSchema.JsonSchema): Array<PropertySignature> {
-    const properties: Record<string, unknown> = Predicate.isObject(js.properties) ? js.properties : {}
-    const required = Array.isArray(js.required) ? js.required : []
-    required.forEach((key) => {
-      if (!Object.hasOwn(properties, key)) {
-        properties[key] = {}
-      }
-    })
-    return Object.entries(properties).map(([key, v]) => ({
-      name: key,
-      type: recur(v),
-      isOptional: !required.includes(key),
-      isMutable: false
-    }))
-  }
-
-  function collectIndexSignatures(js: JsonSchema.JsonSchema): Array<IndexSignature> {
-    const out: Array<IndexSignature> = []
-
-    if (Predicate.isObject(js.patternProperties)) {
-      for (const [pattern, value] of Object.entries(js.patternProperties)) {
-        out.push({ parameter: recur(pattern), type: recur(value) })
+function asChecks<M>(
+  checks: ReadonlyArray<Check<M>>,
+  annotations: Schema.Annotations.Annotations | undefined
+): ReadonlyArray<Check<M>> | undefined {
+  if (Arr.isReadonlyArrayNonEmpty(checks)) {
+    if (annotations !== undefined) {
+      if (checks.length === 1) {
+        const check = checks[0]
+        if (check.annotations === undefined) {
+          return [{ ...check, annotations }]
+        } else {
+          return [{ _tag: "FilterGroup", checks, annotations }]
+        }
+      } else {
+        return [{ _tag: "FilterGroup", checks, annotations }]
       }
     }
-
-    if (js.additionalProperties === undefined || js.additionalProperties === true) {
-      out.push({ parameter: string, type: unknown })
-    } else if (Predicate.isObject(js.additionalProperties)) {
-      out.push({ parameter: string, type: recur(js.additionalProperties) })
-    }
-
-    return out
+    return checks
   }
+}
+
+function combineChecks<M>(
+  a: ReadonlyArray<Check<M>>,
+  b: ReadonlyArray<Check<M>>,
+  annotations: Schema.Annotations.Annotations | undefined
+): Array<Check<M>> | undefined {
+  const checks = asChecks(b, annotations)
+  if (checks) {
+    return [...a, ...checks]
+  }
+}
+
+function combineNumberChecks(
+  a: ReadonlyArray<Check<NumberMeta>>,
+  b: ReadonlyArray<Check<NumberMeta>>,
+  annotations: Schema.Annotations.Annotations | undefined
+): Array<Check<NumberMeta>> | undefined {
+  if (a.some((c) => c._tag === "Filter" && c.meta._tag === "isFinite")) {
+    b = b.filter((c) => c._tag !== "Filter" || c.meta._tag !== "isFinite")
+  }
+  if (a.some((c) => c._tag === "Filter" && c.meta._tag === "isInt")) {
+    b = b.filter((c) => c._tag !== "Filter" || c.meta._tag !== "isInt")
+  }
+  return combineChecks(a, b, annotations)
+}
+
+function combineArraysChecks(
+  a: ReadonlyArray<Check<ArraysMeta>>,
+  b: ReadonlyArray<Check<ArraysMeta>>,
+  annotations: Schema.Annotations.Annotations | undefined
+): Array<Check<ArraysMeta>> | undefined {
+  if (a.some((c) => c._tag === "Filter" && c.meta._tag === "isUnique")) {
+    b = b.filter((c) => c._tag !== "Filter" || c.meta._tag !== "isUnique")
+  }
+  return combineChecks(a, b, annotations)
+}
+
+function makeAnnotations(
+  annotations: Schema.Annotations.Annotations | undefined
+): { annotations: Schema.Annotations.Annotations } | undefined {
+  return annotations ? { annotations } : undefined
+}
+
+function combineAnnotations(
+  a: Schema.Annotations.Annotations | undefined,
+  b: Schema.Annotations.Annotations | undefined
+): { annotations: Schema.Annotations.Annotations } | undefined {
+  if (a === undefined) return makeAnnotations(b)
+  if (b === undefined) return makeAnnotations(a)
+  return { annotations: { ...a, ...b } } // TODO: better merge
+}
+
+function collectStringChecks(js: JsonSchema.JsonSchema): Array<Check<StringMeta>> {
+  const checks: Array<Check<StringMeta>> = []
+  if (typeof js.minLength === "number") {
+    checks.push({ _tag: "Filter", meta: { _tag: "isMinLength", minLength: js.minLength } })
+  }
+  if (typeof js.maxLength === "number") {
+    checks.push({ _tag: "Filter", meta: { _tag: "isMaxLength", maxLength: js.maxLength } })
+  }
+  if (typeof js.pattern === "string") {
+    checks.push({ _tag: "Filter", meta: { _tag: "isPattern", regExp: new RegExp(js.pattern) } })
+  }
+  return checks
+}
+
+function collectNumberChecks(js: JsonSchema.JsonSchema): Array<Check<NumberMeta>> {
+  const checks: Array<Check<NumberMeta>> = []
+  if (typeof js.minimum === "number") {
+    checks.push({ _tag: "Filter", meta: { _tag: "isGreaterThanOrEqualTo", minimum: js.minimum } })
+  }
+  if (typeof js.maximum === "number") {
+    checks.push({ _tag: "Filter", meta: { _tag: "isLessThanOrEqualTo", maximum: js.maximum } })
+  }
+  if (typeof js.exclusiveMinimum === "number") {
+    checks.push({ _tag: "Filter", meta: { _tag: "isGreaterThan", exclusiveMinimum: js.exclusiveMinimum } })
+  }
+  if (typeof js.exclusiveMaximum === "number") {
+    checks.push({ _tag: "Filter", meta: { _tag: "isLessThan", exclusiveMaximum: js.exclusiveMaximum } })
+  }
+  if (typeof js.multipleOf === "number") {
+    checks.push({ _tag: "Filter", meta: { _tag: "isMultipleOf", divisor: js.multipleOf } })
+  }
+  return checks
+}
+
+function collectArraysChecks(js: JsonSchema.JsonSchema): Array<Check<ArraysMeta>> {
+  const checks: Array<Check<ArraysMeta>> = []
+  if (js.prefixItems === undefined) {
+    if (typeof js.minItems === "number") {
+      checks.push({ _tag: "Filter", meta: { _tag: "isMinLength", minLength: js.minItems } })
+    }
+    if (typeof js.maxItems === "number") {
+      checks.push({ _tag: "Filter", meta: { _tag: "isMaxLength", maxLength: js.maxItems } })
+    }
+  }
+  if (typeof js.uniqueItems === "boolean") {
+    checks.push({ _tag: "Filter", meta: { _tag: "isUnique" } })
+  }
+  return checks
+}
+
+function collectObjectsChecks(js: JsonSchema.JsonSchema): Array<Check<ObjectsMeta>> {
+  const checks: Array<Check<ObjectsMeta>> = []
+  if (typeof js.minProperties === "number") {
+    checks.push({ _tag: "Filter", meta: { _tag: "isMinProperties", minProperties: js.minProperties } })
+  }
+  if (typeof js.maxProperties === "number") {
+    checks.push({ _tag: "Filter", meta: { _tag: "isMaxProperties", maxProperties: js.maxProperties } })
+  }
+  return checks
 }
 
 const unknown: Unknown = { _tag: "Unknown" }
 const never: Never = { _tag: "Never" }
 const null_: Null = { _tag: "Null" }
 const string: String = { _tag: "String", checks: [] }
-const number: Number = { _tag: "Number", checks: [{ _tag: "Filter", meta: { _tag: "isFinite" } }] }
-const integer: Number = { _tag: "Number", checks: [{ _tag: "Filter", meta: { _tag: "isInt" } }] }
 const boolean: Boolean = { _tag: "Boolean" }
 
 function collectAnnotations(schema: JsonSchema.JsonSchema): Schema.Annotations.Annotations | undefined {
@@ -2550,6 +2684,8 @@ function collectAnnotations(schema: JsonSchema.JsonSchema): Schema.Annotations.A
   if (schema.default !== undefined) as.default = schema.default
   if (Array.isArray(schema.examples)) as.examples = schema.examples
   if (typeof schema.format === "string") as.format = schema.format
+  if (typeof schema.readOnly === "boolean") as.readOnly = schema.readOnly
+  if (typeof schema.writeOnly === "boolean") as.writeOnly = schema.writeOnly
 
   return Rec.isEmptyRecord(as) ? undefined : as
 }

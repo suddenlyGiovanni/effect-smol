@@ -33,11 +33,28 @@ describe("fromJsonSchemaDocument", () => {
       "Schema.Unknown"
     )
     assertFromJsonSchema(
-      { description: "a" },
       {
-        representation: { _tag: "Unknown", annotations: { description: "a" } }
+        title: "a",
+        description: "b",
+        default: "c",
+        examples: ["d"],
+        readOnly: true,
+        writeOnly: true
       },
-      `Schema.Unknown.annotate({ "description": "a" })`
+      {
+        representation: {
+          _tag: "Unknown",
+          annotations: {
+            title: "a",
+            description: "b",
+            default: "c",
+            examples: ["d"],
+            readOnly: true,
+            writeOnly: true
+          }
+        }
+      },
+      `Schema.Unknown.annotate({ "title": "a", "description": "b", "default": "c", "examples": ["d"], "readOnly": true, "writeOnly": true })`
     )
   })
 
@@ -265,6 +282,61 @@ describe("fromJsonSchemaDocument", () => {
         `Schema.String`
       )
     })
+
+    describe("checks", () => {
+      it("minLength", () => {
+        assertFromJsonSchema(
+          { type: "string", minLength: 1 },
+          {
+            representation: {
+              _tag: "String",
+              checks: [{ _tag: "Filter", meta: { _tag: "isMinLength", minLength: 1 } }]
+            }
+          },
+          `Schema.String.check(Schema.isMinLength(1))`
+        )
+      })
+
+      it("maxLength", () => {
+        assertFromJsonSchema(
+          { type: "string", maxLength: 1 },
+          {
+            representation: {
+              _tag: "String",
+              checks: [{ _tag: "Filter", meta: { _tag: "isMaxLength", maxLength: 1 } }]
+            }
+          },
+          `Schema.String.check(Schema.isMaxLength(1))`
+        )
+      })
+
+      it("pattern", () => {
+        assertFromJsonSchema(
+          { type: "string", pattern: "a*" },
+          {
+            representation: {
+              _tag: "String",
+              checks: [
+                { _tag: "Filter", meta: { _tag: "isPattern", regExp: new RegExp("a*") } }
+              ]
+            }
+          },
+          `Schema.String.check(Schema.isPattern(new RegExp("a*")))`
+        )
+        assertFromJsonSchema(
+          { pattern: "a*" },
+          {
+            representation: {
+              _tag: "String",
+              checks: [
+                { _tag: "Filter", meta: { _tag: "isPattern", regExp: new RegExp("a*") } }
+              ]
+            }
+          },
+          `Schema.String.check(Schema.isPattern(new RegExp("a*")))`
+        )
+      })
+    })
   })
 
   describe("type: number", () => {
@@ -272,10 +344,97 @@ describe("fromJsonSchemaDocument", () => {
       assertFromJsonSchema(
         { type: "number" },
         {
-          representation: { _tag: "Number", checks: [{ _tag: "Filter", meta: { _tag: "isFinite" } }] }
+          representation: {
+            _tag: "Number",
+            checks: [
+              { _tag: "Filter", meta: { _tag: "isFinite" } }
+            ]
+          }
         },
         `Schema.Number.check(Schema.isFinite())`
       )
+    })
+
+    describe("checks", () => {
+      it("minimum", () => {
+        assertFromJsonSchema(
+          { type: "number", minimum: 1 },
+          {
+            representation: {
+              _tag: "Number",
+              checks: [
+                { _tag: "Filter", meta: { _tag: "isFinite" } },
+                { _tag: "Filter", meta: { _tag: "isGreaterThanOrEqualTo", minimum: 1 } }
+              ]
+            }
+          },
+          `Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(1))`
+        )
+      })
+
+      it("maximum", () => {
+        assertFromJsonSchema(
+          { type: "number", maximum: 1 },
+          {
+            representation: {
+              _tag: "Number",
+              checks: [
+                { _tag: "Filter", meta: { _tag: "isFinite" } },
+                { _tag: "Filter", meta: { _tag: "isLessThanOrEqualTo", maximum: 1 } }
+              ]
+            }
+          },
+          `Schema.Number.check(Schema.isFinite(), Schema.isLessThanOrEqualTo(1))`
+        )
+      })
+
+      it("exclusiveMinimum", () => {
+        assertFromJsonSchema(
+          { type: "number", exclusiveMinimum: 1 },
+          {
+            representation: {
+              _tag: "Number",
+              checks: [
+                { _tag: "Filter", meta: { _tag: "isFinite" } },
+                { _tag: "Filter", meta: { _tag: "isGreaterThan", exclusiveMinimum: 1 } }
+              ]
+            }
+          },
+          `Schema.Number.check(Schema.isFinite(), Schema.isGreaterThan(1))`
+        )
+      })
+
+      it("exclusiveMaximum", () => {
+        assertFromJsonSchema(
+          { type: "number", exclusiveMaximum: 1 },
+          {
+            representation: {
+              _tag: "Number",
+              checks: [
+                { _tag: "Filter", meta: { _tag: "isFinite" } },
+                { _tag: "Filter", meta: { _tag: "isLessThan", exclusiveMaximum: 1 } }
+              ]
+            }
+          },
+          `Schema.Number.check(Schema.isFinite(), Schema.isLessThan(1))`
+        )
+      })
+
+      it("multipleOf", () => {
+        assertFromJsonSchema(
+          { type: "number", multipleOf: 1 },
+          {
+            representation: {
+              _tag: "Number",
+              checks: [
+                { _tag: "Filter", meta: { _tag: "isFinite" } },
+                { _tag: "Filter", meta: { _tag: "isMultipleOf", divisor: 1 } }
+              ]
+            }
+          },
+          `Schema.Number.check(Schema.isFinite(), Schema.isMultipleOf(1))`
+        )
+      })
     })
   })
 
@@ -293,6 +452,88 @@ describe("fromJsonSchemaDocument", () => {
         },
         `Schema.Number.check(Schema.isInt())`
       )
+    })
+
+    describe("checks", () => {
+      it("minimum", () => {
+        assertFromJsonSchema(
+          { type: "integer", minimum: 1 },
+          {
+            representation: {
+              _tag: "Number",
+              checks: [
+                { _tag: "Filter", meta: { _tag: "isInt" } },
+                { _tag: "Filter", meta: { _tag: "isGreaterThanOrEqualTo", minimum: 1 } }
+              ]
+            }
+          },
+          `Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1))`
+        )
+      })
+
+      it("maximum", () => {
+        assertFromJsonSchema(
+          { type: "integer", maximum: 1 },
+          {
+            representation: {
+              _tag: "Number",
+              checks: [
+                { _tag: "Filter", meta: { _tag: "isInt" } },
+                { _tag: "Filter", meta: { _tag: "isLessThanOrEqualTo", maximum: 1 } }
+              ]
+            }
+          },
+          `Schema.Number.check(Schema.isInt(), Schema.isLessThanOrEqualTo(1))`
+        )
+      })
+
+      it("exclusiveMinimum", () => {
+        assertFromJsonSchema(
+          { type: "integer", exclusiveMinimum: 1 },
+          {
+            representation: {
+              _tag: "Number",
+              checks: [
+                { _tag: "Filter", meta: { _tag: "isInt" } },
+                { _tag: "Filter", meta: { _tag: "isGreaterThan", exclusiveMinimum: 1 } }
+              ]
+            }
+          },
+          `Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(1))`
+        )
+      })
+
+      it("exclusiveMaximum", () => {
+        assertFromJsonSchema(
+          { type: "integer", exclusiveMaximum: 1 },
+          {
+            representation: {
+              _tag: "Number",
+              checks: [
+                { _tag: "Filter", meta: { _tag: "isInt" } },
+                { _tag: "Filter", meta: { _tag: "isLessThan", exclusiveMaximum: 1 } }
+              ]
+            }
+          },
+          `Schema.Number.check(Schema.isInt(), Schema.isLessThan(1))`
+        )
+      })
+
+      it("multipleOf", () => {
+        assertFromJsonSchema(
+          { type: "integer", multipleOf: 1 },
+          {
+            representation: {
+              _tag: "Number",
+              checks: [
+                { _tag: "Filter", meta: { _tag: "isInt" } },
+                { _tag: "Filter", meta: { _tag: "isMultipleOf", divisor: 1 } }
+              ]
+            }
+          },
+          `Schema.Number.check(Schema.isInt(), Schema.isMultipleOf(1))`
+        )
+      })
     })
   })
 
@@ -400,6 +641,53 @@ describe("fromJsonSchemaDocument", () => {
         },
         `Schema.TupleWithRest(Schema.Tuple([Schema.String]), [Schema.Number.check(Schema.isFinite())])`
       )
+    })
+
+    describe("checks", () => {
+      it("minItems", () => {
+        assertFromJsonSchema(
+          { type: "array", minItems: 1 },
+          {
+            representation: {
+              _tag: "Arrays",
+              elements: [],
+              rest: [{ _tag: "Unknown" }],
+              checks: [{ _tag: "Filter", meta: { _tag: "isMinLength", minLength: 1 } }]
+            }
+          },
+          `Schema.Array(Schema.Unknown).check(Schema.isMinLength(1))`
+        )
+      })
+
+      it("maxItems", () => {
+        assertFromJsonSchema(
+          { type: "array", maxItems: 1 },
+          {
+            representation: {
+              _tag: "Arrays",
+              elements: [],
+              rest: [{ _tag: "Unknown" }],
+              checks: [{ _tag: "Filter", meta: { _tag: "isMaxLength", maxLength: 1 } }]
+            }
+          },
+          `Schema.Array(Schema.Unknown).check(Schema.isMaxLength(1))`
+        )
+      })
+
+      it("uniqueItems", () => {
+        assertFromJsonSchema(
+          { type: "array", uniqueItems: true },
+          {
+            representation: {
+              _tag: "Arrays",
+              elements: [],
+              rest: [{ _tag: "Unknown" }],
+              checks: [{ _tag: "Filter", meta: { _tag: "isUnique" } }]
+            }
+          },
+          `Schema.Array(Schema.Unknown).check(Schema.isUnique())`
+        )
+      })
     })
   })
 
@@ -515,9 +803,108 @@ describe("fromJsonSchemaDocument", () => {
         `Schema.StructWithRest(Schema.Struct({ "a": Schema.String }), [Schema.Record(Schema.String, Schema.Boolean)])`
       )
     })
+
+    it("patternProperties", () => {
+      assertFromJsonSchema(
+        {
+          type: "object",
+          patternProperties: {
+            "a*": { type: "string" }
+          },
+          additionalProperties: false
+        },
+        {
+          representation: {
+            _tag: "Objects",
+            propertySignatures: [],
+            indexSignatures: [
+              {
+                parameter: {
+                  _tag: "String",
+                  checks: [{ _tag: "Filter", meta: { _tag: "isPattern", regExp: new RegExp("a*") } }]
+                },
+                type: { _tag: "String", checks: [] }
+              }
+            ],
+            checks: []
+          }
+        },
+        `Schema.Record(Schema.String.check(Schema.isPattern(new RegExp("a*"))), Schema.String)`
+      )
+      assertFromJsonSchema(
+        {
+          type: "object",
+          patternProperties: {
+            "a*": { type: "string" },
+            "b*": { type: "number" }
+          },
+          additionalProperties: false
+        },
+        {
+          representation: {
+            _tag: "Objects",
+            propertySignatures: [],
+            indexSignatures: [
+              {
+                parameter: {
+                  _tag: "String",
+                  checks: [{ _tag: "Filter", meta: { _tag: "isPattern", regExp: new RegExp("a*") } }]
+                },
+                type: { _tag: "String", checks: [] }
+              },
+              {
+                parameter: {
+                  _tag: "String",
+                  checks: [{ _tag: "Filter", meta: { _tag: "isPattern", regExp: new RegExp("b*") } }]
+                },
+                type: { _tag: "Number", checks: [{ _tag: "Filter", meta: { _tag: "isFinite" } }] }
+              }
+            ],
+            checks: []
+          }
+        },
+        `Schema.StructWithRest(Schema.Struct({  }), [Schema.Record(Schema.String.check(Schema.isPattern(new RegExp("a*"))), Schema.String), Schema.Record(Schema.String.check(Schema.isPattern(new RegExp("b*"))), Schema.Number.check(Schema.isFinite()))])`
+      )
+    })
+
+    describe("checks", () => {
+      it("minProperties", () => {
+        assertFromJsonSchema(
+          { type: "object", minProperties: 1 },
+          {
+            representation: {
+              _tag: "Objects",
+              propertySignatures: [],
+              indexSignatures: [
+                { parameter: { _tag: "String", checks: [] }, type: { _tag: "Unknown" } }
+              ],
+              checks: [{ _tag: "Filter", meta: { _tag: "isMinProperties", minProperties: 1 } }]
+            }
+          },
+          `Schema.Record(Schema.String, Schema.Unknown).check(Schema.isMinProperties(1))`
+        )
+      })
+
+      it("maxProperties", () => {
+        assertFromJsonSchema(
+          { type: "object", maxProperties: 1 },
+          {
+            representation: {
+              _tag: "Objects",
+              propertySignatures: [],
+              indexSignatures: [
+                { parameter: { _tag: "String", checks: [] }, type: { _tag: "Unknown" } }
+              ],
+              checks: [{ _tag: "Filter", meta: { _tag: "isMaxProperties", maxProperties: 1 } }]
+            }
+          },
+          `Schema.Record(Schema.String, Schema.Unknown).check(Schema.isMaxProperties(1))`
+        )
+      })
+    })
   })
 
-  it("type: Array", () => {
+  it("type: array of strings", () => {
     assertFromJsonSchema(
       {
         type: ["string", "null"]
@@ -700,54 +1087,431 @@ describe("fromJsonSchemaDocument", () => {
   })
 
   describe("allOf", () => {
-    it("add property", () => {
-      assertFromJsonSchema(
-        {
-          type: "object",
-          additionalProperties: false,
-          allOf: [
-            { properties: { a: { type: "string" } } }
-          ]
-        },
-        {
-          representation: {
-            _tag: "Objects",
-            propertySignatures: [
-              {
-                name: "a",
-                type: { _tag: "String", checks: [] },
-                isOptional: true,
-                isMutable: false
-              }
-            ],
-            indexSignatures: [],
-            checks: []
-          }
-        },
-        `Schema.Struct({ "a": Schema.optionalKey(Schema.String) })`
-      )
+    describe("type: string", () => {
+      it("& minLength", () => {
+        assertFromJsonSchema(
+          {
+            type: "string",
+            allOf: [
+              { minLength: 1 }
+            ]
+          },
+          {
+            representation: {
+              _tag: "String",
+              checks: [
+                { _tag: "Filter", meta: { _tag: "isMinLength", minLength: 1 } }
+              ]
+            }
+          },
+          `Schema.String.check(Schema.isMinLength(1))`
+        )
+      })
+
+      it("& minLength + description", () => {
+        assertFromJsonSchema(
+          {
+            type: "string",
+            allOf: [
+              { minLength: 1, description: "b" }
+            ]
+          },
+          {
+            representation: {
+              _tag: "String",
+              checks: [
+                { _tag: "Filter", meta: { _tag: "isMinLength", minLength: 1 }, annotations: { description: "b" } }
+              ]
+            }
+          },
+          `Schema.String.check(Schema.isMinLength(1, { "description": "b" }))`
+        )
+      })
+
+      it("description & minLength", () => {
+        assertFromJsonSchema(
+          {
+            type: "string",
+            description: "a",
+            allOf: [
+              { minLength: 1 }
+            ]
+          },
+          {
+            representation: {
+              _tag: "String",
+              checks: [
+                { _tag: "Filter", meta: { _tag: "isMinLength", minLength: 1 } }
+              ],
+              annotations: { description: "a" }
+            }
+          },
+          `Schema.String.annotate({ "description": "a" }).check(Schema.isMinLength(1))`
+        )
+      })
+
+      it("description & minLength + description", () => {
+        assertFromJsonSchema(
+          {
+            type: "string",
+            description: "a",
+            allOf: [
+              { minLength: 1, description: "b" }
+            ]
+          },
+          {
+            representation: {
+              _tag: "String",
+              checks: [
+                { _tag: "Filter", meta: { _tag: "isMinLength", minLength: 1 }, annotations: { description: "b" } }
+              ],
+              annotations: { description: "a" }
+            }
+          },
+          `Schema.String.annotate({ "description": "a" }).check(Schema.isMinLength(1, { "description": "b" }))`
+        )
+      })
+
+      it("maxLength & minLength", () => {
+        assertFromJsonSchema(
+          {
+            type: "string",
+            maxLength: 2,
+            allOf: [
+              { minLength: 1 }
+            ]
+          },
+          {
+            representation: {
+              _tag: "String",
+              checks: [
+                { _tag: "Filter", meta: { _tag: "isMaxLength", maxLength: 2 } },
+                { _tag: "Filter", meta: { _tag: "isMinLength", minLength: 1 } }
+              ]
+            }
+          },
+          `Schema.String.check(Schema.isMaxLength(2), Schema.isMinLength(1))`
+        )
+      })
+
+      it("description + maxLength & minLength", () => {
+        assertFromJsonSchema(
+          {
+            type: "string",
+            description: "a",
+            maxLength: 2,
+            allOf: [
+              { minLength: 1 }
+            ]
+          },
+          {
+            representation: {
+              _tag: "String",
+              checks: [
+                { _tag: "Filter", meta: { _tag: "isMaxLength", maxLength: 2 } },
+                { _tag: "Filter", meta: { _tag: "isMinLength", minLength: 1 } }
+              ],
+              annotations: { description: "a" }
+            }
+          },
+          `Schema.String.annotate({ "description": "a" }).check(Schema.isMaxLength(2), Schema.isMinLength(1))`
+        )
+      })
+
+      it("description + maxLength & minLength + description", () => {
+        assertFromJsonSchema(
+          {
+            type: "string",
+            description: "a",
+            maxLength: 2,
+            allOf: [
+              { minLength: 1, description: "b" }
+            ]
+          },
+          {
+            representation: {
+              _tag: "String",
+              checks: [
+                { _tag: "Filter", meta: { _tag: "isMaxLength", maxLength: 2 } },
+                { _tag: "Filter", meta: { _tag: "isMinLength", minLength: 1 }, annotations: { description: "b" } }
+              ],
+              annotations: { description: "a" }
+            }
+          },
+          `Schema.String.annotate({ "description": "a" }).check(Schema.isMaxLength(2), Schema.isMinLength(1, { "description": "b" }))`
+        )
+      })
+
+      it("& minLength + maxLength", () => {
+        assertFromJsonSchema(
+          {
+            type: "string",
+            allOf: [
+              { minLength: 1, maxLength: 2 }
+            ]
+          },
+          {
+            representation: {
+              _tag: "String",
+              checks: [
+                { _tag: "Filter", meta: { _tag: "isMinLength", minLength: 1 } },
+                { _tag: "Filter", meta: { _tag: "isMaxLength", maxLength: 2 } }
+              ]
+            }
+          },
+          `Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(2))`
+        )
+      })
+
+      it("& minLength + maxLength + description", () => {
+        assertFromJsonSchema(
+          {
+            type: "string",
+            allOf: [
+              { minLength: 1, maxLength: 2, description: "b" }
+            ]
+          },
+          {
+            representation: {
+              _tag: "String",
+              checks: [
+                {
+                  _tag: "FilterGroup",
+                  checks: [
+                    { _tag: "Filter", meta: { _tag: "isMinLength", minLength: 1 } },
+                    { _tag: "Filter", meta: { _tag: "isMaxLength", maxLength: 2 } }
+                  ],
+                  annotations: { description: "b" }
+                }
+              ]
+            }
+          },
+          `Schema.String.check(Schema.makeFilterGroup([Schema.isMinLength(1), Schema.isMaxLength(2)], { "description": "b" }))`
+        )
+      })
+
+      it("& (minLength & maxLength + description)", () => {
+        assertFromJsonSchema(
+          {
+            type: "string",
+            allOf: [
+              { minLength: 1, allOf: [{ maxLength: 2, description: "c" }] }
+            ]
+          },
+          {
+            representation: {
+              _tag: "String",
+              checks: [
+                { _tag: "Filter", meta: { _tag: "isMinLength", minLength: 1 } },
+                { _tag: "Filter", meta: { _tag: "isMaxLength", maxLength: 2 }, annotations: { description: "c" } }
+              ]
+            }
+          },
+          `Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(2, { "description": "c" }))`
+        )
+      })
+
+      it("& (minLength + description & maxLength + description)", () => {
+        assertFromJsonSchema(
+          {
+            type: "string",
+            allOf: [
+              { minLength: 1, description: "b", allOf: [{ maxLength: 2, description: "c" }] }
+            ]
+          },
+          {
+            representation: {
+              _tag: "String",
+              checks: [
+                {
+                  _tag: "FilterGroup",
+                  checks: [
+                    { _tag: "Filter", meta: { _tag: "isMinLength", minLength: 1 } },
+                    { _tag: "Filter", meta: { _tag: "isMaxLength", maxLength: 2 }, annotations: { description: "c" } }
+                  ],
+                  annotations: { description: "b" }
+                }
+              ]
+            }
+          },
+          `Schema.String.check(Schema.makeFilterGroup([Schema.isMinLength(1), Schema.isMaxLength(2, { "description": "c" })], { "description": "b" }))`
+        )
+      })
     })
 
-    it("add additionalProperties", () => {
-      assertFromJsonSchema(
-        {
-          type: "object",
-          allOf: [
-            { additionalProperties: { type: "boolean" } }
-          ]
-        },
-        {
-          representation: {
-            _tag: "Objects",
-            propertySignatures: [],
-            indexSignatures: [
-              { parameter: { _tag: "String", checks: [] }, type: { _tag: "Boolean" } }
-            ],
-            checks: []
-          }
-        },
-        `Schema.Record(Schema.String, Schema.Boolean)`
-      )
+    describe("type: number", () => {
+      it("number & integer", () => {
+        assertFromJsonSchema(
+          {
+            type: "number",
+            allOf: [
+              { type: "integer" }
+            ]
+          },
+          {
+            representation: {
+              _tag: "Number",
+              checks: [
+                { _tag: "Filter", meta: { _tag: "isFinite" } },
+                { _tag: "Filter", meta: { _tag: "isInt" } }
+              ]
+            }
+          },
+          `Schema.Number.check(Schema.isFinite(), Schema.isInt())`
+        )
+      })
+
+      it("number & integer & integer", () => {
+        assertFromJsonSchema(
+          {
+            type: "number",
+            allOf: [
+              { type: "integer", minimum: 2 },
+              { type: "integer", maximum: 2 }
+            ]
+          },
+          {
+            representation: {
+              _tag: "Number",
+              checks: [
+                { _tag: "Filter", meta: { _tag: "isFinite" } },
+                { _tag: "Filter", meta: { _tag: "isInt" } },
+                { _tag: "Filter", meta: { _tag: "isGreaterThanOrEqualTo", minimum: 2 } },
+                { _tag: "Filter", meta: { _tag: "isLessThanOrEqualTo", maximum: 2 } }
+              ]
+            }
+          },
+          `Schema.Number.check(Schema.isFinite(), Schema.isInt(), Schema.isGreaterThanOrEqualTo(2), Schema.isLessThanOrEqualTo(2))`
+        )
+      })
+
+      it("integer & number", () => {
+        assertFromJsonSchema(
+          {
+            type: "integer",
+            allOf: [
+              { type: "number" }
+            ]
+          },
+          {
+            representation: {
+              _tag: "Number",
+              checks: [
+                { _tag: "Filter", meta: { _tag: "isInt" } },
+                { _tag: "Filter", meta: { _tag: "isFinite" } }
+              ]
+            }
+          },
+          `Schema.Number.check(Schema.isInt(), Schema.isFinite())`
+        )
+      })
+
+      it("& (minimum + description & maximum + description)", () => {
+        assertFromJsonSchema(
+          {
+            type: "number",
+            allOf: [
+              { minimum: 1, description: "b", allOf: [{ maximum: 2, description: "c" }] }
+            ]
+          },
+          {
+            representation: {
+              _tag: "Number",
+              checks: [
+                { _tag: "Filter", meta: { _tag: "isFinite" } },
+                {
+                  _tag: "FilterGroup",
+                  checks: [
+                    { _tag: "Filter", meta: { _tag: "isGreaterThanOrEqualTo", minimum: 1 } },
+                    {
+                      _tag: "Filter",
+                      meta: { _tag: "isLessThanOrEqualTo", maximum: 2 },
+                      annotations: { description: "c" }
+                    }
+                  ],
+                  annotations: { description: "b" }
+                }
+              ]
+            }
+          },
+          `Schema.Number.check(Schema.isFinite(), Schema.makeFilterGroup([Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(2, { "description": "c" })], { "description": "b" }))`
+        )
+      })
+    })
+
+    describe("type: array", () => {
+      it("uniqueItems & uniqueItems", () => {
+        assertFromJsonSchema(
+          {
+            type: "array",
+            uniqueItems: true,
+            allOf: [
+              { uniqueItems: true }
+            ]
+          },
+          {
+            representation: {
+              _tag: "Arrays",
+              elements: [],
+              rest: [{ _tag: "Unknown" }],
+              checks: [{ _tag: "Filter", meta: { _tag: "isUnique" } }]
+            }
+          },
+          `Schema.Array(Schema.Unknown).check(Schema.isUnique())`
+        )
+      })
+    })
+
+    describe("type: object", () => {
+      it("add properties", () => {
+        assertFromJsonSchema(
+          {
+            type: "object",
+            additionalProperties: false,
+            allOf: [
+              { properties: { a: { type: "string" } } }
+            ]
+          },
+          {
+            representation: {
+              _tag: "Objects",
+              propertySignatures: [
+                {
+                  name: "a",
+                  type: { _tag: "String", checks: [] },
+                  isOptional: true,
+                  isMutable: false
+                }
+              ],
+              indexSignatures: [],
+              checks: []
+            }
+          },
+          `Schema.Struct({ "a": Schema.optionalKey(Schema.String) })`
+        )
+      })
+
+      it("add additionalProperties", () => {
+        assertFromJsonSchema(
+          {
+            type: "object",
+            allOf: [
+              { additionalProperties: { type: "boolean" } }
+            ]
+          },
+          {
+            representation: {
+              _tag: "Objects",
+              propertySignatures: [],
+              indexSignatures: [
+                { parameter: { _tag: "String", checks: [] }, type: { _tag: "Boolean" } }
+              ],
+              checks: []
+            }
+          },
+          `Schema.Record(Schema.String, Schema.Boolean)`
+        )
+      })
     })
   })
 })
