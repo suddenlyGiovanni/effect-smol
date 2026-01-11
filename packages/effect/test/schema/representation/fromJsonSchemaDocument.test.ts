@@ -902,6 +902,105 @@ describe("fromJsonSchemaDocument", () => {
         )
       })
     })
+
+    describe("propertyNames", () => {
+      it("pattern", () => {
+        assertFromJsonSchema(
+          {
+            type: "object",
+            propertyNames: { pattern: "^[A-Z]" }
+          },
+          {
+            representation: {
+              _tag: "Objects",
+              propertySignatures: [],
+              indexSignatures: [
+                {
+                  parameter: { _tag: "String", checks: [] },
+                  type: { _tag: "Unknown" }
+                }
+              ],
+              checks: [{
+                _tag: "Filter",
+                meta: {
+                  _tag: "isPropertyNames",
+                  propertyNames: {
+                    _tag: "String",
+                    checks: [{ _tag: "Filter", meta: { _tag: "isPattern", regExp: new RegExp("^[A-Z]") } }]
+                  }
+                }
+              }]
+            }
+          },
+          `Schema.Record(Schema.String, Schema.Unknown).check(Schema.isPropertyNames(Schema.String.check(Schema.isPattern(new RegExp("^[A-Z]")))))`
+        )
+      })
+
+      it("false", () => {
+        assertFromJsonSchema(
+          {
+            type: "object",
+            propertyNames: false
+          },
+          {
+            representation: {
+              _tag: "Objects",
+              propertySignatures: [],
+              indexSignatures: [
+                { parameter: { _tag: "String", checks: [] }, type: { _tag: "Unknown" } }
+              ],
+              checks: [
+                { _tag: "Filter", meta: { _tag: "isPropertyNames", propertyNames: { _tag: "Never" } } }
+              ]
+            }
+          },
+          `Schema.Record(Schema.String, Schema.Unknown).check(Schema.isPropertyNames(Schema.Never))`
+        )
+      })
+
+      it("allOf combines checks", () => {
+        assertFromJsonSchema(
+          {
+            allOf: [
+              { type: "object", propertyNames: { pattern: "^[A-Z]" } },
+              { type: "object", propertyNames: { minLength: 2 } }
+            ]
+          },
+          {
+            representation: {
+              _tag: "Objects",
+              propertySignatures: [],
+              indexSignatures: [
+                { parameter: { _tag: "String", checks: [] }, type: { _tag: "Unknown" } }
+              ],
+              checks: [
+                {
+                  _tag: "Filter",
+                  meta: {
+                    _tag: "isPropertyNames",
+                    propertyNames: {
+                      _tag: "String",
+                      checks: [{ _tag: "Filter", meta: { _tag: "isPattern", regExp: new RegExp("^[A-Z]") } }]
+                    }
+                  }
+                },
+                {
+                  _tag: "Filter",
+                  meta: {
+                    _tag: "isPropertyNames",
+                    propertyNames: {
+                      _tag: "String",
+                      checks: [{ _tag: "Filter", meta: { _tag: "isMinLength", minLength: 2 } }]
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          `Schema.Record(Schema.String, Schema.Unknown).check(Schema.isPropertyNames(Schema.String.check(Schema.isPattern(new RegExp("^[A-Z]")))), Schema.isPropertyNames(Schema.String.check(Schema.isMinLength(2))))`
+        )
+      })
+    })
   })
 
   it("type: array of strings", () => {
@@ -959,7 +1058,6 @@ describe("fromJsonSchemaDocument", () => {
       )
     })
 
-    // TODO: remove unnecessary definition
     it("should resolve the $ref if there are annotations", () => {
       assertFromJsonSchema(
         {
@@ -976,19 +1074,11 @@ describe("fromJsonSchemaDocument", () => {
             _tag: "String",
             checks: [],
             annotations: { description: "a", identifier: "A" }
-          },
-          definitions: {
-            A: {
-              _tag: "String",
-              checks: [],
-              annotations: { identifier: "A" }
-            }
           }
         }
       )
     })
 
-    // TODO: remove unnecessary definition
     it("should resolve the $ref if there is an allOf", () => {
       assertFromJsonSchema(
         {
@@ -1007,13 +1097,6 @@ describe("fromJsonSchemaDocument", () => {
             _tag: "String",
             checks: [],
             annotations: { description: "a", identifier: "A" }
-          },
-          definitions: {
-            A: {
-              _tag: "String",
-              checks: [],
-              annotations: { identifier: "A" }
-            }
           }
         }
       )
