@@ -1046,7 +1046,7 @@ export const set: {
  * import { Equal, Record } from "effect"
  * import * as assert from "node:assert"
  *
- * const isSubrecord = Record.isSubrecordBy(Equal.equivalence<number>())
+ * const isSubrecord = Record.isSubrecordBy(Equal.asEquivalence<number>())
  *
  * assert.deepStrictEqual(
  *   Record.isSubrecord({ a: 1 } as Record<string, number>, { a: 1, b: 2 }),
@@ -1099,7 +1099,7 @@ export const isSubrecordBy = <A>(equivalence: Equivalence<A>): {
 export const isSubrecord: {
   <K extends string, A>(that: ReadonlyRecord<K, A>): (self: ReadonlyRecord<K, A>) => boolean
   <K extends string, A>(self: ReadonlyRecord<K, A>, that: ReadonlyRecord<K, A>): boolean
-} = isSubrecordBy(Equal.equivalence())
+} = isSubrecordBy(Equal.asEquivalence())
 
 /**
  * Reduce a record to a single value by combining its entries with a specified function.
@@ -1374,7 +1374,7 @@ export const difference: {
  * import { Equal, Record } from "effect"
  * import * as assert from "node:assert"
  *
- * const recordEquivalence = Record.getEquivalence(Equal.equivalence<number>())
+ * const recordEquivalence = Record.getEquivalence(Equal.asEquivalence<number>())
  *
  * assert.deepStrictEqual(recordEquivalence({ a: 1, b: 2 }, { a: 1, b: 2 }), true)
  * assert.deepStrictEqual(recordEquivalence({ a: 1, b: 2 }, { a: 1, b: 3 }), false)
