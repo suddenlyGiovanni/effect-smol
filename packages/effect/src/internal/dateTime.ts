@@ -513,31 +513,31 @@ export const max: {
 export const greaterThan: {
   (that: DateTime.DateTime): (self: DateTime.DateTime) => boolean
   (self: DateTime.DateTime, that: DateTime.DateTime): boolean
-} = order.greaterThan(Order)
+} = order.isGreaterThan(Order)
 
 /** @internal */
 export const greaterThanOrEqualTo: {
   (that: DateTime.DateTime): (self: DateTime.DateTime) => boolean
   (self: DateTime.DateTime, that: DateTime.DateTime): boolean
-} = order.greaterThanOrEqualTo(Order)
+} = order.isGreaterThanOrEqualTo(Order)
 
 /** @internal */
 export const lessThan: {
   (that: DateTime.DateTime): (self: DateTime.DateTime) => boolean
   (self: DateTime.DateTime, that: DateTime.DateTime): boolean
-} = order.lessThan(Order)
+} = order.isLessThan(Order)
 
 /** @internal */
 export const lessThanOrEqualTo: {
   (that: DateTime.DateTime): (self: DateTime.DateTime) => boolean
   (self: DateTime.DateTime, that: DateTime.DateTime): boolean
-} = order.lessThanOrEqualTo(Order)
+} = order.isLessThanOrEqualTo(Order)
 
 /** @internal */
 export const between: {
   (options: { minimum: DateTime.DateTime; maximum: DateTime.DateTime }): (self: DateTime.DateTime) => boolean
   (self: DateTime.DateTime, options: { minimum: DateTime.DateTime; maximum: DateTime.DateTime }): boolean
-} = order.between(Order)
+} = order.isBetween(Order)
 
 /** @internal */
 export const isFuture = (self: DateTime.DateTime): Effect.Effect<boolean> => effect.map(now, lessThan(self))

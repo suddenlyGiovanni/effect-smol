@@ -3974,11 +3974,11 @@ export function makeIsGreaterThan<T>(options: {
   readonly annotate?: ((exclusiveMinimum: T) => Annotations.Filter) | undefined
   readonly formatter?: Formatter<T> | undefined
 }) {
-  const greaterThan = Order.greaterThan(options.order)
+  const gt = Order.isGreaterThan(options.order)
   const formatter = options.formatter ?? format
   return (exclusiveMinimum: T, annotations?: Annotations.Filter) => {
     return makeFilter<T>(
-      (input) => greaterThan(input, exclusiveMinimum),
+      (input) => gt(input, exclusiveMinimum),
       {
         expected: `a value greater than ${formatter(exclusiveMinimum)}`,
         ...options.annotate?.(exclusiveMinimum),
@@ -3997,11 +3997,11 @@ export function makeIsGreaterThanOrEqualTo<T>(options: {
   readonly annotate?: ((exclusiveMinimum: T) => Annotations.Filter) | undefined
   readonly formatter?: Formatter<T> | undefined
 }) {
-  const greaterThanOrEqualTo = Order.greaterThanOrEqualTo(options.order)
+  const gte = Order.isGreaterThanOrEqualTo(options.order)
   const formatter = options.formatter ?? format
   return (minimum: T, annotations?: Annotations.Filter) => {
     return makeFilter<T>(
-      (input) => greaterThanOrEqualTo(input, minimum),
+      (input) => gte(input, minimum),
       {
         expected: `a value greater than or equal to ${formatter(minimum)}`,
         ...options.annotate?.(minimum),
@@ -4020,11 +4020,11 @@ export function makeIsLessThan<T>(options: {
   readonly annotate?: ((exclusiveMaximum: T) => Annotations.Filter) | undefined
   readonly formatter?: Formatter<T> | undefined
 }) {
-  const lessThan = Order.lessThan(options.order)
+  const lt = Order.isLessThan(options.order)
   const formatter = options.formatter ?? format
   return (exclusiveMaximum: T, annotations?: Annotations.Filter) => {
     return makeFilter<T>(
-      (input) => lessThan(input, exclusiveMaximum),
+      (input) => lt(input, exclusiveMaximum),
       {
         expected: `a value less than ${formatter(exclusiveMaximum)}`,
         ...options.annotate?.(exclusiveMaximum),
@@ -4043,11 +4043,11 @@ export function makeIsLessThanOrEqualTo<T>(options: {
   readonly annotate?: ((exclusiveMaximum: T) => Annotations.Filter) | undefined
   readonly formatter?: Formatter<T> | undefined
 }) {
-  const lessThanOrEqualTo = Order.lessThanOrEqualTo(options.order)
+  const lte = Order.isLessThanOrEqualTo(options.order)
   const formatter = options.formatter ?? format
   return (maximum: T, annotations?: Annotations.Filter) => {
     return makeFilter<T>(
-      (input) => lessThanOrEqualTo(input, maximum),
+      (input) => lte(input, maximum),
       {
         expected: `a value less than or equal to ${formatter(maximum)}`,
         ...options.annotate?.(maximum),
@@ -4073,10 +4073,10 @@ export function makeIsBetween<T>(deriveOptions: {
     | undefined
   readonly formatter?: Formatter<T> | undefined
 }) {
-  const greaterThanOrEqualTo = Order.greaterThanOrEqualTo(deriveOptions.order)
-  const greaterThan = Order.greaterThan(deriveOptions.order)
-  const lessThanOrEqualTo = Order.lessThanOrEqualTo(deriveOptions.order)
-  const lessThan = Order.lessThan(deriveOptions.order)
+  const greaterThanOrEqualTo = Order.isGreaterThanOrEqualTo(deriveOptions.order)
+  const greaterThan = Order.isGreaterThan(deriveOptions.order)
+  const lessThanOrEqualTo = Order.isLessThanOrEqualTo(deriveOptions.order)
+  const lessThan = Order.isLessThan(deriveOptions.order)
   const formatter = deriveOptions.formatter ?? format
   return (options: {
     readonly minimum: T
@@ -4139,7 +4139,7 @@ export function makeIsMultipleOf<T>(options: {
  * @since 4.0.0
  */
 export const isGreaterThan = makeIsGreaterThan({
-  order: Order.number,
+  order: Order.Number,
   annotate: (exclusiveMinimum) => ({
     meta: {
       _tag: "isGreaterThan",
@@ -4171,7 +4171,7 @@ export const isGreaterThan = makeIsGreaterThan({
  * @since 4.0.0
  */
 export const isGreaterThanOrEqualTo = makeIsGreaterThanOrEqualTo({
-  order: Order.number,
+  order: Order.Number,
   annotate: (minimum) => ({
     meta: {
       _tag: "isGreaterThanOrEqualTo",
@@ -4202,7 +4202,7 @@ export const isGreaterThanOrEqualTo = makeIsGreaterThanOrEqualTo({
  * @since 4.0.0
  */
 export const isLessThan = makeIsLessThan({
-  order: Order.number,
+  order: Order.Number,
   annotate: (exclusiveMaximum) => ({
     meta: {
       _tag: "isLessThan",
@@ -4234,7 +4234,7 @@ export const isLessThan = makeIsLessThan({
  * @since 4.0.0
  */
 export const isLessThanOrEqualTo = makeIsLessThanOrEqualTo({
-  order: Order.number,
+  order: Order.Number,
   annotate: (maximum) => ({
     meta: {
       _tag: "isLessThanOrEqualTo",
@@ -4267,7 +4267,7 @@ export const isLessThanOrEqualTo = makeIsLessThanOrEqualTo({
  * @since 4.0.0
  */
 export const isBetween = makeIsBetween({
-  order: Order.number,
+  order: Order.Number,
   annotate: (options) => {
     return {
       meta: {
@@ -4610,7 +4610,7 @@ export const isBetweenDate = makeIsBetween({
  * @since 4.0.0
  */
 export const isGreaterThanBigInt = makeIsGreaterThan({
-  order: Order.bigint,
+  order: Order.BigInt,
   annotate: (exclusiveMinimum) => ({
     meta: {
       _tag: "isGreaterThanBigInt",
@@ -4639,7 +4639,7 @@ export const isGreaterThanBigInt = makeIsGreaterThan({
  * @since 4.0.0
  */
 export const isGreaterThanOrEqualToBigInt = makeIsGreaterThanOrEqualTo({
-  order: Order.bigint,
+  order: Order.BigInt,
   annotate: (minimum) => ({
     meta: {
       _tag: "isGreaterThanOrEqualToBigInt",
@@ -4666,7 +4666,7 @@ export const isGreaterThanOrEqualToBigInt = makeIsGreaterThanOrEqualTo({
  * @since 4.0.0
  */
 export const isLessThanBigInt = makeIsLessThan({
-  order: Order.bigint,
+  order: Order.BigInt,
   annotate: (exclusiveMaximum) => ({
     meta: {
       _tag: "isLessThanBigInt",
@@ -4695,7 +4695,7 @@ export const isLessThanBigInt = makeIsLessThan({
  * @since 4.0.0
  */
 export const isLessThanOrEqualToBigInt = makeIsLessThanOrEqualTo({
-  order: Order.bigint,
+  order: Order.BigInt,
   annotate: (maximum) => ({
     meta: {
       _tag: "isLessThanOrEqualToBigInt",
@@ -4723,7 +4723,7 @@ export const isLessThanOrEqualToBigInt = makeIsLessThanOrEqualTo({
  * @since 4.0.0
  */
 export const isBetweenBigInt = makeIsBetween({
-  order: Order.bigint,
+  order: Order.BigInt,
   annotate: (options) => ({
     meta: {
       _tag: "isBetweenBigInt",
