@@ -1951,7 +1951,7 @@ export const filter: {
  * ```ts
  * import { Equivalence, Option } from "effect"
  *
- * const isEquivalent = Option.getEquivalence(Equivalence.strict<number>())
+ * const isEquivalent = Option.makeEquivalence(Equivalence.strict<number>())
  *
  * console.log(isEquivalent(Option.none(), Option.none()))
  * // Output: true
@@ -1972,7 +1972,7 @@ export const filter: {
  * @category Equivalence
  * @since 2.0.0
  */
-export const getEquivalence = <A>(isEquivalent: Equivalence.Equivalence<A>): Equivalence.Equivalence<Option<A>> =>
+export const makeEquivalence = <A>(isEquivalent: Equivalence.Equivalence<A>): Equivalence.Equivalence<Option<A>> =>
   Equivalence.make((x, y) => isNone(x) ? isNone(y) : isNone(y) ? false : isEquivalent(x.value, y.value))
 
 /**
@@ -1993,7 +1993,7 @@ export const getEquivalence = <A>(isEquivalent: Equivalence.Equivalence<A>): Equ
  * import { Option } from "effect"
  * import * as N from "effect/Number"
  *
- * const order = Option.getOrder(N.Order)
+ * const order = Option.makeOrder(N.Order)
  *
  * console.log(order(Option.none(), Option.none()))
  * // Output: 0
@@ -2014,7 +2014,7 @@ export const getEquivalence = <A>(isEquivalent: Equivalence.Equivalence<A>): Equ
  * @category Sorting
  * @since 2.0.0
  */
-export const getOrder = <A>(O: Order<A>): Order<Option<A>> =>
+export const makeOrder = <A>(O: Order<A>): Order<Option<A>> =>
   order.make((self, that) => isSome(self) ? (isSome(that) ? O(self.value, that.value) : 1) : -1)
 
 /**
@@ -2469,7 +2469,7 @@ export const mergeWith = <A>(f: (a1: A, a2: A) => A) => (o1: Option<A>, o2: Opti
  *
  * @since 4.0.0
  */
-export function getReducer<A>(combiner: Combiner.Combiner<A>): Reducer.Reducer<Option<A>> {
+export function makeReducer<A>(combiner: Combiner.Combiner<A>): Reducer.Reducer<Option<A>> {
   return Reducer.make((self, that) => {
     if (isNone(self)) return that
     if (isNone(that)) return self
@@ -2493,12 +2493,12 @@ export function getReducer<A>(combiner: Combiner.Combiner<A>): Reducer.Reducer<O
  * - `none()` + `some(b)` = `none()` (fails fast)
  * - `some(a)` + `some(b)` = `some(a + b)` (values combined)
  *
- * @see {@link getReducerFailFast} if you have a `Reducer` and want to lift it
+ * @see {@link makeReducerFailFast} if you have a `Reducer` and want to lift it
  * to `Option` values.
  *
  * @since 4.0.0
  */
-export function getCombinerFailFast<A>(combiner: Combiner.Combiner<A>): Combiner.Combiner<Option<A>> {
+export function makeCombinerFailFast<A>(combiner: Combiner.Combiner<A>): Combiner.Combiner<Option<A>> {
   return Combiner.make((self, that) => {
     if (isNone(self) || isNone(that)) return none()
     return some(combiner.combine(self.value, that.value))
@@ -2521,13 +2521,13 @@ export function getCombinerFailFast<A>(combiner: Combiner.Combiner<A>): Combiner
  * - Fails fast (returns `none()`) if any operand is `None`
  * - Uses the underlying reducer's combine logic when both values are present
  *
- * @see {@link getCombinerFailFast} if you only have a `Combiner` and want to
+ * @see {@link makeCombinerFailFast} if you only have a `Combiner` and want to
  * lift it to `Option` values.
  *
  * @since 4.0.0
  */
-export function getReducerFailFast<A>(reducer: Reducer.Reducer<A>): Reducer.Reducer<Option<A>> {
-  const combine = getCombinerFailFast(reducer).combine
+export function makeReducerFailFast<A>(reducer: Reducer.Reducer<A>): Reducer.Reducer<Option<A>> {
+  const combine = makeCombinerFailFast(reducer).combine
   const initialValue = some(reducer.initialValue)
   return Reducer.make(combine, initialValue, (collection) => {
     let out = initialValue

@@ -3393,14 +3393,14 @@ export const unfold = <B, A>(b: B, f: (b: B) => readonly [A, B] | undefined): Ar
  * ```ts
  * import { Array, Order } from "effect"
  *
- * const arrayOrder = Array.getOrder(Order.number)
+ * const arrayOrder = Array.makeOrder(Order.number)
  * console.log(arrayOrder([1, 2], [1, 3])) // -1 (first is less than second)
  * ```
  *
  * @category instances
  * @since 2.0.0
  */
-export const getOrder: <A>(O: Order.Order<A>) => Order.Order<ReadonlyArray<A>> = Order.array
+export const makeOrder: <A>(O: Order.Order<A>) => Order.Order<ReadonlyArray<A>> = Order.array
 
 /**
  * Creates an equivalence relation for arrays.
@@ -3410,14 +3410,14 @@ export const getOrder: <A>(O: Order.Order<A>) => Order.Order<ReadonlyArray<A>> =
  * ```ts
  * import { Array } from "effect"
  *
- * const eq = Array.getEquivalence<number>((a, b) => a === b)
+ * const eq = Array.makeEquivalence<number>((a, b) => a === b)
  * console.log(eq([1, 2, 3], [1, 2, 3])) // true
  * ```
  *
  * @category instances
  * @since 2.0.0
  */
-export const getEquivalence: <A>(
+export const makeEquivalence: <A>(
   isEquivalent: Equivalence.Equivalence<A>
 ) => Equivalence.Equivalence<ReadonlyArray<A>> = Equivalence.array
 
@@ -3901,7 +3901,7 @@ export function getReadonlyReducerConcat<A>(): Reducer.Reducer<ReadonlyArray<A>>
  *
  * @since 4.0.0
  */
-export function getReducerConcat<A>(): Reducer.Reducer<Array<A>> {
+export function makeReducerConcat<A>(): Reducer.Reducer<Array<A>> {
   return reducer
 }
 

@@ -341,7 +341,7 @@ export const renameKeys: {
  * ```ts
  * import { Equivalence, Struct } from "effect"
  *
- * const PersonEquivalence = Struct.getEquivalence({
+ * const PersonEquivalence = Struct.makeEquivalence({
  *   name: Equivalence.strict<string>(),
  *   age: Equivalence.strict<number>()
  * })
@@ -360,7 +360,7 @@ export const renameKeys: {
  * @category Equivalence
  * @since 2.0.0
  */
-export const getEquivalence = Equivalence.struct
+export const makeEquivalence = Equivalence.struct
 
 /**
  * Creates an `Order` for a struct of values based on the given `Order`s for each property.
@@ -373,7 +373,7 @@ export const getEquivalence = Equivalence.struct
  * import * as N from "effect/Number"
  * import * as S from "effect/String"
  *
- * const PersonOrder = Struct.getOrder({
+ * const PersonOrder = Struct.makeOrder({
  *   name: S.Order,
  *   age: N.Order
  * })
@@ -388,7 +388,7 @@ export const getEquivalence = Equivalence.struct
  * @category Ordering
  * @since 2.0.0
  */
-export const getOrder = order.struct
+export const makeOrder = order.struct
 
 /**
  * A higher-kinded type interface for representing type-level functions.
@@ -592,7 +592,7 @@ function buildStruct<
  * ```ts
  * import { Number, String, Struct } from "effect"
  *
- * const C = Struct.getCombiner<{ readonly n: number; readonly s: string }>({
+ * const C = Struct.makeCombiner<{ readonly n: number; readonly s: string }>({
  *   n: Number.ReducerSum,
  *   s: String.ReducerConcat
  * })
@@ -600,7 +600,7 @@ function buildStruct<
  *
  * @since 4.0.0
  */
-export function getCombiner<A>(
+export function makeCombiner<A>(
   combiners: { readonly [K in keyof A]: Combiner.Combiner<A[K]> },
   options?: {
     readonly omitKeyWhen?: ((a: A[keyof A]) => boolean) | undefined
@@ -637,7 +637,7 @@ export function getCombiner<A>(
  * ```ts
  * import { Number, String, Struct } from "effect"
  *
- * const R = Struct.getReducer<{ readonly n: number; readonly s: string }>({
+ * const R = Struct.makeReducer<{ readonly n: number; readonly s: string }>({
  *   n: Number.ReducerSum,
  *   s: String.ReducerConcat
  * })
@@ -645,13 +645,13 @@ export function getCombiner<A>(
  *
  * @since 4.0.0
  */
-export function getReducer<A>(
+export function makeReducer<A>(
   reducers: { readonly [K in keyof A]: Reducer.Reducer<A[K]> },
   options?: {
     readonly omitKeyWhen?: ((a: A[keyof A]) => boolean) | undefined
   }
 ): Reducer.Reducer<A> {
-  const combine = getCombiner(reducers, options).combine
+  const combine = makeCombiner(reducers, options).combine
   const initialValue = {} as A
   for (const key of Reflect.ownKeys(reducers) as Array<keyof A>) {
     const iv = reducers[key].initialValue

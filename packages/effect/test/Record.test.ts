@@ -9,14 +9,14 @@ describe("Record", () => {
     deepStrictEqual(Record.singleton("__proto__", 1), { ["__proto__"]: 1 })
   })
 
-  it("getReducerUnion", () => {
-    const R = Record.getReducerUnion(Num.ReducerSum)
+  it("makeReducerUnion", () => {
+    const R = Record.makeReducerUnion(Num.ReducerSum)
 
     deepStrictEqual(R.combine({ a: 1, b: 2 }, { a: 3, b: 4, c: 5 }), { a: 4, b: 6, c: 5 })
   })
 
-  it("getReducerIntersection", () => {
-    const R = Record.getReducerIntersection(Num.ReducerSum)
+  it("makeReducerIntersection", () => {
+    const R = Record.makeReducerIntersection(Num.ReducerSum)
 
     deepStrictEqual(R.combine({ a: 1, b: 2 }, { a: 3, b: 4, c: 5 }), { a: 4, b: 6 })
   })
@@ -353,13 +353,13 @@ describe("Record", () => {
       })
     })
 
-    it("getEquivalence", () => {
-      deepStrictEqual(Record.getEquivalence(Equivalence.strict<number>())({ a: 1 }, { a: 1 }), true)
-      deepStrictEqual(Record.getEquivalence(Equivalence.strict<number>())({ a: 1 }, stringRecord), true)
-      deepStrictEqual(Record.getEquivalence(Equivalence.strict<number>())({ a: 1 }, { a: 2 }), false)
-      deepStrictEqual(Record.getEquivalence(Equivalence.strict<number>())({ a: 1 }, { b: 1 }), false)
+    it("makeEquivalence", () => {
+      deepStrictEqual(Record.makeEquivalence(Equivalence.strict<number>())({ a: 1 }, { a: 1 }), true)
+      deepStrictEqual(Record.makeEquivalence(Equivalence.strict<number>())({ a: 1 }, stringRecord), true)
+      deepStrictEqual(Record.makeEquivalence(Equivalence.strict<number>())({ a: 1 }, { a: 2 }), false)
+      deepStrictEqual(Record.makeEquivalence(Equivalence.strict<number>())({ a: 1 }, { b: 1 }), false)
       const noPrototypeObject = Object.create(null)
-      deepStrictEqual(Record.getEquivalence(Equivalence.strict<number>())(noPrototypeObject, { b: 1 }), false)
+      deepStrictEqual(Record.makeEquivalence(Equivalence.strict<number>())(noPrototypeObject, { b: 1 }), false)
     })
 
     it("mapKeys", () => {
