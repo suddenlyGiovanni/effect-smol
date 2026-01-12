@@ -1641,6 +1641,40 @@ export const flatMap: {
   ))
 
 /**
+ * @since 4.0.0
+ * @category sequencing
+ */
+export const switchMap: {
+  <A, A2, E2, R2>(
+    f: (a: A) => Stream<A2, E2, R2>,
+    options?: {
+      readonly concurrency?: number | "unbounded" | undefined
+      readonly bufferSize?: number | undefined
+    } | undefined
+  ): <E, R>(self: Stream<A, E, R>) => Stream<A2, E2 | E, R2 | R>
+  <A, E, R, A2, E2, R2>(
+    self: Stream<A, E, R>,
+    f: (a: A) => Stream<A2, E2, R2>,
+    options?: {
+      readonly concurrency?: number | "unbounded" | undefined
+      readonly bufferSize?: number | undefined
+    } | undefined
+  ): Stream<A2, E | E2, R | R2>
+} = dual((args) => isStream(args[0]), <A, E, R, A2, E2, R2>(
+  self: Stream<A, E, R>,
+  f: (a: A) => Stream<A2, E2, R2>,
+  options?: {
+    readonly concurrency?: number | "unbounded" | undefined
+    readonly bufferSize?: number | undefined
+  } | undefined
+): Stream<A2, E | E2, R | R2> =>
+  self.channel.pipe(
+    Channel.flattenArray,
+    Channel.switchMap((a) => f(a).channel, options),
+    fromChannel
+  ))
+
+/**
  * Flattens a stream of streams into a single stream.
  *
  * @example
