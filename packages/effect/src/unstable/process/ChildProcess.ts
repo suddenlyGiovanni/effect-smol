@@ -81,7 +81,7 @@ export interface StandardCommand extends
     StandardCommand,
     ChildProcessHandle,
     PlatformError.PlatformError,
-    ChildProcessSpawner
+    ChildProcessSpawner | Scope.Scope
   >
 {
   readonly _tag: "StandardCommand"
@@ -102,7 +102,7 @@ export interface TemplatedCommand extends
     TemplatedCommand,
     ChildProcessHandle,
     PlatformError.PlatformError,
-    ChildProcessSpawner
+    ChildProcessSpawner | Scope.Scope
   >
 {
   readonly _tag: "TemplatedCommand"
@@ -124,7 +124,7 @@ export interface PipedCommand extends
     PipedCommand,
     ChildProcessHandle,
     PlatformError.PlatformError,
-    ChildProcessSpawner
+    ChildProcessSpawner | Scope.Scope
   >
 {
   readonly _tag: "PipedCommand"
