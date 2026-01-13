@@ -94,6 +94,8 @@ This is the Effect library repository, focusing on functional programming patter
 
 ## Development Workflow
 
+- Run `pnpm install` first to set up dependencies
+
 ### Core Principles
 
 - **Zero Tolerance for Errors**: All automated checks must pass
