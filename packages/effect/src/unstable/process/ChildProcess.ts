@@ -50,7 +50,7 @@ import * as Predicate from "../../Predicate.ts"
 import type * as Scope from "../../Scope.ts"
 import type * as Sink from "../../Sink.ts"
 import * as Stream from "../../Stream.ts"
-import type { ChildProcessHandle } from "./ChildProcessSpawner.ts"
+import type { ChildProcessHandle, ExitCode } from "./ChildProcessSpawner.ts"
 import { ChildProcessSpawner } from "./ChildProcessSpawner.ts"
 
 const TypeId = "~effect/unstable/process/ChildProcess"
@@ -773,13 +773,23 @@ export const spawn = (command: Command): Effect.Effect<
  * @since 4.0.0
  * @category Execution
  */
+export const exitCode = (command: Command): Effect.Effect<
+  ExitCode,
+  PlatformError.PlatformError,
+  ChildProcessSpawner
+> => Effect.scoped(Effect.flatMap(spawn(command), (handle) => handle.exitCode))
+
+/**
+ * @since 4.0.0
+ * @category Execution
+ */
 export const streamString: {
   (options?: {
     readonly includeStderr?: boolean | undefined
-  }): (self: Command) => Stream.Stream<string, PlatformError.PlatformError>
+  }): (self: Command) => Stream.Stream<string, PlatformError.PlatformError, ChildProcessSpawner>
   (self: Command, options?: {
     readonly includeStderr?: boolean | undefined
-  }): Stream.Stream<string, PlatformError.PlatformError>
+  }): Stream.Stream<string, PlatformError.PlatformError, ChildProcessSpawner>
 } = dual(
   (args) => isCommand(args[0]),
   (
@@ -807,15 +817,16 @@ export const streamString: {
 export const streamLines: {
   (options?: {
     readonly includeStderr?: boolean | undefined
-  }): (self: Command) => Stream.Stream<string, PlatformError.PlatformError>
+  }): (self: Command) => Stream.Stream<string, PlatformError.PlatformError, ChildProcessSpawner>
   (self: Command, options?: {
     readonly includeStderr?: boolean | undefined
-  }): Stream.Stream<string, PlatformError.PlatformError>
+  }): Stream.Stream<string, PlatformError.PlatformError, ChildProcessSpawner>
 } = dual(
   (args) => isCommand(args[0]),
   (self: Command, options?: { readonly includeStderr?: boolean | undefined }): Stream.Stream<
     string,
-    PlatformError.PlatformError
+    PlatformError.PlatformError,
+    ChildProcessSpawner
   > => Stream.splitLines(streamString(self, options))
 )
 
@@ -826,10 +837,10 @@ export const streamLines: {
 export const lines: {
   (options?: {
     readonly includeStderr?: boolean | undefined
-  }): (self: Command) => Effect.Effect<Array<string>, PlatformError.PlatformError>
+  }): (self: Command) => Effect.Effect<Array<string>, PlatformError.PlatformError, ChildProcessSpawner>
   (self: Command, options?: {
     readonly includeStderr?: boolean | undefined
-  }): Effect.Effect<Array<string>, PlatformError.PlatformError>
+  }): Effect.Effect<Array<string>, PlatformError.PlatformError, ChildProcessSpawner>
 } = dual(
   (args) => isCommand(args[0]),
   (
@@ -837,7 +848,8 @@ export const lines: {
     options?: { readonly includeStderr?: boolean | undefined }
   ): Effect.Effect<
     Array<string>,
-    PlatformError.PlatformError
+    PlatformError.PlatformError,
+    ChildProcessSpawner
   > => Stream.runCollect(streamLines(self, options))
 )
 
@@ -848,16 +860,20 @@ export const lines: {
 export const string: {
   (options?: {
     readonly includeStderr?: boolean | undefined
-  }): (self: Command) => Effect.Effect<string, PlatformError.PlatformError>
+  }): (self: Command) => Effect.Effect<string, PlatformError.PlatformError, ChildProcessSpawner>
   (self: Command, options?: {
     readonly includeStderr?: boolean | undefined
-  }): Effect.Effect<string, PlatformError.PlatformError>
+  }): Effect.Effect<string, PlatformError.PlatformError, ChildProcessSpawner>
 } = dual(
   (args) => isCommand(args[0]),
   (
     self: Command,
     options?: { readonly includeStderr?: boolean | undefined }
-  ): Effect.Effect<string, PlatformError.PlatformError> => Stream.mkString(streamString(self, options))
+  ): Effect.Effect<
+    string,
+    PlatformError.PlatformError,
+    ChildProcessSpawner
+  > => Stream.mkString(streamString(self, options))
 )
 
 const isTemplateString = (u: unknown): u is TemplateStringsArray =>
