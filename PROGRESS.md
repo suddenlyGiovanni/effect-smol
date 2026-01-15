@@ -55,6 +55,18 @@
 - Notes: split now uses predicate/refinement delimiter; updated split tests/docs; ran pnpm lint-fix/test/check/build/docgen
 - Blockers: none
 
+### Task EFF-207: port Effect.catchIf from effect 3
+
+- Files: packages/effect/src/internal/effect.ts, packages/effect/src/Effect.ts, packages/effect/test/Effect.test.ts, PROGRESS.md
+- Notes: added catchIf implementation + docs; added error-handling test; ran pnpm lint-fix/test/check/build/docgen
+- Blockers: none
+
+### Task EFF-207: update catchIf/catchFilter docs
+
+- Files: packages/effect/src/Effect.ts, PROGRESS.md
+- Notes: removed catchSome reference in docs; ran pnpm lint-fix/test/check/build/docgen
+- Blockers: none
+
 ### Task EFF-177: refactor Effect.filterOrElse
 
 - Files: packages/effect/src/internal/effect.ts, packages/effect/src/Effect.ts, packages/effect/src/unstable/http/HttpClient.ts, PROGRESS.md
@@ -65,4 +77,16 @@
 
 - Files: packages/effect/src/internal/effect.ts, packages/effect/src/unstable/http/HttpClient.ts, PROGRESS.md
 - Notes: filterOrFailCause uses Predicate/Refinement overloads; removed unused Filter import; ran pnpm lint-fix/test/check/build/docgen
+- Blockers: none
+
+### Task EFF-207: adjust catchFilter docs wording
+
+- Files: packages/effect/src/Effect.ts, PROGRESS.md
+- Notes: clarify catchFilter docs use Filter module; ran pnpm lint-fix/test/check/build/docgen
+- Blockers: none
+
+### Task EFF-207: refresh catchFilter docs example
+
+- Files: packages/effect/src/Effect.ts, PROGRESS.md
+- Notes: use Filter module in catchFilter docs/example; ran pnpm lint-fix/test/check/build/docgen
 - Blockers: none

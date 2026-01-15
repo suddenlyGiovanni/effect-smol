@@ -2870,15 +2870,81 @@ export const catchDefect: {
  *
  * **When to Use**
  *
- * `catchFilter` works similarly to {@link catchSome}, but it allows you to
- * recover from errors by providing a predicate function. If the predicate
+ * `catchIf` lets you recover from errors with a predicate. If the predicate
  * matches the error, the recovery effect is applied. This function doesn't
  * alter the error type, so the resulting effect still carries the original
  * error type unless a user-defined type guard is used to narrow the type.
  *
+ * **Example** (Catching Specific Errors with a Predicate)
+ *
+ * ```ts
+ * import { Effect, Random } from "effect"
+ *
+ * class HttpError {
+ *   readonly _tag = "HttpError"
+ * }
+ *
+ * class ValidationError {
+ *   readonly _tag = "ValidationError"
+ * }
+ *
+ * const program = Effect.gen(function*() {
+ *   const n1 = yield* Random.next
+ *   const n2 = yield* Random.next
+ *   if (n1 < 0.5) {
+ *     yield* Effect.fail(new HttpError())
+ *   }
+ *   if (n2 < 0.5) {
+ *     yield* Effect.fail(new ValidationError())
+ *   }
+ *   return "some result"
+ * })
+ *
+ * const recovered = program.pipe(
+ *   Effect.catchIf(
+ *     (error) => error._tag === "HttpError",
+ *     () => Effect.succeed("Recovering from HttpError")
+ *   )
+ * )
+ * ```
+ *
+ * @since 2.0.0
+ * @category Error handling
+ */
+export const catchIf: {
+  <E, EB extends E, A2, E2, R2>(
+    refinement: Predicate.Refinement<NoInfer<E>, EB>,
+    f: (e: EB) => Effect<A2, E2, R2>
+  ): <A, R>(self: Effect<A, E, R>) => Effect<A2 | A, E2 | Exclude<E, EB>, R2 | R>
+  <E, A2, E2, R2>(
+    predicate: Predicate.Predicate<NoInfer<E>>,
+    f: (e: NoInfer<E>) => Effect<A2, E2, R2>
+  ): <A, R>(self: Effect<A, E, R>) => Effect<A2 | A, E | E2, R2 | R>
+  <A, E, R, EB extends E, A2, E2, R2>(
+    self: Effect<A, E, R>,
+    refinement: Predicate.Refinement<E, EB>,
+    f: (e: EB) => Effect<A2, E2, R2>
+  ): Effect<A | A2, E2 | Exclude<E, EB>, R | R2>
+  <A, E, R, A2, E2, R2>(
+    self: Effect<A, E, R>,
+    predicate: Predicate.Predicate<E>,
+    f: (e: E) => Effect<A2, E2, R2>
+  ): Effect<A | A2, E | E2, R | R2>
+} = internal.catchIf
+
+/**
+ * Recovers from specific errors using a `Filter`.
+ *
+ * **When to Use**
+ *
+ * `catchFilter` lets you recover from errors with a `Filter` from the `Filter`
+ * module. If the filter matches the error, the recovery effect is applied. This
+ * function doesn't alter the error type, so the resulting effect still carries
+ * the original error type unless a type-guarding filter narrows the type.
+ *
  * @example
  * ```ts
- * import { Effect } from "effect"
+ * import { Effect, Filter } from "effect"
  *
  * // An effect that might fail with a number
  * const program = Effect.fail(42)
@@ -2886,7 +2952,7 @@ export const catchDefect: {
  * // Recover only from specific error values
  * const recovered = Effect.catchFilter(
  *   program,
- *   (error) => error === 42,
+ *   Filter.fromPredicate((error: number) => error === 42),
  *   (error) => Effect.succeed(`Recovered from error: ${error}`)
  * )
  * ```
