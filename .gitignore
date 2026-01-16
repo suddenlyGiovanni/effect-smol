@@ -23,5 +23,6 @@ scratchpad/**/*
 
 # lalph
 .lalph/
+lalph-plan.md
 
 .pnpm-store/
