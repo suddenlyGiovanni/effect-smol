@@ -1,5 +1,7 @@
 #!/bin/bash
 
+npm install -g lalph@latest @anthropic-ai/claude-code@latest opencode-ai@latest
+
 if [ ! -f ~/.local/share/opencode/auth.json ]; then
   opencode auth login
 fi
