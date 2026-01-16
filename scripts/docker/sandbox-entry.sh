@@ -14,4 +14,7 @@ git config --global user.name "$GIT_AUTHOR_NAME"
 git config --global user.email "$GIT_AUTHOR_EMAIL"
 gh auth setup-git
 
+corepack enable
+corepack install
+
 exec /bin/bash

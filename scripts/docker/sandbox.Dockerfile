@@ -22,8 +22,6 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | d
 
 RUN npm install -g lalph@latest @anthropic-ai/claude-code@latest opencode-ai@latest
 
-RUN corepack enable
-
 COPY scripts/docker/sandbox-entry.sh /usr/local/bin/sandbox-entry.sh
 RUN chmod +x /usr/local/bin/sandbox-entry.sh
 
