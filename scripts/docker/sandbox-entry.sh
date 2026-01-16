@@ -1,7 +1,5 @@
 #!/bin/bash
 
-direnv allow
-
 if [ ! -f ~/.local/share/opencode/auth.json ]; then
   opencode auth login
 fi
@@ -9,5 +7,9 @@ fi
 if [ ! -f ~/.config/gh/hosts.yml ]; then
   gh auth login
 fi
+
+git config --global user.name "$GIT_AUTHOR_NAME"
+git config --global user.email "$GIT_AUTHOR_EMAIL"
+gh auth setup-git
 
 exec /bin/bash
