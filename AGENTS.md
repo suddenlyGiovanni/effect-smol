@@ -50,6 +50,11 @@ This is the Effect library repository, focusing on functional programming patter
 - Delete old code when replacing functionality
 - Choose clarity over cleverness in all implementations
 
+### Barrel files
+
+The `index.ts` files are automatically generated. Do not manually edit them. Use
+`pnpm codegen` to regenerate barrel files after adding or removing modules.
+
 ## Testing
 
 - Test files are located in `packages/*/test/` directories for each package
