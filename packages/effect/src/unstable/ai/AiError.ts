@@ -1,77 +1,77 @@
 /**
- * The `AiError` module provides comprehensive error handling for AI operations.
+ * The `AiError` module provides comprehensive, provider-agnostic error handling
+ * for AI operations.
  *
- * This module defines a hierarchy of error types that can occur when working
- * with AI services, including HTTP request/response errors, input/output
- * validation errors, and general runtime errors. All errors follow Effect's
- * structured error patterns and provide detailed context for debugging.
+ * This module uses the `reason` pattern where `AiError` is a top-level
+ * wrapper error containing `module`, `method`, and a `reason` field that holds
+ * the semantic error. This design enables ergonomic error handling while
+ * preserving rich context about failures.
  *
- * ## Error Types
+ * ## Semantic Error Categories
  *
- * - **HttpRequestError**: Errors occurring during HTTP request processing
- * - **HttpResponseError**: Errors occurring during HTTP response processing
- * - **MalformedInput**: Errors when input data doesn't match expected format
- * - **MalformedOutput**: Errors when output data can't be parsed or validated
- * - **UnknownError**: Catch-all for unexpected runtime errors
+ * - **RateLimitError** - Request throttled (429s, provider-specific limits)
+ * - **QuotaExhaustedError** - Account/billing limits reached
+ * - **AuthenticationError** - Invalid/expired credentials
+ * - **ContentPolicyError** - Input/output violated content policy
+ * - **ModelUnavailableError** - Model not available/deprecated
+ * - **ContextLengthError** - Token limit exceeded
+ * - **InvalidRequestError** - Malformed request parameters
+ * - **ProviderInternalError** - Provider-side failures (5xx)
+ * - **AiTimeoutError** - Request timeout
+ * - **NetworkError** - Transport-level failures
+ * - **OutputParseError** - LLM output parsing failures
+ * - **AiUnknownError** - Catch-all for unknown errors
+ *
+ * ## Retryability
+ *
+ * Each reason type has an `isRetryable` getter indicating whether the error is
+ * transient. Some errors also provide a `retryAfter` duration hint.
  *
  * @example
  * ```ts
  * import { Effect, Match } from "effect"
  * import type { AiError } from "effect/unstable/ai"
  *
+ * // Handle errors using Match on the reason
  * const handleAiError = Match.type<AiError.AiError>().pipe(
- *   Match.tag(
- *     "HttpRequestError",
- *     (err) => Effect.logError(`Request failed: ${err.message}`)
+ *   Match.when(
+ *     { reason: { _tag: "RateLimitError" } },
+ *     (err) => Effect.logWarning(`Rate limited, retry after ${err.retryAfter}`)
  *   ),
- *   Match.tag(
- *     "HttpResponseError",
- *     (err) =>
- *       Effect.logError(`Response error (${err.response.status}): ${err.message}`)
+ *   Match.when(
+ *     { reason: { _tag: "AuthenticationError" } },
+ *     (err) => Effect.logError(`Auth failed: ${err.reason.kind}`)
  *   ),
- *   Match.tag(
- *     "MalformedInput",
- *     (err) => Effect.logError(`Invalid input: ${err.message}`)
+ *   Match.when(
+ *     { reason: { isRetryable: true } },
+ *     (err) => Effect.logWarning(`Transient error, retrying: ${err.message}`)
  *   ),
- *   Match.tag(
- *     "MalformedOutput",
- *     (err) => Effect.logError(`Invalid output: ${err.message}`)
- *   ),
- *   Match.orElse((err) => Effect.logError(`Unknown error: ${err.message}`))
+ *   Match.orElse((err) => Effect.logError(`Permanent error: ${err.message}`))
  * )
  * ```
  *
  * @example
  * ```ts
- * import { Effect } from "effect"
+ * import { Duration, Effect } from "effect"
  * import { AiError } from "effect/unstable/ai"
  *
- * const aiOperation = Effect.gen(function*() {
- *   // Some AI operation that might fail
- *   return yield* new AiError.HttpRequestError({
- *     module: "OpenAI",
- *     method: "completion",
- *     reason: "Transport",
- *     request: {
- *       method: "POST",
- *       url: "https://api.openai.com/v1/completions",
- *       urlParams: [],
- *       hash: undefined,
- *       headers: { "Content-Type": "application/json" }
- *     }
+ * // Create an AiError with a reason
+ * const error = AiError.make({
+ *   module: "OpenAI",
+ *   method: "completion",
+ *   reason: new AiError.RateLimitError({
+ *     limit: "requests",
+ *     retryAfter: Duration.seconds(60)
  *   })
  * })
  *
- * const program = aiOperation.pipe(
- *   Effect.catchTag("HttpRequestError", (error) => {
- *     console.log("Request failed:", error.message)
- *     return Effect.succeed("fallback response")
- *   })
- * )
+ * console.log(error.isRetryable) // true
+ * console.log(error.message) // "OpenAI.completion: Rate limit exceeded (requests). Retry after 1 minute"
  * ```
  *
  * @since 4.0.0
  */
+import * as Duration from "../../Duration.ts"
 import * as Effect from "../../Effect.ts"
 import { format } from "../../Formatter.ts"
 import * as Predicate from "../../Predicate.ts"
@@ -79,32 +79,7 @@ import { redact } from "../../Redactable.ts"
 import * as Schema from "../../Schema.ts"
 import type * as HttpClientError from "../http/HttpClientError.ts"
 
-const TypeId = "~effect/unstable/ai/AiError" as const
-
-/**
- * Type guard to check if a value is an AI error.
- *
- * @param u - The value to check
- * @returns `true` if the value is an `AiError`, `false` otherwise
- *
- * @example
- * ```ts
- * import { AiError } from "effect/unstable/ai"
- *
- * const someError = new Error("generic error")
- * const aiError = new AiError.UnknownError({
- *   module: "Test",
- *   method: "example"
- * })
- *
- * console.log(AiError.isAiError(someError)) // false
- * console.log(AiError.isAiError(aiError)) // true
- * ```
- *
- * @since 4.0.0
- * @category guards
- */
-export const isAiError = (u: unknown): u is AiError => Predicate.hasProperty(u, TypeId)
+const LegacyTypeId = "~effect/unstable/ai/AiError" as const
 
 // =============================================================================
 // Http Request Error
@@ -189,7 +164,7 @@ export class HttpRequestError extends Schema.ErrorClass<HttpRequestError>(
   /**
    * @since 4.0.0
    */
-  readonly [TypeId] = TypeId
+  readonly [LegacyTypeId] = LegacyTypeId
 
   /**
    * Creates an HttpRequestError from a platform HttpClientError.RequestError.
@@ -297,6 +272,920 @@ export const HttpResponseDetails = Schema.Struct({
   headers: Schema.Record(Schema.String, Schema.String)
 }).annotate({ identifier: "HttpResponseDetails" })
 
+// =============================================================================
+// Supporting Schemas
+// =============================================================================
+
+/**
+ * Metadata about the AI provider that originated an error.
+ *
+ * @since 4.0.0
+ * @category schemas
+ */
+export const ProviderMetadata = Schema.Struct({
+  name: Schema.String,
+  errorCode: Schema.optional(Schema.String),
+  errorType: Schema.optional(Schema.String),
+  requestId: Schema.optional(Schema.String),
+  raw: Schema.optional(Schema.Unknown)
+}).annotate({ identifier: "ProviderMetadata" })
+
+/**
+ * Token usage information from AI operations.
+ *
+ * @since 4.0.0
+ * @category schemas
+ */
+export const UsageInfo = Schema.Struct({
+  promptTokens: Schema.optional(Schema.Number),
+  completionTokens: Schema.optional(Schema.Number),
+  totalTokens: Schema.optional(Schema.Number)
+}).annotate({ identifier: "UsageInfo" })
+
+/**
+ * Combined HTTP context for error reporting.
+ *
+ * @since 4.0.0
+ * @category schemas
+ */
+export const HttpContext = Schema.Struct({
+  request: HttpRequestDetails,
+  response: Schema.optional(HttpResponseDetails),
+  body: Schema.optional(Schema.String)
+}).annotate({ identifier: "HttpContext" })
+
+// =============================================================================
+// Reason Classes
+// =============================================================================
+
+/**
+ * Error indicating the request was rate limited.
+ *
+ * Rate limit errors are always retryable. When `retryAfter` is provided,
+ * callers should wait that duration before retrying.
+ *
+ * @example
+ * ```ts
+ * import { Duration } from "effect"
+ * import { AiError } from "effect/unstable/ai"
+ *
+ * const rateLimitError = new AiError.RateLimitError({
+ *   limit: "requests",
+ *   remaining: 0,
+ *   retryAfter: Duration.seconds(60)
+ * })
+ *
+ * console.log(rateLimitError.isRetryable) // true
+ * console.log(rateLimitError.message) // "Rate limit exceeded (requests). Retry after 1 minute"
+ * ```
+ *
+ * @since 4.0.0
+ * @category reason
+ */
+export class RateLimitError extends Schema.ErrorClass<RateLimitError>(
+  "effect/ai/AiError/RateLimitError"
+)({
+  _tag: Schema.tag("RateLimitError"),
+  retryAfter: Schema.optional(Schema.Duration),
+  limit: Schema.optional(Schema.String),
+  remaining: Schema.optional(Schema.Number),
+  resetAt: Schema.optional(Schema.DateTimeUtc),
+  provider: Schema.optional(ProviderMetadata),
+  http: Schema.optional(HttpContext),
+  cause: Schema.optional(Schema.Defect)
+}) {
+  /**
+   * Rate limit errors are always retryable.
+   *
+   * @since 4.0.0
+   */
+  get isRetryable(): boolean {
+    return true
+  }
+
+  override get message(): string {
+    let msg = "Rate limit exceeded"
+    if (this.limit) msg += ` (${this.limit})`
+    if (this.retryAfter) msg += `. Retry after ${Duration.format(this.retryAfter)}`
+    return msg
+  }
+}
+
+/**
+ * Error indicating account or billing limits have been reached.
+ *
+ * Quota exhausted errors are not retryable without user action.
+ *
+ * @example
+ * ```ts
+ * import { AiError } from "effect/unstable/ai"
+ *
+ * const quotaError = new AiError.QuotaExhaustedError({
+ *   quotaType: "tokens"
+ * })
+ *
+ * console.log(quotaError.isRetryable) // false
+ * console.log(quotaError.message)
+ * // "Quota exhausted (tokens). Check your account billing and usage limits."
+ * ```
+ *
+ * @since 4.0.0
+ * @category reason
+ */
+export class QuotaExhaustedError extends Schema.ErrorClass<QuotaExhaustedError>(
+  "effect/ai/AiError/QuotaExhaustedError"
+)({
+  _tag: Schema.tag("QuotaExhaustedError"),
+  quotaType: Schema.optional(Schema.String),
+  resetAt: Schema.optional(Schema.DateTimeUtc),
+  provider: Schema.optional(ProviderMetadata),
+  http: Schema.optional(HttpContext),
+  cause: Schema.optional(Schema.Defect)
+}) {
+  /**
+   * Quota exhausted errors require user action and are not retryable.
+   *
+   * @since 4.0.0
+   */
+  get isRetryable(): boolean {
+    return false
+  }
+
+  override get message(): string {
+    let msg = "Quota exhausted"
+    if (this.quotaType) msg += ` (${this.quotaType})`
+    if (this.resetAt) msg += `. Resets at ${this.resetAt}`
+    return `${msg}. Check your account billing and usage limits.`
+  }
+}
+
+/**
+ * Error indicating authentication or authorization failure.
+ *
+ * Authentication errors are never retryable without credential changes.
+ *
+ * @example
+ * ```ts
+ * import { AiError } from "effect/unstable/ai"
+ *
+ * const authError = new AiError.AuthenticationError({
+ *   kind: "InvalidKey"
+ * })
+ *
+ * console.log(authError.isRetryable) // false
+ * console.log(authError.message)
+ * // "InvalidKey: Verify your API key is correct"
+ * ```
+ *
+ * @since 4.0.0
+ * @category reason
+ */
+export class AuthenticationError extends Schema.ErrorClass<AuthenticationError>(
+  "effect/ai/AiError/AuthenticationError"
+)({
+  _tag: Schema.tag("AuthenticationError"),
+  kind: Schema.Literals(["InvalidKey", "ExpiredKey", "MissingKey", "InsufficientPermissions", "Unknown"]),
+  provider: Schema.optional(ProviderMetadata),
+  http: Schema.optional(HttpContext),
+  cause: Schema.optional(Schema.Defect)
+}) {
+  /**
+   * Authentication errors require credential changes and are not retryable.
+   *
+   * @since 4.0.0
+   */
+  get isRetryable(): boolean {
+    return false
+  }
+
+  override get message(): string {
+    const suggestions: Record<string, string> = {
+      InvalidKey: "Verify your API key is correct",
+      ExpiredKey: "Your API key has expired. Generate a new one",
+      MissingKey: "No API key provided. Set the appropriate environment variable",
+      InsufficientPermissions: "Your API key lacks required permissions",
+      Unknown: "Authentication failed. Check your credentials"
+    }
+    return `${this.kind}: ${suggestions[this.kind]}`
+  }
+}
+
+/**
+ * Error indicating content policy violation.
+ *
+ * Content policy errors are never retryable without content changes.
+ *
+ * @example
+ * ```ts
+ * import { AiError } from "effect/unstable/ai"
+ *
+ * const policyError = new AiError.ContentPolicyError({
+ *   violationType: "hate",
+ *   flaggedInput: true
+ * })
+ *
+ * console.log(policyError.isRetryable) // false
+ * console.log(policyError.message)
+ * // "Content policy violation: hate in input"
+ * ```
+ *
+ * @since 4.0.0
+ * @category reason
+ */
+export class ContentPolicyError extends Schema.ErrorClass<ContentPolicyError>(
+  "effect/ai/AiError/ContentPolicyError"
+)({
+  _tag: Schema.tag("ContentPolicyError"),
+  violationType: Schema.optional(Schema.String),
+  flaggedInput: Schema.optional(Schema.Boolean),
+  flaggedOutput: Schema.optional(Schema.Boolean),
+  flaggedContent: Schema.optional(Schema.String),
+  categories: Schema.optional(Schema.Array(Schema.String)),
+  provider: Schema.optional(ProviderMetadata),
+  http: Schema.optional(HttpContext),
+  cause: Schema.optional(Schema.Defect)
+}) {
+  /**
+   * Content policy errors require content changes and are not retryable.
+   *
+   * @since 4.0.0
+   */
+  get isRetryable(): boolean {
+    return false
+  }
+
+  override get message(): string {
+    let msg = "Content policy violation"
+    if (this.violationType) msg += `: ${this.violationType}`
+    if (this.flaggedInput) msg += " in input"
+    if (this.flaggedOutput) msg += " in output"
+    return msg
+  }
+}
+
+/**
+ * Error indicating the requested model is unavailable.
+ *
+ * Model unavailable errors are retryable only for temporary conditions
+ * like `Overloaded` or `Maintenance`.
+ *
+ * @example
+ * ```ts
+ * import { AiError } from "effect/unstable/ai"
+ *
+ * const modelError = new AiError.ModelUnavailableError({
+ *   model: "gpt-5",
+ *   kind: "NotFound",
+ *   alternativeModels: ["gpt-4", "gpt-4-turbo"]
+ * })
+ *
+ * console.log(modelError.isRetryable) // false
+ * console.log(modelError.message)
+ * // "Model 'gpt-5' unavailable: NotFound. Try: gpt-4, gpt-4-turbo"
+ * ```
+ *
+ * @since 4.0.0
+ * @category reason
+ */
+export class ModelUnavailableError extends Schema.ErrorClass<ModelUnavailableError>(
+  "effect/ai/AiError/ModelUnavailableError"
+)({
+  _tag: Schema.tag("ModelUnavailableError"),
+  model: Schema.String,
+  kind: Schema.Literals(["NotFound", "Deprecated", "Overloaded", "Maintenance", "Unknown"]),
+  alternativeModels: Schema.optional(Schema.Array(Schema.String)),
+  provider: Schema.optional(ProviderMetadata),
+  http: Schema.optional(HttpContext),
+  cause: Schema.optional(Schema.Defect)
+}) {
+  /**
+   * Model unavailable errors are retryable only for temporary conditions.
+   *
+   * @since 4.0.0
+   */
+  get isRetryable(): boolean {
+    return this.kind === "Overloaded" || this.kind === "Maintenance"
+  }
+
+  override get message(): string {
+    let msg = `Model '${this.model}' unavailable: ${this.kind}`
+    if (this.alternativeModels && this.alternativeModels.length > 0) {
+      msg += `. Try: ${this.alternativeModels.join(", ")}`
+    }
+    return msg
+  }
+}
+
+/**
+ * Error indicating the request exceeded the model's context length.
+ *
+ * Context length errors require reducing input size and are not retryable.
+ *
+ * @example
+ * ```ts
+ * import { AiError } from "effect/unstable/ai"
+ *
+ * const contextError = new AiError.ContextLengthError({
+ *   maxTokens: 8192,
+ *   requestedTokens: 12000
+ * })
+ *
+ * console.log(contextError.isRetryable) // false
+ * console.log(contextError.message)
+ * // "Context length exceeded: requested 12000 tokens, max 8192. Reduce input size or use a model with larger context window."
+ * ```
+ *
+ * @since 4.0.0
+ * @category reason
+ */
+export class ContextLengthError extends Schema.ErrorClass<ContextLengthError>(
+  "effect/ai/AiError/ContextLengthError"
+)({
+  _tag: Schema.tag("ContextLengthError"),
+  maxTokens: Schema.optional(Schema.Number),
+  requestedTokens: Schema.optional(Schema.Number),
+  provider: Schema.optional(ProviderMetadata),
+  http: Schema.optional(HttpContext),
+  cause: Schema.optional(Schema.Defect)
+}) {
+  /**
+   * Context length errors require reducing input and are not retryable.
+   *
+   * @since 4.0.0
+   */
+  get isRetryable(): boolean {
+    return false
+  }
+
+  override get message(): string {
+    let msg = "Context length exceeded"
+    if (this.requestedTokens && this.maxTokens) {
+      msg += `: requested ${this.requestedTokens} tokens, max ${this.maxTokens}`
+    }
+    return `${msg}. Reduce input size or use a model with larger context window.`
+  }
+}
+
+/**
+ * Error indicating the request had invalid or malformed parameters.
+ *
+ * Invalid request errors require fixing the request and are not retryable.
+ *
+ * @example
+ * ```ts
+ * import { AiError } from "effect/unstable/ai"
+ *
+ * const invalidRequestError = new AiError.InvalidRequestError({
+ *   parameter: "temperature",
+ *   constraint: "must be between 0 and 2",
+ *   description: "Temperature value 5 is out of range"
+ * })
+ *
+ * console.log(invalidRequestError.isRetryable) // false
+ * console.log(invalidRequestError.message)
+ * // "Invalid request: parameter 'temperature' must be between 0 and 2. Temperature value 5 is out of range"
+ * ```
+ *
+ * @since 4.0.0
+ * @category reason
+ */
+export class InvalidRequestError extends Schema.ErrorClass<InvalidRequestError>(
+  "effect/ai/AiError/InvalidRequestError"
+)({
+  _tag: Schema.tag("InvalidRequestError"),
+  parameter: Schema.optional(Schema.String),
+  constraint: Schema.optional(Schema.String),
+  description: Schema.optional(Schema.String),
+  provider: Schema.optional(ProviderMetadata),
+  http: Schema.optional(HttpContext),
+  cause: Schema.optional(Schema.Defect)
+}) {
+  /**
+   * Invalid request errors require fixing the request and are not retryable.
+   *
+   * @since 4.0.0
+   */
+  get isRetryable(): boolean {
+    return false
+  }
+
+  override get message(): string {
+    let msg = "Invalid request"
+    if (this.parameter) msg += `: parameter '${this.parameter}'`
+    if (this.constraint) msg += ` ${this.constraint}`
+    if (this.description) msg += `. ${this.description}`
+    return msg
+  }
+}
+
+/**
+ * Error indicating the AI provider experienced an internal error.
+ *
+ * Provider internal errors are typically transient and are retryable.
+ *
+ * @example
+ * ```ts
+ * import { Duration } from "effect"
+ * import { AiError } from "effect/unstable/ai"
+ *
+ * const providerError = new AiError.ProviderInternalError({
+ *   retryAfter: Duration.seconds(30)
+ * })
+ *
+ * console.log(providerError.isRetryable) // true
+ * console.log(providerError.message)
+ * // "Provider internal error. Retry after 30 seconds. This is likely temporary."
+ * ```
+ *
+ * @since 4.0.0
+ * @category reason
+ */
+export class ProviderInternalError extends Schema.ErrorClass<ProviderInternalError>(
+  "effect/ai/AiError/ProviderInternalError"
+)({
+  _tag: Schema.tag("ProviderInternalError"),
+  retryAfter: Schema.optional(Schema.Duration),
+  provider: Schema.optional(ProviderMetadata),
+  http: Schema.optional(HttpContext),
+  cause: Schema.optional(Schema.Defect)
+}) {
+  /**
+   * Provider internal errors are typically transient and are retryable.
+   *
+   * @since 4.0.0
+   */
+  get isRetryable(): boolean {
+    return true
+  }
+
+  override get message(): string {
+    let msg = "Provider internal error"
+    if (this.provider?.name) msg = `${this.provider.name} internal error`
+    if (this.retryAfter) msg += `. Retry after ${Duration.format(this.retryAfter)}`
+    return `${msg}. This is likely temporary.`
+  }
+}
+
+/**
+ * Error indicating a request timeout.
+ *
+ * Timeout errors are typically transient and are retryable.
+ *
+ * @example
+ * ```ts
+ * import { Duration } from "effect"
+ * import { AiError } from "effect/unstable/ai"
+ *
+ * const timeoutError = new AiError.AiTimeoutError({
+ *   phase: "Response",
+ *   duration: Duration.seconds(30)
+ * })
+ *
+ * console.log(timeoutError.isRetryable) // true
+ * console.log(timeoutError.message)
+ * // "Response timeout after 30 seconds"
+ * ```
+ *
+ * @since 4.0.0
+ * @category reason
+ */
+export class AiTimeoutError extends Schema.ErrorClass<AiTimeoutError>(
+  "effect/ai/AiError/AiTimeoutError"
+)({
+  _tag: Schema.tag("AiTimeoutError"),
+  phase: Schema.Literals(["Connection", "Request", "Response"]),
+  duration: Schema.optional(Schema.Duration),
+  provider: Schema.optional(ProviderMetadata),
+  http: Schema.optional(HttpContext),
+  cause: Schema.optional(Schema.Defect)
+}) {
+  /**
+   * Timeout errors are typically transient and are retryable.
+   *
+   * @since 4.0.0
+   */
+  get isRetryable(): boolean {
+    return true
+  }
+
+  override get message(): string {
+    let msg = `${this.phase} timeout`
+    if (this.duration) msg += ` after ${Duration.format(this.duration)}`
+    return msg
+  }
+}
+
+/**
+ * Error indicating a network-level failure.
+ *
+ * Network errors are typically transient and are retryable.
+ *
+ * @example
+ * ```ts
+ * import { AiError } from "effect/unstable/ai"
+ *
+ * const networkError = new AiError.NetworkError({
+ *   kind: "ConnectionRefused"
+ * })
+ *
+ * console.log(networkError.isRetryable) // true
+ * console.log(networkError.message)
+ * // "ConnectionRefused: Check network connectivity and firewall settings"
+ * ```
+ *
+ * @since 4.0.0
+ * @category reason
+ */
+export class NetworkError extends Schema.ErrorClass<NetworkError>(
+  "effect/ai/AiError/NetworkError"
+)({
+  _tag: Schema.tag("NetworkError"),
+  kind: Schema.Literals(["ConnectionRefused", "DnsLookupFailed", "TlsError", "Unknown"]),
+  http: Schema.optional(HttpContext),
+  cause: Schema.optional(Schema.Defect)
+}) {
+  /**
+   * Network errors are typically transient and are retryable.
+   *
+   * @since 4.0.0
+   */
+  get isRetryable(): boolean {
+    return true
+  }
+
+  override get message(): string {
+    const suggestions: Record<string, string> = {
+      ConnectionRefused: "Check network connectivity and firewall settings",
+      DnsLookupFailed: "Verify the API endpoint hostname is correct",
+      TlsError: "TLS/SSL handshake failed. Check certificate validity",
+      Unknown: "Network error occurred. Check your connection"
+    }
+    return `${this.kind}: ${suggestions[this.kind]}`
+  }
+}
+
+/**
+ * Error indicating failure to parse LLM output.
+ *
+ * Output parse errors are retryable since LLM outputs are non-deterministic.
+ *
+ * @example
+ * ```ts
+ * import { AiError } from "effect/unstable/ai"
+ *
+ * const parseError = new AiError.OutputParseError({
+ *   rawOutput: '{"invalid": json}',
+ *   expectedSchema: "UserResponse"
+ * })
+ *
+ * console.log(parseError.isRetryable) // true
+ * console.log(parseError.message)
+ * // "Failed to parse LLM output into expected schema"
+ * ```
+ *
+ * @since 4.0.0
+ * @category reason
+ */
+export class OutputParseError extends Schema.ErrorClass<OutputParseError>(
+  "effect/ai/AiError/OutputParseError"
+)({
+  _tag: Schema.tag("OutputParseError"),
+  rawOutput: Schema.optional(Schema.String),
+  expectedSchema: Schema.optional(Schema.String),
+  provider: Schema.optional(ProviderMetadata),
+  usage: Schema.optional(UsageInfo),
+  cause: Schema.optional(Schema.Defect)
+}) {
+  /**
+   * Output parse errors are retryable since LLM outputs are non-deterministic.
+   *
+   * @since 4.0.0
+   */
+  get isRetryable(): boolean {
+    return true
+  }
+
+  /**
+   * Creates an OutputParseError from a Schema error.
+   *
+   * @example
+   * ```ts
+   * import { Schema } from "effect"
+   * import { AiError } from "effect/unstable/ai"
+   *
+   * declare const schemaError: Schema.SchemaError
+   *
+   * const parseError = AiError.OutputParseError.fromSchemaError({
+   *   rawOutput: "invalid json",
+   *   error: schemaError
+   * })
+   * ```
+   *
+   * @since 4.0.0
+   * @category constructors
+   */
+  static fromSchemaError(params: {
+    readonly rawOutput?: string
+    readonly error: Schema.SchemaError
+  }): OutputParseError {
+    return new OutputParseError({
+      rawOutput: params.rawOutput,
+      cause: params.error
+    })
+  }
+
+  override get message(): string {
+    return "Failed to parse LLM output into expected schema"
+  }
+}
+
+/**
+ * Catch-all error for unknown or unexpected errors.
+ *
+ * Unknown errors are not retryable by default since the cause is unknown.
+ *
+ * @example
+ * ```ts
+ * import { AiError } from "effect/unstable/ai"
+ *
+ * const unknownError = new AiError.AiUnknownError({
+ *   description: "An unexpected error occurred"
+ * })
+ *
+ * console.log(unknownError.isRetryable) // false
+ * console.log(unknownError.message)
+ * // "An unexpected error occurred"
+ * ```
+ *
+ * @since 4.0.0
+ * @category reason
+ */
+export class AiUnknownError extends Schema.ErrorClass<AiUnknownError>(
+  "effect/ai/AiError/AiUnknownError"
+)({
+  _tag: Schema.tag("AiUnknownError"),
+  description: Schema.optional(Schema.String),
+  provider: Schema.optional(ProviderMetadata),
+  http: Schema.optional(HttpContext),
+  cause: Schema.optional(Schema.Defect)
+}) {
+  /**
+   * Unknown errors are not retryable by default.
+   *
+   * @since 4.0.0
+   */
+  get isRetryable(): boolean {
+    return false
+  }
+
+  override get message(): string {
+    return this.description ?? "Unknown error"
+  }
+}
+
+// =============================================================================
+// AiErrorReason Union
+// =============================================================================
+
+/**
+ * Union type of all semantic error reasons that can occur during AI operations.
+ *
+ * Each reason type provides:
+ * - Semantic categorization of the failure mode
+ * - `isRetryable` getter indicating if the error is transient
+ * - Optional `retryAfter` duration for rate limit/throttling errors
+ * - Rich context including provider metadata and HTTP details
+ *
+ * @since 4.0.0
+ * @category models
+ */
+export type AiErrorReason =
+  | RateLimitError
+  | QuotaExhaustedError
+  | AuthenticationError
+  | ContentPolicyError
+  | ModelUnavailableError
+  | ContextLengthError
+  | InvalidRequestError
+  | ProviderInternalError
+  | AiTimeoutError
+  | NetworkError
+  | OutputParseError
+  | AiUnknownError
+
+/**
+ * Schema for validating and parsing AI error reasons.
+ *
+ * @since 4.0.0
+ * @category schemas
+ */
+export const AiErrorReason: Schema.Union<[
+  typeof RateLimitError,
+  typeof QuotaExhaustedError,
+  typeof AuthenticationError,
+  typeof ContentPolicyError,
+  typeof ModelUnavailableError,
+  typeof ContextLengthError,
+  typeof InvalidRequestError,
+  typeof ProviderInternalError,
+  typeof AiTimeoutError,
+  typeof NetworkError,
+  typeof OutputParseError,
+  typeof AiUnknownError
+]> = Schema.Union([
+  RateLimitError,
+  QuotaExhaustedError,
+  AuthenticationError,
+  ContentPolicyError,
+  ModelUnavailableError,
+  ContextLengthError,
+  InvalidRequestError,
+  ProviderInternalError,
+  AiTimeoutError,
+  NetworkError,
+  OutputParseError,
+  AiUnknownError
+])
+
+// =============================================================================
+// Top-Level AiError
+// =============================================================================
+
+const TypeId = "~effect/unstable/ai/AiError/AiError" as const
+
+/**
+ * Top-level AI error wrapper using the `reason` pattern.
+ *
+ * This error wraps semantic error reasons and provides:
+ * - `module` and `method` context for where the error occurred
+ * - `reason` field containing the semantic error type
+ * - Delegated `isRetryable` and `retryAfter` to the underlying reason
+ *
+ * Use with `Effect.catchReason` for ergonomic error handling:
+ *
+ * @example
+ * ```ts
+ * import { Effect } from "effect"
+ * import { AiError } from "effect/unstable/ai"
+ *
+ * declare const aiOperation: Effect.Effect<string, AiError.AiError>
+ *
+ * // Handle specific reason types
+ * const handled = aiOperation.pipe(
+ *   Effect.catchTag("AiError", (error) => {
+ *     if (error.reason._tag === "RateLimitError") {
+ *       return Effect.succeed(`Retry after ${error.retryAfter}`)
+ *     }
+ *     return Effect.fail(error)
+ *   })
+ * )
+ * ```
+ *
+ * @since 4.0.0
+ * @category schemas
+ */
+export class AiError extends Schema.ErrorClass<AiError>(
+  "effect/ai/AiError/AiError"
+)({
+  _tag: Schema.tag("AiError"),
+  module: Schema.String,
+  method: Schema.String,
+  reason: AiErrorReason
+}) {
+  /**
+   * @since 4.0.0
+   */
+  readonly [TypeId] = TypeId
+
+  /**
+   * Delegates to the underlying reason's `isRetryable` getter.
+   *
+   * @since 4.0.0
+   */
+  get isRetryable(): boolean {
+    return this.reason.isRetryable
+  }
+
+  /**
+   * Delegates to the underlying reason's `retryAfter` if present.
+   *
+   * @since 4.0.0
+   */
+  get retryAfter(): Duration.Duration | undefined {
+    return "retryAfter" in this.reason ? this.reason.retryAfter : undefined
+  }
+
+  override get message(): string {
+    return `${this.module}.${this.method}: ${this.reason.message}`
+  }
+}
+
+/**
+ * Type guard to check if a value is an `AiError`.
+ *
+ * @param u - The value to check
+ * @returns `true` if the value is an `AiError`, `false` otherwise
+ *
+ * @example
+ * ```ts
+ * import { AiError } from "effect/unstable/ai"
+ *
+ * const someError = new Error("generic error")
+ * const aiError = AiError.make({
+ *   module: "Test",
+ *   method: "example",
+ *   reason: new AiError.RateLimitError({})
+ * })
+ *
+ * console.log(AiError.isAiError(someError)) // false
+ * console.log(AiError.isAiError(aiError)) // true
+ * ```
+ *
+ * @since 4.0.0
+ * @category guards
+ */
+export const isAiError = (u: unknown): u is AiError => Predicate.hasProperty(u, TypeId)
+
+/**
+ * Creates an `AiError` with the given reason.
+ *
+ * @example
+ * ```ts
+ * import { Duration } from "effect"
+ * import { AiError } from "effect/unstable/ai"
+ *
+ * const error = AiError.make({
+ *   module: "OpenAI",
+ *   method: "completion",
+ *   reason: new AiError.RateLimitError({
+ *     limit: "requests",
+ *     retryAfter: Duration.seconds(60)
+ *   })
+ * })
+ *
+ * console.log(error.message)
+ * // "OpenAI.completion: Rate limit exceeded (requests). Retry after 1 minute"
+ * ```
+ *
+ * @since 4.0.0
+ * @category constructors
+ */
+export const make = (params: {
+  readonly module: string
+  readonly method: string
+  readonly reason: AiErrorReason
+}): AiError => new AiError(params)
+
+/**
+ * Maps HTTP status codes to semantic error reasons.
+ *
+ * Provider packages can use this as a base for provider-specific mapping.
+ *
+ * @example
+ * ```ts
+ * import { AiError } from "effect/unstable/ai"
+ *
+ * const reason = AiError.reasonFromHttpStatus({
+ *   status: 429,
+ *   body: { error: "Rate limit exceeded" }
+ * })
+ *
+ * console.log(reason._tag) // "RateLimitError"
+ * ```
+ *
+ * @since 4.0.0
+ * @category constructors
+ */
+export const reasonFromHttpStatus = (params: {
+  readonly status: number
+  readonly body?: unknown
+  readonly http?: typeof HttpContext.Type
+  readonly provider?: typeof ProviderMetadata.Type
+}): AiErrorReason => {
+  const { status, body, http, provider } = params
+  switch (status) {
+    case 400:
+      return new InvalidRequestError({ http, provider, cause: body })
+    case 401:
+      return new AuthenticationError({ kind: "InvalidKey", http, provider, cause: body })
+    case 403:
+      return new AuthenticationError({ kind: "InsufficientPermissions", http, provider, cause: body })
+    case 408:
+      return new AiTimeoutError({ phase: "Request", http, provider, cause: body })
+    case 429:
+      return new RateLimitError({ http, provider, cause: body })
+    default:
+      if (status >= 500) {
+        return new ProviderInternalError({ http, provider, cause: body })
+      }
+      return new AiUnknownError({ http, provider, cause: body })
+  }
+}
+
+// =============================================================================
+// Deprecated Error Types (To Be Removed in Phase 5)
+// =============================================================================
+
 /**
  * Error that occurs during HTTP response processing.
  *
@@ -348,7 +1237,7 @@ export class HttpResponseError extends Schema.ErrorClass<HttpResponseError>(
   /**
    * @since 4.0.0
    */
-  readonly [TypeId] = TypeId
+  readonly [LegacyTypeId] = LegacyTypeId
 
   /**
    * Creates an HttpResponseError from a platform HttpClientError.ResponseError.
@@ -497,7 +1386,7 @@ export class MalformedInput extends Schema.ErrorClass<MalformedInput>(
   /**
    * @since 4.0.0
    */
-  readonly [TypeId] = TypeId
+  readonly [LegacyTypeId] = LegacyTypeId
 }
 
 // =============================================================================
@@ -555,7 +1444,7 @@ export class MalformedOutput extends Schema.ErrorClass<MalformedOutput>(
   /**
    * @since 4.0.0
    */
-  readonly [TypeId] = TypeId
+  readonly [LegacyTypeId] = LegacyTypeId
 
   /**
    * Creates a MalformedOutput error from a Schema ParseError.
@@ -655,7 +1544,7 @@ export class UnknownError extends Schema.ErrorClass<UnknownError>(
   /**
    * @since 4.0.0
    */
-  readonly [TypeId] = TypeId
+  readonly [LegacyTypeId] = LegacyTypeId
 
   /**
    * @since 4.0.0
@@ -667,96 +1556,6 @@ export class UnknownError extends Schema.ErrorClass<UnknownError>(
       : `${moduleMethod}: ${this.description}`
   }
 }
-
-// =============================================================================
-// AiError
-// =============================================================================
-
-/**
- * Union type representing all possible AI operation errors.
- *
- * This type encompasses all error cases that can occur during AI operations,
- * providing a comprehensive error handling surface for applications.
- *
- * @example
- * ```ts
- * import { Match } from "effect"
- * import type { AiError } from "effect/unstable/ai"
- *
- * const handleAnyAiError = Match.type<AiError.AiError>().pipe(
- *   Match.tag("HttpRequestError", (err) => `Network error: ${err.reason}`),
- *   Match.tag(
- *     "HttpResponseError",
- *     (err) => `Server error: HTTP ${err.response.status}`
- *   ),
- *   Match.tag(
- *     "MalformedInput",
- *     (err) => `Invalid input: ${err.description || "Data validation failed"}`
- *   ),
- *   Match.tag(
- *     "MalformedOutput",
- *     (err) => `Invalid response: ${err.description || "Response parsing failed"}`
- *   ),
- *   Match.orElse((err) => `Unknown error: ${err.message}`)
- * )
- * ```
- *
- * @since 4.0.0
- * @category models
- */
-export type AiError =
-  | HttpRequestError
-  | HttpResponseError
-  | MalformedInput
-  | MalformedOutput
-  | UnknownError
-
-/**
- * Schema for validating and parsing AI errors.
- *
- * This schema can be used to decode unknown values into properly typed AI
- * errors, ensuring type safety when handling errors from external sources or
- * serialized data.
- *
- * @example
- * ```ts
- * import { Effect, Schema } from "effect"
- * import { AiError } from "effect/unstable/ai"
- *
- * const parseAiError = (data: unknown) =>
- *   Schema.decodeUnknownEffect(AiError.AiError)(data).pipe(
- *     Effect.map((error) => {
- *       console.log(`Parsed AI error: ${error._tag}`)
- *       return error
- *     }),
- *     Effect.catch(() =>
- *       Effect.succeed(
- *         new AiError.UnknownError({
- *           module: "Parser",
- *           method: "parseAiError",
- *           description: "Failed to parse error data"
- *         })
- *       )
- *     )
- *   )
- * ```
- *
- * @since 4.0.0
- * @category schemas
- */
-export const AiError: Schema.Union<[
-  typeof HttpRequestError,
-  typeof HttpResponseError,
-  typeof MalformedInput,
-  typeof MalformedOutput,
-  typeof UnknownError
-]> = Schema.Union([
-  HttpRequestError,
-  HttpResponseError,
-  MalformedInput,
-  MalformedOutput,
-  UnknownError
-])
 
 // =============================================================================
 // Utilities
