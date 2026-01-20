@@ -3190,16 +3190,10 @@ export const filterMapArray: {
   self: Channel<Arr.NonEmptyReadonlyArray<OutElem>, OutErr, OutDone, InElem, InErr, InDone, Env>,
   filter: Filter.Filter<OutElem, B, X>
 ): Channel<Arr.NonEmptyReadonlyArray<B>, OutErr, OutDone, InElem, InErr, InDone, Env> =>
-  transformPull(self, (pull) =>
-    Effect.succeed(Effect.flatMap(
-      pull,
-      function loop(arr): Pull.Pull<Arr.NonEmptyReadonlyArray<B>, OutErr, OutDone> {
-        const [passes] = Arr.partitionFilter(arr, filter)
-        return Arr.isReadonlyArrayNonEmpty(passes)
-          ? Effect.succeed(passes)
-          : Effect.flatMap(pull, loop)
-      }
-    ))))
+  filterMap(self, (arr) => {
+    const [passes] = Arr.partitionFilter(arr, filter)
+    return Arr.isReadonlyArrayNonEmpty(passes) ? passes : Filter.failVoid
+  }))
 
 /**
  * @since 4.0.0
@@ -3219,19 +3213,11 @@ export const filterMapArrayEffect: {
   self: Channel<Arr.NonEmptyReadonlyArray<OutElem>, OutErr, OutDone, InElem, InErr, InDone, Env>,
   filter: Filter.FilterEffect<OutElem, B, X, EX, RX>
 ): Channel<Arr.NonEmptyReadonlyArray<B>, OutErr | EX, OutDone, InElem, InErr, InDone, Env | RX> =>
-  transformPull(self, (pull) =>
-    Effect.succeed(Effect.flatMap(
-      pull,
-      function loop(arr): Pull.Pull<Arr.NonEmptyReadonlyArray<B>, OutErr | EX, OutDone, RX> {
-        return Effect.flatMap(
-          Effect.filterMap(arr, filter),
-          (passes) =>
-            Arr.isReadonlyArrayNonEmpty(passes)
-              ? Effect.succeed(passes)
-              : Effect.flatMap(pull, loop)
-        )
-      }
-    ))))
+  filterMapEffect(self, (arr) =>
+    Effect.map(
+      Effect.filterMap(arr, filter),
+      (passes) => Arr.isReadonlyArrayNonEmpty(passes) ? passes : Filter.failVoid
+    )))
 
 /**
  * Statefully maps over a channel with an accumulator, where each element can produce multiple output values.
