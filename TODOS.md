@@ -14,7 +14,7 @@ Releases are snapshot only
 - [x] Port Stream / Sink apis
 - [x] Add opentelemetry package
 - [x] Add Atom package
-- [ ] Use Predicate for filtering functions
+- [x] Use Predicate for filtering functions
 - [ ] Add AI provider packages
 
 ## Beta
