@@ -1,11 +1,10 @@
 /**
  * @since 4.0.0
  */
+import type * as Config from "../../Config.ts"
 import type * as Effect from "../../Effect.ts"
-import type * as FileSystem from "../../FileSystem.ts"
 import { dual, type LazyArg } from "../../Function.ts"
 import type * as Option from "../../Option.ts"
-import type * as Path from "../../Path.ts"
 import type * as Redacted from "../../Redacted.ts"
 import type * as Result from "../../Result.ts"
 import type * as Schema from "../../Schema.ts"
@@ -13,6 +12,7 @@ import type * as CliError from "./CliError.ts"
 import type { Environment } from "./Command.ts"
 import * as Param from "./Param.ts"
 import type * as Primitive from "./Primitive.ts"
+import type * as Prompt from "./Prompt.ts"
 
 // -------------------------------------------------------------------------------------
 // models
@@ -315,6 +315,47 @@ export const withDefault: {
 } = dual(2, <A>(self: Argument<A>, defaultValue: A) => Param.withDefault(self, defaultValue))
 
 /**
+ * Adds a fallback config that is loaded when a required argument is missing.
+ *
+ * @example
+ * ```ts
+ * import { Config } from "effect"
+ * import { Argument } from "effect/unstable/cli"
+ *
+ * const repository = Argument.string("repository").pipe(
+ *   Argument.withFallbackConfig(Config.string("REPOSITORY"))
+ * )
+ * ```
+ *
+ * @since 4.0.0
+ * @category combinators
+ */
+export const withFallbackConfig: {
+  <B>(config: Config.Config<B>): <A>(self: Argument<A>) => Argument<A | B>
+  <A, B>(self: Argument<A>, config: Config.Config<B>): Argument<A | B>
+} = dual(2, <A, B>(self: Argument<A>, config: Config.Config<B>) => Param.withFallbackConfig(self, config))
+
+/**
+ * Adds a fallback prompt that is shown when a required argument is missing.
+ *
+ * @example
+ * ```ts
+ * import { Argument, Prompt } from "effect/unstable/cli"
+ *
+ * const filename = Argument.string("filename").pipe(
+ *   Argument.withFallbackPrompt(Prompt.text({ message: "Filename" }))
+ * )
+ * ```
+ *
+ * @since 4.0.0
+ * @category combinators
+ */
+export const withFallbackPrompt: {
+  <B>(prompt: Prompt.Prompt<B>): <A>(self: Argument<A>) => Argument<A | B>
+  <A, B>(self: Argument<A>, prompt: Prompt.Prompt<B>): Argument<A | B>
+} = dual(2, <A, B>(self: Argument<A>, prompt: Prompt.Prompt<B>) => Param.withFallbackPrompt(self, prompt))
+
+/**
  * Creates a variadic positional argument that accepts multiple values.
  *
  * @example
@@ -400,7 +441,7 @@ export const mapEffect: {
   ): Argument<B>
 } = dual(2, <A, B>(
   self: Argument<A>,
-  f: (a: A) => Effect.Effect<B, CliError.CliError, FileSystem.FileSystem | Path.Path>
+  f: (a: A) => Effect.Effect<B, CliError.CliError, Environment>
 ) => Param.mapEffect(self, f))
 
 /**
