@@ -688,6 +688,71 @@ export const pipeTo: {
 )
 
 /**
+ * Prefix a command with another command.
+ *
+ * For pipelines, only the leftmost command is prefixed.
+ *
+ * @example
+ * ```ts
+ * import { ChildProcess } from "effect/unstable/process"
+ *
+ * const command = ChildProcess.make`echo "foo"`
+ *
+ * const prefixed = command.pipe(
+ *   ChildProcess.prefix`time`
+ * )
+ *
+ * // now prefixed will execute `time echo "foo"`
+ * ```
+ *
+ * @since 4.0.0
+ * @category Combinators
+ */
+export const prefix: {
+  (command: string, args?: ReadonlyArray<string>): (self: Command) => Command
+  (templates: TemplateStringsArray, ...expressions: ReadonlyArray<TemplateExpression>): (self: Command) => Command
+  (self: Command, command: string, args?: ReadonlyArray<string>): Command
+} = function prefix(...args: Array<unknown>): any {
+  if (isCommand(args[0]) && args.length > 1) {
+    const [self, ...rest] = args as [Command, ...Array<unknown>]
+    const prefixSpec = parsePrefixArgs(rest)
+    return applyPrefix(self, prefixSpec)
+  }
+  const prefixSpec = parsePrefixArgs(args)
+  return (self: Command): Command => applyPrefix(self, prefixSpec)
+}
+
+type PrefixSpec = {
+  readonly command: string
+  readonly args: ReadonlyArray<string>
+}
+
+const parsePrefixArgs = (args: ReadonlyArray<unknown>): PrefixSpec => {
+  if (isTemplateString(args[0])) {
+    const [templates, ...expressions] = args as [TemplateStringsArray, ...ReadonlyArray<TemplateExpression>]
+    const tokens = parseTemplates(templates, expressions)
+    return { command: tokens[0] ?? "", args: tokens.slice(1) }
+  }
+  const [command, cmdArgs = []] = args as [string, ReadonlyArray<string>?]
+  return { command, args: cmdArgs }
+}
+
+const applyPrefix = (self: Command, prefixSpec: PrefixSpec): Command => {
+  switch (self._tag) {
+    case "StandardCommand": {
+      return makeStandardCommand(
+        prefixSpec.command,
+        [...prefixSpec.args, self.command, ...self.args],
+        self.options
+      )
+    }
+    case "PipedCommand": {
+      return makePipedCommand(applyPrefix(self.left, prefixSpec), self.right, self.options)
+    }
+  }
+}
+
+/**
  * Set the current working directory for a command.
  *
  * For pipelines, applies to each command in the pipeline.
