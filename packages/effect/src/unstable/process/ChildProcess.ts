@@ -40,7 +40,6 @@
  *
  * @since 4.0.0
  */
-import * as Arr from "../../Array.ts"
 import type * as Duration from "../../Duration.ts"
 import * as Effect from "../../Effect.ts"
 import { dual } from "../../Function.ts"
@@ -621,7 +620,7 @@ export const make: {
   if (isTemplateString(args[0])) {
     const [templates, ...expressions] = args as [TemplateStringsArray, ...ReadonlyArray<TemplateExpression>]
     const tokens = parseTemplates(templates, expressions)
-    return makeStandardCommand(tokens[0], tokens.slice(1), {})
+    return makeStandardCommand(tokens[0] ?? "", tokens.slice(1), {})
   }
 
   // Options form: make({ cwd: "/tmp" })`command`
@@ -632,7 +631,7 @@ export const make: {
       ...expressions: ReadonlyArray<TemplateExpression>
     ): StandardCommand {
       const tokens = parseTemplates(templates, expressions)
-      return makeStandardCommand(tokens[0], tokens.slice(1), options)
+      return makeStandardCommand(tokens[0] ?? "", tokens.slice(1), options)
     }
   }
 
@@ -709,7 +708,7 @@ export const setCwd: {
   (cwd: string): (self: Command) => Command
   (self: Command, cwd: string): Command
 } = dual(
-  (args) => isCommand(args[0]),
+  2,
   (self: Command, cwd: string): Command => {
     switch (self._tag) {
       case "StandardCommand": {
@@ -907,18 +906,12 @@ export const fdName = (fd: number): string => `fd${fd}`
 const parseTemplates = (
   templates: TemplateStringsArray,
   expressions: ReadonlyArray<TemplateExpression>
-): Arr.NonEmptyReadonlyArray<string> => {
+): ReadonlyArray<string> => {
   let tokens: ReadonlyArray<string> = []
-
   for (const [index, template] of templates.entries()) {
     tokens = parseTemplate(templates, expressions, tokens, template, index)
   }
-
-  if (Arr.isReadonlyArrayNonEmpty(tokens)) {
-    return tokens
-  }
-
-  return [""]
+  return tokens
 }
 
 const parseTemplate = (
