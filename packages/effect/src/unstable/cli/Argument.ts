@@ -309,8 +309,13 @@ export const withDescription: {
  * @category combinators
  */
 export const withDefault: {
-  <A>(defaultValue: A | Effect.Effect<A, CliError.CliError, Param.Environment>): (self: Argument<A>) => Argument<A>
-  <A>(self: Argument<A>, defaultValue: A | Effect.Effect<A, CliError.CliError, Param.Environment>): Argument<A>
+  <const B>(
+    defaultValue: B | Effect.Effect<B, CliError.CliError, Param.Environment>
+  ): <A>(self: Argument<A>) => Argument<A | B>
+  <A, const B>(
+    self: Argument<A>,
+    defaultValue: B | Effect.Effect<B, CliError.CliError, Param.Environment>
+  ): Argument<A | B>
 } = Param.withDefault
 
 /**

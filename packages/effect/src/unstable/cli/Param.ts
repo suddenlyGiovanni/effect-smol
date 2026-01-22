@@ -1137,22 +1137,22 @@ export const optional = <Kind extends ParamKind, A>(
  * @category combinators
  */
 export const withDefault: {
-  <A>(
-    defaultValue: A | Effect.Effect<A, CliError.CliError, Environment>
-  ): <Kind extends ParamKind>(self: Param<Kind, A>) => Param<Kind, A>
-  <Kind extends ParamKind, A>(
+  <const B>(
+    defaultValue: B | Effect.Effect<B, CliError.CliError, Environment>
+  ): <Kind extends ParamKind, A>(self: Param<Kind, A>) => Param<Kind, A | B>
+  <Kind extends ParamKind, A, const B>(
     self: Param<Kind, A>,
-    defaultValue: A | Effect.Effect<A, CliError.CliError, Environment>
-  ): Param<Kind, A>
-} = dual(2, <Kind extends ParamKind, A>(
+    defaultValue: B | Effect.Effect<B, CliError.CliError, Environment>
+  ): Param<Kind, A | B>
+} = dual(2, <Kind extends ParamKind, A, const B>(
   self: Param<Kind, A>,
-  defaultValue: A | Effect.Effect<A, CliError.CliError, Environment>
-) => {
+  defaultValue: B | Effect.Effect<B, CliError.CliError, Environment>
+): Param<Kind, A | B> => {
   if (!Effect.isEffect(defaultValue)) {
     return map(optional(self), Option.getOrElse(() => defaultValue))
   }
   return mapEffect(
-    optional(self),
+    optional(self as Param<Kind, A | B>),
     Option.match({
       onNone: () => defaultValue,
       onSome: Effect.succeed

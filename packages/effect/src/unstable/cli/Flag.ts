@@ -494,8 +494,8 @@ export const optional = <A>(param: Flag<A>): Flag<Option.Option<A>> => Param.opt
  * @category optionality
  */
 export const withDefault: {
-  <A>(defaultValue: A | Effect.Effect<A, CliError.CliError, Param.Environment>): (self: Flag<A>) => Flag<A>
-  <A>(self: Flag<A>, defaultValue: A | Effect.Effect<A, CliError.CliError, Param.Environment>): Flag<A>
+  <const B>(defaultValue: B | Effect.Effect<B, CliError.CliError, Param.Environment>): <A>(self: Flag<A>) => Flag<A | B>
+  <A, const B>(self: Flag<A>, defaultValue: B | Effect.Effect<B, CliError.CliError, Param.Environment>): Flag<A | B>
 } = Param.withDefault
 
 /**
