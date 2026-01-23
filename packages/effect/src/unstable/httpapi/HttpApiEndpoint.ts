@@ -9,7 +9,6 @@ import type { ReadonlyRecord } from "../../Record.ts"
 import * as Schema from "../../Schema.ts"
 import * as ServiceMap from "../../ServiceMap.ts"
 import type * as Stream from "../../Stream.ts"
-import type { Simplify } from "../../Struct.ts"
 import type * as Types from "../../Types.ts"
 import * as UndefinedOr from "../../UndefinedOr.ts"
 import type { HttpMethod } from "../http/HttpMethod.ts"
@@ -782,26 +781,6 @@ export type PayloadConstraintField<Method extends HttpMethod> = Method extends H
  * @since 4.0.0
  * @category models
  */
-export type ValidateParams<
-  Schemas extends ReadonlyArray<Schema.Top>,
-  Prev extends Schema.Top = never
-> = Schemas extends [
-  infer Head extends Schema.Top,
-  ...infer Tail extends ReadonlyArray<Schema.Top>
-] ? [
-    Head extends HttpApiSchema.Param<infer _Name, infer _S>
-      ? HttpApiSchema.Param<_Name, any> extends Prev ? `Duplicate param: ${_Name}`
-      : [Head["Encoded"] & {}] extends [string] ? Head
-      : `Must be encodeable to string: ${_Name}` :
-      Head,
-    ...ValidateParams<Tail, Prev | Head>
-  ]
-  : Schemas
-
-/**
- * @since 4.0.0
- * @category models
- */
 export type AddPrefix<Endpoint extends Any, Prefix extends HttpRouter.PathInput> = Endpoint extends HttpApiEndpoint<
   infer _Name,
   infer _Method,
@@ -890,34 +869,6 @@ export type AddMiddleware<Endpoint extends Any, M extends HttpApiMiddleware.AnyI
     HttpApiMiddleware.ApplyServices<M, _MR>
   > :
   never
-
-/**
- * @since 4.0.0
- * @category models
- */
-export type PathEntries<Schemas extends ReadonlyArray<Schema.Top>> = Extract<keyof Schemas, string> extends infer K ?
-  K extends keyof Schemas ? Schemas[K] extends HttpApiSchema.Param<infer _Name, infer _S> ? [_Name, _S] :
-    Schemas[K] extends Schema.Top ? [K, Schemas[K]]
-    : never
-  : never
-  : never
-
-/**
- * @since 4.0.0
- * @category models
- */
-export type ExtractPath<Schemas extends ReadonlyArray<Schema.Top>> = Simplify<
-  & {
-    readonly [
-      Entry in Extract<PathEntries<Schemas>, [any, { readonly "~type.mutability": "optional" }]> as Entry[0]
-    ]?: Entry[1]
-  }
-  & {
-    readonly [
-      Entry in Extract<PathEntries<Schemas>, [any, { readonly "~type.mutability": "required" }]> as Entry[0]
-    ]: Entry[1]
-  }
->
 
 const Proto = {
   [TypeId]: TypeId,
