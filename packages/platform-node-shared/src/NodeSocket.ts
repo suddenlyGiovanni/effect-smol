@@ -62,7 +62,11 @@ export const makeNet = (
               resume(Effect.succeed(conn!))
             })
             conn.on("error", (cause: Error) => {
-              resume(Effect.fail(new Socket.SocketGenericError({ reason: "Open", cause })))
+              resume(Effect.fail(
+                new Socket.SocketError({
+                  reason: new Socket.SocketOpenError({ kind: "Unknown", cause })
+                })
+              ))
             })
           })
       )
@@ -109,9 +113,8 @@ export const fromDuplex = <RO>(
               duration: options.openTimeout,
               onTimeout: () =>
                 Effect.fail(
-                  new Socket.SocketGenericError({
-                    reason: "Open",
-                    cause: new Error("Connection timed out")
+                  new Socket.SocketError({
+                    reason: new Socket.SocketOpenError({ kind: "Timeout", cause: new Error("Connection timed out") })
                   })
                 )
             }) :
@@ -143,13 +146,21 @@ export const fromDuplex = <RO>(
         function onError(cause: Error) {
           Deferred.doneUnsafe(
             fiberSet.deferred,
-            Effect.fail(new Socket.SocketGenericError({ reason: "Read", cause }))
+            Effect.fail(
+              new Socket.SocketError({
+                reason: new Socket.SocketReadError({ cause })
+              })
+            )
           )
         }
         function onClose(hadError: boolean) {
           Deferred.doneUnsafe(
             fiberSet.deferred,
-            Effect.fail(new Socket.SocketCloseError({ code: hadError ? 1006 : 1000 }))
+            Effect.fail(
+              new Socket.SocketError({
+                reason: new Socket.SocketCloseError({ code: hadError ? 1006 : 1000 })
+              })
+            )
           )
         }
       })).pipe(
@@ -170,7 +181,11 @@ export const fromDuplex = <RO>(
         currentSocket!.write(chunk, (cause) => {
           resume(
             cause
-              ? Effect.fail(new Socket.SocketGenericError({ reason: "Write", cause }))
+              ? Effect.fail(
+                new Socket.SocketError({
+                  reason: new Socket.SocketWriteError({ cause: cause! })
+                })
+              )
               : Effect.void
           )
         })

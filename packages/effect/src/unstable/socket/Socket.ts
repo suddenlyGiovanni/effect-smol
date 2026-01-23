@@ -4,7 +4,6 @@
 import type { NonEmptyReadonlyArray } from "../../Array.ts"
 import type * as Cause from "../../Cause.ts"
 import * as Channel from "../../Channel.ts"
-import * as Data from "../../Data.ts"
 import * as Deferred from "../../Deferred.ts"
 import type { DurationInput } from "../../Duration.ts"
 import * as Effect from "../../Effect.ts"
@@ -16,6 +15,7 @@ import * as Layer from "../../Layer.ts"
 import * as Predicate from "../../Predicate.ts"
 import * as Pull from "../../Pull.ts"
 import * as Queue from "../../Queue.ts"
+import * as Schema from "../../Schema.ts"
 import * as Scope from "../../Scope.ts"
 import * as ServiceMap from "../../ServiceMap.ts"
 
@@ -99,13 +99,13 @@ export const isCloseEvent = (u: unknown): u is CloseEvent => Predicate.hasProper
  * @since 4.0.0
  * @category type ids
  */
-export const SocketErrorTypeId: unique symbol = Symbol.for("@effect/platform/Socket/SocketError")
+export type SocketErrorTypeId = "~effect/socket/Socket/SocketError"
 
 /**
  * @since 4.0.0
  * @category type ids
  */
-export type SocketErrorTypeId = typeof SocketErrorTypeId
+export const SocketErrorTypeId: SocketErrorTypeId = "~effect/socket/Socket/SocketError"
 
 /**
  * @since 4.0.0
@@ -117,26 +117,46 @@ export const isSocketError = (u: unknown): u is SocketError => Predicate.hasProp
  * @since 4.0.0
  * @category errors
  */
-export type SocketError = SocketGenericError | SocketCloseError
+export class SocketReadError extends Schema.ErrorClass<SocketReadError>("effect/socket/Socket/SocketReadError")({
+  _tag: Schema.tag("SocketReadError"),
+  cause: Schema.Defect
+}) {
+  /**
+   * @since 4.0.0
+   */
+  override readonly message = `An error occurred during Read`
+}
 
 /**
  * @since 4.0.0
  * @category errors
  */
-export class SocketGenericError extends Data.TaggedError("SocketError")<{
-  readonly reason: "Write" | "Read" | "Open" | "OpenTimeout"
-  readonly cause: unknown
-}> {
+export class SocketWriteError extends Schema.ErrorClass<SocketWriteError>("effect/socket/Socket/SocketWriteError")({
+  _tag: Schema.tag("SocketWriteError"),
+  cause: Schema.Defect
+}) {
   /**
    * @since 4.0.0
    */
-  readonly [SocketErrorTypeId]: SocketErrorTypeId = SocketErrorTypeId
+  override readonly message = `An error occurred during Write`
+}
 
+/**
+ * @since 4.0.0
+ * @category errors
+ */
+export class SocketOpenError extends Schema.ErrorClass<SocketOpenError>("effect/socket/Socket/SocketOpenError")({
+  _tag: Schema.tag("SocketOpenError"),
+  kind: Schema.Literals(["Unknown", "Timeout"]),
+  cause: Schema.Defect
+}) {
   /**
    * @since 4.0.0
    */
   override get message() {
-    return `An error occurred during ${this.reason}`
+    return this.kind === "Timeout"
+      ? `timeout waiting for "open"`
+      : `An error occurred during Open`
   }
 }
 
@@ -144,10 +164,72 @@ export class SocketGenericError extends Data.TaggedError("SocketError")<{
  * @since 4.0.0
  * @category errors
  */
-export class SocketCloseError extends Data.TaggedError("SocketError")<{
-  readonly code: number
-  readonly closeReason?: string | undefined
-}> {
+export class SocketCloseError extends Schema.ErrorClass<SocketCloseError>("effect/socket/Socket/SocketCloseError")({
+  _tag: Schema.tag("SocketCloseError"),
+  code: Schema.Number,
+  closeReason: Schema.optional(Schema.String)
+}) {
+  /**
+   * @since 4.0.0
+   */
+  static filterClean(isClean: (code: number) => boolean): <E>(u: E) => SocketCloseError | Filter.fail<E> {
+    return function<E>(u: E) {
+      return SocketError.is(u) && u.reason._tag === "SocketCloseError" && isClean(u.reason.code)
+        ? u.reason
+        : Filter.fail(u)
+    }
+  }
+
+  override get message() {
+    if (this.closeReason) {
+      return `${this.code}: ${this.closeReason}`
+    }
+    return `${this.code}`
+  }
+}
+
+/**
+ * @since 4.0.0
+ * @category errors
+ */
+export const SocketErrorReason = Schema.Union([
+  SocketReadError,
+  SocketWriteError,
+  SocketOpenError,
+  SocketCloseError
+])
+
+/**
+ * @since 4.0.0
+ * @category errors
+ */
+export type SocketErrorReason =
+  | SocketReadError
+  | SocketWriteError
+  | SocketOpenError
+  | SocketCloseError
+
+/**
+ * @since 4.0.0
+ * @category errors
+ */
+export class SocketError extends Schema.ErrorClass<SocketError>(SocketErrorTypeId)({
+  _tag: Schema.tag("SocketError"),
+  reason: SocketErrorReason
+}) {
+  constructor(props: {
+    readonly reason: SocketReadError | SocketWriteError | SocketOpenError | SocketCloseError
+  }) {
+    if ("cause" in props.reason) {
+      super({
+        ...props,
+        cause: props.reason.cause
+      } as any)
+    } else {
+      super(props)
+    }
+  }
+
   /**
    * @since 4.0.0
    */
@@ -156,29 +238,8 @@ export class SocketCloseError extends Data.TaggedError("SocketError")<{
   /**
    * @since 4.0.0
    */
-  readonly reason: "Close" = "Close" as const
-
-  /**
-   * @since 4.0.0
-   */
-  static is(u: unknown): u is SocketCloseError {
-    return isSocketError(u) && u.reason === "Close"
-  }
-
-  /**
-   * @since 4.0.0
-   */
-  static isClean(isClean: (code: number) => boolean): <E>(u: E) => SocketCloseError | Filter.fail<E> {
-    return function<E>(u: E) {
-      return SocketCloseError.is(u) && isClean(u.code) ? u : Filter.fail(u)
-    }
-  }
-
-  override get message() {
-    if (this.closeReason) {
-      return `${this.reason}: ${this.code}: ${this.closeReason}`
-    }
-    return `${this.reason}: ${this.code}`
+  static is(u: unknown): u is SocketError {
+    return isSocketError(u)
   }
 }
 
@@ -413,7 +474,18 @@ export const fromWebSocket = <RO>(
           ws.removeEventListener("close", onClose)
           Deferred.doneUnsafe(
             fiberSet.deferred,
-            Effect.fail(new SocketGenericError({ reason: open ? "Read" : "Open", cause }))
+            Effect.fail(
+              new SocketError({
+                reason: open ?
+                  new SocketReadError({
+                    cause
+                  }) :
+                  new SocketOpenError({
+                    kind: "Unknown",
+                    cause
+                  })
+              })
+            )
           )
         }
         function onClose(event: globalThis.CloseEvent) {
@@ -422,9 +494,11 @@ export const fromWebSocket = <RO>(
           Deferred.doneUnsafe(
             fiberSet.deferred,
             Effect.fail(
-              new SocketCloseError({
-                code: event.code,
-                closeReason: event.reason
+              new SocketError({
+                reason: new SocketCloseError({
+                  code: event.code,
+                  closeReason: event.reason
+                })
               })
             )
           )
@@ -444,7 +518,14 @@ export const fromWebSocket = <RO>(
             Effect.timeoutOrElse({
               duration: options?.openTimeout ?? 10000,
               onTimeout: () =>
-                Effect.fail(new SocketGenericError({ reason: "OpenTimeout", cause: "timeout waiting for \"open\"" }))
+                Effect.fail(
+                  new SocketError({
+                    reason: new SocketOpenError({
+                      kind: "Timeout",
+                      cause: new Error("timeout waiting for \"open\"")
+                    })
+                  })
+                )
             }),
             Effect.raceFirst(FiberSet.join(fiberSet))
           )
@@ -455,7 +536,7 @@ export const fromWebSocket = <RO>(
         if (opts?.onOpen) yield* opts.onOpen
         return yield* FiberSet.join(fiberSet).pipe(
           Effect.catchFilter(
-            SocketCloseError.isClean((_) => !closeCodeIsError(_)),
+            SocketCloseError.filterClean((_) => !closeCodeIsError(_)),
             (_) => Effect.void
           )
         )
@@ -581,7 +662,7 @@ export const fromTransformStream = <R>(acquire: Effect.Effect<InputTransformStre
             while (true) {
               const { done, value } = await reader.read()
               if (done) {
-                throw new SocketCloseError({ code: 1000 })
+                throw new SocketError({ reason: new SocketCloseError({ code: 1000 }) })
               }
               const result = handler(value)
               if (Effect.isEffect(result)) {
@@ -589,7 +670,10 @@ export const fromTransformStream = <R>(acquire: Effect.Effect<InputTransformStre
               }
             }
           },
-          catch: (cause) => isSocketError(cause) ? cause : new SocketGenericError({ reason: "Read", cause })
+          catch: (cause) =>
+            isSocketError(cause) ? cause : new SocketError({
+              reason: new SocketReadError({ cause })
+            })
         }).pipe(
           FiberSet.run(fiberSet)
         )
@@ -600,7 +684,7 @@ export const fromTransformStream = <R>(acquire: Effect.Effect<InputTransformStre
 
         return yield* FiberSet.join(fiberSet).pipe(
           Effect.catchFilter(
-            SocketCloseError.isClean((_) => !closeCodeIsError(_)),
+            SocketCloseError.filterClean((_) => !closeCodeIsError(_)),
             (_) => Effect.void
           )
         )
@@ -637,7 +721,9 @@ export const fromTransformStream = <R>(acquire: Effect.Effect<InputTransformStre
         if (isCloseEvent(chunk)) {
           return Deferred.fail(
             fiberSet.deferred,
-            new SocketCloseError({ code: chunk.code, closeReason: chunk.reason })
+            new SocketError({
+              reason: new SocketCloseError({ code: chunk.code, closeReason: chunk.reason })
+            })
           )
         }
         return Effect.promise(() => getWriter(stream).write(typeof chunk === "string" ? encoder.encode(chunk) : chunk))
