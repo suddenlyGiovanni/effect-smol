@@ -3008,17 +3008,14 @@ export const ignore: <
         readonly log?: boolean | LogLevel.LogLevel | undefined
       } | undefined
     ): Effect.Effect<void, never, R> => {
-      const log = options?.log
-      if (log === undefined || log === false) {
+      if (!options?.log) {
         return matchEffect(self, { onFailure: (_) => void_, onSuccess: (_) => void_ })
       }
-      const logEffect = logWithLevel(log === true ? undefined : log)
+      const logEffect = logWithLevel(options.log === true ? undefined : options.log)
       return matchCauseEffect(self, {
-        onFailure: (cause) => {
+        onFailure(cause) {
           const failure = causeFilterFail(cause)
-          return Filter.isFail(failure)
-            ? andThen(logEffect(cause), failCause(failure.fail))
-            : logEffect(cause)
+          return Filter.isFail(failure) ? failCause(failure.fail) : logEffect(cause)
         },
         onSuccess: (_) => void_
       })
