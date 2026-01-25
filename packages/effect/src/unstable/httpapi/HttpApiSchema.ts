@@ -26,7 +26,8 @@ declare module "../../Schema.ts" {
 
 /** @internal */
 export const resolveHttpApiIsEmpty = AST.resolveAt<boolean>("httpApiIsEmpty")
-const resolveHttpApiEncoding = AST.resolveAt<Encoding>("httpApiEncoding")
+/** @internal */
+export const resolveHttpApiEncoding = AST.resolveAt<Encoding>("httpApiEncoding")
 /** @internal */
 export const resolveHttpApiMultipart = AST.resolveAt<Multipart_.withLimits.Options>("httpApiMultipart")
 /** @internal */
@@ -329,8 +330,8 @@ export declare namespace Encoding {
     : never
 }
 
-const defaultContentType = (encoding: Encoding["kind"]) => {
-  switch (encoding) {
+const defaultContentType = (kind: Encoding["kind"]) => {
+  switch (kind) {
     case "Json": {
       return "application/json"
     }
@@ -375,9 +376,16 @@ export const withEncoding: {
     }
   }))
 
-const encodingJson: Encoding = {
+/** @internal */
+export const encodingJson: Encoding = {
   kind: "Json",
   contentType: "application/json"
+}
+
+/** @internal */
+export const encodingMultipart: Encoding = {
+  kind: "Json",
+  contentType: "multipart/form-data"
 }
 
 /**
