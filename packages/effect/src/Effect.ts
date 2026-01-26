@@ -1323,7 +1323,9 @@ export const gen: {
       : never
   >
   <Self, Eff extends Yieldable<any, any, any, any>, AEff>(
-    self: Self,
+    options: {
+      readonly this: Self
+    },
     f: (this: Self) => Generator<Eff, AEff, never>
   ): Effect<
     AEff,
@@ -8189,7 +8191,7 @@ export namespace fn {
    * @since 3.11.0
    * @category Models
    */
-  export type Gen = {
+  export type Untraced = {
     <Eff extends Yieldable<any, any, any, any>, AEff, Args extends Array<any>>(
       body: (this: unassigned, ...args: Args) => Generator<Eff, AEff, never>
     ): (...args: Args) => Effect<
@@ -8212,6 +8214,7 @@ export namespace fn {
         : [Eff] extends [Yieldable<infer _S, infer _A, infer _E, infer R>] ? R
         : never
     >
+
     <Eff extends Yieldable<any, any, any, any>, AEff, Args extends Array<any>, A>(
       body: (this: unassigned, ...args: Args) => Generator<Eff, AEff, never>,
       a: (
@@ -9774,7 +9777,7 @@ export namespace fn {
    * @since 3.11.0
    * @category Models
    */
-  export type WithNonGen = {
+  export type Traced = {
     <Eff extends Yieldable<any, any, any, any>, AEff, Args extends Array<any>>(
       body: (this: unassigned, ...args: Args) => Generator<Eff, AEff, never> | (Eff & Effect<AEff, any, any>)
     ): (...args: Args) => Effect<
@@ -9797,6 +9800,19 @@ export namespace fn {
         : [Eff] extends [Yieldable<infer _S, infer _A, infer _E, infer R>] ? R
         : never
     >
+    <Self, Eff extends Yieldable<any, any, any, any>, AEff, Args extends Array<any>>(
+      options: { readonly this: Self },
+      body: (this: Self, ...args: Args) => Generator<Eff, AEff, never> | (Eff & Effect<AEff, any, any>)
+    ): (...args: Args) => Effect<
+      AEff,
+      [Eff] extends [never] ? never
+        : [Eff] extends [Yieldable<infer _S, infer _A, infer E, infer _R>] ? E
+        : never,
+      [Eff] extends [never] ? never
+        : [Eff] extends [Yieldable<infer _S, infer _A, infer _E, infer R>] ? R
+        : never
+    >
+
     <Eff extends Yieldable<any, any, any, any>, AEff, Args extends Array<any>, A>(
       body: (this: unassigned, ...args: Args) => Generator<Eff, AEff, never> | (Eff & Effect<AEff, any, any>),
       a: (
@@ -9827,6 +9843,23 @@ export namespace fn {
         ...args: Args
       ) => A
     ): (this: Self, ...args: Args) => A
+    <Self, Eff extends Yieldable<any, any, any, any>, AEff, Args extends Array<any>, A>(
+      options: { readonly this: Self },
+      body: (this: Self, ...args: Args) => Generator<Eff, AEff, never> | (Eff & Effect<AEff, any, any>),
+      a: (
+        _: Effect<
+          AEff,
+          [Eff] extends [never] ? never
+            : [Eff] extends [Yieldable<infer _S, infer _A, infer E, infer _R>] ? E
+            : never,
+          [Eff] extends [never] ? never
+            : [Eff] extends [Yieldable<infer _S, infer _A, infer _E, infer R>] ? R
+            : never
+        >,
+        ...args: Args
+      ) => A
+    ): (...args: Args) => A
+
     <Eff extends Yieldable<any, any, any, any>, AEff, Args extends Array<any>, A, B>(
       body: (this: unassigned, ...args: Args) => Generator<Eff, AEff, never> | (Eff & Effect<AEff, any, any>),
       a: (
@@ -9859,6 +9892,24 @@ export namespace fn {
       ) => A,
       b: (_: A, ...args: Args) => B
     ): (this: Self, ...args: Args) => B
+    <Self, Eff extends Yieldable<any, any, any, any>, AEff, Args extends Array<any>, A, B>(
+      options: { readonly this: Self },
+      body: (this: Self, ...args: Args) => Generator<Eff, AEff, never> | (Eff & Effect<AEff, any, any>),
+      a: (
+        _: Effect<
+          AEff,
+          [Eff] extends [never] ? never
+            : [Eff] extends [Yieldable<infer _S, infer _A, infer E, infer _R>] ? E
+            : never,
+          [Eff] extends [never] ? never
+            : [Eff] extends [Yieldable<infer _S, infer _A, infer _E, infer R>] ? R
+            : never
+        >,
+        ...args: Args
+      ) => A,
+      b: (_: A, ...args: Args) => B
+    ): (...args: Args) => B
+
     <
       Eff extends Yieldable<any, any, any, any>,
       AEff,
@@ -9909,6 +9960,33 @@ export namespace fn {
       c: (_: B, ...args: Args) => C
     ): (this: Self, ...args: Args) => C
     <
+      Self,
+      Eff extends Yieldable<any, any, any, any>,
+      AEff,
+      Args extends Array<any>,
+      A,
+      B,
+      C
+    >(
+      options: { readonly this: Self },
+      body: (this: Self, ...args: Args) => Generator<Eff, AEff, never> | (Eff & Effect<AEff, any, any>),
+      a: (
+        _: Effect<
+          AEff,
+          [Eff] extends [never] ? never
+            : [Eff] extends [Yieldable<infer _S, infer _A, infer E, infer _R>] ? E
+            : never,
+          [Eff] extends [never] ? never
+            : [Eff] extends [Yieldable<infer _S, infer _A, infer _E, infer R>] ? R
+            : never
+        >,
+        ...args: Args
+      ) => A,
+      b: (_: A, ...args: Args) => B,
+      c: (_: B, ...args: Args) => C
+    ): (...args: Args) => C
+
+    <
       Eff extends Yieldable<any, any, any, any>,
       AEff,
       Args extends Array<any>,
@@ -9917,7 +9995,7 @@ export namespace fn {
       C,
       D
     >(
-      body: (...args: Args) => Generator<Eff, AEff, never> | (Eff & Effect<AEff, any, any>),
+      body: (this: unassigned, ...args: Args) => Generator<Eff, AEff, never> | (Eff & Effect<AEff, any, any>),
       a: (
         _: Effect<
           AEff,
@@ -9961,6 +10039,36 @@ export namespace fn {
       c: (_: B, ...args: Args) => C,
       d: (_: C, ...args: Args) => D
     ): (this: Self, ...args: Args) => D
+
+    <
+      Self,
+      Eff extends Yieldable<any, any, any, any>,
+      AEff,
+      Args extends Array<any>,
+      A,
+      B,
+      C,
+      D
+    >(
+      options: { readonly this: Self },
+      body: (this: Self, ...args: Args) => Generator<Eff, AEff, never> | (Eff & Effect<AEff, any, any>),
+      a: (
+        _: Effect<
+          AEff,
+          [Eff] extends [never] ? never
+            : [Eff] extends [Yieldable<infer _S, infer _A, infer E, infer _R>] ? E
+            : never,
+          [Eff] extends [never] ? never
+            : [Eff] extends [Yieldable<infer _S, infer _A, infer _E, infer R>] ? R
+            : never
+        >,
+        ...args: Args
+      ) => A,
+      b: (_: A, ...args: Args) => B,
+      c: (_: B, ...args: Args) => C,
+      d: (_: C, ...args: Args) => D
+    ): (...args: Args) => D
+
     <
       Eff extends Yieldable<any, any, any, any>,
       AEff,
@@ -10018,6 +10126,38 @@ export namespace fn {
       d: (_: C, ...args: Args) => D,
       e: (_: D, ...args: Args) => E
     ): (this: Self, ...args: Args) => E
+
+    <
+      Self,
+      Eff extends Yieldable<any, any, any, any>,
+      AEff,
+      Args extends Array<any>,
+      A,
+      B,
+      C,
+      D,
+      E
+    >(
+      options: { readonly this: Self },
+      body: (this: Self, ...args: Args) => Generator<Eff, AEff, never> | (Eff & Effect<AEff, any, any>),
+      a: (
+        _: Effect<
+          AEff,
+          [Eff] extends [never] ? never
+            : [Eff] extends [Yieldable<infer _S, infer _A, infer E, infer _R>] ? E
+            : never,
+          [Eff] extends [never] ? never
+            : [Eff] extends [Yieldable<infer _S, infer _A, infer _E, infer R>] ? R
+            : never
+        >,
+        ...args: Args
+      ) => A,
+      b: (_: A, ...args: Args) => B,
+      c: (_: B, ...args: Args) => C,
+      d: (_: C, ...args: Args) => D,
+      e: (_: D, ...args: Args) => E
+    ): (...args: Args) => E
+
     <
       Eff extends Yieldable<any, any, any, any>,
       AEff,
@@ -10079,6 +10219,40 @@ export namespace fn {
       e: (_: D, ...args: Args) => E,
       f: (_: E, ...args: Args) => F
     ): (this: Self, ...args: Args) => F
+
+    <
+      Self,
+      Eff extends Yieldable<any, any, any, any>,
+      AEff,
+      Args extends Array<any>,
+      A,
+      B,
+      C,
+      D,
+      E,
+      F
+    >(
+      options: { readonly this: Self },
+      body: (this: Self, ...args: Args) => Generator<Eff, AEff, never> | (Eff & Effect<AEff, any, any>),
+      a: (
+        _: Effect<
+          AEff,
+          [Eff] extends [never] ? never
+            : [Eff] extends [Yieldable<infer _S, infer _A, infer E, infer _R>] ? E
+            : never,
+          [Eff] extends [never] ? never
+            : [Eff] extends [Yieldable<infer _S, infer _A, infer _E, infer R>] ? R
+            : never
+        >,
+        ...args: Args
+      ) => A,
+      b: (_: A, ...args: Args) => B,
+      c: (_: B, ...args: Args) => C,
+      d: (_: C, ...args: Args) => D,
+      e: (_: D, ...args: Args) => E,
+      f: (_: E, ...args: Args) => F
+    ): (...args: Args) => F
+
     <
       Eff extends Yieldable<any, any, any, any>,
       AEff,
@@ -10144,6 +10318,42 @@ export namespace fn {
       f: (_: E, ...args: Args) => F,
       g: (_: F, ...args: Args) => G
     ): (this: Self, ...args: Args) => G
+
+    <
+      Self,
+      Eff extends Yieldable<any, any, any, any>,
+      AEff,
+      Args extends Array<any>,
+      A,
+      B,
+      C,
+      D,
+      E,
+      F,
+      G
+    >(
+      options: { readonly this: Self },
+      body: (this: Self, ...args: Args) => Generator<Eff, AEff, never> | (Eff & Effect<AEff, any, any>),
+      a: (
+        _: Effect<
+          AEff,
+          [Eff] extends [never] ? never
+            : [Eff] extends [Yieldable<infer _S, infer _A, infer E, infer _R>] ? E
+            : never,
+          [Eff] extends [never] ? never
+            : [Eff] extends [Yieldable<infer _S, infer _A, infer _E, infer R>] ? R
+            : never
+        >,
+        ...args: Args
+      ) => A,
+      b: (_: A, ...args: Args) => B,
+      c: (_: B, ...args: Args) => C,
+      d: (_: C, ...args: Args) => D,
+      e: (_: D, ...args: Args) => E,
+      f: (_: E, ...args: Args) => F,
+      g: (_: F, ...args: Args) => G
+    ): (...args: Args) => G
+
     <
       Eff extends Yieldable<any, any, any, any>,
       AEff,
@@ -10213,6 +10423,44 @@ export namespace fn {
       g: (_: F, ...args: Args) => G,
       h: (_: G, ...args: Args) => H
     ): (this: Self, ...args: Args) => H
+
+    <
+      Self,
+      Eff extends Yieldable<any, any, any, any>,
+      AEff,
+      Args extends Array<any>,
+      A,
+      B,
+      C,
+      D,
+      E,
+      F,
+      G,
+      H
+    >(
+      options: { readonly this: Self },
+      body: (this: Self, ...args: Args) => Generator<Eff, AEff, never> | (Eff & Effect<AEff, any, any>),
+      a: (
+        _: Effect<
+          AEff,
+          [Eff] extends [never] ? never
+            : [Eff] extends [Yieldable<infer _S, infer _A, infer E, infer _R>] ? E
+            : never,
+          [Eff] extends [never] ? never
+            : [Eff] extends [Yieldable<infer _S, infer _A, infer _E, infer R>] ? R
+            : never
+        >,
+        ...args: Args
+      ) => A,
+      b: (_: A, ...args: Args) => B,
+      c: (_: B, ...args: Args) => C,
+      d: (_: C, ...args: Args) => D,
+      e: (_: D, ...args: Args) => E,
+      f: (_: E, ...args: Args) => F,
+      g: (_: F, ...args: Args) => G,
+      h: (_: G, ...args: Args) => H
+    ): (...args: Args) => H
+
     <
       Eff extends Yieldable<any, any, any, any>,
       AEff,
@@ -10286,6 +10534,46 @@ export namespace fn {
       h: (_: G, ...args: Args) => H,
       i: (_: H, ...args: Args) => I
     ): (this: Self, ...args: Args) => I
+
+    <
+      Self,
+      Eff extends Yieldable<any, any, any, any>,
+      AEff,
+      Args extends Array<any>,
+      A,
+      B,
+      C,
+      D,
+      E,
+      F,
+      G,
+      H,
+      I
+    >(
+      options: { readonly this: Self },
+      body: (this: Self, ...args: Args) => Generator<Eff, AEff, never> | (Eff & Effect<AEff, any, any>),
+      a: (
+        _: Effect<
+          AEff,
+          [Eff] extends [never] ? never
+            : [Eff] extends [Yieldable<infer _S, infer _A, infer E, infer _R>] ? E
+            : never,
+          [Eff] extends [never] ? never
+            : [Eff] extends [Yieldable<infer _S, infer _A, infer _E, infer R>] ? R
+            : never
+        >,
+        ...args: Args
+      ) => A,
+      b: (_: A, ...args: Args) => B,
+      c: (_: B, ...args: Args) => C,
+      d: (_: C, ...args: Args) => D,
+      e: (_: D, ...args: Args) => E,
+      f: (_: E, ...args: Args) => F,
+      g: (_: F, ...args: Args) => G,
+      h: (_: G, ...args: Args) => H,
+      i: (_: H, ...args: Args) => I
+    ): (...args: Args) => I
+
     <
       Eff extends Yieldable<any, any, any, any>,
       AEff,
@@ -10363,6 +10651,48 @@ export namespace fn {
       i: (_: H, ...args: Args) => I,
       j: (_: I, ...args: Args) => J
     ): (this: Self, ...args: Args) => J
+
+    <
+      Self,
+      Eff extends Yieldable<any, any, any, any>,
+      AEff,
+      Args extends Array<any>,
+      A,
+      B,
+      C,
+      D,
+      E,
+      F,
+      G,
+      H,
+      I,
+      J
+    >(
+      options: { readonly this: Self },
+      body: (this: Self, ...args: Args) => Generator<Eff, AEff, never> | (Eff & Effect<AEff, any, any>),
+      a: (
+        _: Effect<
+          AEff,
+          [Eff] extends [never] ? never
+            : [Eff] extends [Yieldable<infer _S, infer _A, infer E, infer _R>] ? E
+            : never,
+          [Eff] extends [never] ? never
+            : [Eff] extends [Yieldable<infer _S, infer _A, infer _E, infer R>] ? R
+            : never
+        >,
+        ...args: Args
+      ) => A,
+      b: (_: A, ...args: Args) => B,
+      c: (_: B, ...args: Args) => C,
+      d: (_: C, ...args: Args) => D,
+      e: (_: D, ...args: Args) => E,
+      f: (_: E, ...args: Args) => F,
+      g: (_: F, ...args: Args) => G,
+      h: (_: G, ...args: Args) => H,
+      i: (_: H, ...args: Args) => I,
+      j: (_: I, ...args: Args) => J
+    ): (...args: Args) => J
+
     <
       Eff extends Yieldable<any, any, any, any>,
       AEff,
@@ -10444,6 +10774,50 @@ export namespace fn {
       j: (_: I, ...args: Args) => J,
       k: (_: J, ...args: Args) => K
     ): (this: Self, ...args: Args) => K
+
+    <
+      Self,
+      Eff extends Yieldable<any, any, any, any>,
+      AEff,
+      Args extends Array<any>,
+      A,
+      B,
+      C,
+      D,
+      E,
+      F,
+      G,
+      H,
+      I,
+      J,
+      K
+    >(
+      options: { readonly this: Self },
+      body: (this: Self, ...args: Args) => Generator<Eff, AEff, never> | (Eff & Effect<AEff, any, any>),
+      a: (
+        _: Effect<
+          AEff,
+          [Eff] extends [never] ? never
+            : [Eff] extends [Yieldable<infer _S, infer _A, infer E, infer _R>] ? E
+            : never,
+          [Eff] extends [never] ? never
+            : [Eff] extends [Yieldable<infer _S, infer _A, infer _E, infer R>] ? R
+            : never
+        >,
+        ...args: Args
+      ) => A,
+      b: (_: A, ...args: Args) => B,
+      c: (_: B, ...args: Args) => C,
+      d: (_: C, ...args: Args) => D,
+      e: (_: D, ...args: Args) => E,
+      f: (_: E, ...args: Args) => F,
+      g: (_: F, ...args: Args) => G,
+      h: (_: G, ...args: Args) => H,
+      i: (_: H, ...args: Args) => I,
+      j: (_: I, ...args: Args) => J,
+      k: (_: J, ...args: Args) => K
+    ): (...args: Args) => K
+
     <
       Eff extends Yieldable<any, any, any, any>,
       AEff,
@@ -10529,6 +10903,52 @@ export namespace fn {
       k: (_: J, ...args: Args) => K,
       l: (_: K, ...args: Args) => L
     ): (this: Self, ...args: Args) => L
+
+    <
+      Self,
+      Eff extends Yieldable<any, any, any, any>,
+      AEff,
+      Args extends Array<any>,
+      A,
+      B,
+      C,
+      D,
+      E,
+      F,
+      G,
+      H,
+      I,
+      J,
+      K,
+      L
+    >(
+      options: { readonly this: Self },
+      body: (this: Self, ...args: Args) => Generator<Eff, AEff, never> | (Eff & Effect<AEff, any, any>),
+      a: (
+        _: Effect<
+          AEff,
+          [Eff] extends [never] ? never
+            : [Eff] extends [Yieldable<infer _S, infer _A, infer E, infer _R>] ? E
+            : never,
+          [Eff] extends [never] ? never
+            : [Eff] extends [Yieldable<infer _S, infer _A, infer _E, infer R>] ? R
+            : never
+        >,
+        ...args: Args
+      ) => A,
+      b: (_: A, ...args: Args) => B,
+      c: (_: B, ...args: Args) => C,
+      d: (_: C, ...args: Args) => D,
+      e: (_: D, ...args: Args) => E,
+      f: (_: E, ...args: Args) => F,
+      g: (_: F, ...args: Args) => G,
+      h: (_: G, ...args: Args) => H,
+      i: (_: H, ...args: Args) => I,
+      j: (_: I, ...args: Args) => J,
+      k: (_: J, ...args: Args) => K,
+      l: (_: K, ...args: Args) => L
+    ): (...args: Args) => L
+
     <
       Eff extends Yieldable<any, any, any, any>,
       AEff,
@@ -10618,6 +11038,54 @@ export namespace fn {
       l: (_: K, ...args: Args) => L,
       m: (_: L, ...args: Args) => M
     ): (this: Self, ...args: Args) => M
+
+    <
+      Self,
+      Eff extends Yieldable<any, any, any, any>,
+      AEff,
+      Args extends Array<any>,
+      A,
+      B,
+      C,
+      D,
+      E,
+      F,
+      G,
+      H,
+      I,
+      J,
+      K,
+      L,
+      M
+    >(
+      options: { readonly this: Self },
+      body: (this: Self, ...args: Args) => Generator<Eff, AEff, never> | (Eff & Effect<AEff, any, any>),
+      a: (
+        _: Effect<
+          AEff,
+          [Eff] extends [never] ? never
+            : [Eff] extends [Yieldable<infer _S, infer _A, infer E, infer _R>] ? E
+            : never,
+          [Eff] extends [never] ? never
+            : [Eff] extends [Yieldable<infer _S, infer _A, infer _E, infer R>] ? R
+            : never
+        >,
+        ...args: Args
+      ) => A,
+      b: (_: A, ...args: Args) => B,
+      c: (_: B, ...args: Args) => C,
+      d: (_: C, ...args: Args) => D,
+      e: (_: D, ...args: Args) => E,
+      f: (_: E, ...args: Args) => F,
+      g: (_: F, ...args: Args) => G,
+      h: (_: G, ...args: Args) => H,
+      i: (_: H, ...args: Args) => I,
+      j: (_: I, ...args: Args) => J,
+      k: (_: J, ...args: Args) => K,
+      l: (_: K, ...args: Args) => L,
+      m: (_: L, ...args: Args) => M
+    ): (...args: Args) => M
+
     <
       Eff extends Yieldable<any, any, any, any>,
       AEff,
@@ -10711,6 +11179,56 @@ export namespace fn {
       m: (_: L, ...args: Args) => M,
       n: (_: M, ...args: Args) => N
     ): (this: Self, ...args: Args) => N
+
+    <
+      Self,
+      Eff extends Yieldable<any, any, any, any>,
+      AEff,
+      Args extends Array<any>,
+      A,
+      B,
+      C,
+      D,
+      E,
+      F,
+      G,
+      H,
+      I,
+      J,
+      K,
+      L,
+      M,
+      N
+    >(
+      options: { readonly this: Self },
+      body: (this: Self, ...args: Args) => Generator<Eff, AEff, never> | (Eff & Effect<AEff, any, any>),
+      a: (
+        _: Effect<
+          AEff,
+          [Eff] extends [never] ? never
+            : [Eff] extends [Yieldable<infer _S, infer _A, infer E, infer _R>] ? E
+            : never,
+          [Eff] extends [never] ? never
+            : [Eff] extends [Yieldable<infer _S, infer _A, infer _E, infer R>] ? R
+            : never
+        >,
+        ...args: Args
+      ) => A,
+      b: (_: A, ...args: Args) => B,
+      c: (_: B, ...args: Args) => C,
+      d: (_: C, ...args: Args) => D,
+      e: (_: D, ...args: Args) => E,
+      f: (_: E, ...args: Args) => F,
+      g: (_: F, ...args: Args) => G,
+      h: (_: G, ...args: Args) => H,
+      i: (_: H, ...args: Args) => I,
+      j: (_: I, ...args: Args) => J,
+      k: (_: J, ...args: Args) => K,
+      l: (_: K, ...args: Args) => L,
+      m: (_: L, ...args: Args) => M,
+      n: (_: M, ...args: Args) => N
+    ): (...args: Args) => N
+
     <
       Eff extends Yieldable<any, any, any, any>,
       AEff,
@@ -10808,6 +11326,58 @@ export namespace fn {
       n: (_: M, ...args: Args) => N,
       o: (_: N, ...args: Args) => O
     ): (this: Self, ...args: Args) => O
+
+    <
+      Self,
+      Eff extends Yieldable<any, any, any, any>,
+      AEff,
+      Args extends Array<any>,
+      A,
+      B,
+      C,
+      D,
+      E,
+      F,
+      G,
+      H,
+      I,
+      J,
+      K,
+      L,
+      M,
+      N,
+      O
+    >(
+      options: { readonly this: Self },
+      body: (this: Self, ...args: Args) => Generator<Eff, AEff, never> | (Eff & Effect<AEff, any, any>),
+      a: (
+        _: Effect<
+          AEff,
+          [Eff] extends [never] ? never
+            : [Eff] extends [Yieldable<infer _S, infer _A, infer E, infer _R>] ? E
+            : never,
+          [Eff] extends [never] ? never
+            : [Eff] extends [Yieldable<infer _S, infer _A, infer _E, infer R>] ? R
+            : never
+        >,
+        ...args: Args
+      ) => A,
+      b: (_: A, ...args: Args) => B,
+      c: (_: B, ...args: Args) => C,
+      d: (_: C, ...args: Args) => D,
+      e: (_: D, ...args: Args) => E,
+      f: (_: E, ...args: Args) => F,
+      g: (_: F, ...args: Args) => G,
+      h: (_: G, ...args: Args) => H,
+      i: (_: H, ...args: Args) => I,
+      j: (_: I, ...args: Args) => J,
+      k: (_: J, ...args: Args) => K,
+      l: (_: K, ...args: Args) => L,
+      m: (_: L, ...args: Args) => M,
+      n: (_: M, ...args: Args) => N,
+      o: (_: N, ...args: Args) => O
+    ): (...args: Args) => O
+
     <
       Eff extends Yieldable<any, any, any, any>,
       AEff,
@@ -10909,6 +11479,60 @@ export namespace fn {
       o: (_: N, ...args: Args) => O,
       p: (_: O, ...args: Args) => P
     ): (this: Self, ...args: Args) => P
+
+    <
+      Self,
+      Eff extends Yieldable<any, any, any, any>,
+      AEff,
+      Args extends Array<any>,
+      A,
+      B,
+      C,
+      D,
+      E,
+      F,
+      G,
+      H,
+      I,
+      J,
+      K,
+      L,
+      M,
+      N,
+      O,
+      P
+    >(
+      options: { readonly this: Self },
+      body: (this: Self, ...args: Args) => Generator<Eff, AEff, never> | (Eff & Effect<AEff, any, any>),
+      a: (
+        _: Effect<
+          AEff,
+          [Eff] extends [never] ? never
+            : [Eff] extends [Yieldable<infer _S, infer _A, infer E, infer _R>] ? E
+            : never,
+          [Eff] extends [never] ? never
+            : [Eff] extends [Yieldable<infer _S, infer _A, infer _E, infer R>] ? R
+            : never
+        >,
+        ...args: Args
+      ) => A,
+      b: (_: A, ...args: Args) => B,
+      c: (_: B, ...args: Args) => C,
+      d: (_: C, ...args: Args) => D,
+      e: (_: D, ...args: Args) => E,
+      f: (_: E, ...args: Args) => F,
+      g: (_: F, ...args: Args) => G,
+      h: (_: G, ...args: Args) => H,
+      i: (_: H, ...args: Args) => I,
+      j: (_: I, ...args: Args) => J,
+      k: (_: J, ...args: Args) => K,
+      l: (_: K, ...args: Args) => L,
+      m: (_: L, ...args: Args) => M,
+      n: (_: M, ...args: Args) => N,
+      o: (_: N, ...args: Args) => O,
+      p: (_: O, ...args: Args) => P
+    ): (...args: Args) => P
+
     <
       Eff extends Yieldable<any, any, any, any>,
       AEff,
@@ -11014,6 +11638,62 @@ export namespace fn {
       p: (_: O, ...args: Args) => P,
       q: (_: P, ...args: Args) => Q
     ): (this: Self, ...args: Args) => Q
+
+    <
+      Self,
+      Eff extends Yieldable<any, any, any, any>,
+      AEff,
+      Args extends Array<any>,
+      A,
+      B,
+      C,
+      D,
+      E,
+      F,
+      G,
+      H,
+      I,
+      J,
+      K,
+      L,
+      M,
+      N,
+      O,
+      P,
+      Q
+    >(
+      options: { readonly this: Self },
+      body: (this: Self, ...args: Args) => Generator<Eff, AEff, never> | (Eff & Effect<AEff, any, any>),
+      a: (
+        _: Effect<
+          AEff,
+          [Eff] extends [never] ? never
+            : [Eff] extends [Yieldable<infer _S, infer _A, infer E, infer _R>] ? E
+            : never,
+          [Eff] extends [never] ? never
+            : [Eff] extends [Yieldable<infer _S, infer _A, infer _E, infer R>] ? R
+            : never
+        >,
+        ...args: Args
+      ) => A,
+      b: (_: A, ...args: Args) => B,
+      c: (_: B, ...args: Args) => C,
+      d: (_: C, ...args: Args) => D,
+      e: (_: D, ...args: Args) => E,
+      f: (_: E, ...args: Args) => F,
+      g: (_: F, ...args: Args) => G,
+      h: (_: G, ...args: Args) => H,
+      i: (_: H, ...args: Args) => I,
+      j: (_: I, ...args: Args) => J,
+      k: (_: J, ...args: Args) => K,
+      l: (_: K, ...args: Args) => L,
+      m: (_: L, ...args: Args) => M,
+      n: (_: M, ...args: Args) => N,
+      o: (_: N, ...args: Args) => O,
+      p: (_: O, ...args: Args) => P,
+      q: (_: P, ...args: Args) => Q
+    ): (...args: Args) => Q
+
     <
       Eff extends Yieldable<any, any, any, any>,
       AEff,
@@ -11123,6 +11803,64 @@ export namespace fn {
       q: (_: P, ...args: Args) => Q,
       r: (_: Q, ...args: Args) => R
     ): (this: Self, ...args: Args) => R
+
+    <
+      Self,
+      Eff extends Yieldable<any, any, any, any>,
+      AEff,
+      Args extends Array<any>,
+      A,
+      B,
+      C,
+      D,
+      E,
+      F,
+      G,
+      H,
+      I,
+      J,
+      K,
+      L,
+      M,
+      N,
+      O,
+      P,
+      Q,
+      R
+    >(
+      options: { readonly this: Self },
+      body: (this: Self, ...args: Args) => Generator<Eff, AEff, never> | (Eff & Effect<AEff, any, any>),
+      a: (
+        _: Effect<
+          AEff,
+          [Eff] extends [never] ? never
+            : [Eff] extends [Yieldable<infer _S, infer _A, infer E, infer _R>] ? E
+            : never,
+          [Eff] extends [never] ? never
+            : [Eff] extends [Yieldable<infer _S, infer _A, infer _E, infer R>] ? R
+            : never
+        >,
+        ...args: Args
+      ) => A,
+      b: (_: A, ...args: Args) => B,
+      c: (_: B, ...args: Args) => C,
+      d: (_: C, ...args: Args) => D,
+      e: (_: D, ...args: Args) => E,
+      f: (_: E, ...args: Args) => F,
+      g: (_: F, ...args: Args) => G,
+      h: (_: G, ...args: Args) => H,
+      i: (_: H, ...args: Args) => I,
+      j: (_: I, ...args: Args) => J,
+      k: (_: J, ...args: Args) => K,
+      l: (_: K, ...args: Args) => L,
+      m: (_: L, ...args: Args) => M,
+      n: (_: M, ...args: Args) => N,
+      o: (_: N, ...args: Args) => O,
+      p: (_: O, ...args: Args) => P,
+      q: (_: P, ...args: Args) => Q,
+      r: (_: Q, ...args: Args) => R
+    ): (...args: Args) => R
+
     <
       Eff extends Yieldable<any, any, any, any>,
       AEff,
@@ -11236,6 +11974,66 @@ export namespace fn {
       r: (_: Q, ...args: Args) => R,
       s: (_: R, ...args: Args) => S
     ): (this: Self, ...args: Args) => S
+
+    <
+      Self,
+      Eff extends Yieldable<any, any, any, any>,
+      AEff,
+      Args extends Array<any>,
+      A,
+      B,
+      C,
+      D,
+      E,
+      F,
+      G,
+      H,
+      I,
+      J,
+      K,
+      L,
+      M,
+      N,
+      O,
+      P,
+      Q,
+      R,
+      S
+    >(
+      options: { readonly this: Self },
+      body: (this: Self, ...args: Args) => Generator<Eff, AEff, never> | (Eff & Effect<AEff, any, any>),
+      a: (
+        _: Effect<
+          AEff,
+          [Eff] extends [never] ? never
+            : [Eff] extends [Yieldable<infer _S, infer _A, infer E, infer _R>] ? E
+            : never,
+          [Eff] extends [never] ? never
+            : [Eff] extends [Yieldable<infer _S, infer _A, infer _E, infer R>] ? R
+            : never
+        >,
+        ...args: Args
+      ) => A,
+      b: (_: A, ...args: Args) => B,
+      c: (_: B, ...args: Args) => C,
+      d: (_: C, ...args: Args) => D,
+      e: (_: D, ...args: Args) => E,
+      f: (_: E, ...args: Args) => F,
+      g: (_: F, ...args: Args) => G,
+      h: (_: G, ...args: Args) => H,
+      i: (_: H, ...args: Args) => I,
+      j: (_: I, ...args: Args) => J,
+      k: (_: J, ...args: Args) => K,
+      l: (_: K, ...args: Args) => L,
+      m: (_: L, ...args: Args) => M,
+      n: (_: M, ...args: Args) => N,
+      o: (_: N, ...args: Args) => O,
+      p: (_: O, ...args: Args) => P,
+      q: (_: P, ...args: Args) => Q,
+      r: (_: Q, ...args: Args) => R,
+      s: (_: R, ...args: Args) => S
+    ): (...args: Args) => S
+
     <
       Eff extends Yieldable<any, any, any, any>,
       AEff,
@@ -11353,6 +12151,67 @@ export namespace fn {
       s: (_: R, ...args: Args) => S,
       t: (_: S, ...args: Args) => T
     ): (this: Self, ...args: Args) => T
+
+    <
+      Self,
+      Eff extends Yieldable<any, any, any, any>,
+      AEff,
+      Args extends Array<any>,
+      A,
+      B,
+      C,
+      D,
+      E,
+      F,
+      G,
+      H,
+      I,
+      J,
+      K,
+      L,
+      M,
+      N,
+      O,
+      P,
+      Q,
+      R,
+      S,
+      T
+    >(
+      options: { readonly this: Self },
+      body: (this: Self, ...args: Args) => Generator<Eff, AEff, never> | (Eff & Effect<AEff, any, any>),
+      a: (
+        _: Effect<
+          AEff,
+          [Eff] extends [never] ? never
+            : [Eff] extends [Yieldable<infer _S, infer _A, infer E, infer _R>] ? E
+            : never,
+          [Eff] extends [never] ? never
+            : [Eff] extends [Yieldable<infer _S, infer _A, infer _E, infer R>] ? R
+            : never
+        >,
+        ...args: Args
+      ) => A,
+      b: (_: A, ...args: Args) => B,
+      c: (_: B, ...args: Args) => C,
+      d: (_: C, ...args: Args) => D,
+      e: (_: D, ...args: Args) => E,
+      f: (_: E, ...args: Args) => F,
+      g: (_: F, ...args: Args) => G,
+      h: (_: G, ...args: Args) => H,
+      i: (_: H, ...args: Args) => I,
+      j: (_: I, ...args: Args) => J,
+      k: (_: J, ...args: Args) => K,
+      l: (_: K, ...args: Args) => L,
+      m: (_: L, ...args: Args) => M,
+      n: (_: M, ...args: Args) => N,
+      o: (_: N, ...args: Args) => O,
+      p: (_: O, ...args: Args) => P,
+      q: (_: P, ...args: Args) => Q,
+      r: (_: Q, ...args: Args) => R,
+      s: (_: R, ...args: Args) => S,
+      t: (_: S, ...args: Args) => T
+    ): (...args: Args) => T
   }
 }
 
@@ -11381,14 +12240,14 @@ export namespace fn {
  * @since 3.12.0
  * @category function
  */
-export const fnUntraced: fn.Gen = internal.fnUntraced
+export const fnUntraced: fn.Untraced = internal.fnUntraced
 
 /**
  * @since 3.12.0
  * @category function
  */
-export const fn: fn.WithNonGen & {
-  (name: string, options?: SpanOptionsNoTrace): fn.WithNonGen
+export const fn: fn.Traced & {
+  (name: string, options?: SpanOptionsNoTrace): fn.Traced
 } = internal.fn
 
 // ========================================================================
@@ -13195,4 +14054,4 @@ export const catchEager: {
  * @since 4.0.0
  * @category Eager
  */
-export const fnUntracedEager: fn.Gen = internal.fnUntracedEager
+export const fnUntracedEager: fn.Untraced = internal.fnUntracedEager
