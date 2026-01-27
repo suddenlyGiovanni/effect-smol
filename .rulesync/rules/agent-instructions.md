@@ -43,6 +43,14 @@ to automatically format code according to the project's style guidelines.
 The `index.ts` files are automatically generated. Do not manually edit them. Use
 `pnpm codegen` to regenerate barrel files after adding or removing modules.
 
+## Running test code
+
+If you need to run some code for testing or debugging purposes, create a new
+file in the `scratchpad/` directory at the root of the repository. You can then
+run the file with `node`scratchpad/your-file.ts`.
+
+Make sure to delete the file after you are done testing.
+
 ## Testing
 
 Before writing tests, look at existing tests in the codebase for similar
