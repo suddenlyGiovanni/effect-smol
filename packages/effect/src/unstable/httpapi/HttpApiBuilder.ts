@@ -625,8 +625,7 @@ const makeSecurityMiddleware = (
 
 const HttpServerResponseSchema = Schema.declare(Response.isHttpServerResponse)
 
-/** @internal */
-export const makeSuccessSchema = (
+const makeSuccessSchema = (
   schema: Schema.Top
 ): Schema.Codec<unknown, HttpServerResponse> => {
   const schemas = new Set<Schema.Schema<any>>()
@@ -662,6 +661,7 @@ const responseTransformation = <A, I, RD, RE>(
       const ast = schema.ast
       const isEmpty = HttpApiSchema.isVoidEncoded(ast)
       const status = getStatus(ast)
+      // Handle empty response
       if (isEmpty) {
         return Effect.succeed(Response.empty({ status }))
       }
