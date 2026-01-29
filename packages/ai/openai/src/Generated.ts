@@ -14942,6 +14942,7 @@ export type FunctionShellCallOutputItemParam = {
   readonly "call_id": string
   readonly "type": "shell_call_output"
   readonly "output": ReadonlyArray<FunctionShellCallOutputContentParam>
+  readonly "status"?: "in_progress" | "completed" | "incomplete" | null
   readonly "max_output_length"?: number | null
 }
 export const FunctionShellCallOutputItemParam = Schema.Struct({
@@ -14963,6 +14964,15 @@ export const FunctionShellCallOutputItemParam = Schema.Struct({
   "output": Schema.Array(FunctionShellCallOutputContentParam).annotate({
     "description": "Captured chunks of stdout and stderr output, along with their associated outcomes."
   }),
+  "status": Schema.optionalKey(
+    Schema.Union([
+      Schema.Literals(["in_progress", "completed", "incomplete"]).annotate({
+        "title": "Shell call status",
+        "description": "The status of the shell call output."
+      }),
+      Schema.Null
+    ])
+  ),
   "max_output_length": Schema.optionalKey(
     Schema.Union([
       Schema.Number.annotate({
