@@ -87,8 +87,35 @@ const setImmediate = "setImmediate" in globalThis
     return (): void => clearTimeout(timer)
   }
 
+class PriorityBuckets {
+  buckets: Array<[priority: number, tasks: Array<() => void>]> = []
+
+  scheduleTask(task: () => void, priority: number) {
+    const buckets = this.buckets
+    for (let i = 0; i < buckets.length; i++) {
+      const bucket = buckets[i]
+      const p = bucket[0]
+      if (p === priority) {
+        bucket[1].push(task)
+        return
+      }
+      if (p < priority) {
+        buckets.splice(i, 0, [priority, [task]])
+        return
+      }
+    }
+    buckets.push([priority, [task]])
+  }
+
+  drain() {
+    const buckets = this.buckets
+    this.buckets = []
+    return buckets
+  }
+}
+
 /**
- * The default scheduler implementation that provides efficient task scheduling
+ * A scheduler implementation that provides efficient task scheduling
  * with support for both synchronous and asynchronous execution modes.
  *
  * Features:
@@ -130,8 +157,8 @@ const setImmediate = "setImmediate" in globalThis
  * @category schedulers
  */
 export class MixedScheduler implements Scheduler {
-  private tasks: Array<() => void> = []
-  private running: ReturnType<typeof setImmediate> | undefined = undefined
+  private tasks = new PriorityBuckets()
+  private running: (() => void) | undefined = undefined
   readonly executionMode: "sync" | "async"
   readonly setImmediate: (f: () => void) => () => void
 
@@ -146,8 +173,8 @@ export class MixedScheduler implements Scheduler {
   /**
    * @since 2.0.0
    */
-  scheduleTask(task: () => void, _priority: number) {
-    this.tasks.push(task)
+  scheduleTask(task: () => void, priority: number) {
+    this.tasks.scheduleTask(task, priority)
     if (this.running === undefined) {
       this.running = this.setImmediate(this.afterScheduled)
     }
@@ -165,10 +192,12 @@ export class MixedScheduler implements Scheduler {
    * @since 2.0.0
    */
   runTasks() {
-    const tasks = this.tasks
-    this.tasks = []
-    for (let i = 0, len = tasks.length; i < len; i++) {
-      tasks[i]()
+    const buckets = this.tasks.drain()
+    for (let i = 0; i < buckets.length; i++) {
+      const toRun = buckets[i][1]
+      for (let j = 0; j < toRun.length; j++) {
+        toRun[j]()
+      }
     }
   }
 
@@ -183,7 +212,7 @@ export class MixedScheduler implements Scheduler {
    * @since 2.0.0
    */
   flush() {
-    while (this.tasks.length > 0) {
+    while (this.tasks.buckets.length > 0) {
       if (this.running !== undefined) {
         this.running()
         this.running = undefined
