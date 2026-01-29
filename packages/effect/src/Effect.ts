@@ -3799,9 +3799,9 @@ export const sandbox: <A, E, R>(
 export const ignore: <
   Arg extends Effect<any, any, any> | {
     readonly log?: boolean | LogLevel | undefined
-  } | undefined
+  } | undefined = undefined
 >(
-  effectOrOptions: Arg,
+  effectOrOptions?: Arg,
   options?: {
     readonly log?: boolean | LogLevel | undefined
   } | undefined
@@ -3828,9 +3828,9 @@ export const ignore: <
 export const ignoreCause: <
   Arg extends Effect<any, any, any> | {
     readonly log?: boolean | LogLevel | undefined
-  } | undefined
+  } | undefined = undefined
 >(
-  effectOrOptions: Arg,
+  effectOrOptions?: Arg,
   options?: {
     readonly log?: boolean | LogLevel | undefined
   } | undefined
@@ -6827,8 +6827,10 @@ export declare namespace Repeat {
  * @since 2.0.0
  * @category Repetition / Recursion
  */
-export const forever: <Arg extends Effect<any, any, any> | { readonly autoYield?: boolean | undefined } | undefined>(
-  effectOrOptions: Arg,
+export const forever: <
+  Arg extends Effect<any, any, any> | { readonly autoYield?: boolean | undefined } | undefined = undefined
+>(
+  effectOrOptions?: Arg,
   options?: { readonly autoYield?: boolean | undefined } | undefined
 ) => [Arg] extends [Effect<infer _A, infer _E, infer _R>] ? Effect<never, _E, _R>
   : <A, E, R>(self: Effect<A, E, R>) => Effect<never, E, R> = internal.forever
@@ -7749,9 +7751,9 @@ export const forkChild: <
   Arg extends Effect<any, any, any> | {
     readonly startImmediately?: boolean | undefined
     readonly uninterruptible?: boolean | "inherit" | undefined
-  } | undefined
+  } | undefined = undefined
 >(
-  effectOrOptions: Arg,
+  effectOrOptions?: Arg,
   options?: {
     readonly startImmediately?: boolean | undefined
     readonly uninterruptible?: boolean | "inherit" | undefined
@@ -7835,9 +7837,9 @@ export const forkScoped: <
   Arg extends Effect<any, any, any> | {
     readonly startImmediately?: boolean | undefined
     readonly uninterruptible?: boolean | "inherit" | undefined
-  } | undefined
+  } | undefined = undefined
 >(
-  effectOrOptions: Arg,
+  effectOrOptions?: Arg,
   options?: {
     readonly startImmediately?: boolean | undefined
     readonly uninterruptible?: boolean | "inherit" | undefined
@@ -7877,9 +7879,9 @@ export const forkDetach: <
   Arg extends Effect<any, any, any> | {
     readonly startImmediately?: boolean | undefined
     readonly uninterruptible?: boolean | "inherit" | undefined
-  } | undefined
+  } | undefined = undefined
 >(
-  effectOrOptions: Arg,
+  effectOrOptions?: Arg,
   options?: {
     readonly startImmediately?: boolean | undefined
     readonly uninterruptible?: boolean | "inherit" | undefined
