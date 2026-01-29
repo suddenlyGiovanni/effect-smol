@@ -161,7 +161,8 @@ export const toStreamResult: {
       Stream.filter(Result.isNotInitial),
       Stream.mapEffect((result) =>
         result._tag === "Success" ? Effect.succeed(result.value) : Effect.failCause(result.cause)
-      )
+      ),
+      Stream.changes
     )
 )
 
