@@ -199,6 +199,22 @@ export const getResult: {
   }
 )
 
+/**
+ * @since 4.0.0
+ * @category Conversions
+ */
+export const mount: {
+  <A>(atom: Atom.Atom<A>): (self: AtomRegistry) => Effect.Effect<void, never, Scope.Scope>
+  <A>(self: AtomRegistry, atom: Atom.Atom<A>): Effect.Effect<void, never, Scope.Scope>
+} = dual(
+  2,
+  <A>(self: AtomRegistry, atom: Atom.Atom<A>) =>
+    Effect.acquireRelease(
+      Effect.sync(() => self.mount(atom)),
+      (release) => Effect.sync(release)
+    )
+)
+
 // -----------------------------------------------------------------------------
 // internal
 // -----------------------------------------------------------------------------
