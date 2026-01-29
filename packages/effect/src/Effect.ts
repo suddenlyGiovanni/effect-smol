@@ -3809,6 +3809,35 @@ export const ignore: <
   : <A, E, R>(self: Effect<A, E, R>) => Effect<void, never, R> = internal.ignore
 
 /**
+ * Ignores the effect's failure cause, including defects and interruptions.
+ *
+ * Use the `log` option to emit the full {@link Cause} when the effect fails.
+ *
+ * @example
+ * ```ts
+ * import { Effect } from "effect"
+ *
+ * const task = Effect.fail("boom")
+ *
+ * const program = Effect.ignoreCause(task, { log: true })
+ * ```
+ *
+ * @since 4.0.0
+ * @category Error Handling
+ */
+export const ignoreCause: <
+  Arg extends Effect<any, any, any> | {
+    readonly log?: boolean | LogLevel | undefined
+  } | undefined
+>(
+  effectOrOptions: Arg,
+  options?: {
+    readonly log?: boolean | LogLevel | undefined
+  } | undefined
+) => [Arg] extends [Effect<infer _A, infer _E, infer _R>] ? Effect<void, never, _R>
+  : <A, E, R>(self: Effect<A, E, R>) => Effect<void, never, R> = internal.ignoreCause
+
+/**
  * Apply an `ExecutionPlan` to an effect, retrying with step-provided resources
  * until it succeeds or the plan is exhausted.
  *
@@ -4243,6 +4272,27 @@ export const raceAllFirst: <Eff extends Effect<any, any, any>>(
 ) => Effect<Success<Eff>, Error<Eff>, Services<Eff>> = internal.raceAllFirst
 
 /**
+ * Races two effects and returns the first successful result.
+ *
+ * If one effect succeeds, the other is interrupted and `onWinner` can observe the
+ * winning fiber. If both fail, the race fails.
+ *
+ * @example
+ * ```ts
+ * import { Console, Duration, Effect } from "effect"
+ *
+ * const fastFail = Effect.delay(Effect.fail("fast-fail"), Duration.millis(10))
+ * const slowSuccess = Effect.delay(Effect.succeed("slow-success"), Duration.millis(50))
+ *
+ * const program = Effect.gen(function*() {
+ *   const result = yield* Effect.race(fastFail, slowSuccess)
+ *   yield* Console.log(`winner: ${result}`)
+ * })
+ *
+ * Effect.runPromise(program)
+ * // Output: winner: slow-success
+ * ```
+ *
  * @since 2.0.0
  * @category Racing
  */
