@@ -8,6 +8,7 @@ import {
   Exit,
   Fiber,
   Filter,
+  Layer,
   Logger,
   type LogLevel,
   Option,
@@ -1953,6 +1954,28 @@ describe("Effect", () => {
           Effect.exit
         )
         assertExitFailure(exit, Cause.fail(error))
+      }))
+  })
+
+  describe("provide", () => {
+    class MyNumber extends ServiceMap.Service<MyNumber, number>()("MyNumber") {}
+
+    it.effect("subsequent calls share MemoMap", () =>
+      Effect.gen(function*() {
+        let buildCount = 0
+        const layer = Layer.sync(MyNumber, () => {
+          buildCount += 1
+          return 42
+        })
+
+        // @effect-diagnostics-next-line multipleEffectProvide:off
+        yield* Effect.void.pipe(
+          Effect.provide(layer, { local: true }), // local always builds the layer
+          Effect.provide(layer),
+          Effect.provide(layer)
+        )
+
+        assert.strictEqual(buildCount, 2)
       }))
   })
 })
