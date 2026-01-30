@@ -18,7 +18,13 @@ describe("Scheduler", () => {
 
       scheduler.flush()
 
-      assert.deepStrictEqual(order, ["p10-1", "p10-2", "p0-1", "p0-2", "p-1-1"])
+      assert.deepStrictEqual(order, [
+        "p-1-1",
+        "p0-1",
+        "p0-2",
+        "p10-1",
+        "p10-2"
+      ])
     }))
 
   it.effect("MixedScheduler is FIFO within a priority", () =>
