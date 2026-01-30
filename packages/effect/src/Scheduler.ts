@@ -14,50 +14,6 @@ import * as ServiceMap from "./ServiceMap.ts"
  * - Determining when fibers should yield control
  * - Managing the execution flow of Effects
  *
- * @example
- * ```ts
- * import type { Fiber } from "effect"
- * import type { Scheduler } from "effect/Scheduler"
- *
- * // Create a custom scheduler implementation
- * class CustomScheduler implements Scheduler {
- *   readonly executionMode = "async" as const
- *   private taskQueue: Array<() => void> = []
- *
- *   scheduleTask(task: () => void, priority: number): void {
- *     // Higher priority tasks are added to the front
- *     if (priority > 0) {
- *       this.taskQueue.unshift(task)
- *     } else {
- *       this.taskQueue.push(task)
- *     }
- *     // Schedule execution
- *     setTimeout(() => this.flush(), 0)
- *   }
- *
- *   shouldYield(fiber: Fiber.Fiber<unknown, unknown>): boolean {
- *     // Yield after every 1000 operations
- *     return fiber.currentOpCount >= 1000
- *   }
- *
- *   private flush(): void {
- *     const task = this.taskQueue.shift()
- *     if (task) {
- *       task()
- *     }
- *   }
- * }
- *
- * // Example implementation demonstrating the interface
- * const scheduler = new CustomScheduler()
- *
- * // Check execution mode
- * console.log(scheduler.executionMode) // "async"
- *
- * // Schedule a task
- * scheduler.scheduleTask(() => console.log("Task executed"), 1)
- * ```
- *
  * @since 2.0.0
  * @category models
  */
@@ -90,21 +46,22 @@ const setImmediate = "setImmediate" in globalThis
 class PriorityBuckets {
   buckets: Array<[priority: number, tasks: Array<() => void>]> = []
 
-  scheduleTask(task: () => void, priority: number) {
+  scheduleTask(task: () => void, priority: number): void {
     const buckets = this.buckets
-    for (let i = 0; i < buckets.length; i++) {
-      const bucket = buckets[i]
-      const p = bucket[0]
-      if (p === priority) {
-        bucket[1].push(task)
-        return
-      }
-      if (p < priority) {
-        buckets.splice(i, 0, [priority, [task]])
-        return
-      }
+    const len = buckets.length
+    let bucket: [number, Array<() => void>] | undefined
+    let index = 0
+    for (; index < len; index++) {
+      if (buckets[index][0] > priority) break
+      bucket = buckets[index]
     }
-    buckets.push([priority, [task]])
+    if (bucket && bucket[0] === priority) {
+      bucket[1].push(task)
+    } else if (index === len) {
+      buckets.push([priority, [task]])
+    } else {
+      buckets.splice(index, 0, [priority, [task]])
+    }
   }
 
   drain() {
