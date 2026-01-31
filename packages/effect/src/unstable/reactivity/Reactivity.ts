@@ -258,7 +258,15 @@ export const invalidate = (
 export const layer: Layer.Layer<Reactivity> = Layer.effect(Reactivity)(make)
 
 function stringOrHash(u: unknown): string | number {
-  return typeof u === "string" ? u : Hash.hash(u)
+  switch (typeof u) {
+    case "string":
+    case "number":
+    case "bigint":
+    case "boolean":
+      return String(u)
+    default:
+      return Hash.hash(u)
+  }
 }
 
 const keysToHashes = (
