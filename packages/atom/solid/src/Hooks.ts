@@ -4,13 +4,12 @@
 import * as Cause from "effect/Cause"
 import * as Effect from "effect/Effect"
 import * as Exit from "effect/Exit"
-import * as Function from "effect/Function"
 import type * as AsyncResult from "effect/unstable/reactivity/AsyncResult"
 import * as Atom from "effect/unstable/reactivity/Atom"
 import type * as AtomRef from "effect/unstable/reactivity/AtomRef"
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry"
-import type { Accessor, ResourceReturn } from "solid-js"
-import { createResource, createSignal, onCleanup, useContext } from "solid-js"
+import type { Accessor } from "solid-js"
+import { createSignal, onCleanup, useContext } from "solid-js"
 import { RegistryContext } from "./RegistryContext.ts"
 
 const initialValuesSet = new WeakMap<AtomRegistry.AtomRegistry, WeakSet<Atom.Atom<any>>>()
@@ -161,33 +160,6 @@ export const createAtom = <R, W, const Mode extends "value" | "promise" | "promi
     setAtom(registry, atom, options)
   ] as const
 }
-
-/**
- * @since 1.0.0
- * @category hooks
- */
-export const createAtomResource = <A, E, const Preserve extends boolean = false>(
-  atom: Atom.Atom<AsyncResult.AsyncResult<A, E>>,
-  options?: {
-    readonly suspendOnWaiting?: boolean | undefined
-    readonly preserveResult?: Preserve | undefined
-  }
-): ResourceReturn<Preserve extends true ? (AsyncResult.Success<A, E> | AsyncResult.Failure<A, E>) : A> => {
-  const registry = useContext(RegistryContext)
-  const value = createAtomAccessor(registry, atom)
-  const resource = createResource(function(): Promise<AsyncResult.Success<A, E> | AsyncResult.Failure<A, E> | A> {
-    const result = value()
-    if (result._tag === "Initial" || (options?.suspendOnWaiting && result.waiting)) {
-      return unresolvedPromise
-    } else if (options?.preserveResult) {
-      return Promise.resolve(result)
-    }
-    return result._tag === "Success" ? Promise.resolve(result.value) : Promise.reject(Cause.squash(result.cause))
-  })
-  return resource as any
-}
-
-const unresolvedPromise = new Promise<never>(Function.constVoid)
 
 /**
  * @since 1.0.0
