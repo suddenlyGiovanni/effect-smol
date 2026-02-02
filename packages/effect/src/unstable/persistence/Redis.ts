@@ -61,8 +61,8 @@ export const make = Effect.fnUntraced(function*(
   })
 })
 
-type ErrorTypeId = "~@effect/platform-bun/BunRedis/RedisError"
-const ErrorTypeId: ErrorTypeId = "~@effect/platform-bun/BunRedis/RedisError"
+type ErrorTypeId = "~effect/persistence/Redis/RedisError"
+const ErrorTypeId: ErrorTypeId = "~effect/persistence/Redis/RedisError"
 
 /**
  * @since 4.0.0
@@ -78,8 +78,8 @@ export class RedisError extends Schema.ErrorClass<RedisError>(ErrorTypeId)({
   readonly [ErrorTypeId]: ErrorTypeId = ErrorTypeId
 }
 
-type ScriptTypeId = "~@effect/platform-bun/BunRedis/Script"
-const ScriptTypeId: ScriptTypeId = "~@effect/platform-bun/BunRedis/Script"
+type ScriptTypeId = "~effect/persistence/Redis/Script"
+const ScriptTypeId: ScriptTypeId = "~effect/persistence/Redis/Script"
 
 /**
  * @since 4.0.0
