@@ -1,26 +1,26 @@
 {
-  "name": "@effect/atom-react",
+  "name": "@effect/atom-solid",
   "version": "0.0.0",
   "type": "module",
   "license": "MIT",
-  "description": "React bindings for the Effect Atom modules",
+  "description": "SolidJS bindings for the Effect Atom modules",
   "homepage": "https://effect.website",
   "repository": {
     "type": "git",
     "url": "https://github.com/Effect-TS/effect.git",
-    "directory": "packages/atom/react"
+    "directory": "packages/atom/solid"
   },
   "bugs": {
     "url": "https://github.com/Effect-TS/effect/issues"
   },
   "tags": [
     "typescript",
-    "react",
+    "solid",
     "database"
   ],
   "keywords": [
     "typescript",
-    "react",
+    "solid",
     "database"
   ],
   "sideEffects": [],
@@ -58,21 +58,14 @@
   },
   "peerDependencies": {
     "effect": "workspace:^",
-    "react": "^19.2.4",
-    "scheduler": "*"
+    "solid-js": ">=1 <2"
   },
   "devDependencies": {
+    "@solidjs/testing-library": "^0.8.0",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
-    "@testing-library/react": "^16.3.0",
-    "@types/react": "^19.2.2",
-    "@types/react-dom": "^19.2.2",
-    "@types/scheduler": "^0.26.0",
     "effect": "workspace:^",
     "jsdom": "^27.1.0",
-    "react": "19.2.3",
-    "react-dom": "19.2.3",
-    "react-error-boundary": "^6.0.0",
-    "scheduler": "^0.27.0"
+    "solid-js": "^1.9.0"
   }
 }

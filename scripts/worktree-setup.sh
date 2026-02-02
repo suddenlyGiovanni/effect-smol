@@ -18,7 +18,7 @@ access the archived repository here:
 
 \`.repos/effect-old\`
 
-## Learning about "effect-atom" old version
+## Learning more about "effect-atom"
 
 If you need to learn more about the old version of effect atom, you can
 access the archived repository here:
