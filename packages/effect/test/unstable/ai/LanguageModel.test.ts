@@ -6,7 +6,7 @@ import { LanguageModel, Prompt, Response, Tool, Toolkit } from "effect/unstable/
 import * as TestUtils from "./utils.ts"
 
 const MyTool = Tool.make("MyTool", {
-  parameters: { testParam: Schema.String },
+  parameters: Schema.Struct({ testParam: Schema.String }),
   success: Schema.Struct({ testSuccess: Schema.String })
 })
 
@@ -20,13 +20,13 @@ const MyToolkitLayer = MyToolkit.toLayer({
 })
 
 const ApprovalTool = Tool.make("ApprovalTool", {
-  parameters: { action: Schema.String },
+  parameters: Schema.Struct({ action: Schema.String }),
   success: Schema.Struct({ result: Schema.String }),
   needsApproval: true
 })
 
 const DynamicApprovalTool = Tool.make("DynamicApprovalTool", {
-  parameters: { dangerous: Schema.Boolean },
+  parameters: Schema.Struct({ dangerous: Schema.Boolean }),
   success: Schema.Struct({ result: Schema.String }),
   needsApproval: (params) => params.dangerous
 })
@@ -192,7 +192,10 @@ describe("LanguageModel", () => {
               return [{
                 type: "finish",
                 reason: "stop",
-                usage: { totalTokens: 10, inputTokens: 5, outputTokens: 5 }
+                usage: {
+                  inputTokens: { uncached: 5, total: 5, cacheRead: undefined, cacheWrite: undefined },
+                  outputTokens: { total: 5, text: undefined, reasoning: undefined }
+                }
               }]
             }
           }),
@@ -257,7 +260,10 @@ describe("LanguageModel", () => {
               return [{
                 type: "finish",
                 reason: "stop",
-                usage: { totalTokens: 10, inputTokens: 5, outputTokens: 5 }
+                usage: {
+                  inputTokens: { uncached: 5, total: 5, cacheRead: undefined, cacheWrite: undefined },
+                  outputTokens: { total: 5, text: undefined, reasoning: undefined }
+                }
               }]
             }
           }),

@@ -267,16 +267,16 @@ export interface GenerateObjectOptions<
  * @since 4.0.0
  * @category models
  */
-export type ToolChoice<Tools extends string> =
+export type ToolChoice<ToolName extends string> =
   | "auto"
   | "none"
   | "required"
   | {
-    readonly tool: Tools
+    readonly tool: ToolName
   }
   | {
     readonly mode?: "auto" | "required"
-    readonly oneOf: ReadonlyArray<Tools>
+    readonly oneOf: ReadonlyArray<ToolName>
   }
 
 /**
@@ -376,11 +376,17 @@ export class GenerateTextResponse<Tools extends Record<string, Tool.Any>> {
     const finishPart = this.content.find((part) => part.type === "finish")
     if (Predicate.isUndefined(finishPart)) {
       return new Response.Usage({
-        inputTokens: undefined,
-        outputTokens: undefined,
-        totalTokens: undefined,
-        reasoningTokens: undefined,
-        cachedInputTokens: undefined
+        inputTokens: {
+          uncached: undefined,
+          total: undefined,
+          cacheRead: undefined,
+          cacheWrite: undefined
+        },
+        outputTokens: {
+          total: undefined,
+          text: undefined,
+          reasoning: undefined
+        }
       })
     }
     return finishPart.usage
@@ -1240,7 +1246,7 @@ export const make: (params: ConstructorParams) => Effect.Effect<Service> = Effec
  *   })
  *
  *   console.log(response.text)
- *   console.log(response.usage.totalTokens)
+ *   console.log(response.usage.inputTokens.total)
  *
  *   return response
  * })

@@ -351,7 +351,7 @@ describe("OpenAiLanguageModel", () => {
             assert.isDefined(functionCall)
             strictEqual(functionCall.name, "TestTool")
             strictEqual(functionCall.call_id, "call_abc")
-          }).pipe(Effect.provide(makeTestLayer()), Effect.provide(TestToolkitLayer)))
+          }).pipe(Effect.provide([makeTestLayer(), TestToolkitLayer])))
       })
 
       describe("tool messages", () => {
@@ -393,7 +393,7 @@ describe("OpenAiLanguageModel", () => {
             assert.isDefined(toolOutput)
             strictEqual(toolOutput.call_id, "call_abc")
             strictEqual(toolOutput.output, JSON.stringify({ output: "result" }))
-          }).pipe(Effect.provide(makeTestLayer()), Effect.provide(TestToolkitLayer)))
+          }).pipe(Effect.provide([makeTestLayer(), TestToolkitLayer])))
       })
     })
 
@@ -413,7 +413,7 @@ describe("OpenAiLanguageModel", () => {
           strictEqual(tool.name, "TestTool")
           strictEqual(tool.description, "A test tool")
           strictEqual(tool.strict, true)
-        }).pipe(Effect.provide(makeTestLayer()), Effect.provide(TestToolkitLayer)))
+        }).pipe(Effect.provide([makeTestLayer(), TestToolkitLayer])))
 
       it.effect("handles tool choice auto", () =>
         Effect.gen(function*() {
@@ -427,7 +427,7 @@ describe("OpenAiLanguageModel", () => {
           const body = yield* getRequestBody(requests[0])
 
           strictEqual(body.tool_choice, "auto")
-        }).pipe(Effect.provide(makeTestLayer()), Effect.provide(TestToolkitLayer)))
+        }).pipe(Effect.provide([makeTestLayer(), TestToolkitLayer])))
 
       it.effect("handles tool choice none", () =>
         Effect.gen(function*() {
@@ -441,7 +441,7 @@ describe("OpenAiLanguageModel", () => {
           const body = yield* getRequestBody(requests[0])
 
           strictEqual(body.tool_choice, "none")
-        }).pipe(Effect.provide(makeTestLayer()), Effect.provide(TestToolkitLayer)))
+        }).pipe(Effect.provide([makeTestLayer(), TestToolkitLayer])))
 
       it.effect("handles tool choice required", () =>
         Effect.gen(function*() {
@@ -455,7 +455,7 @@ describe("OpenAiLanguageModel", () => {
           const body = yield* getRequestBody(requests[0])
 
           strictEqual(body.tool_choice, "required")
-        }).pipe(Effect.provide(makeTestLayer()), Effect.provide(TestToolkitLayer)))
+        }).pipe(Effect.provide([makeTestLayer(), TestToolkitLayer])))
 
       it.effect("handles specific tool choice", () =>
         Effect.gen(function*() {
@@ -469,7 +469,7 @@ describe("OpenAiLanguageModel", () => {
           const body = yield* getRequestBody(requests[0])
 
           deepStrictEqual(body.tool_choice, { type: "function", name: "TestTool" })
-        }).pipe(Effect.provide(makeTestLayer()), Effect.provide(TestToolkitLayer)))
+        }).pipe(Effect.provide([makeTestLayer(), TestToolkitLayer])))
 
       it.effect("adds code_interpreter tool", () =>
         Effect.gen(function*() {
@@ -622,10 +622,12 @@ describe("OpenAiLanguageModel", () => {
             deepStrictEqual(toolCall.params, { input: "hello" })
           }
         }).pipe(
-          Effect.provide(makeTestLayer({
-            body: { output: [makeFunctionCall("TestTool", { input: "hello" })] }
-          })),
-          Effect.provide(TestToolkitLayer)
+          Effect.provide([
+            makeTestLayer({
+              body: { output: [makeFunctionCall("TestTool", { input: "hello" })] }
+            }),
+            TestToolkitLayer
+          ])
         ))
 
       it.effect("extracts reasoning parts", () =>
@@ -655,9 +657,13 @@ describe("OpenAiLanguageModel", () => {
           const finishPart = result.content.find((p) => p.type === "finish")
           assert.isDefined(finishPart)
           if (finishPart?.type === "finish") {
-            strictEqual(finishPart.usage.inputTokens, 10)
-            strictEqual(finishPart.usage.outputTokens, 20)
-            strictEqual(finishPart.usage.totalTokens, 30)
+            deepStrictEqual(finishPart.usage.inputTokens, {
+              uncached: 10,
+              total: 10,
+              cacheRead: 0,
+              cacheWrite: undefined
+            })
+            deepStrictEqual(finishPart.usage.outputTokens, { total: 20, text: 20, reasoning: 0 })
           }
         }).pipe(Effect.provide(makeTestLayer({
           body: {
@@ -709,10 +715,12 @@ describe("OpenAiLanguageModel", () => {
             strictEqual(finishPart.reason, "tool-calls")
           }
         }).pipe(
-          Effect.provide(makeTestLayer({
-            body: { output: [makeFunctionCall("TestTool", { input: "test" })] }
-          })),
-          Effect.provide(TestToolkitLayer)
+          Effect.provide([
+            makeTestLayer({
+              body: { output: [makeFunctionCall("TestTool", { input: "test" })] }
+            }),
+            TestToolkitLayer
+          ])
         ))
 
       it.effect("extracts url citations as source parts", () =>
@@ -743,7 +751,8 @@ describe("OpenAiLanguageModel", () => {
                   title: "Example",
                   start_index: 0,
                   end_index: 14
-                }]
+                }],
+                logprobs: []
               }]
             }]
           }
@@ -880,7 +889,7 @@ const makeTextOutput = (
   id: "msg_123",
   role: "assistant" as const,
   status: "completed",
-  content: [{ type: "output_text", text, annotations: [] }],
+  content: [{ type: "output_text", text, annotations: [], logprobs: [] }],
   ...overrides
 })
 
@@ -922,7 +931,7 @@ const makeUsage = (
 
 const TestTool = Tool.make("TestTool", {
   description: "A test tool",
-  parameters: { input: Schema.String },
+  parameters: Schema.Struct({ input: Schema.String }),
   success: Schema.Struct({ output: Schema.String })
 })
 

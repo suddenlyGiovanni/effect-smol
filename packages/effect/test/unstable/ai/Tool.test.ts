@@ -884,9 +884,9 @@ describe("Tool", () => {
 
 const FailureModeError = Tool.make("FailureModeError", {
   description: "A test tool",
-  parameters: {
+  parameters: Schema.Struct({
     testParam: Schema.String
-  },
+  }),
   success: Schema.Struct({
     testSuccess: Schema.String
   }),
@@ -898,9 +898,9 @@ const FailureModeError = Tool.make("FailureModeError", {
 const FailureModeReturn = Tool.make("FailureModeReturn", {
   description: "A test tool",
   failureMode: "return",
-  parameters: {
+  parameters: Schema.Struct({
     testParam: Schema.String
-  },
+  }),
   success: Schema.Struct({
     testSuccess: Schema.String
   }),
@@ -911,7 +911,7 @@ const FailureModeReturn = Tool.make("FailureModeReturn", {
 
 const IncrementalTool = Tool.make("IncrementalTool", {
   description: "A test tool",
-  parameters: { input: Schema.String },
+  parameters: Schema.Struct({ input: Schema.String }),
   success: Schema.Union([
     Schema.Struct({ status: Schema.Literal("loading"), progress: Schema.Number }),
     Schema.Struct({ status: Schema.Literal("processing"), progress: Schema.Number }),
@@ -922,7 +922,7 @@ const IncrementalTool = Tool.make("IncrementalTool", {
 
 const ConcurrentIncrementalTool = Tool.make("ConcurrentIncrementalTool", {
   description: "A test tool",
-  parameters: { name: Schema.String, delay: Schema.DurationFromMillis },
+  parameters: Schema.Struct({ name: Schema.String, delay: Schema.DurationFromMillis }),
   success: Schema.Union([
     Schema.Struct({ status: Schema.Literal("loading"), job: Schema.String, progress: Schema.Number }),
     Schema.Struct({ status: Schema.Literal("complete"), job: Schema.String })
@@ -932,7 +932,7 @@ const ConcurrentIncrementalTool = Tool.make("ConcurrentIncrementalTool", {
 const IncrementalToolWithFailure = Tool.make("IncrementalToolWithFailure", {
   description: "A test tool",
   failureMode: "return",
-  parameters: { input: Schema.String },
+  parameters: Schema.Struct({ input: Schema.String }),
   success: Schema.Struct({
     status: Schema.String,
     progress: Schema.optional(Schema.Number)
@@ -943,14 +943,15 @@ const IncrementalToolWithFailure = Tool.make("IncrementalToolWithFailure", {
 })
 
 const NoHandlerRequired = Tool.providerDefined({
+  id: "test.no_handler_required",
   customName: "NoHandlerRequired",
   providerName: "no_handler_required",
-  args: {
+  args: Schema.Struct({
     testArg: Schema.String
-  },
-  parameters: {
+  }),
+  parameters: Schema.Struct({
     testParam: Schema.String
-  },
+  }),
   success: Schema.Struct({
     testSuccess: Schema.String
   }),
@@ -960,15 +961,16 @@ const NoHandlerRequired = Tool.providerDefined({
 })
 
 const HandlerRequired = Tool.providerDefined({
+  id: "test.handler_required",
   customName: "HandlerRequired",
   providerName: "handler_required",
   requiresHandler: true,
-  args: {
+  args: Schema.Struct({
     testArg: Schema.String
-  },
-  parameters: {
+  }),
+  parameters: Schema.Struct({
     testParam: Schema.String
-  },
+  }),
   success: Schema.Struct({
     testSuccess: Schema.String
   }),
