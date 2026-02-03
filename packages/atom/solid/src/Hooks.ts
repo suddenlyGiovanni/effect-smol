@@ -18,7 +18,7 @@ const initialValuesSet = new WeakMap<AtomRegistry.AtomRegistry, WeakSet<Atom.Ato
  * @since 1.0.0
  * @category hooks
  */
-export const createAtomInitialValues = (initialValues: Iterable<readonly [Atom.Atom<any>, any]>): void => {
+export const useAtomInitialValues = (initialValues: Iterable<readonly [Atom.Atom<any>, any]>): void => {
   const registry = useContext(RegistryContext)
   let set = initialValuesSet.get(registry)
   if (set === undefined) {
@@ -37,7 +37,7 @@ export const createAtomInitialValues = (initialValues: Iterable<readonly [Atom.A
  * @since 1.0.0
  * @category hooks
  */
-export const createAtomValue: {
+export const useAtomValue: {
   <A>(atom: Atom.Atom<A>): Accessor<A>
   <A, B>(atom: Atom.Atom<A>, f: (_: A) => B): Accessor<B>
 } = <A>(atom: Atom.Atom<A>, f?: (_: A) => A): Accessor<A> => {
@@ -94,7 +94,7 @@ const flattenExit = <A, E>(exit: Exit.Exit<A, E>): A => {
  * @since 1.0.0
  * @category hooks
  */
-export const createAtomMount = <A>(atom: Atom.Atom<A>): void => {
+export const useAtomMount = <A>(atom: Atom.Atom<A>): void => {
   const registry = useContext(RegistryContext)
   mountAtom(registry, atom)
 }
@@ -103,7 +103,7 @@ export const createAtomMount = <A>(atom: Atom.Atom<A>): void => {
  * @since 1.0.0
  * @category hooks
  */
-export const createAtomSet = <
+export const useAtomSet = <
   R,
   W,
   Mode extends "value" | "promise" | "promiseExit" = never
@@ -129,7 +129,7 @@ export const createAtomSet = <
  * @since 1.0.0
  * @category hooks
  */
-export const createAtomRefresh = <A>(atom: Atom.Atom<A>): () => void => {
+export const useAtomRefresh = <A>(atom: Atom.Atom<A>): () => void => {
   const registry = useContext(RegistryContext)
   mountAtom(registry, atom)
   return () => registry.refresh(atom)
@@ -139,7 +139,7 @@ export const createAtomRefresh = <A>(atom: Atom.Atom<A>): () => void => {
  * @since 1.0.0
  * @category hooks
  */
-export const createAtom = <R, W, const Mode extends "value" | "promise" | "promiseExit" = never>(
+export const useAtom = <R, W, const Mode extends "value" | "promise" | "promiseExit" = never>(
   atom: Atom.Writable<R, W>,
   options?: {
     readonly mode?: ([R] extends [AsyncResult.AsyncResult<any, any>] ? Mode : "value") | undefined
@@ -165,7 +165,7 @@ export const createAtom = <R, W, const Mode extends "value" | "promise" | "promi
  * @since 1.0.0
  * @category hooks
  */
-export const createAtomSubscribe = <A>(
+export const useAtomSubscribe = <A>(
   atom: Atom.Atom<A>,
   f: (_: A) => void,
   options?: { readonly immediate?: boolean }
@@ -178,7 +178,7 @@ export const createAtomSubscribe = <A>(
  * @since 1.0.0
  * @category hooks
  */
-export const createAtomRef = <A>(ref: AtomRef.ReadonlyRef<A>): Accessor<A> => {
+export const useAtomRef = <A>(ref: AtomRef.ReadonlyRef<A>): Accessor<A> => {
   const [value, setValue] = createSignal(ref.value)
   onCleanup(ref.subscribe(setValue))
   return value
@@ -188,12 +188,12 @@ export const createAtomRef = <A>(ref: AtomRef.ReadonlyRef<A>): Accessor<A> => {
  * @since 1.0.0
  * @category hooks
  */
-export const createAtomRefProp = <A, K extends keyof A>(ref: AtomRef.AtomRef<A>, prop: K): AtomRef.AtomRef<A[K]> =>
+export const useAtomRefProp = <A, K extends keyof A>(ref: AtomRef.AtomRef<A>, prop: K): AtomRef.AtomRef<A[K]> =>
   ref.prop(prop)
 
 /**
  * @since 1.0.0
  * @category hooks
  */
-export const createAtomRefPropValue = <A, K extends keyof A>(ref: AtomRef.AtomRef<A>, prop: K): Accessor<A[K]> =>
-  createAtomRef(createAtomRefProp(ref, prop))
+export const useAtomRefPropValue = <A, K extends keyof A>(ref: AtomRef.AtomRef<A>, prop: K): Accessor<A[K]> =>
+  useAtomRef(useAtomRefProp(ref, prop))
