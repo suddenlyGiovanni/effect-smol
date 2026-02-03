@@ -644,7 +644,7 @@ export const confirm = (options: ConfirmOptions): Prompt<boolean> => {
   return custom(initialState, {
     render: handleConfirmRender(opts),
     process: (input) => handleConfirmProcess(input, opts.initial),
-    clear: () => handleConfirmClear(opts)
+    clear: handleConfirmClear(opts)
   })
 }
 
@@ -932,7 +932,7 @@ export const select = <const A>(options: SelectOptions<A>): Prompt<A> => {
   return custom(initialIndex, {
     render: handleSelectRender(opts),
     process: handleSelectProcess(opts),
-    clear: () => handleSelectClear(opts)
+    clear: handleSelectClear(opts)
   })
 }
 
@@ -1003,10 +1003,11 @@ export const multiSelect = <const A>(
       initialSelected.add(i)
     }
   }
-  return custom({ index: 0, selectedIndices: initialSelected, error: undefined }, {
+  const initialState: MultiSelectState = { index: 0, selectedIndices: initialSelected, error: undefined }
+  return custom(initialState, {
     render: handleMultiSelectRender(opts),
     process: handleMultiSelectProcess(opts),
-    clear: () => handleMultiSelectClear(opts)
+    clear: handleMultiSelectClear(opts)
   })
 }
 
@@ -1196,6 +1197,15 @@ const lines = (prompt: string, columns: number): number => {
     )
 }
 
+const clearOutputWithError = (outputText: string, columns: number, errorText?: string): string => {
+  if (errorText !== undefined && errorText.length > 0) {
+    return Ansi.cursorDown(lines(errorText, columns))
+      + eraseText(`\n${errorText}`, columns)
+      + eraseText(outputText, columns)
+  }
+  return eraseText(outputText, columns)
+}
+
 interface ConfirmOptionsReq extends Required<ConfirmOptions> {}
 
 interface ConfirmState {
@@ -1204,31 +1214,36 @@ interface ConfirmState {
 
 const renderBeep = Ansi.beep
 
-const handleConfirmClear = Effect.fnUntraced(function*(options: ConfirmOptionsReq) {
-  const terminal = yield* Terminal.Terminal
-  const columns = yield* terminal.columns
-  const clearOutput = eraseText(options.message, columns)
-  const resetCurrentLine = Ansi.eraseLine + Ansi.cursorLeft
-  return clearOutput + resetCurrentLine
-})
-
 const NEWLINE_REGEXP = /\r?\n/
+
+const handleConfirmClear = (options: ConfirmOptionsReq) => {
+  return Effect.fnUntraced(function*(state: ConfirmState, _: Action<ConfirmState, boolean>) {
+    const terminal = yield* Terminal.Terminal
+    const columns = yield* terminal.columns
+    const figures = yield* platformFigures
+    const confirmMessage = state.value
+      ? options.placeholder.defaultConfirm!
+      : options.placeholder.defaultDeny!
+    const promptText = renderConfirmOutput(
+      confirmMessage,
+      "?",
+      figures.pointerSmall,
+      options,
+      { plain: true }
+    )
+    const clearOutput = eraseText(promptText, columns)
+    const resetCurrentLine = Ansi.eraseLine + Ansi.cursorLeft
+    return clearOutput + resetCurrentLine
+  })
+}
 
 const renderConfirmOutput = (
   confirm: string,
   leadingSymbol: string,
   trailingSymbol: string,
-  options: ConfirmOptionsReq
-) => {
-  const prefix = leadingSymbol + " "
-  return Arr.match(options.message.split(NEWLINE_REGEXP), {
-    onEmpty: () => prefix + " " + trailingSymbol + " " + confirm,
-    onNonEmpty: (promptLines) => {
-      const lines = Arr.map(promptLines, (line) => annotateLine(line))
-      return prefix + lines.join("\n") + " " + trailingSymbol + " " + confirm
-    }
-  })
-}
+  options: ConfirmOptionsReq,
+  renderOptions?: RenderOptions | undefined
+) => renderPrompt(confirm, options.message, leadingSymbol, trailingSymbol, renderOptions)
 
 const renderConfirmNextFrame = Effect.fnUntraced(function*(state: ConfirmState, options: ConfirmOptionsReq) {
   const figures = yield* platformFigures
@@ -1295,12 +1310,18 @@ const handleDateClear = (options: DateOptionsReq) => {
   return Effect.fnUntraced(function*(state: DateState, _: Action<DateState, globalThis.Date>) {
     const terminal = yield* Terminal.Terminal
     const columns = yield* terminal.columns
+    const figures = yield* platformFigures
     const resetCurrentLine = Ansi.eraseLine + Ansi.cursorLeft
-    const clearError = state.error !== undefined
-      ? Ansi.cursorDown(lines(state.error, columns)) + eraseText(`\n${state.error}`, columns)
+    const parts = Arr.reduce(state.dateParts, "", (doc, part) => doc + part.toString())
+    const promptText = renderDateOutput("?", figures.pointerSmall, parts, options, { plain: true })
+    const errorText = state.error !== undefined
+      ? Arr.match(state.error.split(NEWLINE_REGEXP), {
+        onEmpty: () => "",
+        onNonEmpty: (errorLines) => `${figures.pointerSmall} ${errorLines.join("\n")}`
+      })
       : ""
-    const clearOutput = eraseText(options.message, columns)
-    return clearError + clearOutput + resetCurrentLine
+    const clearOutput = clearOutputWithError(promptText, columns, errorText)
+    return clearOutput + resetCurrentLine
   })
 }
 
@@ -1335,17 +1356,9 @@ const renderDateOutput = (
   leadingSymbol: string,
   trailingSymbol: string,
   parts: string,
-  options: DateOptionsReq
-) => {
-  const prefix = leadingSymbol + " "
-  return Arr.match(options.message.split(NEWLINE_REGEXP), {
-    onEmpty: () => prefix + " " + trailingSymbol + " " + parts,
-    onNonEmpty: (promptLines) => {
-      const lines = Arr.map(promptLines, (line) => annotateLine(line))
-      return prefix + lines.join("\n") + " " + trailingSymbol + " " + parts
-    }
-  })
-}
+  options: DateOptionsReq,
+  renderOptions?: RenderOptions | undefined
+) => renderPrompt(parts, options.message, leadingSymbol, trailingSymbol, renderOptions)
 
 const renderDateNextFrame = Effect.fnUntraced(function*(state: DateState, options: DateOptionsReq) {
   const figures = yield* platformFigures
@@ -1901,27 +1914,47 @@ const handleFileClear = (options: FileOptionsReq) => {
   return Effect.fnUntraced(function*(state: FileState, _: Action<FileState, string>) {
     const terminal = yield* Terminal.Terminal
     const columns = yield* terminal.columns
+    const path = yield* Path.Path
+    const figures = yield* platformFigures
     const currentPath = yield* resolveCurrentPath(state.path, options)
-    const text = "\n".repeat(Math.min(state.files.length, options.maxPerPage))
-    const clearPath = eraseText(currentPath, columns)
-    const message = showConfirmation(state.confirm) ? CONFIRM_MESSAGE : options.message
-    const clearPrompt = eraseText(`\n${message}`, columns)
-    const clearOptions = eraseText(text, columns)
-    return clearOptions + clearPath + clearPrompt
+    const selectedPath = state.files[state.cursor]
+    const resolvedPath = path.resolve(currentPath, selectedPath)
+    const resolvedPathText = `${figures.pointerSmall} ${resolvedPath}`
+    const isConfirming = showConfirmation(state.confirm)
+    const promptText = isConfirming
+      ? renderPrompt("(Y/n)", CONFIRM_MESSAGE, "?", figures.pointerSmall, { plain: true })
+      : renderPrompt("", options.message, figures.tick, figures.ellipsis, { plain: true })
+    const filesText = isConfirming
+      ? ""
+      : renderFiles(state, state.files, figures, options, { plain: true })
+    const outputText = isConfirming
+      ? `${promptText}\n${resolvedPathText}`
+      : `${promptText}\n${resolvedPathText}\n${filesText}`
+    const clearOutput = eraseText(outputText, columns)
+    const resetCurrentLine = Ansi.eraseLine + Ansi.cursorLeft
+    return clearOutput + resetCurrentLine
   })
+}
+
+type RenderOptions = {
+  readonly plain?: boolean
 }
 
 const renderPrompt = (
   confirm: string,
   message: string,
   leadingSymbol: string,
-  trailingSymbol: string
+  trailingSymbol: string,
+  options?: RenderOptions | undefined
 ) => {
   const prefix = leadingSymbol + " "
+  const annotate = options?.plain === true
+    ? (line: string) => line
+    : annotateLine
   return Arr.match(message.split(NEWLINE_REGEXP), {
     onEmpty: () => prefix + " " + trailingSymbol + " " + confirm,
     onNonEmpty: (promptLines) => {
-      const lines = Arr.map(promptLines, (line) => annotateLine(line))
+      const lines = Arr.map(promptLines, (line) => annotate(line))
       return prefix + lines.join("\n") + " " + trailingSymbol + " " + confirm
     }
   })
@@ -1932,7 +1965,8 @@ const renderPrefix = (
   toDisplay: { readonly startIndex: number; readonly endIndex: number },
   currentIndex: number,
   length: number,
-  figures: Effect.Success<typeof platformFigures>
+  figures: Effect.Success<typeof platformFigures>,
+  renderOptions?: RenderOptions | undefined
 ) => {
   let prefix = " "
   if (currentIndex === toDisplay.startIndex && toDisplay.startIndex > 0) {
@@ -1940,12 +1974,18 @@ const renderPrefix = (
   } else if (currentIndex === toDisplay.endIndex - 1 && toDisplay.endIndex < length) {
     prefix = figures.arrowDown
   }
-  return state.cursor === currentIndex
-    ? Ansi.annotate(figures.pointer, Ansi.cyanBright) + prefix
-    : prefix + " "
+  if (state.cursor === currentIndex) {
+    return renderOptions?.plain === true
+      ? figures.pointer + prefix
+      : Ansi.annotate(figures.pointer, Ansi.cyanBright) + prefix
+  }
+  return prefix + " "
 }
 
-const renderFileName = (file: string, isSelected: boolean) => {
+const renderFileName = (file: string, isSelected: boolean, renderOptions?: RenderOptions | undefined) => {
+  if (renderOptions?.plain === true) {
+    return file
+  }
   return isSelected
     ? Ansi.annotate(file, Ansi.combine(Ansi.underlined, Ansi.cyanBright))
     : file
@@ -1955,15 +1995,16 @@ const renderFiles = (
   state: FileState,
   files: ReadonlyArray<string>,
   figures: Effect.Success<typeof platformFigures>,
-  options: FileOptionsReq
+  options: FileOptionsReq,
+  renderOptions?: RenderOptions | undefined
 ) => {
   const length = files.length
   const toDisplay = entriesToDisplay(state.cursor, length, options.maxPerPage)
   const documents: Array<string> = []
   for (let index = toDisplay.startIndex; index < toDisplay.endIndex; index++) {
     const isSelected = state.cursor === index
-    const prefix = renderPrefix(state, toDisplay, index, length, figures)
-    const fileName = renderFileName(files[index], isSelected)
+    const prefix = renderPrefix(state, toDisplay, index, length, figures, renderOptions)
+    const fileName = renderFileName(files[index], isSelected, renderOptions)
     documents.push(prefix + fileName)
   }
   return documents.join("\n")
@@ -2122,11 +2163,18 @@ type MultiSelectState = {
   error: string | undefined
 }
 
-const renderMultiSelectError = (state: MultiSelectState, pointer: string): string => {
+const renderMultiSelectError = (
+  state: MultiSelectState,
+  pointer: string,
+  renderOptions?: RenderOptions | undefined
+): string => {
   if (state.error !== undefined) {
     return Arr.match(state.error.split(NEWLINE_REGEXP), {
       onEmpty: () => "",
       onNonEmpty: (errorLines) => {
+        if (renderOptions?.plain === true) {
+          return `${pointer} ${errorLines.join("\n")}`
+        }
         const prefix = Ansi.annotate(pointer, Ansi.red) + " "
         const lines = Arr.map(errorLines, (str) => annotateErrorLine(str))
         return Ansi.cursorSavePosition + "\n" + prefix + lines.join("\n") + Ansi.cursorRestorePosition
@@ -2138,10 +2186,13 @@ const renderMultiSelectError = (state: MultiSelectState, pointer: string): strin
 
 const renderChoiceDescription = <A>(
   choice: SelectChoice<A>,
-  isActive: boolean
+  isActive: boolean,
+  renderOptions?: RenderOptions | undefined
 ) => {
   if (!choice.disabled && choice.description && isActive) {
-    return Ansi.annotate("- " + choice.description, Ansi.blackBright)
+    return renderOptions?.plain === true
+      ? "- " + choice.description
+      : Ansi.annotate("- " + choice.description, Ansi.blackBright)
   }
   return ""
 }
@@ -2151,7 +2202,8 @@ const metaOptionsCount = 2
 const renderMultiSelectChoices = <A>(
   state: MultiSelectState,
   options: SelectOptionsReq<A> & MultiSelectOptionsReq,
-  figures: Effect.Success<typeof platformFigures>
+  figures: Effect.Success<typeof platformFigures>,
+  renderOptions?: RenderOptions | undefined
 ) => {
   const choices = options.choices
   const totalChoices = choices.length
@@ -2182,7 +2234,7 @@ const renderMultiSelectChoices = <A>(
     }
     if (index < metaOptions.length) {
       // Meta options
-      const title = isHighlighted
+      const title = isHighlighted && renderOptions?.plain !== true
         ? Ansi.annotate(choice.title, Ansi.cyanBright)
         : choice.title
       documents.push(prefix + " " + title)
@@ -2191,11 +2243,11 @@ const renderMultiSelectChoices = <A>(
       const choiceIndex = index - metaOptions.length
       const isSelected = state.selectedIndices.has(choiceIndex)
       const checkbox = isSelected ? figures.checkboxOn : figures.checkboxOff
-      const annotatedCheckbox = isHighlighted
+      const annotatedCheckbox = isHighlighted && renderOptions?.plain !== true
         ? Ansi.annotate(checkbox, Ansi.cyanBright)
         : checkbox
       const title = choice.title
-      const description = renderChoiceDescription(choice as SelectChoice<A>, isHighlighted)
+      const description = renderChoiceDescription(choice as SelectChoice<A>, isHighlighted, renderOptions)
       documents.push(prefix + " " + annotatedCheckbox + " " + title + " " + description)
     }
   }
@@ -2270,14 +2322,18 @@ const processSpace = <A>(
   return Effect.succeed(Action.NextFrame({ state: { ...state, selectedIndices } }))
 }
 
-const handleMultiSelectClear = Effect.fnUntraced(function*<A>(options: SelectOptionsReq<A>) {
-  const terminal = yield* Terminal.Terminal
-  const columns = yield* terminal.columns
-  const clearPrompt = Ansi.eraseLine + Ansi.cursorLeft
-  const text = "\n".repeat(Math.min(options.choices.length + 2, options.maxPerPage)) + options.message + 1
-  const clearOutput = eraseText(text, columns)
-  return clearOutput + clearPrompt
-})
+const handleMultiSelectClear = <A>(options: SelectOptionsReq<A>) =>
+  Effect.fnUntraced(function*(state: MultiSelectState, _: Action<MultiSelectState, Array<A>>) {
+    const terminal = yield* Terminal.Terminal
+    const columns = yield* terminal.columns
+    const figures = yield* platformFigures
+    const clearPrompt = Ansi.eraseLine + Ansi.cursorLeft
+    const promptText = renderSelectOutput("?", figures.pointerSmall, options, { plain: true })
+    const choicesText = renderMultiSelectChoices(state, options, figures, { plain: true })
+    const errorText = renderMultiSelectError(state, figures.pointer, { plain: true })
+    const clearOutput = clearOutputWithError(`${promptText}\n${choicesText}`, columns, errorText)
+    return clearOutput + clearPrompt
+  })
 
 const handleMultiSelectProcess = <A>(options: SelectOptionsReq<A> & MultiSelectOptionsReq) => {
   return (input: Terminal.UserInput, state: MultiSelectState) => {
@@ -2343,28 +2399,42 @@ const handleNumberClear = (options: IntegerOptionsReq) => {
   return Effect.fnUntraced(function*(state: NumberState, _: Action<NumberState, number>) {
     const terminal = yield* Terminal.Terminal
     const columns = yield* terminal.columns
+    const figures = yield* platformFigures
     const resetCurrentLine = Ansi.eraseLine + Ansi.cursorLeft
-    const clearError = state.error !== undefined
-      ? Ansi.cursorDown(lines(state.error, columns)) + eraseText(`\n${state.error}`, columns)
-      : ""
-    const clearOutput = eraseText(options.message, columns)
-    return clearError + clearOutput + resetCurrentLine
+    const errorText = renderNumberError(state, figures.pointerSmall, { plain: true })
+    const promptText = renderNumberOutput(state, "?", figures.pointerSmall, options, { plain: true })
+    const clearOutput = clearOutputWithError(promptText, columns, errorText)
+    return clearOutput + resetCurrentLine
   })
 }
 
-const renderNumberInput = (state: NumberState, submitted: boolean): string => {
+const renderNumberInput = (
+  state: NumberState,
+  submitted: boolean,
+  renderOptions?: RenderOptions | undefined
+): string => {
+  const value = state.value === "" ? "" : `${state.value}`
+  if (submitted || renderOptions?.plain === true) {
+    return value
+  }
   const annotation = state.error !== undefined ?
     Ansi.red :
     Ansi.combine(Ansi.underlined, Ansi.cyanBright)
-  const value = state.value === "" ? "" : `${state.value}`
-  return submitted ? value : Ansi.annotate(value, annotation)
+  return Ansi.annotate(value, annotation)
 }
 
-const renderNumberError = (state: NumberState, pointer: string) => {
+const renderNumberError = (
+  state: NumberState,
+  pointer: string,
+  renderOptions?: RenderOptions | undefined
+) => {
   if (state.error !== undefined) {
     return Arr.match(state.error.split(NEWLINE_REGEXP), {
       onEmpty: () => "",
       onNonEmpty: (errorLines) => {
+        if (renderOptions?.plain === true) {
+          return `${pointer} ${errorLines.join("\n")}`
+        }
         const prefix = Ansi.annotate(pointer, Ansi.red) + " "
         const lines = Arr.map(errorLines, (str) => annotateErrorLine(str))
         return Ansi.cursorSavePosition + "\n" + prefix + lines.join("\n") + Ansi.cursorRestorePosition
@@ -2379,16 +2449,11 @@ const renderNumberOutput = (
   leadingSymbol: string,
   trailingSymbol: string,
   options: IntegerOptionsReq,
+  renderOptions?: RenderOptions | undefined,
   submitted: boolean = false
 ) => {
-  const prefix = leadingSymbol + " "
-  return Arr.match(options.message.split(NEWLINE_REGEXP), {
-    onEmpty: () => prefix + " " + trailingSymbol + " " + renderNumberInput(state, submitted),
-    onNonEmpty: (promptLines) => {
-      const lines = Arr.map(promptLines, (line) => annotateLine(line))
-      return prefix + lines.join("\n") + " " + trailingSymbol + " " + renderNumberInput(state, submitted)
-    }
-  })
+  const value = renderNumberInput(state, submitted, renderOptions)
+  return renderPrompt(value, options.message, leadingSymbol, trailingSymbol, renderOptions)
 }
 
 const renderNumberNextFrame = Effect.fnUntraced(function*(state: NumberState, options: IntegerOptionsReq) {
@@ -2404,7 +2469,7 @@ const renderNumberSubmission = Effect.fnUntraced(function*(nextState: NumberStat
   const figures = yield* platformFigures
   const leadingSymbol = Ansi.annotate(figures.tick, Ansi.green)
   const trailingSymbol = Ansi.annotate(figures.ellipsis, Ansi.blackBright)
-  const promptMsg = renderNumberOutput(nextState, leadingSymbol, trailingSymbol, options, true)
+  const promptMsg = renderNumberOutput(nextState, leadingSymbol, trailingSymbol, options, undefined, true)
   return promptMsg + "\n"
 })
 
@@ -2646,21 +2711,21 @@ const autoCompleteCursor = (state: AutoCompleteState) =>
 const renderSelectOutput = <A>(
   leadingSymbol: string,
   trailingSymbol: string,
-  options: SelectOptionsReq<A>
-) => {
-  const prefix = leadingSymbol + " "
-  return Arr.match(options.message.split(NEWLINE_REGEXP), {
-    onEmpty: () => prefix + " " + trailingSymbol,
-    onNonEmpty: (promptLines) => {
-      const lines = Arr.map(promptLines, (line) => annotateLine(line))
-      return prefix + lines.join("\n") + " " + trailingSymbol + " "
-    }
-  })
-}
+  options: SelectOptionsReq<A>,
+  renderOptions?: RenderOptions | undefined
+) => renderPrompt("", options.message, leadingSymbol, trailingSymbol, renderOptions)
 
-const renderAutoCompleteFilter = <A>(state: AutoCompleteState, options: AutoCompleteOptionsReq<A>) => {
+const renderAutoCompleteFilter = <A>(
+  state: AutoCompleteState,
+  options: AutoCompleteOptionsReq<A>,
+  renderOptions?: RenderOptions | undefined
+) => {
   const filterValue = state.query.length === 0
-    ? Ansi.annotate(options.filterPlaceholder, Ansi.blackBright)
+    ? renderOptions?.plain === true
+      ? options.filterPlaceholder
+      : Ansi.annotate(options.filterPlaceholder, Ansi.blackBright)
+    : renderOptions?.plain === true
+    ? state.query
     : Ansi.annotate(state.query, Ansi.combine(Ansi.underlined, Ansi.cyanBright))
   return `[${options.filterLabel}: ${filterValue}]`
 }
@@ -2669,17 +2734,11 @@ const renderAutoCompleteOutput = <A>(
   state: AutoCompleteState,
   leadingSymbol: string,
   trailingSymbol: string,
-  options: AutoCompleteOptionsReq<A>
+  options: AutoCompleteOptionsReq<A>,
+  renderOptions?: RenderOptions | undefined
 ) => {
-  const prefix = leadingSymbol + " "
-  const filter = renderAutoCompleteFilter(state, options)
-  return Arr.match(options.message.split(NEWLINE_REGEXP), {
-    onEmpty: () => prefix + " " + trailingSymbol + " " + filter,
-    onNonEmpty: (promptLines) => {
-      const lines = Arr.map(promptLines, (line) => annotateLine(line))
-      return prefix + lines.join("\n") + " " + trailingSymbol + " " + filter
-    }
-  })
+  const filter = renderAutoCompleteFilter(state, options, renderOptions)
+  return renderPrompt(filter, options.message, leadingSymbol, trailingSymbol, renderOptions)
 }
 
 const renderChoicePrefix = <A>(
@@ -2687,13 +2746,19 @@ const renderChoicePrefix = <A>(
   choices: SelectOptionsReq<A>["choices"],
   toDisplay: { readonly startIndex: number; readonly endIndex: number },
   currentIndex: number,
-  figures: Effect.Success<typeof platformFigures>
+  figures: Effect.Success<typeof platformFigures>,
+  renderOptions?: RenderOptions | undefined
 ) => {
   let prefix = " "
   if (currentIndex === toDisplay.startIndex && toDisplay.startIndex > 0) {
     prefix = figures.arrowUp
   } else if (currentIndex === toDisplay.endIndex - 1 && toDisplay.endIndex < choices.length) {
     prefix = figures.arrowDown
+  }
+  if (renderOptions?.plain === true) {
+    return state === currentIndex
+      ? figures.pointer + prefix
+      : prefix + " "
   }
   if (choices[currentIndex].disabled) {
     const annotation = Ansi.combine(Ansi.bold, Ansi.blackBright)
@@ -2711,7 +2776,8 @@ const renderAutoCompleteChoicePrefix = <A>(
   options: AutoCompleteOptionsReq<A>,
   toDisplay: { readonly startIndex: number; readonly endIndex: number },
   currentIndex: number,
-  figures: Effect.Success<typeof platformFigures>
+  figures: Effect.Success<typeof platformFigures>,
+  renderOptions?: RenderOptions | undefined
 ) => {
   let prefix = " "
   if (currentIndex === toDisplay.startIndex && toDisplay.startIndex > 0) {
@@ -2720,6 +2786,11 @@ const renderAutoCompleteChoicePrefix = <A>(
     prefix = figures.arrowDown
   }
   const choiceIndex = state.filtered[currentIndex]
+  if (renderOptions?.plain === true) {
+    return state.index === choiceIndex
+      ? figures.pointer + prefix
+      : prefix + " "
+  }
   const choice = options.choices[choiceIndex]
   if (choice.disabled) {
     const annotation = Ansi.combine(Ansi.bold, Ansi.blackBright)
@@ -2734,8 +2805,12 @@ const renderAutoCompleteChoicePrefix = <A>(
 
 const renderChoiceTitle = <A>(
   choice: SelectChoice<A>,
-  isSelected: boolean
+  isSelected: boolean,
+  renderOptions?: RenderOptions | undefined
 ) => {
+  if (renderOptions?.plain === true) {
+    return choice.title
+  }
   const title = choice.title
   if (isSelected) {
     return choice.disabled
@@ -2750,7 +2825,8 @@ const renderChoiceTitle = <A>(
 const renderSelectChoices = <A>(
   state: SelectState,
   options: SelectOptionsReq<A>,
-  figures: Effect.Success<typeof platformFigures>
+  figures: Effect.Success<typeof platformFigures>,
+  renderOptions?: RenderOptions | undefined
 ) => {
   const choices = options.choices
   const toDisplay = entriesToDisplay(state, choices.length, options.maxPerPage)
@@ -2758,9 +2834,9 @@ const renderSelectChoices = <A>(
   for (let index = toDisplay.startIndex; index < toDisplay.endIndex; index++) {
     const choice = choices[index]
     const isSelected = state === index
-    const prefix = renderChoicePrefix(state, choices, toDisplay, index, figures)
-    const title = renderChoiceTitle(choice, isSelected)
-    const description = renderChoiceDescription(choice, isSelected)
+    const prefix = renderChoicePrefix(state, choices, toDisplay, index, figures, renderOptions)
+    const title = renderChoiceTitle(choice, isSelected, renderOptions)
+    const description = renderChoiceDescription(choice, isSelected, renderOptions)
     documents.push(prefix + title + " " + description)
   }
   return documents.join("\n")
@@ -2769,10 +2845,13 @@ const renderSelectChoices = <A>(
 const renderAutoCompleteChoices = <A>(
   state: AutoCompleteState,
   options: AutoCompleteOptionsReq<A>,
-  figures: Effect.Success<typeof platformFigures>
+  figures: Effect.Success<typeof platformFigures>,
+  renderOptions?: RenderOptions | undefined
 ) => {
   if (state.filtered.length === 0) {
-    return Ansi.annotate(options.emptyMessage, Ansi.blackBright)
+    return renderOptions?.plain === true
+      ? options.emptyMessage
+      : Ansi.annotate(options.emptyMessage, Ansi.blackBright)
   }
   const cursor = autoCompleteCursor(state)
   const toDisplay = entriesToDisplay(cursor, state.filtered.length, options.maxPerPage)
@@ -2781,9 +2860,9 @@ const renderAutoCompleteChoices = <A>(
     const choiceIndex = state.filtered[index]
     const choice = options.choices[choiceIndex]
     const isSelected = state.index === choiceIndex
-    const prefix = renderAutoCompleteChoicePrefix(state, options, toDisplay, index, figures)
-    const title = renderChoiceTitle(choice, isSelected)
-    const description = renderChoiceDescription(choice, isSelected)
+    const prefix = renderAutoCompleteChoicePrefix(state, options, toDisplay, index, figures, renderOptions)
+    const title = renderChoiceTitle(choice, isSelected, renderOptions)
+    const description = renderChoiceDescription(choice, isSelected, renderOptions)
     documents.push(prefix + title + " " + description)
   }
   return documents.join("\n")
@@ -2905,25 +2984,27 @@ const handleAutoCompleteRender = <A>(options: AutoCompleteOptionsReq<A>) => {
   }
 }
 
-const handleSelectClear = Effect.fnUntraced(function*<A>(options: SelectOptionsReq<A>) {
-  const terminal = yield* Terminal.Terminal
-  const columns = yield* terminal.columns
-  const clearPrompt = Ansi.eraseLine + Ansi.cursorLeft
-  const text = "\n".repeat(Math.min(options.choices.length, options.maxPerPage)) + options.message
-  const clearOutput = eraseText(text, columns)
-  return clearOutput + clearPrompt
-})
+const handleSelectClear = <A>(options: SelectOptionsReq<A>) =>
+  Effect.fnUntraced(function*(state: SelectState, _: Action<SelectState, A>) {
+    const terminal = yield* Terminal.Terminal
+    const columns = yield* terminal.columns
+    const figures = yield* platformFigures
+    const clearPrompt = Ansi.eraseLine + Ansi.cursorLeft
+    const promptText = renderSelectOutput("?", figures.pointerSmall, options, { plain: true })
+    const choicesText = renderSelectChoices(state, options, figures, { plain: true })
+    const clearOutput = eraseText(`${promptText}\n${choicesText}`, columns)
+    return clearOutput + clearPrompt
+  })
 
 const handleAutoCompleteClear = <A>(options: AutoCompleteOptionsReq<A>) =>
   Effect.fnUntraced(function*(state: AutoCompleteState, _: Action<AutoCompleteState, A>) {
     const terminal = yield* Terminal.Terminal
     const columns = yield* terminal.columns
+    const figures = yield* platformFigures
     const clearPrompt = Ansi.eraseLine + Ansi.cursorLeft
-    const filterValue = state.query.length === 0 ? options.filterPlaceholder : state.query
-    const prompt = `${options.message} [${options.filterLabel}: ${filterValue}]`
-    const visibleChoices = Math.min(Math.max(state.filtered.length, 1), options.maxPerPage)
-    const text = "\n".repeat(visibleChoices) + prompt
-    const clearOutput = eraseText(text, columns)
+    const promptText = renderAutoCompleteOutput(state, "?", figures.pointerSmall, options, { plain: true })
+    const choicesText = renderAutoCompleteChoices(state, options, figures, { plain: true })
+    const clearOutput = eraseText(`${promptText}\n${choicesText}`, columns)
     return clearOutput + clearPrompt
   })
 
@@ -3011,24 +3092,37 @@ const getValue = (state: TextState, options: TextOptionsReq): string => {
 const renderClearScreen = Effect.fnUntraced(function*(state: TextState, options: TextOptionsReq) {
   const terminal = yield* Terminal.Terminal
   const columns = yield* terminal.columns
-  // Erase the current line and place the cursor in column one
+  const figures = yield* platformFigures
   const resetCurrentLine = Ansi.eraseLine + Ansi.cursorLeft
-  // Check for any error output
-  const clearError = state.error !== undefined
-    // If there was an error, move the cursor down to the final error line and
-    // then clear all lines of error output
-    // Add a leading newline to the error message to ensure that the corrrect
-    // number of error lines are erased
-    ? Ansi.cursorDown(lines(state.error, columns)) + eraseText(`\n${state.error}`, columns)
-    : ""
-  // Ensure that the prior prompt output is cleaned up
-  const clearOutput = eraseText(options.message, columns)
-  // Concatenate and render all documents
-  return clearError + clearOutput + resetCurrentLine
+  const errorText = renderTextError(state, figures.pointerSmall, { plain: true })
+  const clearOutput = clearOutputWithError(
+    renderTextOutput(state, "?", figures.pointerSmall, options, { plain: true }),
+    columns,
+    errorText
+  )
+  return clearOutput + resetCurrentLine
 })
 
-const renderTextInput = (nextState: TextState, options: TextOptionsReq, submitted: boolean) => {
+const renderTextInput = (
+  nextState: TextState,
+  options: TextOptionsReq,
+  submitted: boolean,
+  renderOptions?: RenderOptions | undefined
+) => {
   const text = getValue(nextState, options)
+  if (renderOptions?.plain === true) {
+    switch (options.type) {
+      case "hidden": {
+        return ""
+      }
+      case "password": {
+        return "*".repeat(text.length)
+      }
+      case "text": {
+        return text
+      }
+    }
+  }
 
   const annotation = nextState.error !== undefined ?
     Ansi.red
@@ -3051,11 +3145,18 @@ const renderTextInput = (nextState: TextState, options: TextOptionsReq, submitte
   }
 }
 
-const renderTextError = (nextState: TextState, pointer: string): string => {
+const renderTextError = (
+  nextState: TextState,
+  pointer: string,
+  renderOptions?: RenderOptions | undefined
+): string => {
   if (nextState.error !== undefined) {
     return Arr.match(nextState.error.split(NEWLINE_REGEXP), {
       onEmpty: () => "",
       onNonEmpty: (errorLines) => {
+        if (renderOptions?.plain === true) {
+          return `${pointer} ${errorLines.join("\n")}`
+        }
         const prefix = Ansi.annotate(pointer, Ansi.red) + " "
         const lines = Arr.map(errorLines, (str) => annotateErrorLine(str))
         return Ansi.cursorSavePosition + "\n" + prefix + lines.join("\n") + Ansi.cursorRestorePosition
@@ -3070,16 +3171,11 @@ const renderTextOutput = (
   leadingSymbol: string,
   trailingSymbol: string,
   options: TextOptionsReq,
+  renderOptions?: RenderOptions | undefined,
   submitted: boolean = false
 ) => {
-  const promptLines = options.message.split(NEWLINE_REGEXP)
-  const prefix = leadingSymbol + " "
-  if (Arr.isReadonlyArrayNonEmpty(promptLines)) {
-    const lines = Arr.map(promptLines, (line) => annotateLine(line))
-    return prefix + lines.join("\n") + " " + trailingSymbol + " " +
-      renderTextInput(nextState, options, submitted)
-  }
-  return prefix + " " + trailingSymbol + " " + renderTextInput(nextState, options, submitted)
+  const value = renderTextInput(nextState, options, submitted, renderOptions)
+  return renderPrompt(value, options.message, leadingSymbol, trailingSymbol, renderOptions)
 }
 
 const renderTextNextFrame = Effect.fnUntraced(function*(state: TextState, options: TextOptionsReq) {
@@ -3096,7 +3192,7 @@ const renderTextSubmission = Effect.fnUntraced(function*(state: TextState, optio
   const figures = yield* platformFigures
   const leadingSymbol = Ansi.annotate(figures.tick, Ansi.green)
   const trailingSymbol = Ansi.annotate(figures.ellipsis, Ansi.blackBright)
-  const promptMsg = renderTextOutput(state, leadingSymbol, trailingSymbol, options, true)
+  const promptMsg = renderTextOutput(state, leadingSymbol, trailingSymbol, options, undefined, true)
   return promptMsg + "\n"
 })
 
@@ -3243,8 +3339,11 @@ type ToggleState = boolean
 const handleToggleClear = Effect.fnUntraced(function*(options: ToggleOptionsReq) {
   const terminal = yield* Terminal.Terminal
   const columns = yield* terminal.columns
+  const figures = yield* platformFigures
   const clearPrompt = Ansi.eraseLine + Ansi.cursorLeft
-  const clearOutput = eraseText(options.message, columns)
+  const toggleText = `${options.active} / ${options.inactive}`
+  const promptText = renderPrompt(toggleText, options.message, "?", figures.pointerSmall, { plain: true })
+  const clearOutput = eraseText(promptText, columns)
   return clearOutput + clearPrompt
 })
 
