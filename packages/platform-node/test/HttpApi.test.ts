@@ -39,16 +39,127 @@ import {
 import OpenApiFixture from "./fixtures/openapi.json" with { type: "json" }
 
 describe("HttpApi", () => {
+  it.effect("catch all path", () => {
+    const Api = HttpApi.make("api")
+      .add(
+        HttpApiGroup.make("group")
+          .add(
+            HttpApiEndpoint.get("catch-all", "*", {
+              success: Schema.String
+            })
+          )
+      )
+    const GroupLive = HttpApiBuilder.group(
+      Api,
+      "group",
+      (handlers) => handlers.handle("catch-all", (ctx) => Effect.succeed(ctx.request.url))
+    )
+
+    const ApiLive = HttpRouter.serve(
+      HttpApiBuilder.layer(Api).pipe(Layer.provide(GroupLive)),
+      { disableListenLog: true, disableLogger: true }
+    ).pipe(Layer.provideMerge(NodeHttpServer.layerTest))
+
+    return Effect.gen(function*() {
+      const response1 = yield* HttpClient.get("")
+      assert.strictEqual(response1.status, 200)
+      assert.strictEqual(yield* response1.text, `"/"`)
+
+      const response2 = yield* HttpClient.get("/")
+      assert.strictEqual(response2.status, 200)
+      assert.strictEqual(yield* response2.text, `"/"`)
+
+      const response3 = yield* HttpClient.get("/a/b/c")
+      assert.strictEqual(response3.status, 200)
+      assert.strictEqual(yield* response3.text, `"/a/b/c"`)
+    }).pipe(Effect.provide(ApiLive))
+  })
+
+  it.effect("middleware error", () => {
+    class M extends HttpApiMiddleware.Service<M>()("Http/Logger", {
+      error: Schema.String
+        .pipe(
+          HttpApiSchema.status(405),
+          HttpApiSchema.asText()
+        )
+    }) {}
+
+    const Api = HttpApi.make("api")
+      .add(
+        HttpApiGroup.make("group")
+          .add(
+            HttpApiEndpoint.get("a", "/a", {
+              success: Schema.Finite
+            })
+          ).middleware(M)
+      )
+    const GroupLive = HttpApiBuilder.group(
+      Api,
+      "group",
+      (handlers) => handlers.handle("a", () => Effect.succeed(1))
+    )
+    const MLive = Layer.succeed(
+      M,
+      () => Effect.fail("error")
+    )
+
+    const ApiLive = HttpRouter.serve(
+      HttpApiBuilder.layer(Api).pipe(Layer.provide(GroupLive), Layer.provide(MLive)),
+      { disableListenLog: true, disableLogger: true }
+    ).pipe(Layer.provideMerge(NodeHttpServer.layerTest))
+
+    return Effect.gen(function*() {
+      const client = yield* HttpApiClient.make(Api)
+      const result = yield* Effect.flip(client.group.a())
+      assert.strictEqual(result, "error" as any) // TODO: the client doesn't account for middleware errors
+    }).pipe(Effect.provide(ApiLive))
+  })
+
   describe("payload option", () => {
-    describe("encoding", () => {
+    describe("GET", () => {
+      it.effect("query parameters", () => {
+        const Api = HttpApi.make("api")
+          .add(
+            HttpApiGroup.make("group")
+              .add(
+                HttpApiEndpoint.get("a", "/a", {
+                  payload: {
+                    required: Schema.FiniteFromString,
+                    optionalKey: Schema.optionalKey(Schema.FiniteFromString),
+                    optional: Schema.optional(Schema.FiniteFromString)
+                  },
+                  success: Schema.String
+                })
+              )
+          )
+        const GroupLive = HttpApiBuilder.group(
+          Api,
+          "group",
+          (handlers) => handlers.handle("a", (ctx) => Effect.succeed(JSON.stringify(ctx.payload)))
+        )
+
+        const ApiLive = HttpRouter.serve(
+          HttpApiBuilder.layer(Api).pipe(Layer.provide(GroupLive)),
+          { disableListenLog: true, disableLogger: true }
+        ).pipe(Layer.provideMerge(NodeHttpServer.layerTest))
+
+        return Effect.gen(function*() {
+          const client = yield* HttpApiClient.make(Api)
+          const result = yield* client.group.a({ payload: { required: 1 } })
+          assert.strictEqual(result, `{"required":1}`)
+        }).pipe(Effect.provide(ApiLive))
+      })
+    })
+
+    describe("encodings", () => {
       it.effect("array of schemas with different encodings", () => {
         const Api = HttpApi.make("api").add(
           HttpApiGroup.make("group").add(
             HttpApiEndpoint.post("a", "/a", {
               payload: [
                 Schema.Struct({ a: Schema.String }), // application/json
-                HttpApiSchema.Text(), // text/plain
-                HttpApiSchema.Uint8Array() // application/octet-stream
+                Schema.String.pipe(HttpApiSchema.asText()), // text/plain
+                Schema.Uint8Array.pipe(HttpApiSchema.asUint8Array()) // application/octet-stream
               ],
               success: Schema.String
             })
@@ -78,12 +189,12 @@ describe("HttpApi", () => {
     })
   })
 
-  describe("path option", () => {
-    it.effect("setPath method should accept a record of schemas", () => {
+  describe("params option", () => {
+    it.effect("should accept a record of schemas", () => {
       const Api = HttpApi.make("api").add(
         HttpApiGroup.make("group").add(
           HttpApiEndpoint.get("get", "/:id", {
-            path: {
+            params: {
               id: Schema.FiniteFromString
             },
             success: Schema.String
@@ -93,7 +204,7 @@ describe("HttpApi", () => {
       const GroupLive = HttpApiBuilder.group(
         Api,
         "group",
-        (handlers) => handlers.handle("get", (ctx) => Effect.succeed(`User ${ctx.path.id}`))
+        (handlers) => handlers.handle("get", (ctx) => Effect.succeed(`User ${ctx.params.id}`))
       )
 
       const ApiLive = HttpRouter.serve(
@@ -103,41 +214,14 @@ describe("HttpApi", () => {
 
       return Effect.gen(function*() {
         const client = yield* HttpApiClient.make(Api)
-        const result = yield* client.group.get({ path: { id: 1 } })
+        const result = yield* client.group.get({ params: { id: 1 } })
         assert.strictEqual(result, "User 1")
       }).pipe(Effect.provide(ApiLive))
     })
   })
 
   describe("error option", () => {
-    it.effect("Void", () => {
-      const Api = HttpApi.make("api").add(
-        HttpApiGroup.make("group").add(
-          HttpApiEndpoint.get("a", "/a", {
-            error: Schema.Void
-          })
-        )
-      )
-      const GroupLive = HttpApiBuilder.group(
-        Api,
-        "group",
-        (handlers) =>
-          handlers
-            .handle("a", () => Effect.fail(void 0))
-      )
-      const ApiLive = HttpRouter.serve(
-        HttpApiBuilder.layer(Api).pipe(Layer.provide(GroupLive)),
-        { disableListenLog: true, disableLogger: true }
-      ).pipe(Layer.provideMerge(NodeHttpServer.layerTest))
-
-      return Effect.gen(function*() {
-        const a = yield* HttpClient.get("/a")
-        assert.strictEqual(a.status, 500)
-        assert.strictEqual(yield* a.text, "")
-      }).pipe(Effect.provide(ApiLive))
-    })
-
-    it.effect("Empty(400)", () => {
+    it.effect("makeNoContent(400)", () => {
       const Api = HttpApi.make("api").add(
         HttpApiGroup.make("group").add(
           HttpApiEndpoint.get("a", "/a", {
@@ -164,11 +248,11 @@ describe("HttpApi", () => {
       }).pipe(Effect.provide(ApiLive))
     })
 
-    it.effect("Empty(401)", () => {
+    it.effect("UnauthorizedNoContent", () => {
       const Api = HttpApi.make("api").add(
         HttpApiGroup.make("group").add(
           HttpApiEndpoint.get("a", "/a", {
-            error: HttpApiSchema.Empty(401)
+            error: HttpApiError.UnauthorizedNoContent
           })
         )
       )
@@ -177,34 +261,7 @@ describe("HttpApi", () => {
         "group",
         (handlers) =>
           handlers
-            .handle("a", () => Effect.fail(void 0))
-      )
-      const ApiLive = HttpRouter.serve(
-        HttpApiBuilder.layer(Api).pipe(Layer.provide(GroupLive)),
-        { disableListenLog: true, disableLogger: true }
-      ).pipe(Layer.provideMerge(NodeHttpServer.layerTest))
-
-      return Effect.gen(function*() {
-        const a = yield* HttpClient.get("/a")
-        assert.strictEqual(a.status, 401)
-        assert.strictEqual(yield* a.text, "")
-      }).pipe(Effect.provide(ApiLive))
-    })
-
-    it.effect("Unauthorized", () => {
-      const Api = HttpApi.make("api").add(
-        HttpApiGroup.make("group").add(
-          HttpApiEndpoint.get("a", "/a", {
-            error: HttpApiError.Unauthorized
-          })
-        )
-      )
-      const GroupLive = HttpApiBuilder.group(
-        Api,
-        "group",
-        (handlers) =>
-          handlers
-            .handle("a", () => Effect.fail(new HttpApiError.Unauthorized()))
+            .handle("a", () => Effect.fail(new HttpApiError.Unauthorized({})))
       )
       const ApiLive = HttpRouter.serve(
         HttpApiBuilder.layer(Api).pipe(Layer.provide(GroupLive)),
@@ -222,7 +279,7 @@ describe("HttpApi", () => {
       const Api = HttpApi.make("api").add(
         HttpApiGroup.make("group").add(
           HttpApiEndpoint.get("a", "/a", {
-            error: HttpApiError.BadRequest
+            error: HttpApiError.BadRequestNoContent
           })
         )
       )
@@ -231,7 +288,7 @@ describe("HttpApi", () => {
         "group",
         (handlers) =>
           handlers
-            .handle("a", () => Effect.fail(new HttpApiError.BadRequest()))
+            .handle("a", () => Effect.fail(new HttpApiError.BadRequest({})))
       )
       const ApiLive = HttpRouter.serve(
         HttpApiBuilder.layer(Api).pipe(Layer.provide(GroupLive)),
@@ -246,12 +303,12 @@ describe("HttpApi", () => {
     })
   })
 
-  describe("urlParams", () => {
-    it.effect("setUrlParams method should accept a record of schemas", () => {
+  describe("query", () => {
+    it.effect("should accept a record of schemas", () => {
       const Api = HttpApi.make("api").add(
         HttpApiGroup.make("group").add(
           HttpApiEndpoint.get("get", "/", {
-            urlParams: {
+            query: {
               id: Schema.FiniteFromString
             },
             success: Schema.String
@@ -261,7 +318,7 @@ describe("HttpApi", () => {
       const GroupLive = HttpApiBuilder.group(
         Api,
         "group",
-        (handlers) => handlers.handle("get", (ctx) => Effect.succeed(`User ${ctx.urlParams.id}`))
+        (handlers) => handlers.handle("get", (ctx) => Effect.succeed(`User ${ctx.query.id}`))
       )
 
       const ApiLive = HttpRouter.serve(
@@ -271,7 +328,7 @@ describe("HttpApi", () => {
 
       return Effect.gen(function*() {
         const client = yield* HttpApiClient.make(Api)
-        const result = yield* client.group.get({ urlParams: { id: 1 } })
+        const result = yield* client.group.get({ query: { id: 1 } })
         assert.strictEqual(result, "User 1")
       }).pipe(Effect.provide(ApiLive))
     })
@@ -297,7 +354,7 @@ describe("HttpApi", () => {
         })
 
         const apiClientUser = yield* client.users.create({
-          urlParams: { id: 123 },
+          query: { id: 123 },
           payload: { name: "Joe" }
         })
         assert.deepStrictEqual(
@@ -305,7 +362,7 @@ describe("HttpApi", () => {
           expected
         )
         const groupClientUser = yield* clientUsersGroup.create({
-          urlParams: { id: 123 },
+          query: { id: 123 },
           payload: { name: "Joe" }
         })
         assert.deepStrictEqual(
@@ -313,7 +370,7 @@ describe("HttpApi", () => {
           expected
         )
         const endpointClientUser = yield* clientUsersEndpointCreate({
-          urlParams: { id: 123 },
+          query: { id: 123 },
           payload: { name: "Joe" }
         })
         assert.deepStrictEqual(
@@ -327,7 +384,7 @@ describe("HttpApi", () => {
         const client = yield* HttpApiClient.make(Api)
         const data = new FormData()
         data.append("file", new Blob(["hello"], { type: "text/plain" }), "hello.txt")
-        const result = yield* client.users.upload({ payload: data, path: {} })
+        const result = yield* client.users.upload({ payload: data, params: {} })
         assert.deepStrictEqual(result, {
           contentType: "text/plain",
           length: 5
@@ -348,7 +405,7 @@ describe("HttpApi", () => {
   })
 
   describe("headers", () => {
-    it.effect("setHeaders method should accept a record of schemas", () => {
+    it.effect("should accept a record of schemas", () => {
       const Api = HttpApi.make("api").add(
         HttpApiGroup.make("group").add(
           HttpApiEndpoint.get("get", "/:id", {
@@ -382,7 +439,7 @@ describe("HttpApi", () => {
         const client = yield* HttpApiClient.make(Api)
         const users = yield* client.users.list({
           headers: { page: 1 },
-          urlParams: {}
+          query: {}
         })
         const user = users[0]
         assert.deepStrictEqual(
@@ -408,10 +465,10 @@ describe("HttpApi", () => {
     it.effect("empty errors decode", () =>
       Effect.gen(function*() {
         const client = yield* HttpApiClient.make(Api)
-        const error = yield* client.groups.findById({ path: { id: 0 } }).pipe(
+        const error = yield* client.groups.findById({ params: { id: 0 } }).pipe(
           Effect.flip
         )
-        assert.deepStrictEqual(error, new GroupError())
+        assert.deepStrictEqual(error, new GroupError({}))
       }).pipe(Effect.provide(HttpLive)))
 
     it.effect("default to 500 status code", () =>
@@ -440,10 +497,10 @@ describe("HttpApi", () => {
     it.effect("HttpApiSchemaError", () =>
       Effect.gen(function*() {
         const client = yield* HttpApiClient.make(Api)
-        const error = yield* client.users.upload({ path: {}, payload: new FormData() }).pipe(
+        const error = yield* client.users.upload({ params: {}, payload: new FormData() }).pipe(
           Effect.flip
         )
-        assert(error._tag === "HttpApiSchemaError")
+        assert.strictEqual(error._tag, "HttpApiSchemaError")
         // TODO: add back issues
         // assert.deepStrictEqual(error.issues[0].path, ["file"])
       }).pipe(Effect.provide(HttpLive)))
@@ -452,7 +509,7 @@ describe("HttpApi", () => {
   it.effect("handler level context", () =>
     Effect.gen(function*() {
       const client = yield* HttpApiClient.make(Api)
-      const users = yield* client.users.list({ headers: { page: 1 }, urlParams: {} })
+      const users = yield* client.users.list({ headers: { page: 1 }, query: {} })
       const user = users[0]
       assert.strictEqual(user.name, "page 1")
       assert.deepStrictEqual(user.createdAt, DateTime.makeUnsafe(0))
@@ -469,7 +526,7 @@ describe("HttpApi", () => {
           }))
         )
       })
-      const users = yield* client.users.list({ headers: { page: 1 }, urlParams: {} }).pipe(
+      const users = yield* client.users.list({ headers: { page: 1 }, query: {} }).pipe(
         Effect.provideService(
           CurrentUser,
           new User({
@@ -493,7 +550,7 @@ describe("HttpApi", () => {
         const client = yield* HttpApiClient.makeWith(Api, {
           httpClient: HttpClient.withCookiesRef(yield* HttpClient.HttpClient, ref)
         })
-        const user = yield* client.users.findById({ path: { id: -1 } })
+        const user = yield* client.users.findById({ params: { id: -1 } })
         assert.strictEqual(user.name, "foo")
       }).pipe(Effect.provide(HttpLive)))
 
@@ -534,7 +591,7 @@ describe("HttpApi", () => {
   it.effect("client withResponse", () =>
     Effect.gen(function*() {
       const client = yield* HttpApiClient.make(Api)
-      const [users, response] = yield* client.users.list({ headers: { page: 1 }, urlParams: {}, withResponse: true })
+      const [users, response] = yield* client.users.list({ headers: { page: 1 }, query: {}, withResponse: true })
       assert.strictEqual(users[0].name, "page 1")
       assert.strictEqual(response.status, 200)
     }).pipe(Effect.provide(HttpLive)))
@@ -568,7 +625,7 @@ describe("HttpApi", () => {
     Effect.gen(function*() {
       const client = yield* HttpApiClient.make(Api)
       const response = yield* client.groups.handle({
-        path: { id: 1 },
+        params: { id: 1 },
         payload: { name: "Some group" }
       })
       assert.deepStrictEqual(response, {
@@ -581,7 +638,7 @@ describe("HttpApi", () => {
     Effect.gen(function*() {
       const client = yield* HttpApiClient.make(Api)
       const response = yield* client.groups.handleRaw({
-        path: { id: 1 },
+        params: { id: 1 },
         payload: { name: "Some group" }
       })
       assert.deepStrictEqual(response, {
@@ -603,18 +660,16 @@ describe("HttpApi", () => {
       message: Schema.String
     }) {}
 
-    const RateLimitErrorSchema = HttpApiSchema.withEncoding(
-      Schema.String.pipe(
-        Schema.decodeTo(
-          RateLimitError,
-          SchemaTransformation.transform({
-            encode: ({ message }) => message,
-            decode: (message) => new RateLimitError({ message })
-          })
-        )
-      ),
-      { kind: "Text" }
-    ).annotate({ httpApiStatus: 429 })
+    const RateLimitErrorSchema = Schema.String.pipe(
+      Schema.decodeTo(
+        RateLimitError,
+        SchemaTransformation.transform({
+          encode: ({ message }) => message,
+          decode: (message) => new RateLimitError({ message })
+        })
+      )
+    )
+      .pipe(HttpApiSchema.status(429), HttpApiSchema.asText())
 
     const Api = HttpApi.make("api").add(
       HttpApiGroup.make("group").add(
@@ -648,9 +703,10 @@ class UserError extends Schema.ErrorClass<UserError>("UserError")({
 }, {
   httpApiStatus: 400
 }) {}
-class GroupError extends HttpApiSchema.EmptyError<GroupError>()({
-  tag: "GroupError",
-  status: 418
+class GroupError extends Schema.ErrorClass<GroupError>("GroupError")({
+  _tag: Schema.tag("GroupError")
+}, {
+  httpApiStatus: 418
 }) {}
 class NoStatusError extends Schema.ErrorClass<NoStatusError>("NoStatusError")({
   _tag: Schema.tag("NoStatusError")
@@ -696,26 +752,28 @@ class Authorization extends HttpApiMiddleware.Service<Authorization, {
 
 class GroupsApi extends HttpApiGroup.make("groups").add(
   HttpApiEndpoint.get("findById", "/:id", {
-    path: {
+    params: {
       id: Schema.FiniteFromString
     },
     success: Group,
-    error: GroupError
+    error: GroupError.pipe(HttpApiSchema.asNoContent({
+      decode: () => new GroupError({})
+    }))
   }),
   HttpApiEndpoint.post("create", "/", {
-    payload: Schema.Union([
+    payload: [
       Schema.Struct(Struct.pick(Group.fields, ["name"])),
       Schema.Struct({ foo: Schema.String }).pipe(
-        HttpApiSchema.withEncoding({ kind: "UrlParams" })
+        HttpApiSchema.asFormUrlEncoded()
       ),
-      HttpApiSchema.Multipart(
-        Schema.Struct(Struct.pick(Group.fields, ["name"]))
+      Schema.Struct(Struct.pick(Group.fields, ["name"])).pipe(
+        HttpApiSchema.asMultipart()
       )
-    ]).annotate({ httpApiIsContainer: true }),
+    ],
     success: Group
   }),
   HttpApiEndpoint.post("handle", "/handle/:id", {
-    path: {
+    params: {
       id: Schema.FiniteFromString
     },
     payload: Schema.Struct({
@@ -727,7 +785,7 @@ class GroupsApi extends HttpApiGroup.make("groups").add(
     })
   }),
   HttpApiEndpoint.post("handleRaw", "/handleraw/:id", {
-    path: {
+    params: {
       id: Schema.FiniteFromString
     },
     payload: Schema.Struct({
@@ -743,7 +801,7 @@ class GroupsApi extends HttpApiGroup.make("groups").add(
 class UsersApi extends HttpApiGroup.make("users")
   .add(
     HttpApiEndpoint.get("findById", "/:id", {
-      path: {
+      params: {
         id: Schema.FiniteFromString
       },
       success: User,
@@ -751,7 +809,7 @@ class UsersApi extends HttpApiGroup.make("users")
     }),
     HttpApiEndpoint.post("create", "/", {
       payload: Schema.Struct(Struct.omit(User.fields, ["id", "createdAt"])),
-      urlParams: {
+      query: {
         id: Schema.FiniteFromString
       },
       success: User,
@@ -767,7 +825,7 @@ class UsersApi extends HttpApiGroup.make("users")
           })
         )
       },
-      urlParams: {
+      query: {
         query: Schema.optional(Schema.String).annotate({ description: "search query" })
       },
       success: Schema.Array(User),
@@ -777,21 +835,21 @@ class UsersApi extends HttpApiGroup.make("users")
       .annotate(OpenApi.Summary, "test summary")
       .annotateMerge(OpenApi.annotations({ identifier: "listUsers" })),
     HttpApiEndpoint.post("upload", "/upload/:0?", {
-      path: {
+      params: {
         0: Schema.optional(Schema.String)
       },
-      payload: HttpApiSchema.Multipart(Schema.Struct({
+      payload: Schema.Struct({
         file: Multipart.SingleFileSchema
-      })),
+      }).pipe(HttpApiSchema.asMultipart()),
       success: Schema.Struct({
         contentType: Schema.String,
         length: Schema.Int
       })
     }),
     HttpApiEndpoint.post("uploadStream", `/uploadstream`, {
-      payload: HttpApiSchema.MultipartStream(Schema.Struct({
+      payload: Schema.Struct({
         file: Multipart.SingleFileSchema
-      })),
+      }).pipe(HttpApiSchema.asMultipartStream()),
       success: Schema.Struct({
         contentType: Schema.String,
         length: Schema.Int
@@ -871,13 +929,13 @@ const HttpUsersLive = HttpApiBuilder.group(
     const fs = yield* FileSystem.FileSystem
     const repo = yield* UserRepo
     return handlers
-      .handle("findById", (_) => _.path.id === -1 ? CurrentUser.asEffect() : repo.findById(_.path.id))
+      .handle("findById", (_) => _.params.id === -1 ? CurrentUser.asEffect() : repo.findById(_.params.id))
       .handle("create", (_) =>
         _.payload.name === "boom"
           ? Effect.fail(new UserError({}))
           : Effect.map(DateTime.now, (now) =>
             new User({
-              id: _.urlParams.id,
+              id: _.query.id,
               name: _.payload.name,
               createdAt: now
             })))
@@ -932,9 +990,9 @@ const HttpGroupsLive = HttpApiBuilder.group(
   "groups",
   (handlers) =>
     handlers
-      .handle("findById", ({ path }) =>
-        path.id === 0
-          ? Effect.fail(new GroupError())
+      .handle("findById", ({ params }) =>
+        params.id === 0
+          ? Effect.fail(new GroupError({}))
           : Effect.succeed(new Group({ id: 1, name: "foo" })))
       .handle("create", ({ payload }) =>
         Effect.succeed(
@@ -945,19 +1003,19 @@ const HttpGroupsLive = HttpApiBuilder.group(
         ))
       .handle(
         "handle",
-        Effect.fnUntraced(function*({ path, payload }) {
+        Effect.fnUntraced(function*({ params, payload }) {
           return HttpServerResponse.jsonUnsafe({
-            id: path.id,
+            id: params.id,
             name: payload.name
           })
         })
       )
       .handleRaw(
         "handleRaw",
-        Effect.fnUntraced(function*({ path, request }) {
+        Effect.fnUntraced(function*({ params, request }) {
           const body = (yield* Effect.orDie(request.json)) as { name: string }
           return HttpServerResponse.jsonUnsafe({
-            id: path.id,
+            id: params.id,
             name: body.name
           })
         })

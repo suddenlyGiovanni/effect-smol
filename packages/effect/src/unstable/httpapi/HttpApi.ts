@@ -10,7 +10,7 @@ import * as AST from "../../SchemaAST.ts"
 import * as ServiceMap from "../../ServiceMap.ts"
 import type { Mutable } from "../../Types.ts"
 import type { PathInput } from "../http/HttpRouter.ts"
-import type * as HttpApiEndpoint from "./HttpApiEndpoint.ts"
+import * as HttpApiEndpoint from "./HttpApiEndpoint.ts"
 import type * as HttpApiGroup from "./HttpApiGroup.ts"
 import type * as HttpApiMiddleware from "./HttpApiMiddleware.ts"
 import * as HttpApiSchema from "./HttpApiSchema.ts"
@@ -210,13 +210,12 @@ export const reflect = <Id extends string, Groups extends HttpApiGroup.Any>(
       readonly endpoint: HttpApiEndpoint.AnyWithProps
       readonly mergedAnnotations: ServiceMap.ServiceMap<never>
       readonly middleware: ReadonlySet<HttpApiMiddleware.AnyKey>
-      readonly payloads: ReadonlyMap<HttpApiSchema.Encoding["kind"], ReadonlyMap<string, ReadonlySet<AST.AST>>>
       readonly successes: ReadonlyMap<number, {
-        readonly ast: AST.AST | undefined
+        readonly content: ReadonlySet<Schema.Top>
         readonly description: string | undefined
       }>
       readonly errors: ReadonlyMap<number, {
-        readonly ast: AST.AST | undefined
+        readonly content: ReadonlySet<Schema.Top>
         readonly description: string | undefined
       }>
     }) => void
@@ -238,15 +237,19 @@ export const reflect = <Id extends string, Groups extends HttpApiGroup.Any>(
         } as any)
       ) continue
 
-      const errors = extractMembers(endpoint.errorSchema, HttpApiSchema.getStatusError)
       options.onEndpoint({
         group,
         endpoint,
         middleware: endpoint.middlewares as any,
         mergedAnnotations: ServiceMap.merge(groupAnnotations, endpoint.annotations),
-        payloads: endpoint.payloadSchema ? extractPayloads(endpoint.payloadSchema.ast) : emptyMap,
-        successes: extractMembers(endpoint.successSchema, HttpApiSchema.getStatusSuccess),
-        errors
+        successes: extractResponseContent(
+          HttpApiEndpoint.getSuccessSchemas(endpoint),
+          HttpApiSchema.getStatusSuccess
+        ),
+        errors: extractResponseContent(
+          HttpApiEndpoint.getErrorSchemas(endpoint),
+          HttpApiSchema.getStatusError
+        )
       })
     }
   }
@@ -254,93 +257,44 @@ export const reflect = <Id extends string, Groups extends HttpApiGroup.Any>(
 
 // -------------------------------------------------------------------------------------
 
-const emptyMap = new Map<never, never>()
-
-function resoveDescriptionOrIdentifier(ast: AST.AST): string | undefined {
+function resolveDescriptionOrIdentifier(ast: AST.AST): string | undefined {
   return AST.resolveDescription(ast) ?? AST.resolveIdentifier(ast)
 }
 
-const extractMembers = (
-  schema: Schema.Top,
+const extractResponseContent = (
+  schemas: readonly [Schema.Top, ...Array<Schema.Top>],
   getStatus: (ast: AST.AST) => number
 ): ReadonlyMap<number, {
-  readonly ast: AST.AST | undefined
+  readonly content: ReadonlySet<Schema.Top>
   readonly description: string | undefined
 }> => {
   const map = new Map<number, {
-    set: Set<AST.AST>
+    content: Set<Schema.Top>
     description: string | undefined
   }>()
 
-  HttpApiSchema.forEachMember(schema, process)
-  return new Map(
-    [...map.entries()].map((
-      [status, { set, description }]
-    ) => {
-      const asts = Array.from(set)
-      return [
-        status,
-        { description, ast: asts.length === 0 ? undefined : asts.length === 1 ? asts[0] : new AST.Union(asts, "anyOf") }
-      ]
-    })
-  )
+  schemas.forEach(add)
 
-  function process(schema: Schema.Top) {
+  return map
+
+  function add(schema: Schema.Top) {
     const ast = schema.ast
     const status = getStatus(ast)
     // only include a schema in the response-body union if it actually has a payload,
-    // or if it's explicitly an “empty response” schema (so the empty-ness is intentional)
-    const shouldAdd = HttpApiSchema.resolveHttpApiIsEmpty(ast) || !HttpApiSchema.isVoidEncoded(ast)
-    const description = resoveDescriptionOrIdentifier(ast)
+    // or if it's explicitly a "no content" schema (so the empty-ness is intentional)
+    const isUndecodableNoContent = HttpApiSchema.isUndecodableNoContent(ast)
+    const description = resolveDescriptionOrIdentifier(ast)
     const pair = map.get(status)
     if (pair === undefined) {
       map.set(status, {
         description,
-        set: shouldAdd ? new Set([ast]) : new Set([])
+        content: isUndecodableNoContent ? new Set([]) : new Set([schema])
       })
     } else {
-      pair.description = [pair.description, description].filter(Boolean).join(" | ")
-      if (shouldAdd) {
-        pair.set.add(ast)
+      pair.description = [pair.description, description].filter(Predicate.isNotUndefined).join(" | ")
+      if (!isUndecodableNoContent) {
+        pair.content.add(schema)
       }
-    }
-  }
-}
-
-function extractPayloads(
-  ast: AST.AST
-): ReadonlyMap<HttpApiSchema.Encoding["kind"], ReadonlyMap<string, ReadonlySet<AST.AST>>> {
-  const map = new Map<
-    HttpApiSchema.Encoding["kind"],
-    Map<string, Set<AST.AST>>
-  >()
-
-  recur(ast)
-
-  return map
-
-  function add(ast: AST.AST) {
-    const encoding = HttpApiSchema.getEncoding(ast)
-    const kind = map.get(encoding.kind)
-    if (kind === undefined) {
-      map.set(encoding.kind, new Map([[encoding.contentType, new Set([ast])]]))
-    } else {
-      const contentType = kind.get(encoding.contentType)
-      if (contentType === undefined) {
-        kind.set(encoding.contentType, new Set([ast]))
-      } else {
-        contentType.add(ast)
-      }
-    }
-  }
-
-  function recur(ast: AST.AST) {
-    if (HttpApiSchema.isHttpApiContainer(ast)) {
-      for (const type of ast.types) {
-        add(type)
-      }
-    } else {
-      add(ast)
     }
   }
 }
