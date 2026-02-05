@@ -221,6 +221,10 @@ export const mount: {
 
 const constImmediate = { immediate: true }
 
+const notifyListener = (listener: () => void): void => {
+  listener()
+}
+
 const SerializableTypeId: Atom.SerializableTypeId = "~effect-atom/atom/Atom/Serializable"
 const atomKey = <A>(atom: Atom.Atom<A>): Atom.Atom<A> | string =>
   SerializableTypeId in atom ? (atom as Atom.Serializable<any>)[SerializableTypeId].key : atom
@@ -492,11 +496,11 @@ class NodeImpl<A> {
   parents: Array<NodeImpl<any>> = []
   previousParents: Array<NodeImpl<any>> | undefined
   children: Array<NodeImpl<any>> = []
-  listeners: Array<() => void> = []
+  listeners: Set<() => void> = new Set()
   skipInvalidation = false
 
   get canBeRemoved(): boolean {
-    return !this.atom.keepAlive && this.listeners.length === 0 && this.children.length === 0 && this.state !== 0
+    return !this.atom.keepAlive && this.listeners.size === 0 && this.children.length === 0 && this.state !== 0
   }
 
   _value: A = undefined as any
@@ -556,7 +560,7 @@ class NodeImpl<A> {
       this.invalidateChildren()
     }
 
-    if (this.listeners.length > 0) {
+    if (this.listeners.size > 0) {
       if (batchState.phase === BatchPhase.collect) {
         batchState.notify.add(this)
       } else {
@@ -601,7 +605,7 @@ class NodeImpl<A> {
 
     if (batchState.phase === BatchPhase.collect) {
       batchState.stale.push(this)
-    } else if (this.atom.lazy && this.listeners.length === 0 && !childrenAreActive(this.children)) {
+    } else if (this.atom.lazy && this.listeners.size === 0 && !childrenAreActive(this.children)) {
       this.invalidateChildren()
       this.skipInvalidation = true
     } else {
@@ -622,9 +626,7 @@ class NodeImpl<A> {
   }
 
   notify(): void {
-    for (let i = 0; i < this.listeners.length; i++) {
-      this.listeners[i]()
-    }
+    this.listeners.forEach(notifyListener)
 
     if (batchState.phase === BatchPhase.commit) {
       batchState.notify.delete(this)
@@ -645,7 +647,7 @@ class NodeImpl<A> {
 
   remove() {
     this.state = NodeState.removed
-    this.listeners = []
+    this.listeners.clear()
 
     if (this.lifetime === undefined) {
       return
@@ -668,14 +670,8 @@ class NodeImpl<A> {
   }
 
   subscribe(listener: () => void): () => void {
-    this.listeners.push(listener)
-    return () => {
-      const index = this.listeners.indexOf(listener)
-      if (index !== -1) {
-        this.listeners[index] = this.listeners[this.listeners.length - 1]
-        this.listeners.pop()
-      }
-    }
+    this.listeners.add(listener)
+    return () => this.listeners.delete(listener)
   }
 }
 
@@ -689,7 +685,7 @@ function childrenAreActive(children: Array<NodeImpl<any>>): boolean {
   while (current !== undefined) {
     for (let i = 0, len = current.length; i < len; i++) {
       const child = current[i]
-      if (!child.atom.lazy || child.listeners.length > 0) {
+      if (!child.atom.lazy || child.listeners.size > 0) {
         return true
       } else if (child.children.length > 0) {
         if (stack === undefined) {
