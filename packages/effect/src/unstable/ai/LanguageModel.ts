@@ -65,6 +65,7 @@ import type { Span } from "../../Tracer.ts"
 import type { Concurrency, Mutable, NoExcessProperties } from "../../Types.ts"
 import * as AiError from "./AiError.ts"
 import { defaultIdGenerator, IdGenerator } from "./IdGenerator.ts"
+import * as InternalCodecTransformer from "./internal/codec-transformer.ts"
 import * as Prompt from "./Prompt.ts"
 import * as Response from "./Response.ts"
 import type { SpanTransformer } from "./Telemetry.ts"
@@ -98,9 +99,8 @@ import * as Toolkit from "./Toolkit.ts"
  * ```
  *
  * @since 4.0.0
- * @category Context
+ * @category services
  */
-// @effect-diagnostics effect/leakingRequirements:off
 export class LanguageModel extends ServiceMap.Service<LanguageModel, Service>()(
   "effect/unstable/ai/LanguageModel"
 ) {}
@@ -134,18 +134,18 @@ export interface Service {
    */
   readonly generateObject: <
     ObjectEncoded extends Record<string, any>,
-    ObjectSchema extends Schema.Codec<any, ObjectEncoded, any, any>,
+    StructuredOutputSchema extends Schema.Codec<any, ObjectEncoded, any, any>,
     Options extends NoExcessProperties<
-      GenerateObjectOptions<any, ObjectSchema>,
+      GenerateObjectOptions<any, StructuredOutputSchema>,
       Options
     >,
     Tools extends Record<string, Tool.Any> = {}
   >(
-    options: Options & GenerateObjectOptions<Tools, ObjectSchema>
+    options: Options & GenerateObjectOptions<Tools, StructuredOutputSchema>
   ) => Effect.Effect<
-    GenerateObjectResponse<Tools, ObjectSchema["Type"]>,
+    GenerateObjectResponse<Tools, StructuredOutputSchema["Type"]>,
     ExtractError<Options>,
-    ExtractServices<Options> | ObjectSchema["DecodingServices"]
+    ExtractServices<Options> | StructuredOutputSchema["DecodingServices"]
   >
 
   /**
@@ -162,6 +162,35 @@ export interface Service {
     ExtractServices<Options>
   >
 }
+
+/**
+ * A function that transforms a `Schema.Codec` into a provider-compatible form
+ * for structured output generation.
+ *
+ * Different language model providers have varying constraints on the JSON
+ * schemas they accept. A `CodecTransformer` rewrites a codec's encoded side to
+ * satisfy those constraints while preserving the decoded type.
+ *
+ * @since 4.0.0
+ * @category models
+ */
+export type CodecTransformer = <T, E, RD, RE>(schema: Schema.Codec<T, E, RD, RE>) => Schema.Codec<T, unknown, RD, RE>
+
+/**
+ * A `ServiceMap.Reference` that holds the current `CodecTransformer` used by
+ * `LanguageModel.generateObject` to adapt structured output schemas for the
+ * active provider.
+ *
+ * By default, this is the identity function (no transformation). Provider
+ * packages (e.g. `@effect/ai-anthropic`) override this reference with a
+ * provider-specific transformer so that schemas are automatically rewritten
+ * before being sent to the model as well as before decoding the generated value.
+ *
+ * @since 4.0.0
+ * @category services
+ */
+export const CurrentCodecTransformer: ServiceMap.Reference<CodecTransformer> =
+  InternalCodecTransformer.CurrentCodecTransformer
 
 /**
  * Configuration options for text generation.
@@ -235,7 +264,7 @@ export interface GenerateTextOptions<Tools extends Record<string, Tool.Any>> {
  */
 export interface GenerateObjectOptions<
   Tools extends Record<string, Tool.Any>,
-  ObjectSchema extends Schema.Top
+  StructuredOutputSchema extends Schema.Top
 > extends GenerateTextOptions<Tools> {
   /**
    * The name of the structured output that should be generated. Used by some
@@ -246,7 +275,7 @@ export interface GenerateObjectOptions<
   /**
    * The schema to be used to specify the structure of the object to generate.
    */
-  readonly schema: ObjectSchema
+  readonly schema: StructuredOutputSchema
 }
 
 /**
@@ -618,6 +647,8 @@ export interface ConstructorParams {
  * @category constructors
  */
 export const make: (params: ConstructorParams) => Effect.Effect<Service> = Effect.fnUntraced(function*(params) {
+  const codecTransformer = yield* InternalCodecTransformer.CurrentCodecTransformer
+
   const parentSpanTransformer = yield* Effect.serviceOption(
     CurrentSpanTransformer
   )
@@ -677,24 +708,25 @@ export const make: (params: ConstructorParams) => Effect.Effect<Service> = Effec
             })
           )),
         (effect, span) => Effect.withParentSpan(effect, span, { captureStackTrace: false }),
-        Effect.provideService(IdGenerator, idGenerator)
+        Effect.provideService(IdGenerator, idGenerator),
+        Effect.provideService(InternalCodecTransformer.CurrentCodecTransformer, codecTransformer)
       )
     ) as any
 
   const generateObject = <
     ObjectEncoded extends Record<string, any>,
-    ObjectSchema extends Schema.Codec<any, ObjectEncoded, any, any>,
+    StructuredOutputSchema extends Schema.Codec<any, ObjectEncoded, any, any>,
     Options extends NoExcessProperties<
-      GenerateObjectOptions<any, ObjectSchema>,
+      GenerateObjectOptions<any, StructuredOutputSchema>,
       Options
     >,
     Tools extends Record<string, Tool.Any> = {}
   >(
-    options: Options & GenerateObjectOptions<Tools, ObjectSchema>
+    options: Options & GenerateObjectOptions<Tools, StructuredOutputSchema>
   ): Effect.Effect<
-    GenerateObjectResponse<Tools, ObjectSchema["Type"]>,
+    GenerateObjectResponse<Tools, StructuredOutputSchema["Type"]>,
     ExtractError<Options>,
-    ExtractServices<Options> | ObjectSchema["DecodingServices"]
+    ExtractServices<Options> | StructuredOutputSchema["DecodingServices"]
   > => {
     const objectName = getObjectName(options.objectName, options.schema)
     return Effect.useSpan(
@@ -730,9 +762,20 @@ export const make: (params: ConstructorParams) => Effect.Effect<Service> = Effec
             providerOptions
           )
 
+          const transformedSchema = yield* Effect.try({
+            try: () => codecTransformer(options.schema),
+            catch: (error) =>
+              AiError.make({
+                module: "LanguageModel",
+                method: "generateObject",
+                reason: new AiError.UnsupportedSchemaError({
+                  description: error instanceof Error ? error.message : String(error)
+                })
+              })
+          })
           const value = yield* resolveStructuredOutput(
             content as any,
-            options.schema
+            transformedSchema
           )
 
           return new GenerateObjectResponse(value, content)
@@ -746,7 +789,8 @@ export const make: (params: ConstructorParams) => Effect.Effect<Service> = Effec
             })
           )),
         (effect, span) => Effect.withParentSpan(effect, span, { captureStackTrace: false }),
-        Effect.provideService(IdGenerator, idGenerator)
+        Effect.provideService(IdGenerator, idGenerator),
+        Effect.provideService(InternalCodecTransformer.CurrentCodecTransformer, codecTransformer)
       )
     ) as any
   }
@@ -817,7 +861,8 @@ export const make: (params: ConstructorParams) => Effect.Effect<Service> = Effec
         })
         : error
     ),
-    Stream.provideService(IdGenerator, idGenerator)
+    Stream.provideService(IdGenerator, idGenerator),
+    Stream.provideService(InternalCodecTransformer.CurrentCodecTransformer, codecTransformer)
   ) as any
 
   const generateContent: <
@@ -903,7 +948,6 @@ export const make: (params: ConstructorParams) => Effect.Effect<Service> = Effec
             method: "generateText",
             reason: new AiError.ToolNotFoundError({
               toolName: approval.toolCall.name,
-              toolParams: approval.toolCall.params as Schema.Json,
               availableTools: Object.keys(toolkit.tools)
             })
           })
@@ -966,6 +1010,7 @@ export const make: (params: ConstructorParams) => Effect.Effect<Service> = Effec
       ),
       Stream.runCollect
     )
+
     const content = yield* Schema.decodeEffect(ResponseSchema)(rawContent)
 
     // Return the content merged with the tool call results
@@ -1084,7 +1129,6 @@ export const make: (params: ConstructorParams) => Effect.Effect<Service> = Effec
             method: "streamText",
             reason: new AiError.ToolNotFoundError({
               toolName: approval.toolCall.name,
-              toolParams: approval.toolCall.params as Schema.Json,
               availableTools: Object.keys(toolkit.tools)
             })
           })
@@ -1264,7 +1308,11 @@ export const generateText = <
   GenerateTextResponse<Tools>,
   ExtractError<Options>,
   LanguageModel | ExtractServices<Options>
-> => Effect.flatMap(LanguageModel.asEffect(), (model) => model.generateText(options))
+> =>
+  Effect.flatMap(
+    Effect.service(LanguageModel),
+    (model) => model.generateText(options)
+  )
 
 /**
  * Generate a structured object from a schema using a language model.
@@ -1300,19 +1348,23 @@ export const generateText = <
  */
 export const generateObject = <
   ObjectEncoded extends Record<string, any>,
-  ObjectSchema extends Schema.Codec<any, ObjectEncoded, any, any>,
+  StructuredOutputSchema extends Schema.Codec<any, ObjectEncoded, any, any>,
   Options extends NoExcessProperties<
-    GenerateObjectOptions<any, ObjectSchema>,
+    GenerateObjectOptions<any, StructuredOutputSchema>,
     Options
   >,
   Tools extends Record<string, Tool.Any> = {}
 >(
-  options: Options & GenerateObjectOptions<Tools, ObjectSchema>
+  options: Options & GenerateObjectOptions<Tools, StructuredOutputSchema>
 ): Effect.Effect<
-  GenerateObjectResponse<Tools, ObjectSchema["Type"]>,
+  GenerateObjectResponse<Tools, StructuredOutputSchema["Type"]>,
   ExtractError<Options>,
-  ExtractServices<Options> | ObjectSchema["DecodingServices"] | LanguageModel
-> => Effect.flatMap(LanguageModel.asEffect(), (model) => model.generateObject(options))
+  ExtractServices<Options> | StructuredOutputSchema["DecodingServices"] | LanguageModel
+> =>
+  Effect.flatMap(
+    Effect.service(LanguageModel),
+    (model) => model.generateObject(options)
+  )
 
 /**
  * Generate text using a language model with streaming output.
@@ -1348,9 +1400,10 @@ export const streamText = <
   ExtractError<Options>,
   ExtractServices<Options> | LanguageModel
 > =>
-  Stream.unwrap(
-    Effect.map(LanguageModel.asEffect(), (model) => model.streamText(options))
-  )
+  Stream.unwrap(Effect.map(
+    Effect.service(LanguageModel),
+    (model) => model.streamText(options)
+  ))
 
 // =============================================================================
 // Tool Approval Helpers
@@ -1491,7 +1544,6 @@ const executeApprovedToolCalls = <Tools extends Record<string, Tool.Any>>(
         method: "generateText",
         reason: new AiError.ToolNotFoundError({
           toolName: toolCall.name,
-          toolParams: toolCall.params as Schema.Json,
           availableTools: Object.keys(toolkit.tools)
         })
       })
@@ -1678,9 +1730,9 @@ const resolveToolkit = <Tools extends Record<string, Tool.Any>, E, R>(
   "asEffect" in toolkit ? toolkit.asEffect() : Effect.succeed(toolkit)
 
 /** @internal */
-export const getObjectName = <ObjectSchema extends Schema.Top>(
+export const getObjectName = <StructuredOutputSchema extends Schema.Top>(
   objectName: string | undefined,
-  schema: ObjectSchema
+  schema: StructuredOutputSchema
 ): string => {
   if (Predicate.isNotUndefined(objectName)) {
     return objectName
@@ -1696,8 +1748,8 @@ export const getObjectName = <ObjectSchema extends Schema.Top>(
 }
 
 const resolveStructuredOutput = Effect.fnUntraced(function*<
-  ObjectSchema extends Schema.Top
->(response: ReadonlyArray<Response.AllParts<any>>, schema: ObjectSchema) {
+  StructuredOutputSchema extends Schema.Top
+>(response: ReadonlyArray<Response.AllParts<any>>, schema: StructuredOutputSchema) {
   const text: Array<string> = []
   for (const part of response) {
     if (part.type === "text") {
@@ -1709,7 +1761,7 @@ const resolveStructuredOutput = Effect.fnUntraced(function*<
     return yield* AiError.make({
       module: "LanguageModel",
       method: "generateObject",
-      reason: new AiError.InvalidOutputError({
+      reason: new AiError.StructuredOutputError({
         description: "No text content in response"
       })
     })
@@ -1720,7 +1772,7 @@ const resolveStructuredOutput = Effect.fnUntraced(function*<
     AiError.make({
       module: "LanguageModel",
       method: "generateObject",
-      reason: AiError.InvalidOutputError.fromSchemaError(error)
+      reason: AiError.StructuredOutputError.fromSchemaError(error)
     }))
 })
 

@@ -2152,10 +2152,11 @@ export function brand(ast: AST, brand: string): AST {
 
 /**
  * Maps over the array but will return the original array if no changes occur.
+ * @internal
  */
-function mapOrSame<A>(as: Arr.NonEmptyReadonlyArray<A>, f: (a: A) => A): Arr.NonEmptyReadonlyArray<A>
-function mapOrSame<A>(as: ReadonlyArray<A>, f: (a: A) => A): ReadonlyArray<A>
-function mapOrSame<A>(as: ReadonlyArray<A>, f: (a: A) => A): ReadonlyArray<A> {
+export function mapOrSame<A>(as: Arr.NonEmptyReadonlyArray<A>, f: (a: A) => A): Arr.NonEmptyReadonlyArray<A>
+export function mapOrSame<A>(as: ReadonlyArray<A>, f: (a: A) => A): ReadonlyArray<A>
+export function mapOrSame<A>(as: ReadonlyArray<A>, f: (a: A) => A): ReadonlyArray<A> {
   let changed = false
   const out: Array<A> = new Array(as.length)
   for (let i = 0; i < as.length; i++) {
@@ -2185,7 +2186,9 @@ export function annotateKey<A extends AST>(ast: A, annotations: Schema.Annotatio
 /** @internal */
 export const optionalKeyLastLink = applyToLastLink(optionalKey)
 
-/** @internal */
+/**
+ * @since 4.0.0
+ */
 export function optionalKey<A extends AST>(ast: A): A {
   const context = ast.context ?
     ast.context.isOptional === false ?
@@ -2234,7 +2237,9 @@ export function withConstructorDefault<A extends AST>(
   return replaceContext(ast, context)
 }
 
-/** @internal */
+/**
+ * @since 4.0.0
+ */
 export function decodeTo<A extends AST>(
   from: AST,
   to: A,

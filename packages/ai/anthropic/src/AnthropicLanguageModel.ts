@@ -8,6 +8,7 @@ import * as Base64 from "effect/encoding/Base64"
 import { dual } from "effect/Function"
 import * as Layer from "effect/Layer"
 import * as Predicate from "effect/Predicate"
+import * as Schema from "effect/Schema"
 import * as SchemaAST from "effect/SchemaAST"
 import * as ServiceMap from "effect/ServiceMap"
 import * as Stream from "effect/Stream"
@@ -21,6 +22,7 @@ import type * as Prompt from "effect/unstable/ai/Prompt"
 import type * as Response from "effect/unstable/ai/Response"
 import * as Tool from "effect/unstable/ai/Tool"
 import { AnthropicClient, type MessageStreamEvent } from "./AnthropicClient.ts"
+import { toCodecAnthropic } from "./AnthropicStructuredOutput.ts"
 import { addGenAIAnnotations } from "./AnthropicTelemetry.ts"
 import type { AnthropicTool } from "./AnthropicTool.ts"
 import type * as Generated from "./Generated.ts"
@@ -426,7 +428,7 @@ export const make = Effect.fnUntraced(function*({ model, config: providerConfig 
       const betas = new Set<string>()
       const capabilities = getModelCapabilities(config.model!)
       const { messages, system } = yield* prepareMessages({ betas, options, toolNameMapper })
-      const outputFormat = getOutputFormat({ capabilities, options })
+      const outputFormat = yield* getOutputFormat({ capabilities, options })
       const { tools, toolChoice } = yield* prepareTools({ betas, capabilities, config, options })
       const params: Mutable<typeof Generated.BetaMessagesPostParams.Encoded> = {}
       if (betas.size > 0) {
@@ -480,7 +482,10 @@ export const make = Effect.fnUntraced(function*({ model, config: providerConfig 
           return response
         })
       ))
-  })
+  }).pipe(Effect.provideService(
+    LanguageModel.CurrentCodecTransformer,
+    toCodecAnthropic
+  ))
 })
 
 /**
@@ -974,12 +979,14 @@ const prepareTools = Effect.fnUntraced(
 
     // Return a JSON response tool when using non-native structured outputs
     if (options.responseFormat.type === "json" && !capabilities.supportsStructuredOutput) {
+      const input_schema = yield* tryJsonSchema(options.responseFormat.schema, "prepareTools")
+      const userDescription = SchemaAST.resolveDescription(options.responseFormat.schema.ast)
+      const description = Predicate.isNotUndefined(userDescription) ? `${userDescription} - ` : ""
       return {
         tools: [{
           name: options.responseFormat.objectName,
-          description: SchemaAST.resolveDescription(options.responseFormat.schema.ast) ??
-            "Response with a JSON object.",
-          input_schema: Tool.getJsonSchemaFromSchema(options.responseFormat.schema) as any
+          description: `${description}You MUST respond with a JSON object.`,
+          input_schema: input_schema as any
         }],
         toolChoice: {
           type: "tool",
@@ -995,7 +1002,7 @@ const prepareTools = Effect.fnUntraced(
     for (const tool of options.tools) {
       if (Tool.isUserDefined(tool)) {
         const description = Tool.getDescription(tool)
-        const input_schema = Tool.getJsonSchema(tool)
+        const input_schema = yield* tryJsonSchema(tool.parametersSchema, "prepareTools")
 
         userTools.push({
           name: tool.name,
@@ -1291,11 +1298,13 @@ const makeResponse = Effect.fnUntraced(
               }
               : undefined
 
+            const params = yield* encodeToolParameters(options.tools, part.name, part.input)
+
             parts.push({
               type: "tool-call",
               id: part.id,
               name: part.name,
-              params: part.input,
+              params,
               ...(Predicate.isNotUndefined(callerInfo)
                 ? { metadata: { anthropic: { caller: callerInfo } } }
                 : undefined)
@@ -1720,11 +1729,13 @@ const makeStreamResponse = Effect.fnUntraced(
                     id: part.id
                   })
 
+                  const params = yield* encodeToolParameters(options.tools, part.name, part.input)
+
                   parts.push({
                     type: "tool-call",
                     id: part.id,
                     name: part.name,
-                    params: part.input,
+                    params,
                     ...(Predicate.isNotUndefined(callerInfo)
                       ? { metadata: { anthropic: { caller: callerInfo } } }
                       : undefined)
@@ -2300,11 +2311,15 @@ const makeStreamResponse = Effect.fnUntraced(
                     }
                   }
 
+                  const params = contentBlock.providerExecuted === true
+                    ? finalParams
+                    : encodeToolParameters(options.tools, contentBlock.name, finalParams)
+
                   parts.push({
                     type: "tool-call",
                     id: contentBlock.id,
                     name: contentBlock.name,
-                    params: finalParams,
+                    params,
                     providerExecuted: contentBlock.providerExecuted,
                     ...(Predicate.isNotUndefined(contentBlock.caller)
                       ? { metadata: { anthropic: { caller: contentBlock.caller } } }
@@ -2663,15 +2678,73 @@ const getModelCapabilities = (modelId: string): ModelCapabilities => {
   }
 }
 
-const getOutputFormat = ({ capabilities, options }: {
+const unsupportedSchemaError = (error: unknown, method: string): AiError.AiError =>
+  AiError.make({
+    module: "AnthropicLanguageModel",
+    method,
+    reason: new AiError.UnsupportedSchemaError({
+      description: error instanceof Error ? error.message : String(error)
+    })
+  })
+
+const tryCodecTransform = <S extends Schema.Top>(schema: S, method: string) =>
+  Effect.try({
+    try: () => toCodecAnthropic(schema),
+    catch: (error) => unsupportedSchemaError(error, method)
+  })
+
+const tryJsonSchema = <S extends Schema.Top>(schema: S, method: string) =>
+  Effect.try({
+    try: () => Tool.getJsonSchemaFromSchema(schema, { transformer: toCodecAnthropic }),
+    catch: (error) => unsupportedSchemaError(error, method)
+  })
+
+const getOutputFormat = Effect.fnUntraced(function*({ capabilities, options }: {
   readonly capabilities: ModelCapabilities
   readonly options: LanguageModel.ProviderOptions
-}): typeof Generated.JsonOutputFormat.Encoded | undefined => {
+}): Effect.fn.Return<typeof Generated.JsonOutputFormat.Encoded | undefined, AiError.AiError> {
   if (options.responseFormat.type === "json" && capabilities.supportsStructuredOutput) {
+    const jsonSchema = yield* tryJsonSchema(options.responseFormat.schema, "getOutputFormat")
     return {
       type: "json_schema",
-      schema: Tool.getJsonSchemaFromSchema(options.responseFormat.schema) as any
+      schema: jsonSchema as any
     }
   }
   return undefined
-}
+})
+
+const encodeToolParameters = Effect.fnUntraced(function*<Tools extends ReadonlyArray<Tool.Any>>(
+  tools: Tools,
+  toolName: string,
+  toolParams: unknown
+): Effect.fn.Return<unknown, AiError.AiError> {
+  const tool = tools.find((tool) => tool.name === toolName)
+
+  if (Predicate.isUndefined(tool)) {
+    return yield* AiError.make({
+      module: "AnthropicLanguageModel",
+      method: "makeResponse",
+      reason: new AiError.ToolNotFoundError({
+        toolName,
+        availableTools: tools.map((tool) => tool.name)
+      })
+    })
+  }
+
+  const transformedSchema = yield* tryCodecTransform(tool.parametersSchema, "makeResponse")
+  const encodeParams = Schema.decodeEffect(transformedSchema)
+
+  return yield* (
+    encodeParams(toolParams) as Effect.Effect<unknown, Schema.SchemaError>
+  ).pipe(Effect.mapError((error) =>
+    AiError.make({
+      module: "AnthropicLanguageModel",
+      method: "makeResponse",
+      reason: new AiError.ToolParameterValidationError({
+        toolName,
+        toolParams,
+        description: error.issue.toString()
+      })
+    })
+  ))
+})
