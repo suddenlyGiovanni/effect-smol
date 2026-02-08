@@ -1,7 +1,6 @@
 /**
  * @since 1.0.0
  */
-// @ts-nocheck - Generated file with example values that may not type-check
 
 import * as Data from "effect/Data"
 import * as Effect from "effect/Effect"
@@ -172,6 +171,11 @@ export const BetaCodeExecutionToolResultErrorCode = Schema.Literals([
   "too_many_requests",
   "execution_time_exceeded"
 ]).annotate({ "title": "CodeExecutionToolResultErrorCode" })
+export type BetaCompactionContentBlockDelta = { readonly "content": string | null; readonly "type": "compaction_delta" }
+export const BetaCompactionContentBlockDelta = Schema.Struct({
+  "content": Schema.Union([Schema.String, Schema.Null]).annotate({ "title": "Content" }),
+  "type": Schema.Literal("compaction_delta").annotate({ "title": "Type", "default": "compaction_delta" })
+}).annotate({ "title": "CompactionContentBlockDelta" })
 export type BetaContentBlockStopEvent = { readonly "index": number; readonly "type": "content_block_stop" }
 export const BetaContentBlockStopEvent = Schema.Struct({
   "index": Schema.Number.annotate({ "title": "Index" }).check(Schema.isInt()),
@@ -331,6 +335,11 @@ export const BetaDeleteSkillVersionResponse = Schema.Struct({
 export type BetaDirectCaller = { readonly "type": "direct" }
 export const BetaDirectCaller = Schema.Struct({ "type": Schema.Literal("direct").annotate({ "title": "Type" }) })
   .annotate({ "title": "DirectCaller", "description": "Tool invocation directly from the model." })
+export type BetaEffortLevel = "low" | "medium" | "high" | "max"
+export const BetaEffortLevel = Schema.Literals(["low", "medium", "high", "max"]).annotate({
+  "title": "EffortLevel",
+  "description": "All possible effort levels."
+})
 export type BetaExpiredResult = { readonly "type": "expired" }
 export const BetaExpiredResult = Schema.Struct({
   "type": Schema.Literal("expired").annotate({ "title": "Type", "default": "expired" })
@@ -668,18 +677,18 @@ export const BetaModelInfo = Schema.Struct({
     "title": "Created At",
     "description":
       "RFC 3339 datetime string representing the time at which the model was released. May be set to an epoch value if the release date is unknown.",
-    "examples": ["2025-02-19T00:00:00Z"],
+    "examples": ["2026-02-04T00:00:00Z"],
     "format": "date-time"
   }),
   "display_name": Schema.String.annotate({
     "title": "Display Name",
     "description": "A human-readable name for the model.",
-    "examples": ["Claude Sonnet 4"]
+    "examples": ["Claude Opus 4.6"]
   }),
   "id": Schema.String.annotate({
     "title": "Id",
     "description": "Unique model identifier.",
-    "examples": ["claude-sonnet-4-20250514"]
+    "examples": ["claude-opus-4-6"]
   }),
   "type": Schema.Literal("model").annotate({
     "title": "Type",
@@ -1006,6 +1015,18 @@ export const BetaResponseCodeExecutionOutputBlock = Schema.Struct({
   "file_id": Schema.String.annotate({ "title": "File Id" }),
   "type": Schema.Literal("code_execution_output").annotate({ "title": "Type", "default": "code_execution_output" })
 }).annotate({ "title": "ResponseCodeExecutionOutputBlock" })
+export type BetaResponseCompactionBlock = { readonly "content": string | null; readonly "type": "compaction" }
+export const BetaResponseCompactionBlock = Schema.Struct({
+  "content": Schema.Union([Schema.String, Schema.Null]).annotate({
+    "title": "Content",
+    "description": "Summary of compacted content, or null if compaction failed"
+  }),
+  "type": Schema.Literal("compaction").annotate({ "title": "Type", "default": "compaction" })
+}).annotate({
+  "title": "ResponseCompactionBlock",
+  "description":
+    "A compaction block returned when autocompact is triggered.\n\nWhen content is None, it indicates the compaction failed to produce a valid\nsummary (e.g., malformed output from the model). Clients may round-trip\ncompaction blocks with null content; the server treats them as no-ops."
+})
 export type BetaResponseContainerUploadBlock = { readonly "file_id": string; readonly "type": "container_upload" }
 export const BetaResponseContainerUploadBlock = Schema.Struct({
   "file_id": Schema.String.annotate({ "title": "File Id" }),
@@ -1182,8 +1203,8 @@ export const BetaResponseThinkingBlock = Schema.Struct({
 export type BetaResponseToolReferenceBlock = { readonly "tool_name": string; readonly "type": "tool_reference" }
 export const BetaResponseToolReferenceBlock = Schema.Struct({
   "tool_name": Schema.String.annotate({ "title": "Tool Name" }).check(Schema.isMinLength(1)).check(
-    Schema.isMaxLength(64)
-  ).check(Schema.isPattern(new RegExp("^[a-zA-Z0-9_-]{1,64}$"))),
+    Schema.isMaxLength(256)
+  ).check(Schema.isPattern(new RegExp("^[a-zA-Z0-9_-]{1,256}$"))),
   "type": Schema.Literal("tool_reference").annotate({ "title": "Type", "default": "tool_reference" })
 }).annotate({ "title": "ResponseToolReferenceBlock" })
 export type BetaResponseWebSearchResultBlock = {
@@ -1336,6 +1357,8 @@ export const BetaSkillVersion = Schema.Struct({
     "examples": ["1759178010641129"]
   })
 }).annotate({ "title": "SkillVersion" })
+export type BetaSpeed = "standard" | "fast"
+export const BetaSpeed = Schema.Literals(["standard", "fast"]).annotate({ "title": "Speed" })
 export type BetaTextContentBlockDelta = { readonly "text": string; readonly "type": "text_delta" }
 export const BetaTextContentBlockDelta = Schema.Struct({
   "text": Schema.String.annotate({ "title": "Text" }),
@@ -1354,6 +1377,10 @@ export const BetaTextEditorCodeExecutionToolResultErrorCode = Schema.Literals([
   "execution_time_exceeded",
   "file_not_found"
 ]).annotate({ "title": "TextEditorCodeExecutionToolResultErrorCode" })
+export type BetaThinkingConfigAdaptive = { readonly "type": "adaptive" }
+export const BetaThinkingConfigAdaptive = Schema.Struct({
+  "type": Schema.Literal("adaptive").annotate({ "title": "Type" })
+}).annotate({ "title": "ThinkingConfigAdaptive" })
 export type BetaThinkingConfigDisabled = { readonly "type": "disabled" }
 export const BetaThinkingConfigDisabled = Schema.Struct({
   "type": Schema.Literal("disabled").annotate({ "title": "Type" })
@@ -1798,6 +1825,11 @@ export const DeleteSkillVersionResponse = Schema.Struct({
     "default": "skill_version_deleted"
   })
 }).annotate({ "title": "DeleteSkillVersionResponse" })
+export type EffortLevel = "low" | "medium" | "high" | "max"
+export const EffortLevel = Schema.Literals(["low", "medium", "high", "max"]).annotate({
+  "title": "EffortLevel",
+  "description": "All possible effort levels."
+})
 export type ExpiredResult = { readonly "type": "expired" }
 export const ExpiredResult = Schema.Struct({
   "type": Schema.Literal("expired").annotate({ "title": "Type", "default": "expired" })
@@ -2108,18 +2140,18 @@ export const ModelInfo = Schema.Struct({
     "title": "Created At",
     "description":
       "RFC 3339 datetime string representing the time at which the model was released. May be set to an epoch value if the release date is unknown.",
-    "examples": ["2025-02-19T00:00:00Z"],
+    "examples": ["2026-02-04T00:00:00Z"],
     "format": "date-time"
   }),
   "display_name": Schema.String.annotate({
     "title": "Display Name",
     "description": "A human-readable name for the model.",
-    "examples": ["Claude Sonnet 4"]
+    "examples": ["Claude Opus 4.6"]
   }),
   "id": Schema.String.annotate({
     "title": "Id",
     "description": "Unique model identifier.",
-    "examples": ["claude-sonnet-4-20250514"]
+    "examples": ["claude-opus-4-6"]
   }),
   "type": Schema.Literal("model").annotate({
     "title": "Type",
@@ -2553,11 +2585,17 @@ export const SkillVersion = Schema.Struct({
     "examples": ["1759178010641129"]
   })
 }).annotate({ "title": "SkillVersion" })
+export type Speed = "standard" | "fast"
+export const Speed = Schema.Literals(["standard", "fast"]).annotate({ "title": "Speed" })
 export type TextContentBlockDelta = { readonly "text": string; readonly "type": "text_delta" }
 export const TextContentBlockDelta = Schema.Struct({
   "text": Schema.String.annotate({ "title": "Text" }),
   "type": Schema.Literal("text_delta").annotate({ "title": "Type", "default": "text_delta" })
 }).annotate({ "title": "TextContentBlockDelta" })
+export type ThinkingConfigAdaptive = { readonly "type": "adaptive" }
+export const ThinkingConfigAdaptive = Schema.Struct({
+  "type": Schema.Literal("adaptive").annotate({ "title": "Type" })
+}).annotate({ "title": "ThinkingConfigAdaptive" })
 export type ThinkingConfigDisabled = { readonly "type": "disabled" }
 export const ThinkingConfigDisabled = Schema.Struct({
   "type": Schema.Literal("disabled").annotate({ "title": "Type" })
@@ -2700,6 +2738,7 @@ export type BetaStopReason =
   | "stop_sequence"
   | "tool_use"
   | "pause_turn"
+  | "compaction"
   | "refusal"
   | "model_context_window_exceeded"
 export const BetaStopReason = Schema.Literals([
@@ -2708,10 +2747,12 @@ export const BetaStopReason = Schema.Literals([
   "stop_sequence",
   "tool_use",
   "pause_turn",
+  "compaction",
   "refusal",
   "model_context_window_exceeded"
 ])
 export type Model =
+  | "claude-opus-4-6"
   | "claude-opus-4-5-20251101"
   | "claude-opus-4-5"
   | "claude-3-7-sonnet-latest"
@@ -2733,6 +2774,7 @@ export type Model =
   | "claude-3-opus-20240229"
   | "claude-3-haiku-20240307"
 export const Model = Schema.Literals([
+  "claude-opus-4-6",
   "claude-opus-4-5-20251101",
   "claude-opus-4-5",
   "claude-3-7-sonnet-latest",
@@ -2919,6 +2961,28 @@ export const BetaCodeExecutionTool_20250825 = Schema.Struct({
   ),
   "type": Schema.Literal("code_execution_20250825").annotate({ "title": "Type" })
 }).annotate({ "title": "CodeExecutionTool_20250825" })
+export type BetaRequestCompactionBlock = {
+  readonly "cache_control"?: BetaCacheControlEphemeral | null
+  readonly "content": string | null
+  readonly "type": "compaction"
+}
+export const BetaRequestCompactionBlock = Schema.Struct({
+  "cache_control": Schema.optionalKey(
+    Schema.Union([Schema.Union([BetaCacheControlEphemeral], { mode: "oneOf" }), Schema.Null]).annotate({
+      "title": "Cache Control",
+      "description": "Create a cache control breakpoint at this content block."
+    })
+  ),
+  "content": Schema.Union([Schema.String, Schema.Null]).annotate({
+    "title": "Content",
+    "description": "Summary of previously compacted content, or null if compaction failed"
+  }),
+  "type": Schema.Literal("compaction").annotate({ "title": "Type" })
+}).annotate({
+  "title": "RequestCompactionBlock",
+  "description":
+    "A compaction block containing summary of previous context.\n\nUsers should round-trip these blocks from responses to subsequent requests\nto maintain context across compaction boundaries.\n\nWhen content is None, the block represents a failed compaction. The server\ntreats these as no-ops. Empty string content is not allowed."
+})
 export type BetaRequestContainerUploadBlock = {
   readonly "cache_control"?: BetaCacheControlEphemeral | null
   readonly "file_id": string
@@ -2972,8 +3036,8 @@ export const BetaRequestToolReferenceBlock = Schema.Struct({
     })
   ),
   "tool_name": Schema.String.annotate({ "title": "Tool Name" }).check(Schema.isMinLength(1)).check(
-    Schema.isMaxLength(64)
-  ).check(Schema.isPattern(new RegExp("^[a-zA-Z0-9_-]{1,64}$"))),
+    Schema.isMaxLength(256)
+  ).check(Schema.isPattern(new RegExp("^[a-zA-Z0-9_-]{1,256}$"))),
   "type": Schema.Literal("tool_reference").annotate({ "title": "Type" })
 }).annotate({
   "title": "RequestToolReferenceBlock",
@@ -3053,6 +3117,80 @@ export const BetaToolSearchToolRegex_20251119 = Schema.Struct({
   ),
   "type": Schema.Literals(["tool_search_tool_regex_20251119", "tool_search_tool_regex"]).annotate({ "title": "Type" })
 }).annotate({ "title": "ToolSearchToolRegex_20251119" })
+export type BetaCompactionIterationUsage = {
+  readonly "cache_creation": BetaCacheCreation | null
+  readonly "cache_creation_input_tokens": number
+  readonly "cache_read_input_tokens": number
+  readonly "input_tokens": number
+  readonly "output_tokens": number
+  readonly "type": "compaction"
+}
+export const BetaCompactionIterationUsage = Schema.Struct({
+  "cache_creation": Schema.Union([BetaCacheCreation, Schema.Null]).annotate({
+    "description": "Breakdown of cached tokens by TTL",
+    "default": null
+  }),
+  "cache_creation_input_tokens": Schema.Number.annotate({
+    "title": "Cache Creation Input Tokens",
+    "description": "The number of input tokens used to create the cache entry.",
+    "default": 0
+  }).check(Schema.isInt()).check(Schema.isGreaterThanOrEqualTo(0)),
+  "cache_read_input_tokens": Schema.Number.annotate({
+    "title": "Cache Read Input Tokens",
+    "description": "The number of input tokens read from the cache.",
+    "default": 0
+  }).check(Schema.isInt()).check(Schema.isGreaterThanOrEqualTo(0)),
+  "input_tokens": Schema.Number.annotate({
+    "title": "Input Tokens",
+    "description": "The number of input tokens which were used."
+  }).check(Schema.isInt()).check(Schema.isGreaterThanOrEqualTo(0)),
+  "output_tokens": Schema.Number.annotate({
+    "title": "Output Tokens",
+    "description": "The number of output tokens which were used."
+  }).check(Schema.isInt()).check(Schema.isGreaterThanOrEqualTo(0)),
+  "type": Schema.Literal("compaction").annotate({
+    "title": "Type",
+    "description": "Usage for a compaction iteration",
+    "default": "compaction"
+  })
+}).annotate({ "title": "CompactionIterationUsage", "description": "Token usage for a compaction iteration." })
+export type BetaMessageIterationUsage = {
+  readonly "cache_creation": BetaCacheCreation | null
+  readonly "cache_creation_input_tokens": number
+  readonly "cache_read_input_tokens": number
+  readonly "input_tokens": number
+  readonly "output_tokens": number
+  readonly "type": "message"
+}
+export const BetaMessageIterationUsage = Schema.Struct({
+  "cache_creation": Schema.Union([BetaCacheCreation, Schema.Null]).annotate({
+    "description": "Breakdown of cached tokens by TTL",
+    "default": null
+  }),
+  "cache_creation_input_tokens": Schema.Number.annotate({
+    "title": "Cache Creation Input Tokens",
+    "description": "The number of input tokens used to create the cache entry.",
+    "default": 0
+  }).check(Schema.isInt()).check(Schema.isGreaterThanOrEqualTo(0)),
+  "cache_read_input_tokens": Schema.Number.annotate({
+    "title": "Cache Read Input Tokens",
+    "description": "The number of input tokens read from the cache.",
+    "default": 0
+  }).check(Schema.isInt()).check(Schema.isGreaterThanOrEqualTo(0)),
+  "input_tokens": Schema.Number.annotate({
+    "title": "Input Tokens",
+    "description": "The number of input tokens which were used."
+  }).check(Schema.isInt()).check(Schema.isGreaterThanOrEqualTo(0)),
+  "output_tokens": Schema.Number.annotate({
+    "title": "Output Tokens",
+    "description": "The number of output tokens which were used."
+  }).check(Schema.isInt()).check(Schema.isGreaterThanOrEqualTo(0)),
+  "type": Schema.Literal("message").annotate({
+    "title": "Type",
+    "description": "Usage for a sampling iteration",
+    "default": "message"
+  })
+}).annotate({ "title": "MessageIterationUsage", "description": "Token usage for a sampling iteration." })
 export type BetaRequestCodeExecutionToolResultError = {
   readonly "error_code": BetaCodeExecutionToolResultErrorCode
   readonly "type": "code_execution_tool_result_error"
@@ -3117,6 +3255,35 @@ export const BetaFileListResponse = Schema.Struct({
     })
   )
 }).annotate({ "title": "FileListResponse" })
+export type BetaCompact20260112 = {
+  readonly "instructions"?: string | null
+  readonly "pause_after_compaction"?: boolean
+  readonly "trigger"?: BetaInputTokensTrigger | null
+  readonly "type": "compact_20260112"
+}
+export const BetaCompact20260112 = Schema.Struct({
+  "instructions": Schema.optionalKey(
+    Schema.Union([Schema.String, Schema.Null]).annotate({
+      "title": "Instructions",
+      "description": "Additional instructions for summarization."
+    })
+  ),
+  "pause_after_compaction": Schema.optionalKey(
+    Schema.Boolean.annotate({
+      "title": "Pause After Compaction",
+      "description": "Whether to pause after compaction and return the compaction block to the user."
+    })
+  ),
+  "trigger": Schema.optionalKey(
+    Schema.Union([BetaInputTokensTrigger, Schema.Null]).annotate({
+      "description": "When to trigger compaction. Defaults to 150000 input tokens."
+    })
+  ),
+  "type": Schema.Literal("compact_20260112").annotate({ "title": "Type" })
+}).annotate({
+  "title": "Compact20260112",
+  "description": "Automatically compact older context when reaching the configured trigger threshold."
+})
 export type BetaBashTool_20241022 = {
   readonly "allowed_callers"?: ReadonlyArray<"direct" | "code_execution_20250825">
   readonly "cache_control"?: BetaCacheControlEphemeral | null
@@ -3605,6 +3772,7 @@ export type BetaTool = {
   }
   readonly "cache_control"?: BetaCacheControlEphemeral | null
   readonly "strict"?: boolean
+  readonly "eager_input_streaming"?: boolean | null
   readonly "allowed_callers"?: ReadonlyArray<"direct" | "code_execution_20250825">
   readonly "defer_loading"?: boolean
   readonly "input_examples"?: ReadonlyArray<{ readonly [x: string]: BetaJsonValue }>
@@ -3657,6 +3825,13 @@ export const BetaTool = Schema.Struct({
     Schema.Boolean.annotate({
       "title": "Strict",
       "description": "When true, guarantees schema validation on tool names and inputs"
+    })
+  ),
+  "eager_input_streaming": Schema.optionalKey(
+    Schema.Union([Schema.Boolean, Schema.Null]).annotate({
+      "title": "Eager Input Streaming",
+      "description":
+        "Enable eager input streaming for this tool. When true, tool input parameters will be streamed incrementally as they are generated, and types will be inferred on-the-fly rather than buffering the full JSON output. When false, streaming is disabled for this tool even if the fine-grained-tool-streaming beta is active. When null (default), uses the default behavior based on beta headers."
     })
   ),
   "allowed_callers": Schema.optionalKey(
@@ -4349,10 +4524,15 @@ export const BetaResponseTextEditorCodeExecutionToolResultError = Schema.Struct(
     "default": "text_editor_code_execution_tool_result_error"
   })
 }).annotate({ "title": "ResponseTextEditorCodeExecutionToolResultError" })
-export type BetaThinkingConfigParam = BetaThinkingConfigEnabled | BetaThinkingConfigDisabled
-export const BetaThinkingConfigParam = Schema.Union([BetaThinkingConfigEnabled, BetaThinkingConfigDisabled], {
-  mode: "oneOf"
-}).annotate({
+export type BetaThinkingConfigParam =
+  | BetaThinkingConfigEnabled
+  | BetaThinkingConfigDisabled
+  | BetaThinkingConfigAdaptive
+export const BetaThinkingConfigParam = Schema.Union([
+  BetaThinkingConfigEnabled,
+  BetaThinkingConfigDisabled,
+  BetaThinkingConfigAdaptive
+], { mode: "oneOf" }).annotate({
   "title": "Thinking",
   "description":
     "Configuration for enabling Claude's extended thinking.\n\nWhen enabled, responses include `thinking` content blocks showing Claude's thinking process before the final answer. Requires a minimum budget of 1,024 tokens and counts towards your `max_tokens` limit.\n\nSee [extended thinking](https://docs.claude.com/en/docs/build-with-claude/extended-thinking) for details."
@@ -4724,6 +4904,7 @@ export type Tool = {
   }
   readonly "cache_control"?: CacheControlEphemeral | null
   readonly "strict"?: boolean
+  readonly "eager_input_streaming"?: boolean | null
 }
 export const Tool = Schema.Struct({
   "type": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Literal("custom")]).annotate({ "title": "Type" })),
@@ -4773,6 +4954,13 @@ export const Tool = Schema.Struct({
     Schema.Boolean.annotate({
       "title": "Strict",
       "description": "When true, guarantees schema validation on tool names and inputs"
+    })
+  ),
+  "eager_input_streaming": Schema.optionalKey(
+    Schema.Union([Schema.Boolean, Schema.Null]).annotate({
+      "title": "Eager Input Streaming",
+      "description":
+        "Enable eager input streaming for this tool. When true, tool input parameters will be streamed incrementally as they are generated, and types will be inferred on-the-fly rather than buffering the full JSON output. When false, streaming is disabled for this tool even if the fine-grained-tool-streaming beta is active. When null (default), uses the default behavior based on beta headers."
     })
   )
 }).annotate({ "title": "Tool" })
@@ -5007,13 +5195,15 @@ export const ListSkillVersionsResponse = Schema.Struct({
     "examples": ["page_MjAyNS0wNS0xNFQwMDowMDowMFo=", null]
   })
 }).annotate({ "title": "ListSkillVersionsResponse" })
-export type ThinkingConfigParam = ThinkingConfigEnabled | ThinkingConfigDisabled
-export const ThinkingConfigParam = Schema.Union([ThinkingConfigEnabled, ThinkingConfigDisabled], { mode: "oneOf" })
-  .annotate({
-    "title": "Thinking",
-    "description":
-      "Configuration for enabling Claude's extended thinking.\n\nWhen enabled, responses include `thinking` content blocks showing Claude's thinking process before the final answer. Requires a minimum budget of 1,024 tokens and counts towards your `max_tokens` limit.\n\nSee [extended thinking](https://docs.claude.com/en/docs/build-with-claude/extended-thinking) for details."
-  })
+export type ThinkingConfigParam = ThinkingConfigEnabled | ThinkingConfigDisabled | ThinkingConfigAdaptive
+export const ThinkingConfigParam = Schema.Union(
+  [ThinkingConfigEnabled, ThinkingConfigDisabled, ThinkingConfigAdaptive],
+  { mode: "oneOf" }
+).annotate({
+  "title": "Thinking",
+  "description":
+    "Configuration for enabling Claude's extended thinking.\n\nWhen enabled, responses include `thinking` content blocks showing Claude's thinking process before the final answer. Requires a minimum budget of 1,024 tokens and counts towards your `max_tokens` limit.\n\nSee [extended thinking](https://docs.claude.com/en/docs/build-with-claude/extended-thinking) for details."
+})
 export type ToolChoice = ToolChoiceAuto | ToolChoiceAny | ToolChoiceTool | ToolChoiceNone
 export const ToolChoice = Schema.Union([ToolChoiceAuto, ToolChoiceAny, ToolChoiceTool, ToolChoiceNone], {
   mode: "oneOf"
@@ -5236,6 +5426,16 @@ export const BetaRequestToolSearchToolSearchResultBlock = Schema.Struct({
   "tool_references": Schema.Array(BetaRequestToolReferenceBlock).annotate({ "title": "Tool References" }),
   "type": Schema.Literal("tool_search_tool_search_result").annotate({ "title": "Type" })
 }).annotate({ "title": "RequestToolSearchToolSearchResultBlock" })
+export type BetaIterationsUsage = ReadonlyArray<BetaMessageIterationUsage | BetaCompactionIterationUsage> | null
+export const BetaIterationsUsage = Schema.Union([
+  Schema.Array(Schema.Union([BetaMessageIterationUsage, BetaCompactionIterationUsage])),
+  Schema.Null
+]).annotate({
+  "title": "Iterations",
+  "description":
+    "Per-iteration token usage breakdown.\n\nEach entry represents one sampling iteration, with its own input/output token counts and cache statistics. This allows you to:\n- Determine which iterations exceeded long context thresholds (>=200k tokens)\n- Calculate the true context window size from the last iteration\n- Understand token accumulation across server-side tool use loops",
+  "default": null
+})
 export type BetaErroredResult = { readonly "error": BetaErrorResponse; readonly "type": "errored" }
 export const BetaErroredResult = Schema.Struct({
   "error": BetaErrorResponse,
@@ -5359,6 +5559,7 @@ export type BetaContentBlockDeltaEvent = {
     | BetaCitationsDelta
     | BetaThinkingContentBlockDelta
     | BetaSignatureContentBlockDelta
+    | BetaCompactionContentBlockDelta
   readonly "index": number
   readonly "type": "content_block_delta"
 }
@@ -5368,7 +5569,8 @@ export const BetaContentBlockDeltaEvent = Schema.Struct({
     BetaInputJsonContentBlockDelta,
     BetaCitationsDelta,
     BetaThinkingContentBlockDelta,
-    BetaSignatureContentBlockDelta
+    BetaSignatureContentBlockDelta,
+    BetaCompactionContentBlockDelta
   ], { mode: "oneOf" }).annotate({ "title": "Delta" }),
   "index": Schema.Number.annotate({ "title": "Index" }).check(Schema.isInt()),
   "type": Schema.Literal("content_block_delta").annotate({ "title": "Type", "default": "content_block_delta" })
@@ -5455,14 +5657,15 @@ export const BetaResponseToolSearchToolResultBlock = Schema.Struct({
   "type": Schema.Literal("tool_search_tool_result").annotate({ "title": "Type", "default": "tool_search_tool_result" })
 }).annotate({ "title": "ResponseToolSearchToolResultBlock" })
 export type BetaContextManagementConfig = {
-  readonly "edits"?: ReadonlyArray<BetaClearToolUses20250919 | BetaClearThinking20251015>
+  readonly "edits"?: ReadonlyArray<BetaClearToolUses20250919 | BetaClearThinking20251015 | BetaCompact20260112>
 }
 export const BetaContextManagementConfig = Schema.Struct({
   "edits": Schema.optionalKey(
-    Schema.Array(Schema.Union([BetaClearToolUses20250919, BetaClearThinking20251015], { mode: "oneOf" })).annotate({
-      "title": "Edits",
-      "description": "List of context management edits to apply"
-    }).check(Schema.isMinLength(0))
+    Schema.Array(
+      Schema.Union([BetaClearToolUses20250919, BetaClearThinking20251015, BetaCompact20260112], { mode: "oneOf" })
+    ).annotate({ "title": "Edits", "description": "List of context management edits to apply" }).check(
+      Schema.isMinLength(0)
+    )
   )
 }).annotate({ "title": "ContextManagementConfig" })
 export type BetaContentBlockSource = {
@@ -5715,6 +5918,7 @@ export type BetaMessageDeltaEvent = {
     readonly "cache_creation_input_tokens": number | null
     readonly "cache_read_input_tokens": number | null
     readonly "input_tokens": number | null
+    readonly "iterations": BetaIterationsUsage
     readonly "output_tokens": number
     readonly "server_tool_use"?: BetaServerToolUsage | null
   }
@@ -5756,6 +5960,7 @@ export const BetaMessageDeltaEvent = Schema.Struct({
       "default": null,
       "examples": [2095]
     }),
+    "iterations": BetaIterationsUsage,
     "output_tokens": Schema.Number.annotate({
       "title": "Output Tokens",
       "description": "The cumulative number of output tokens which were used.",
@@ -5893,6 +6098,7 @@ export type BetaContentBlockStartEvent = {
     | BetaResponseMCPToolUseBlock
     | BetaResponseMCPToolResultBlock
     | BetaResponseContainerUploadBlock
+    | BetaResponseCompactionBlock
   readonly "index": number
   readonly "type": "content_block_start"
 }
@@ -5911,7 +6117,8 @@ export const BetaContentBlockStartEvent = Schema.Struct({
     BetaResponseToolSearchToolResultBlock,
     BetaResponseMCPToolUseBlock,
     BetaResponseMCPToolResultBlock,
-    BetaResponseContainerUploadBlock
+    BetaResponseContainerUploadBlock,
+    BetaResponseCompactionBlock
   ], { mode: "oneOf" }).annotate({ "title": "Content Block" }),
   "index": Schema.Number.annotate({ "title": "Index" }).check(Schema.isInt()),
   "type": Schema.Literal("content_block_start").annotate({ "title": "Type", "default": "content_block_start" })
@@ -5931,6 +6138,7 @@ export type BetaContentBlock =
   | BetaResponseMCPToolUseBlock
   | BetaResponseMCPToolResultBlock
   | BetaResponseContainerUploadBlock
+  | BetaResponseCompactionBlock
 export const BetaContentBlock = Schema.Union([
   BetaResponseTextBlock,
   BetaResponseThinkingBlock,
@@ -5945,7 +6153,8 @@ export const BetaContentBlock = Schema.Union([
   BetaResponseToolSearchToolResultBlock,
   BetaResponseMCPToolUseBlock,
   BetaResponseMCPToolResultBlock,
-  BetaResponseContainerUploadBlock
+  BetaResponseContainerUploadBlock,
+  BetaResponseCompactionBlock
 ], { mode: "oneOf" })
 export type BetaRequestWebFetchResultBlock = {
   readonly "content": BetaRequestDocumentBlock
@@ -6162,10 +6371,12 @@ export type Message = {
     readonly "cache_creation": CacheCreation | null
     readonly "cache_creation_input_tokens": number | null
     readonly "cache_read_input_tokens": number | null
+    readonly "inference_geo": string | null
     readonly "input_tokens": number
     readonly "output_tokens": number
     readonly "server_tool_use"?: ServerToolUsage | null
     readonly "service_tier": "standard" | "priority" | "batch" | null
+    readonly "speed": unknown
   }
 }
 export const Message = Schema.Struct({
@@ -6225,6 +6436,11 @@ export const Message = Schema.Struct({
       "default": null,
       "examples": [2051]
     }),
+    "inference_geo": Schema.Union([Schema.String, Schema.Null]).annotate({
+      "title": "Inference Geo",
+      "description": "The geographic region where inference was performed for this request.",
+      "default": null
+    }),
     "input_tokens": Schema.Number.annotate({
       "title": "Input Tokens",
       "description": "The number of input tokens which were used.",
@@ -6245,13 +6461,26 @@ export const Message = Schema.Struct({
       "title": "Service Tier",
       "description": "If the request used the priority, standard, or batch tier.",
       "default": null
-    })
+    }),
+    "speed": Schema.Unknown
   }).annotate({
     "title": "Usage",
     "description":
       "Billing and rate-limit usage.\n\nAnthropic's API bills and rate-limits by token counts, as tokens represent the underlying cost to our systems.\n\nUnder the hood, the API transforms requests into a format suitable for the model. The model's output then goes through a parsing stage before becoming an API response. As a result, the token counts in `usage` will not match one-to-one with the exact visible content of an API request or response.\n\nFor example, `output_tokens` will be non-zero, even for an empty string response from Claude.\n\nTotal input tokens in a request is the summation of `input_tokens`, `cache_creation_input_tokens`, and `cache_read_input_tokens`."
   })
-}).annotate({ "title": "Message" })
+}).annotate({
+  "title": "Message",
+  "examples": [{
+    "content": [{ "citations": null, "text": "Hi! My name is Claude.", "type": "text" }],
+    "id": "msg_013Zva2CMHLNnXjNJJKqJ2EF",
+    "model": "claude-opus-4-6",
+    "role": "assistant",
+    "stop_reason": "end_turn",
+    "stop_sequence": null,
+    "type": "message",
+    "usage": { "input_tokens": 2095, "output_tokens": 503 }
+  }]
+})
 export type BetaMessage = {
   readonly "id": string
   readonly "type": "message"
@@ -6264,10 +6493,13 @@ export type BetaMessage = {
     readonly "cache_creation": BetaCacheCreation | null
     readonly "cache_creation_input_tokens": number | null
     readonly "cache_read_input_tokens": number | null
+    readonly "inference_geo": string | null
     readonly "input_tokens": number
+    readonly "iterations": BetaIterationsUsage
     readonly "output_tokens": number
     readonly "server_tool_use"?: BetaServerToolUsage | null
     readonly "service_tier": "standard" | "priority" | "batch" | null
+    readonly "speed": BetaSpeed | null
   }
   readonly "context_management"?: BetaResponseContextManagement | null
   readonly "container"?: BetaContainer | null
@@ -6329,11 +6561,17 @@ export const BetaMessage = Schema.Struct({
       "default": null,
       "examples": [2051]
     }),
+    "inference_geo": Schema.Union([Schema.String, Schema.Null]).annotate({
+      "title": "Inference Geo",
+      "description": "The geographic region where inference was performed for this request.",
+      "default": null
+    }),
     "input_tokens": Schema.Number.annotate({
       "title": "Input Tokens",
       "description": "The number of input tokens which were used.",
       "examples": [2095]
     }).check(Schema.isInt()).check(Schema.isGreaterThanOrEqualTo(0)),
+    "iterations": BetaIterationsUsage,
     "output_tokens": Schema.Number.annotate({
       "title": "Output Tokens",
       "description": "The number of output tokens which were used.",
@@ -6348,6 +6586,10 @@ export const BetaMessage = Schema.Struct({
     "service_tier": Schema.Union([Schema.Literals(["standard", "priority", "batch"]), Schema.Null]).annotate({
       "title": "Service Tier",
       "description": "If the request used the priority, standard, or batch tier.",
+      "default": null
+    }),
+    "speed": Schema.Union([BetaSpeed, Schema.Null]).annotate({
+      "description": "The inference speed mode used for this request.",
       "default": null
     })
   }).annotate({
@@ -6369,7 +6611,19 @@ export const BetaMessage = Schema.Struct({
       "default": null
     })
   )
-}).annotate({ "title": "Message" })
+}).annotate({
+  "title": "Message",
+  "examples": [{
+    "content": [{ "citations": null, "text": "Hi! My name is Claude.", "type": "text" }],
+    "id": "msg_013Zva2CMHLNnXjNJJKqJ2EF",
+    "model": "claude-opus-4-6",
+    "role": "assistant",
+    "stop_reason": "end_turn",
+    "stop_sequence": null,
+    "type": "message",
+    "usage": { "input_tokens": 2095, "output_tokens": 503 }
+  }]
+})
 export type BetaRequestWebFetchToolResultBlock = {
   readonly "cache_control"?: BetaCacheControlEphemeral | null
   readonly "content": BetaRequestWebFetchToolResultError | BetaRequestWebFetchResultBlock
@@ -6495,6 +6749,7 @@ export type BetaInputContentBlock =
   | BetaRequestMCPToolUseBlock
   | BetaRequestMCPToolResultBlock
   | BetaRequestContainerUploadBlock
+  | BetaRequestCompactionBlock
 export const BetaInputContentBlock = Schema.Union([
   Schema.Struct({
     "cache_control": Schema.optionalKey(
@@ -6644,12 +6899,13 @@ export const BetaInputContentBlock = Schema.Union([
   BetaRequestToolSearchToolResultBlock,
   BetaRequestMCPToolUseBlock,
   BetaRequestMCPToolResultBlock,
-  BetaRequestContainerUploadBlock
+  BetaRequestContainerUploadBlock,
+  BetaRequestCompactionBlock
 ], { mode: "oneOf" })
 export type CountMessageTokensParams = {
   readonly "messages": ReadonlyArray<InputMessage>
   readonly "model": Model
-  readonly "output_config"?: { readonly "format"?: JsonOutputFormat | null }
+  readonly "output_config"?: { readonly "effort"?: EffortLevel | null; readonly "format"?: JsonOutputFormat | null }
   readonly "system"?: string | ReadonlyArray<RequestTextBlock>
   readonly "thinking"?: ThinkingConfigParam
   readonly "tool_choice"?: ToolChoice
@@ -6666,6 +6922,12 @@ export const CountMessageTokensParams = Schema.Struct({
   "model": Model,
   "output_config": Schema.optionalKey(
     Schema.Struct({
+      "effort": Schema.optionalKey(
+        Schema.Union([EffortLevel, Schema.Null]).annotate({
+          "description":
+            "How much effort the model should put into its response. Higher effort levels may result in more thorough analysis but take longer.\n\nValid values are `low`, `medium`, `high`, or `max`."
+        })
+      ),
       "format": Schema.optionalKey(
         Schema.Union([JsonOutputFormat, Schema.Null]).annotate({
           "description":
@@ -6705,14 +6967,15 @@ export const CountMessageTokensParams = Schema.Struct({
   )
 }).annotate({
   "title": "CountMessageTokensParams",
-  "examples": [{ "messages": [{ "content": "Hello, world", "role": "user" }], "model": "claude-sonnet-4-5-20250929" }]
+  "examples": [{ "messages": [{ "content": "Hello, world", "role": "user" }], "model": "claude-opus-4-6" }]
 })
 export type CreateMessageParams = {
   readonly "model": Model
   readonly "messages": ReadonlyArray<InputMessage>
+  readonly "inference_geo"?: string | null
   readonly "max_tokens": number
   readonly "metadata"?: { readonly "user_id"?: string | null }
-  readonly "output_config"?: { readonly "format"?: JsonOutputFormat | null }
+  readonly "output_config"?: { readonly "effort"?: EffortLevel | null; readonly "format"?: JsonOutputFormat | null }
   readonly "service_tier"?: "auto" | "standard_only"
   readonly "stop_sequences"?: ReadonlyArray<string>
   readonly "stream"?: boolean
@@ -6733,6 +6996,13 @@ export const CreateMessageParams = Schema.Struct({
     "description":
       "Input messages.\n\nOur models are trained to operate on alternating `user` and `assistant` conversational turns. When creating a new `Message`, you specify the prior conversational turns with the `messages` parameter, and the model then generates the next `Message` in the conversation. Consecutive `user` or `assistant` turns in your request will be combined into a single turn.\n\nEach input message must be an object with a `role` and `content`. You can specify a single `user`-role message, or you can include multiple `user` and `assistant` messages.\n\nIf the final message uses the `assistant` role, the response content will continue immediately from the content in that message. This can be used to constrain part of the model's response.\n\nExample with a single `user` message:\n\n```json\n[{\"role\": \"user\", \"content\": \"Hello, Claude\"}]\n```\n\nExample with multiple conversational turns:\n\n```json\n[\n  {\"role\": \"user\", \"content\": \"Hello there.\"},\n  {\"role\": \"assistant\", \"content\": \"Hi, I'm Claude. How can I help you?\"},\n  {\"role\": \"user\", \"content\": \"Can you explain LLMs in plain English?\"},\n]\n```\n\nExample with a partially-filled response from Claude:\n\n```json\n[\n  {\"role\": \"user\", \"content\": \"What's the Greek name for Sun? (A) Sol (B) Helios (C) Sun\"},\n  {\"role\": \"assistant\", \"content\": \"The best answer is (\"},\n]\n```\n\nEach input message `content` may be either a single `string` or an array of content blocks, where each block has a specific `type`. Using a `string` for `content` is shorthand for an array of one content block of type `\"text\"`. The following input messages are equivalent:\n\n```json\n{\"role\": \"user\", \"content\": \"Hello, Claude\"}\n```\n\n```json\n{\"role\": \"user\", \"content\": [{\"type\": \"text\", \"text\": \"Hello, Claude\"}]}\n```\n\nSee [input examples](https://docs.claude.com/en/api/messages-examples).\n\nNote that if you want to include a [system prompt](https://docs.claude.com/en/docs/system-prompts), you can use the top-level `system` parameter — there is no `\"system\"` role for input messages in the Messages API.\n\nThere is a limit of 100,000 messages in a single request."
   }),
+  "inference_geo": Schema.optionalKey(
+    Schema.Union([Schema.String, Schema.Null]).annotate({
+      "title": "Inference Geo",
+      "description":
+        "Specifies the geographic region for inference processing. If not specified, the workspace's `default_inference_geo` is used."
+    })
+  ),
   "max_tokens": Schema.Number.annotate({
     "title": "Max Tokens",
     "description":
@@ -6753,6 +7023,12 @@ export const CreateMessageParams = Schema.Struct({
   ),
   "output_config": Schema.optionalKey(
     Schema.Struct({
+      "effort": Schema.optionalKey(
+        Schema.Union([EffortLevel, Schema.Null]).annotate({
+          "description":
+            "How much effort the model should put into its response. Higher effort levels may result in more thorough analysis but take longer.\n\nValid values are `low`, `medium`, `high`, or `max`."
+        })
+      ),
       "format": Schema.optionalKey(
         Schema.Union([JsonOutputFormat, Schema.Null]).annotate({
           "description":
@@ -6841,9 +7117,10 @@ export type MessageBatchIndividualRequestParams = {
   readonly "params": {
     readonly "model": Model
     readonly "messages": ReadonlyArray<InputMessage>
+    readonly "inference_geo"?: string | null
     readonly "max_tokens": number
     readonly "metadata"?: { readonly "user_id"?: string | null }
-    readonly "output_config"?: { readonly "format"?: JsonOutputFormat | null }
+    readonly "output_config"?: { readonly "effort"?: EffortLevel | null; readonly "format"?: JsonOutputFormat | null }
     readonly "service_tier"?: "auto" | "standard_only"
     readonly "stop_sequences"?: ReadonlyArray<string>
     readonly "stream"?: boolean
@@ -6879,6 +7156,13 @@ export const MessageBatchIndividualRequestParams = Schema.Struct({
       "description":
         "Input messages.\n\nOur models are trained to operate on alternating `user` and `assistant` conversational turns. When creating a new `Message`, you specify the prior conversational turns with the `messages` parameter, and the model then generates the next `Message` in the conversation. Consecutive `user` or `assistant` turns in your request will be combined into a single turn.\n\nEach input message must be an object with a `role` and `content`. You can specify a single `user`-role message, or you can include multiple `user` and `assistant` messages.\n\nIf the final message uses the `assistant` role, the response content will continue immediately from the content in that message. This can be used to constrain part of the model's response.\n\nExample with a single `user` message:\n\n```json\n[{\"role\": \"user\", \"content\": \"Hello, Claude\"}]\n```\n\nExample with multiple conversational turns:\n\n```json\n[\n  {\"role\": \"user\", \"content\": \"Hello there.\"},\n  {\"role\": \"assistant\", \"content\": \"Hi, I'm Claude. How can I help you?\"},\n  {\"role\": \"user\", \"content\": \"Can you explain LLMs in plain English?\"},\n]\n```\n\nExample with a partially-filled response from Claude:\n\n```json\n[\n  {\"role\": \"user\", \"content\": \"What's the Greek name for Sun? (A) Sol (B) Helios (C) Sun\"},\n  {\"role\": \"assistant\", \"content\": \"The best answer is (\"},\n]\n```\n\nEach input message `content` may be either a single `string` or an array of content blocks, where each block has a specific `type`. Using a `string` for `content` is shorthand for an array of one content block of type `\"text\"`. The following input messages are equivalent:\n\n```json\n{\"role\": \"user\", \"content\": \"Hello, Claude\"}\n```\n\n```json\n{\"role\": \"user\", \"content\": [{\"type\": \"text\", \"text\": \"Hello, Claude\"}]}\n```\n\nSee [input examples](https://docs.claude.com/en/api/messages-examples).\n\nNote that if you want to include a [system prompt](https://docs.claude.com/en/docs/system-prompts), you can use the top-level `system` parameter — there is no `\"system\"` role for input messages in the Messages API.\n\nThere is a limit of 100,000 messages in a single request."
     }),
+    "inference_geo": Schema.optionalKey(
+      Schema.Union([Schema.String, Schema.Null]).annotate({
+        "title": "Inference Geo",
+        "description":
+          "Specifies the geographic region for inference processing. If not specified, the workspace's `default_inference_geo` is used."
+      })
+    ),
     "max_tokens": Schema.Number.annotate({
       "title": "Max Tokens",
       "description":
@@ -6899,6 +7183,12 @@ export const MessageBatchIndividualRequestParams = Schema.Struct({
     ),
     "output_config": Schema.optionalKey(
       Schema.Struct({
+        "effort": Schema.optionalKey(
+          Schema.Union([EffortLevel, Schema.Null]).annotate({
+            "description":
+              "How much effort the model should put into its response. Higher effort levels may result in more thorough analysis but take longer.\n\nValid values are `low`, `medium`, `high`, or `max`."
+          })
+        ),
         "format": Schema.optionalKey(
           Schema.Union([JsonOutputFormat, Schema.Null]).annotate({
             "description":
@@ -7008,10 +7298,11 @@ export type BetaCountMessageTokensParams = {
   readonly "messages": ReadonlyArray<BetaInputMessage>
   readonly "model": Model
   readonly "output_config"?: {
-    readonly "effort"?: "low" | "medium" | "high" | null
+    readonly "effort"?: BetaEffortLevel | null
     readonly "format"?: BetaJsonOutputFormat | null
   }
   readonly "output_format"?: BetaJsonOutputFormat | null
+  readonly "speed"?: BetaSpeed | null
   readonly "system"?: string | ReadonlyArray<BetaRequestTextBlock>
   readonly "thinking"?: BetaThinkingConfigParam
   readonly "tool_choice"?: BetaToolChoice
@@ -7058,9 +7349,9 @@ export const BetaCountMessageTokensParams = Schema.Struct({
   "output_config": Schema.optionalKey(
     Schema.Struct({
       "effort": Schema.optionalKey(
-        Schema.Union([Schema.Literals(["low", "medium", "high"]), Schema.Null]).annotate({
+        Schema.Union([BetaEffortLevel, Schema.Null]).annotate({
           "description":
-            "How much effort the model should put into its response. Higher effort levels may result in more thorough analysis but take longer.\n\nValid values are `low`, `medium`, or `high`."
+            "How much effort the model should put into its response. Higher effort levels may result in more thorough analysis but take longer.\n\nValid values are `low`, `medium`, `high`, or `max`."
         })
       ),
       "format": Schema.optionalKey(
@@ -7078,6 +7369,12 @@ export const BetaCountMessageTokensParams = Schema.Struct({
     Schema.Union([BetaJsonOutputFormat, Schema.Null]).annotate({
       "description":
         "Deprecated: Use `output_config.format` instead. See [structured outputs](https://platform.claude.com/docs/en/build-with-claude/structured-outputs)\n\nA schema to specify Claude's output format in responses. This parameter will be removed in a future release."
+    })
+  ),
+  "speed": Schema.optionalKey(
+    Schema.Union([BetaSpeed, Schema.Null]).annotate({
+      "description":
+        "The inference speed mode for this request. `\"fast\"` enables high output-tokens-per-second inference."
     })
   ),
   "system": Schema.optionalKey(
@@ -7120,22 +7417,24 @@ export const BetaCountMessageTokensParams = Schema.Struct({
   )
 }).annotate({
   "title": "CountMessageTokensParams",
-  "examples": [{ "messages": [{ "content": "Hello, world", "role": "user" }], "model": "claude-sonnet-4-5-20250929" }]
+  "examples": [{ "messages": [{ "content": "Hello, world", "role": "user" }], "model": "claude-opus-4-6" }]
 })
 export type BetaCreateMessageParams = {
   readonly "model": Model
   readonly "messages": ReadonlyArray<BetaInputMessage>
   readonly "container"?: BetaContainerParams | string | null
   readonly "context_management"?: BetaContextManagementConfig | null
+  readonly "inference_geo"?: string | null
   readonly "max_tokens": number
   readonly "mcp_servers"?: ReadonlyArray<BetaRequestMCPServerURLDefinition>
   readonly "metadata"?: { readonly "user_id"?: string | null }
   readonly "output_config"?: {
-    readonly "effort"?: "low" | "medium" | "high" | null
+    readonly "effort"?: BetaEffortLevel | null
     readonly "format"?: BetaJsonOutputFormat | null
   }
   readonly "output_format"?: BetaJsonOutputFormat | null
   readonly "service_tier"?: "auto" | "standard_only"
+  readonly "speed"?: BetaSpeed | null
   readonly "stop_sequences"?: ReadonlyArray<string>
   readonly "stream"?: boolean
   readonly "system"?: string | ReadonlyArray<BetaRequestTextBlock>
@@ -7184,6 +7483,13 @@ export const BetaCreateMessageParams = Schema.Struct({
         "Context management configuration.\n\nThis allows you to control how Claude manages context across multiple requests, such as whether to clear function results or not."
     })
   ),
+  "inference_geo": Schema.optionalKey(
+    Schema.Union([Schema.String, Schema.Null]).annotate({
+      "title": "Inference Geo",
+      "description":
+        "Specifies the geographic region for inference processing. If not specified, the workspace's `default_inference_geo` is used."
+    })
+  ),
   "max_tokens": Schema.Number.annotate({
     "title": "Max Tokens",
     "description":
@@ -7211,9 +7517,9 @@ export const BetaCreateMessageParams = Schema.Struct({
   "output_config": Schema.optionalKey(
     Schema.Struct({
       "effort": Schema.optionalKey(
-        Schema.Union([Schema.Literals(["low", "medium", "high"]), Schema.Null]).annotate({
+        Schema.Union([BetaEffortLevel, Schema.Null]).annotate({
           "description":
-            "How much effort the model should put into its response. Higher effort levels may result in more thorough analysis but take longer.\n\nValid values are `low`, `medium`, or `high`."
+            "How much effort the model should put into its response. Higher effort levels may result in more thorough analysis but take longer.\n\nValid values are `low`, `medium`, `high`, or `max`."
         })
       ),
       "format": Schema.optionalKey(
@@ -7238,6 +7544,12 @@ export const BetaCreateMessageParams = Schema.Struct({
       "title": "Service Tier",
       "description":
         "Determines whether to use priority capacity (if available) or standard capacity for this request.\n\nAnthropic offers different levels of service for your API requests. See [service-tiers](https://docs.claude.com/en/api/service-tiers) for details."
+    })
+  ),
+  "speed": Schema.optionalKey(
+    Schema.Union([BetaSpeed, Schema.Null]).annotate({
+      "description":
+        "The inference speed mode for this request. `\"fast\"` enables high output-tokens-per-second inference."
     })
   ),
   "stop_sequences": Schema.optionalKey(
@@ -7324,15 +7636,17 @@ export type BetaMessageBatchIndividualRequestParams = {
     readonly "messages": ReadonlyArray<BetaInputMessage>
     readonly "container"?: BetaContainerParams | string | null
     readonly "context_management"?: BetaContextManagementConfig | null
+    readonly "inference_geo"?: string | null
     readonly "max_tokens": number
     readonly "mcp_servers"?: ReadonlyArray<BetaRequestMCPServerURLDefinition>
     readonly "metadata"?: { readonly "user_id"?: string | null }
     readonly "output_config"?: {
-      readonly "effort"?: "low" | "medium" | "high" | null
+      readonly "effort"?: BetaEffortLevel | null
       readonly "format"?: BetaJsonOutputFormat | null
     }
     readonly "output_format"?: BetaJsonOutputFormat | null
     readonly "service_tier"?: "auto" | "standard_only"
+    readonly "speed"?: BetaSpeed | null
     readonly "stop_sequences"?: ReadonlyArray<string>
     readonly "stream"?: boolean
     readonly "system"?: string | ReadonlyArray<BetaRequestTextBlock>
@@ -7391,6 +7705,13 @@ export const BetaMessageBatchIndividualRequestParams = Schema.Struct({
           "Context management configuration.\n\nThis allows you to control how Claude manages context across multiple requests, such as whether to clear function results or not."
       })
     ),
+    "inference_geo": Schema.optionalKey(
+      Schema.Union([Schema.String, Schema.Null]).annotate({
+        "title": "Inference Geo",
+        "description":
+          "Specifies the geographic region for inference processing. If not specified, the workspace's `default_inference_geo` is used."
+      })
+    ),
     "max_tokens": Schema.Number.annotate({
       "title": "Max Tokens",
       "description":
@@ -7418,9 +7739,9 @@ export const BetaMessageBatchIndividualRequestParams = Schema.Struct({
     "output_config": Schema.optionalKey(
       Schema.Struct({
         "effort": Schema.optionalKey(
-          Schema.Union([Schema.Literals(["low", "medium", "high"]), Schema.Null]).annotate({
+          Schema.Union([BetaEffortLevel, Schema.Null]).annotate({
             "description":
-              "How much effort the model should put into its response. Higher effort levels may result in more thorough analysis but take longer.\n\nValid values are `low`, `medium`, or `high`."
+              "How much effort the model should put into its response. Higher effort levels may result in more thorough analysis but take longer.\n\nValid values are `low`, `medium`, `high`, or `max`."
           })
         ),
         "format": Schema.optionalKey(
@@ -7445,6 +7766,12 @@ export const BetaMessageBatchIndividualRequestParams = Schema.Struct({
         "title": "Service Tier",
         "description":
           "Determines whether to use priority capacity (if available) or standard capacity for this request.\n\nAnthropic offers different levels of service for your API requests. See [service-tiers](https://docs.claude.com/en/api/service-tiers) for details."
+      })
+    ),
+    "speed": Schema.optionalKey(
+      Schema.Union([BetaSpeed, Schema.Null]).annotate({
+        "description":
+          "The inference speed mode for this request. `\"fast\"` enables high output-tokens-per-second inference."
       })
     ),
     "stop_sequences": Schema.optionalKey(
