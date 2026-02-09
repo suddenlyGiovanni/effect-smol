@@ -12,14 +12,12 @@
 "@effect/sql-sqlite-do": major
 "@effect/ai-anthropic": major
 "@effect/platform-bun": major
-"@effect/utils": major
 "@effect/atom-react": major
 "@effect/atom-solid": major
 "@effect/sql-libsql": major
 "@effect/sql-mysql2": major
 "@effect/ai-openai": major
 "@effect/sql-mssql": major
-"@effect/oxc": major
 "@effect/atom-vue": major
 "effect": major
 "@effect/sql-d1": major

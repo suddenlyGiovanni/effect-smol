@@ -7,8 +7,6 @@
   "baseBranch": "main",
   "updateInternalDependencies": "patch",
   "ignore": [
-    "packages/tools/ai-codegen",
-    "packages/tools/bundle",
     "scratchpad",
     "scripts"
   ],

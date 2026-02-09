@@ -24,8 +24,6 @@
     "@effect/sql-sqlite-node": "3.0.0",
     "@effect/sql-sqlite-react-native": "3.0.0",
     "@effect/sql-sqlite-wasm": "3.0.0",
-    "@effect/ai-codegen": "3.0.0",
-    "@effect/bundle": "3.0.0",
     "@effect/openapi-generator": "3.0.0",
     "@effect/oxc": "3.0.0",
     "@effect/utils": "3.0.0",
