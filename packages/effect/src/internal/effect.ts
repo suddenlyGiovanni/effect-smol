@@ -13,6 +13,7 @@ import type { LazyArg } from "../Function.ts"
 import { constant, constFalse, constTrue, constUndefined, constVoid, dual, identity } from "../Function.ts"
 import * as Hash from "../Hash.ts"
 import { toJson, toStringUnknown } from "../Inspectable.ts"
+import * as Iterable from "../Iterable.ts"
 import type * as Logger from "../Logger.ts"
 import type * as LogLevel from "../LogLevel.ts"
 import type * as Metric from "../Metric.ts"
@@ -4361,6 +4362,29 @@ export const forkDetach: {
   }
 ): Effect.Effect<Fiber.Fiber<A, E>, never, R> =>
   withFiber((fiber) => succeed(forkUnsafe(fiber, self, options?.startImmediately, true, options?.uninterruptible))))
+
+/** @internal */
+export const awaitAllChildren = <A, E, R>(
+  self: Effect.Effect<A, E, R>
+): Effect.Effect<A, E, R> =>
+  withFiber((fiber) => {
+    const initialChildren = fiber._children && Arr.fromIterable(fiber._children)
+    return onExit(
+      self,
+      (_) => {
+        let children = fiber._children
+        if (children === undefined || children.size === 0) {
+          return
+        } else if (initialChildren) {
+          children = Iterable.filter(
+            children,
+            (child: FiberImpl<any, any>) => !initialChildren.includes(child)
+          ) as Set<FiberImpl<any, any>>
+        }
+        return fiberAwaitAll(children)
+      }
+    )
+  })
 
 /** @internal */
 export const forkIn: {
