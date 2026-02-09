@@ -10,6 +10,7 @@
     "scratchpad",
     "scripts"
   ],
+  "privatePackages": false,
   "snapshot": {
     "useCalculatedVersion": false,
     "prereleaseTemplate": "{tag}-{commit}"
