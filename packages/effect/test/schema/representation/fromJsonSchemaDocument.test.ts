@@ -7,7 +7,7 @@ describe("fromJsonSchemaDocument", () => {
     input: {
       readonly schema: JsonSchema.JsonSchema
       readonly options?: {
-        readonly additionalProperties?: false | undefined
+        readonly onEnter?: ((js: JsonSchema.JsonSchema) => JsonSchema.JsonSchema) | undefined
       }
     },
     expected: {
@@ -1891,8 +1891,8 @@ describe("fromJsonSchemaDocument", () => {
   })
 
   describe("options", () => {
-    describe("additionalProperties", () => {
-      it("false", () => {
+    describe("onEnter", () => {
+      it("additionalProperties false via onEnter", () => {
         assertFromJsonSchema(
           {
             schema: {
@@ -1902,7 +1902,14 @@ describe("fromJsonSchemaDocument", () => {
               },
               required: ["a"]
             },
-            options: { additionalProperties: false }
+            options: {
+              onEnter: (js) => {
+                if (js.type === "object" && js.additionalProperties === undefined) {
+                  return { ...js, additionalProperties: false }
+                }
+                return js
+              }
+            }
           },
           {
             representation: {
@@ -1920,6 +1927,92 @@ describe("fromJsonSchemaDocument", () => {
             }
           },
           `Schema.Struct({ "a": Schema.String })`
+        )
+      })
+
+      it("strips annotation keys via onEnter", () => {
+        assertFromJsonSchema(
+          {
+            schema: {
+              title: "a",
+              description: "b",
+              examples: ["d"]
+            },
+            options: {
+              onEnter: (js) => {
+                const out = { ...js }
+                delete out.examples
+                return out
+              }
+            }
+          },
+          {
+            representation: {
+              _tag: "Unknown",
+              annotations: {
+                title: "a",
+                description: "b"
+              }
+            }
+          },
+          `Schema.Unknown.annotate({ "title": "a", "description": "b" })`
+        )
+      })
+
+      it("filters annotations by predicate via onEnter", () => {
+        assertFromJsonSchema(
+          {
+            schema: {
+              title: "a",
+              description: "b",
+              examples: ["d"],
+              default: "c"
+            },
+            options: {
+              onEnter: (js) => {
+                const out: any = {}
+                for (const [k, v] of Object.entries(js)) {
+                  if (k === "title" || k === "default" || k === "type") out[k] = v
+                }
+                return out
+              }
+            }
+          },
+          {
+            representation: {
+              _tag: "Unknown",
+              annotations: {
+                title: "a",
+                default: "c"
+              }
+            }
+          },
+          `Schema.Unknown.annotate({ "title": "a", "default": "c" })`
+        )
+      })
+
+      it("default preserves all annotations", () => {
+        assertFromJsonSchema(
+          {
+            schema: {
+              title: "a",
+              description: "b",
+              default: "c",
+              examples: ["d"]
+            }
+          },
+          {
+            representation: {
+              _tag: "Unknown",
+              annotations: {
+                title: "a",
+                description: "b",
+                default: "c",
+                examples: ["d"]
+              }
+            }
+          },
+          `Schema.Unknown.annotate({ "title": "a", "description": "b", "default": "c", "examples": ["d"] })`
         )
       })
     })

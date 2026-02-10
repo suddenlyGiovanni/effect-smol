@@ -2268,7 +2268,7 @@ function toRuntimeRegExp(regExp: RegExp): string {
  * @since 4.0.0
  */
 export function fromJsonSchemaDocument(document: JsonSchema.Document<"draft-2020-12">, options?: {
-  readonly additionalProperties?: false | undefined
+  readonly onEnter?: ((js: JsonSchema.JsonSchema) => JsonSchema.JsonSchema) | undefined
 }): Document {
   const { references, representations: schemas } = fromJsonSchemaMultiDocument({
     dialect: document.dialect,
@@ -2285,7 +2285,7 @@ export function fromJsonSchemaDocument(document: JsonSchema.Document<"draft-2020
  * @since 4.0.0
  */
 export function fromJsonSchemaMultiDocument(document: JsonSchema.MultiDocument<"draft-2020-12">, options?: {
-  readonly additionalProperties?: false | undefined
+  readonly onEnter?: ((js: JsonSchema.JsonSchema) => JsonSchema.JsonSchema) | undefined
 }): MultiDocument {
   let visited: Set<string>
   const references: Record<string, Representation> = {}
@@ -2354,7 +2354,7 @@ export function fromJsonSchemaMultiDocument(document: JsonSchema.MultiDocument<"
     if (u === false) return never
     if (!Predicate.isObject(u)) return unknown
 
-    let js: JsonSchema.JsonSchema = u
+    let js: JsonSchema.JsonSchema = options?.onEnter?.(u) ?? u
     if (Array.isArray(js.type)) {
       if (js.type.every(isType)) {
         const { type, ...rest } = js
@@ -2684,11 +2684,10 @@ export function fromJsonSchemaMultiDocument(document: JsonSchema.MultiDocument<"
       }
     }
 
-    const additionalProperties = js.additionalProperties ?? options?.additionalProperties
-    if (additionalProperties === undefined || additionalProperties === true) {
+    if (js.additionalProperties === undefined || js.additionalProperties === true) {
       out.push({ parameter: string, type: unknown })
-    } else if (Predicate.isObject(additionalProperties)) {
-      out.push({ parameter: string, type: recur(additionalProperties) })
+    } else if (Predicate.isObject(js.additionalProperties)) {
+      out.push({ parameter: string, type: recur(js.additionalProperties) })
     }
 
     return out
@@ -2907,7 +2906,9 @@ const null_: Null = { _tag: "Null" }
 const string: String = { _tag: "String", checks: [] }
 const boolean: Boolean = { _tag: "Boolean" }
 
-function collectAnnotations(schema: JsonSchema.JsonSchema): Schema.Annotations.Annotations | undefined {
+function collectAnnotations(
+  schema: JsonSchema.JsonSchema
+): Schema.Annotations.Annotations | undefined {
   const as: Record<string, unknown> = {}
 
   if (typeof schema.title === "string") as.title = schema.title

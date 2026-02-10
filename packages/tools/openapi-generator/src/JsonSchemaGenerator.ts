@@ -17,7 +17,10 @@ export function make() {
   function generate(
     source: "openapi-3.0" | "openapi-3.1",
     components: JsonSchema.Definitions,
-    typeOnly: boolean
+    typeOnly: boolean,
+    options?: {
+      readonly onEnter?: ((js: JsonSchema.JsonSchema) => JsonSchema.JsonSchema) | undefined
+    }
   ) {
     const nameMap: Array<string> = []
     const schemas: Array<JsonSchema.JsonSchema> = []
@@ -38,7 +41,13 @@ export function make() {
         schemas,
         definitions
       }, {
-        additionalProperties: false
+        onEnter(js) {
+          const out = { ...js }
+          if (out.type === "object" && out.additionalProperties === undefined) {
+            out.additionalProperties = false
+          }
+          return options?.onEnter?.(out) ?? out
+        }
       })
 
       const codeDocument = SchemaRepresentation.toCodeDocument(multiDocument)

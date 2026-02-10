@@ -26,6 +26,10 @@ export interface OpenApiGenerateOptions {
    * specification (without corresponding schemas).
    */
   readonly typeOnly: boolean
+  /**
+   * Hook to transform each JSON Schema node before processing.
+   */
+  readonly onEnter?: ((js: JsonSchema.JsonSchema) => JsonSchema.JsonSchema) | undefined
 }
 
 const methodNames: ReadonlyArray<OpenAPISpecMethodName> = [
@@ -239,7 +243,9 @@ export const make = Effect.gen(function*() {
       // TODO: make a CLI option ?
       const importName = "Schema"
       const source = getDialect(spec)
-      const generation = generator.generate(source, spec.components?.schemas ?? {}, options.typeOnly)
+      const generation = generator.generate(source, spec.components?.schemas ?? {}, options.typeOnly, {
+        onEnter: options.onEnter
+      })
 
       return String.stripMargin(
         `|${openApiTransformer.imports(importName, operations)}
