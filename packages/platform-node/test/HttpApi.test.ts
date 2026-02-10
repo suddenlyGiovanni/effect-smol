@@ -4,6 +4,7 @@ import {
   Array,
   DateTime,
   Effect,
+  Equal,
   FileSystem,
   Layer,
   Redacted,
@@ -17,8 +18,10 @@ import {
 } from "effect"
 import {
   Cookies,
+  HttpBody,
   HttpClient,
   HttpClientRequest,
+  type HttpClientResponse,
   HttpRouter,
   HttpServerRequest,
   HttpServerResponse,
@@ -38,13 +41,42 @@ import {
 } from "effect/unstable/httpapi"
 import OpenApiFixture from "./fixtures/openapi.json" with { type: "json" }
 
+function* assertServerText(res: HttpClientResponse.HttpClientResponse, status: number, text: string) {
+  assert.strictEqual(res.status, status)
+  assert.strictEqual(yield* res.text, text)
+}
+
+function* assertServerJson(res: HttpClientResponse.HttpClientResponse, status: number, json: unknown) {
+  assert.strictEqual(res.status, status)
+  assert.deepStrictEqual(yield* res.json, json)
+}
+
+function* assertServerSchemaError(res: HttpClientResponse.HttpClientResponse, status: number, message: string) {
+  yield* assertServerJson(res, status, {
+    _tag: "HttpApiSchemaError",
+    message
+  })
+}
+
+function* assertClientText<E, R>(res: Effect.Effect<string, E, R>, text: string) {
+  assert.strictEqual(yield* res, text)
+}
+
+function* assertClientJson<E, R>(res: Effect.Effect<unknown, E, R>, json: unknown) {
+  assert.deepStrictEqual(yield* res, json)
+}
+
+function* assertClientError<A, E, R>(res: Effect.Effect<A, E, R>, error: E) {
+  assert.ok(Equal.equals(yield* Effect.flip(res), error))
+}
+
 describe("HttpApi", () => {
   it.effect("catch all path", () => {
     const Api = HttpApi.make("api")
       .add(
         HttpApiGroup.make("group")
           .add(
-            HttpApiEndpoint.get("catch-all", "*", {
+            HttpApiEndpoint.get("catchAll", "*", {
               success: Schema.String
             })
           )
@@ -52,67 +84,68 @@ describe("HttpApi", () => {
     const GroupLive = HttpApiBuilder.group(
       Api,
       "group",
-      (handlers) => handlers.handle("catch-all", (ctx) => Effect.succeed(ctx.request.url))
+      (handlers) => handlers.handle("catchAll", (ctx) => Effect.succeed(ctx.request.url))
     )
-
     const ApiLive = HttpRouter.serve(
       HttpApiBuilder.layer(Api).pipe(Layer.provide(GroupLive)),
       { disableListenLog: true, disableLogger: true }
     ).pipe(Layer.provideMerge(NodeHttpServer.layerTest))
 
     return Effect.gen(function*() {
-      const response1 = yield* HttpClient.get("")
-      assert.strictEqual(response1.status, 200)
-      assert.strictEqual(yield* response1.text, `"/"`)
+      // server side
+      yield* assertServerText(yield* HttpClient.get(""), 200, `"/"`)
+      yield* assertServerText(yield* HttpClient.get("/"), 200, `"/"`)
+      yield* assertServerText(yield* HttpClient.get("/a/b/c"), 200, `"/a/b/c"`)
 
-      const response2 = yield* HttpClient.get("/")
-      assert.strictEqual(response2.status, 200)
-      assert.strictEqual(yield* response2.text, `"/"`)
-
-      const response3 = yield* HttpClient.get("/a/b/c")
-      assert.strictEqual(response3.status, 200)
-      assert.strictEqual(yield* response3.text, `"/a/b/c"`)
+      // client side
+      const client = yield* HttpApiClient.make(Api)
+      yield* assertClientText(client.group.catchAll(), "/*")
     }).pipe(Effect.provide(ApiLive))
   })
 
-  it.effect("middleware error", () => {
-    class M extends HttpApiMiddleware.Service<M>()("Http/Logger", {
-      error: Schema.String
-        .pipe(
-          HttpApiSchema.status(405),
-          HttpApiSchema.asText()
+  describe("middleware", () => {
+    it.effect("error", () => {
+      class M extends HttpApiMiddleware.Service<M>()("Http/Logger", {
+        error: Schema.String
+          .pipe(
+            HttpApiSchema.status(405),
+            HttpApiSchema.asText()
+          )
+      }) {}
+
+      const Api = HttpApi.make("api")
+        .add(
+          HttpApiGroup.make("group")
+            .add(
+              HttpApiEndpoint.get("a", "/a", {
+                success: Schema.Finite
+              })
+            ).middleware(M)
         )
-    }) {}
-
-    const Api = HttpApi.make("api")
-      .add(
-        HttpApiGroup.make("group")
-          .add(
-            HttpApiEndpoint.get("a", "/a", {
-              success: Schema.Finite
-            })
-          ).middleware(M)
+      const GroupLive = HttpApiBuilder.group(
+        Api,
+        "group",
+        (handlers) => handlers.handle("a", () => Effect.succeed(1))
       )
-    const GroupLive = HttpApiBuilder.group(
-      Api,
-      "group",
-      (handlers) => handlers.handle("a", () => Effect.succeed(1))
-    )
-    const MLive = Layer.succeed(
-      M,
-      () => Effect.fail("error")
-    )
+      const MLive = Layer.succeed(
+        M,
+        () => Effect.fail("error")
+      )
 
-    const ApiLive = HttpRouter.serve(
-      HttpApiBuilder.layer(Api).pipe(Layer.provide(GroupLive), Layer.provide(MLive)),
-      { disableListenLog: true, disableLogger: true }
-    ).pipe(Layer.provideMerge(NodeHttpServer.layerTest))
+      const ApiLive = HttpRouter.serve(
+        HttpApiBuilder.layer(Api).pipe(Layer.provide(GroupLive), Layer.provide(MLive)),
+        { disableListenLog: true, disableLogger: true }
+      ).pipe(Layer.provideMerge(NodeHttpServer.layerTest))
 
-    return Effect.gen(function*() {
-      const client = yield* HttpApiClient.make(Api)
-      const result = yield* Effect.flip(client.group.a())
-      assert.strictEqual(result, "error")
-    }).pipe(Effect.provide(ApiLive))
+      return Effect.gen(function*() {
+        // server side
+        yield* assertServerText(yield* HttpClient.get("/a"), 405, "error")
+
+        // client side
+        const client = yield* HttpApiClient.make(Api)
+        yield* assertClientError(client.group.a(), "error")
+      }).pipe(Effect.provide(ApiLive))
+    })
   })
 
   describe("payload option", () => {
@@ -128,64 +161,101 @@ describe("HttpApi", () => {
                     optionalKey: Schema.optionalKey(Schema.FiniteFromString),
                     optional: Schema.optional(Schema.FiniteFromString)
                   },
-                  success: Schema.String
+                  success: Schema.Any
                 })
               )
           )
         const GroupLive = HttpApiBuilder.group(
           Api,
           "group",
-          (handlers) => handlers.handle("a", (ctx) => Effect.succeed(JSON.stringify(ctx.payload)))
+          (handlers) => handlers.handle("a", (ctx) => Effect.succeed(ctx.payload))
         )
-
         const ApiLive = HttpRouter.serve(
           HttpApiBuilder.layer(Api).pipe(Layer.provide(GroupLive)),
           { disableListenLog: true, disableLogger: true }
         ).pipe(Layer.provideMerge(NodeHttpServer.layerTest))
 
         return Effect.gen(function*() {
+          // server side
+          yield* assertServerSchemaError(
+            yield* HttpClient.get("/a"),
+            400,
+            `Missing key
+  at ["required"]`
+          )
+          yield* assertServerJson(yield* HttpClient.get("/a?required=1"), 200, { required: 1 })
+          yield* assertServerJson(yield* HttpClient.get("/a?required=1&optionalKey=1"), 200, {
+            required: 1,
+            optionalKey: 1
+          })
+          yield* assertServerJson(yield* HttpClient.get("/a?required=1&optional=1"), 200, { required: 1, optional: 1 })
+          yield* assertServerJson(yield* HttpClient.get("/a?required=1"), 200, { required: 1 })
+          // TODO: fix this test
+          yield* assertServerJson(yield* HttpClient.get("/a?required=1&optional="), 200, { required: 1, optional: 0 })
+
+          // client side
           const client = yield* HttpApiClient.make(Api)
-          const result = yield* client.group.a({ payload: { required: 1 } })
-          assert.strictEqual(result, `{"required":1}`)
+          yield* assertClientJson(client.group.a({ payload: { required: 1 } }), { required: 1 })
+          yield* assertClientJson(client.group.a({ payload: { required: 1, optionalKey: 1 } }), {
+            required: 1,
+            optionalKey: 1
+          })
+          yield* assertClientJson(client.group.a({ payload: { required: 1, optional: 1 } }), {
+            required: 1,
+            optional: 1
+          })
+          yield* assertClientJson(client.group.a({ payload: { required: 1, optional: undefined } }), { required: 1 })
         }).pipe(Effect.provide(ApiLive))
       })
     })
 
-    describe("encodings", () => {
-      it.effect("array of schemas with different encodings", () => {
-        const Api = HttpApi.make("api").add(
-          HttpApiGroup.make("group").add(
-            HttpApiEndpoint.post("a", "/a", {
-              payload: [
-                Schema.Struct({ a: Schema.String }), // application/json
-                Schema.String.pipe(HttpApiSchema.asText()), // text/plain
-                Schema.Uint8Array.pipe(HttpApiSchema.asUint8Array()) // application/octet-stream
-              ],
-              success: Schema.String
-            })
-          )
+    it.effect("array of schemas with different encodings", () => {
+      const Api = HttpApi.make("api").add(
+        HttpApiGroup.make("group").add(
+          HttpApiEndpoint.post("a", "/a", {
+            payload: [
+              Schema.Struct({ a: Schema.String }), // application/json
+              Schema.String.pipe(HttpApiSchema.asText()), // text/plain
+              Schema.Uint8Array.pipe(HttpApiSchema.asUint8Array()) // application/octet-stream
+            ],
+            success: Schema.Any
+          })
         )
-        const GroupLive = HttpApiBuilder.group(
-          Api,
-          "group",
-          (handlers) => handlers.handle("a", (ctx) => Effect.succeed(JSON.stringify(ctx.payload)))
+      )
+      const GroupLive = HttpApiBuilder.group(
+        Api,
+        "group",
+        (handlers) => handlers.handle("a", (ctx) => Effect.succeed(ctx.payload))
+      )
+
+      const ApiLive = HttpRouter.serve(
+        HttpApiBuilder.layer(Api).pipe(Layer.provide(GroupLive)),
+        { disableListenLog: true, disableLogger: true }
+      ).pipe(Layer.provideMerge(NodeHttpServer.layerTest))
+
+      return Effect.gen(function*() {
+        // server side
+        yield* assertServerSchemaError(
+          yield* HttpClient.post("/a"),
+          400,
+          `Expected object, got null`
+        )
+        yield* assertServerJson(yield* HttpClient.post("/a", { body: HttpBody.jsonUnsafe({ a: "text" }) }), 200, {
+          a: "text"
+        })
+        yield* assertServerJson(yield* HttpClient.post("/a", { body: HttpBody.text("text") }), 200, "text")
+        yield* assertServerJson(
+          yield* HttpClient.post("/a", { body: HttpBody.uint8Array(new Uint8Array([1, 2, 3])) }),
+          200,
+          { 0: 1, 1: 2, 2: 3 }
         )
 
-        const ApiLive = HttpRouter.serve(
-          HttpApiBuilder.layer(Api).pipe(Layer.provide(GroupLive)),
-          { disableListenLog: true, disableLogger: true }
-        ).pipe(Layer.provideMerge(NodeHttpServer.layerTest))
-
-        return Effect.gen(function*() {
-          const client = yield* HttpApiClient.make(Api)
-          const resultJson = yield* client.group.a({ payload: { a: "text" } })
-          assert.strictEqual(resultJson, `{"a":"text"}`)
-          const resultText = yield* client.group.a({ payload: "text" })
-          assert.strictEqual(resultText, `"text"`)
-          const resultUint8Array = yield* client.group.a({ payload: new Uint8Array([1, 2, 3]) })
-          assert.strictEqual(resultUint8Array, `{"0":1,"1":2,"2":3}`)
-        }).pipe(Effect.provide(ApiLive))
-      })
+        // client side
+        const client = yield* HttpApiClient.make(Api)
+        yield* assertClientJson(client.group.a({ payload: { a: "text" } }), { a: "text" })
+        yield* assertClientJson(client.group.a({ payload: "text" }), "text")
+        yield* assertClientJson(client.group.a({ payload: new Uint8Array([1, 2, 3]) }), { 0: 1, 1: 2, 2: 3 })
+      }).pipe(Effect.provide(ApiLive))
     })
   })
 
@@ -213,97 +283,17 @@ describe("HttpApi", () => {
       ).pipe(Layer.provideMerge(NodeHttpServer.layerTest))
 
       return Effect.gen(function*() {
+        // server side
+        yield* assertServerJson(yield* HttpClient.get("/1"), 200, "User 1")
+
+        // client side
         const client = yield* HttpApiClient.make(Api)
-        const result = yield* client.group.get({ params: { id: 1 } })
-        assert.strictEqual(result, "User 1")
+        yield* assertClientJson(client.group.get({ params: { id: 1 } }), "User 1")
       }).pipe(Effect.provide(ApiLive))
     })
   })
 
-  describe("error option", () => {
-    it.effect("makeNoContent(400)", () => {
-      const Api = HttpApi.make("api").add(
-        HttpApiGroup.make("group").add(
-          HttpApiEndpoint.get("a", "/a", {
-            error: HttpApiSchema.Empty(400)
-          })
-        )
-      )
-      const GroupLive = HttpApiBuilder.group(
-        Api,
-        "group",
-        (handlers) =>
-          handlers
-            .handle("a", () => Effect.fail(void 0))
-      )
-      const ApiLive = HttpRouter.serve(
-        HttpApiBuilder.layer(Api).pipe(Layer.provide(GroupLive)),
-        { disableListenLog: true, disableLogger: true }
-      ).pipe(Layer.provideMerge(NodeHttpServer.layerTest))
-
-      return Effect.gen(function*() {
-        const a = yield* HttpClient.get("/a")
-        assert.strictEqual(a.status, 400)
-        assert.strictEqual(yield* a.text, "")
-      }).pipe(Effect.provide(ApiLive))
-    })
-
-    it.effect("UnauthorizedNoContent", () => {
-      const Api = HttpApi.make("api").add(
-        HttpApiGroup.make("group").add(
-          HttpApiEndpoint.get("a", "/a", {
-            error: HttpApiError.UnauthorizedNoContent
-          })
-        )
-      )
-      const GroupLive = HttpApiBuilder.group(
-        Api,
-        "group",
-        (handlers) =>
-          handlers
-            .handle("a", () => Effect.fail(new HttpApiError.Unauthorized({})))
-      )
-      const ApiLive = HttpRouter.serve(
-        HttpApiBuilder.layer(Api).pipe(Layer.provide(GroupLive)),
-        { disableListenLog: true, disableLogger: true }
-      ).pipe(Layer.provideMerge(NodeHttpServer.layerTest))
-
-      return Effect.gen(function*() {
-        const a = yield* HttpClient.get("/a")
-        assert.strictEqual(a.status, 401)
-        assert.strictEqual(yield* a.text, "")
-      }).pipe(Effect.provide(ApiLive))
-    })
-
-    it.effect("BadRequest", () => {
-      const Api = HttpApi.make("api").add(
-        HttpApiGroup.make("group").add(
-          HttpApiEndpoint.get("a", "/a", {
-            error: HttpApiError.BadRequestNoContent
-          })
-        )
-      )
-      const GroupLive = HttpApiBuilder.group(
-        Api,
-        "group",
-        (handlers) =>
-          handlers
-            .handle("a", () => Effect.fail(new HttpApiError.BadRequest({})))
-      )
-      const ApiLive = HttpRouter.serve(
-        HttpApiBuilder.layer(Api).pipe(Layer.provide(GroupLive)),
-        { disableListenLog: true, disableLogger: true }
-      ).pipe(Layer.provideMerge(NodeHttpServer.layerTest))
-
-      return Effect.gen(function*() {
-        const a = yield* HttpClient.get("/a")
-        assert.strictEqual(a.status, 400)
-        assert.strictEqual(yield* a.text, "")
-      }).pipe(Effect.provide(ApiLive))
-    })
-  })
-
-  describe("query", () => {
+  describe("query option", () => {
     it.effect("should accept a record of schemas", () => {
       const Api = HttpApi.make("api").add(
         HttpApiGroup.make("group").add(
@@ -327,99 +317,41 @@ describe("HttpApi", () => {
       ).pipe(Layer.provideMerge(NodeHttpServer.layerTest))
 
       return Effect.gen(function*() {
+        // server side
+        yield* assertServerJson(yield* HttpClient.get("/?id=1"), 200, "User 1")
+
+        // client side
         const client = yield* HttpApiClient.make(Api)
-        const result = yield* client.group.get({ query: { id: 1 } })
-        assert.strictEqual(result, "User 1")
+        yield* assertClientJson(client.group.get({ query: { id: 1 } }), "User 1")
       }).pipe(Effect.provide(ApiLive))
     })
   })
 
-  describe("payload", () => {
-    it.effect("is decoded / encoded", () =>
-      Effect.gen(function*() {
-        const expected = new User({
-          id: 123,
-          name: "Joe",
-          createdAt: DateTime.makeUnsafe(0)
-        })
-        const client = yield* HttpApiClient.make(Api)
-        const clientUsersGroup = yield* HttpApiClient.group(Api, {
-          httpClient: yield* HttpClient.HttpClient,
-          group: "users"
-        })
-        const clientUsersEndpointCreate = yield* HttpApiClient.endpoint(Api, {
-          httpClient: yield* HttpClient.HttpClient,
-          group: "users",
-          endpoint: "create"
-        })
-
-        const apiClientUser = yield* client.users.create({
-          query: { id: 123 },
-          payload: { name: "Joe" }
-        })
-        assert.deepStrictEqual(
-          apiClientUser,
-          expected
+  describe("success option", () => {
+    it.effect("no content", () => {
+      const Api = HttpApi.make("api")
+        .add(
+          HttpApiGroup.make("group")
+            .add(
+              HttpApiEndpoint.get("a", "/a", {
+                success: Schema.Void
+              }),
+              HttpApiEndpoint.get("b", "/b", {
+                success: HttpApiSchema.NoContent
+              }),
+              HttpApiEndpoint.get("c", "/c", {
+                success: Schema.String.pipe(HttpApiSchema.asNoContent({ decode: () => "c" }))
+              })
+            )
         )
-        const groupClientUser = yield* clientUsersGroup.create({
-          query: { id: 123 },
-          payload: { name: "Joe" }
-        })
-        assert.deepStrictEqual(
-          groupClientUser,
-          expected
-        )
-        const endpointClientUser = yield* clientUsersEndpointCreate({
-          query: { id: 123 },
-          payload: { name: "Joe" }
-        })
-        assert.deepStrictEqual(
-          endpointClientUser,
-          expected
-        )
-      }).pipe(Effect.provide(HttpLive)))
-
-    it.live("multipart", () =>
-      Effect.gen(function*() {
-        const client = yield* HttpApiClient.make(Api)
-        const data = new FormData()
-        data.append("file", new Blob(["hello"], { type: "text/plain" }), "hello.txt")
-        const result = yield* client.users.upload({ payload: data, params: {} })
-        assert.deepStrictEqual(result, {
-          contentType: "text/plain",
-          length: 5
-        })
-      }).pipe(Effect.provide(HttpLive)))
-
-    it.live("multipart stream", () =>
-      Effect.gen(function*() {
-        const client = yield* HttpApiClient.make(Api)
-        const data = new FormData()
-        data.append("file", new Blob(["hello"], { type: "text/plain" }), "hello.txt")
-        const result = yield* client.users.uploadStream({ payload: data })
-        assert.deepStrictEqual(result, {
-          contentType: "text/plain",
-          length: 5
-        })
-      }).pipe(Effect.provide(HttpLive)))
-  })
-
-  describe("headers", () => {
-    it.effect("should accept a record of schemas", () => {
-      const Api = HttpApi.make("api").add(
-        HttpApiGroup.make("group").add(
-          HttpApiEndpoint.get("get", "/:id", {
-            headers: {
-              id: Schema.FiniteFromString
-            },
-            success: Schema.String
-          })
-        )
-      )
       const GroupLive = HttpApiBuilder.group(
         Api,
         "group",
-        (handlers) => handlers.handle("get", (ctx) => Effect.succeed(`User ${ctx.headers.id}`))
+        (handlers) =>
+          handlers
+            .handle("a", () => Effect.void)
+            .handle("b", () => Effect.succeed(HttpApiSchema.NoContent.makeUnsafe()))
+            .handle("c", () => Effect.succeed("-"))
       )
 
       const ApiLive = HttpRouter.serve(
@@ -428,274 +360,488 @@ describe("HttpApi", () => {
       ).pipe(Layer.provideMerge(NodeHttpServer.layerTest))
 
       return Effect.gen(function*() {
+        // server side
+        yield* assertServerText(yield* HttpClient.get("/a"), 200, "")
+        yield* assertServerText(yield* HttpClient.get("/b"), 204, "")
+        yield* assertServerText(yield* HttpClient.get("/c"), 200, "")
+
+        // client side
         const client = yield* HttpApiClient.make(Api)
-        const result = yield* client.group.get({ headers: { id: 1 } })
-        assert.strictEqual(result, "User 1")
+        yield* assertClientJson(client.group.a(), undefined)
+        yield* assertClientJson(client.group.b(), undefined)
+        yield* assertClientJson(client.group.c(), "c")
       }).pipe(Effect.provide(ApiLive))
     })
 
-    it.effect("is decoded / encoded", () =>
-      Effect.gen(function*() {
-        const client = yield* HttpApiClient.make(Api)
-        const users = yield* client.users.list({
-          headers: { page: 1 },
-          query: {}
-        })
-        const user = users[0]
-        assert.deepStrictEqual(
-          user,
-          new User({
-            id: 1,
-            name: "page 1",
-            createdAt: DateTime.makeUnsafe(0)
-          })
-        )
-      }).pipe(Effect.provide(HttpLive)))
-  })
-
-  describe("errors", () => {
-    it.effect("empty errors have no body", () =>
-      Effect.gen(function*() {
-        const response = yield* HttpClient.get("/groups/0")
-        assert.strictEqual(response.status, 418)
-        const text = yield* response.text
-        assert.strictEqual(text, "")
-      }).pipe(Effect.provide(HttpLive)))
-
-    it.effect("empty errors decode", () =>
-      Effect.gen(function*() {
-        const client = yield* HttpApiClient.make(Api)
-        const error = yield* client.groups.findById({ params: { id: 0 } }).pipe(
-          Effect.flip
-        )
-        assert.deepStrictEqual(error, new GroupError({}))
-      }).pipe(Effect.provide(HttpLive)))
-
-    it.effect("default to 500 status code", () =>
-      Effect.gen(function*() {
-        const response = yield* HttpClientRequest.get("/users").pipe(
-          HttpClientRequest.setHeaders({ page: "0" }),
-          HttpClient.execute
-        )
-        assert.strictEqual(response.status, 500)
-        const body = yield* response.json
-        assert.deepStrictEqual(body, {
-          _tag: "NoStatusError"
-        })
-      }).pipe(Effect.provide(HttpLive)))
-
-    it.effect("class level annotations", () =>
-      Effect.gen(function*() {
-        const response = yield* HttpClientRequest.post("/users").pipe(
-          HttpClientRequest.setUrlParams({ id: "0" }),
-          HttpClientRequest.bodyJsonUnsafe({ name: "boom" }),
-          HttpClient.execute
-        )
-        assert.strictEqual(response.status, 400)
-      }).pipe(Effect.provide(HttpLive)))
-
-    it.effect("HttpApiSchemaError", () =>
-      Effect.gen(function*() {
-        const client = yield* HttpApiClient.make(Api)
-        const error = yield* client.users.upload({ params: {}, payload: new FormData() }).pipe(
-          Effect.flip
-        )
-        assert.strictEqual(error._tag, "HttpApiSchemaError")
-        // TODO: add back issues
-        // assert.deepStrictEqual(error.issues[0].path, ["file"])
-      }).pipe(Effect.provide(HttpLive)))
-  })
-
-  it.effect("handler level context", () =>
-    Effect.gen(function*() {
-      const client = yield* HttpApiClient.make(Api)
-      const users = yield* client.users.list({ headers: { page: 1 }, query: {} })
-      const user = users[0]
-      assert.strictEqual(user.name, "page 1")
-      assert.deepStrictEqual(user.createdAt, DateTime.makeUnsafe(0))
-    }).pipe(Effect.provide(HttpLive)))
-
-  it.effect("custom client context", () =>
-    Effect.gen(function*() {
-      let tapped = false
-      const client = yield* HttpApiClient.makeWith(Api, {
-        httpClient: (yield* HttpClient.HttpClient).pipe(
-          HttpClient.tapRequest(Effect.fnUntraced(function*(_request) {
-            tapped = true
-            yield* CurrentUser
-          }))
-        )
-      })
-      const users = yield* client.users.list({ headers: { page: 1 }, query: {} }).pipe(
-        Effect.provideService(
-          CurrentUser,
-          new User({
-            id: 1,
-            name: "foo",
-            createdAt: DateTime.makeUnsafe(0)
-          })
-        )
-      )
-      const user = users[0]
-      assert.strictEqual(user.name, "page 1")
-      assert.isTrue(tapped)
-    }).pipe(Effect.provide(HttpLive)))
-
-  describe("security", () => {
-    it.effect("security middleware sets current user", () =>
-      Effect.gen(function*() {
-        const ref = yield* Ref.make(Cookies.empty.pipe(
-          Cookies.setUnsafe("token", "foo")
-        ))
-        const client = yield* HttpApiClient.makeWith(Api, {
-          httpClient: HttpClient.withCookiesRef(yield* HttpClient.HttpClient, ref)
-        })
-        const user = yield* client.users.findById({ params: { id: -1 } })
-        assert.strictEqual(user.name, "foo")
-      }).pipe(Effect.provide(HttpLive)))
-
-    it.effect("apiKey header security", () =>
-      Effect.gen(function*() {
-        const decode = HttpApiBuilder.securityDecode(securityHeader).pipe(
-          Effect.provideService(
-            HttpServerRequest.HttpServerRequest,
-            HttpServerRequest.fromWeb(
-              new Request("http://localhost:3000/", {
-                headers: {
-                  "x-api-key": "foo"
-                }
+    describe("encodings", () => {
+      describe("asJson", () => {
+        it.effect("custom contentType", () => {
+          const Api = HttpApi.make("api").add(
+            HttpApiGroup.make("group").add(
+              HttpApiEndpoint.get("a", "/a", {
+                success: Schema.String.pipe(HttpApiSchema.asJson({ contentType: "application/scim+json" }))
               })
             )
-          ),
-          Effect.provideService(HttpServerRequest.ParsedSearchParams, {})
-        )
-        const redacted = yield* decode
-        assert.strictEqual(Redacted.value(redacted), "foo")
-      }).pipe(Effect.provide(HttpLive)))
+          )
+          const GroupLive = HttpApiBuilder.group(
+            Api,
+            "group",
+            (handlers) => handlers.handle("a", () => Effect.succeed("a"))
+          )
 
-    it.effect("apiKey query security", () =>
-      Effect.gen(function*() {
-        const redacted = yield* HttpApiBuilder.securityDecode(securityQuery).pipe(
-          Effect.provideService(
-            HttpServerRequest.HttpServerRequest,
-            HttpServerRequest.fromWeb(new Request("http://localhost:3000/"))
-          ),
-          Effect.provideService(HttpServerRequest.ParsedSearchParams, {
-            api_key: "foo"
-          })
-        )
-        assert.strictEqual(Redacted.value(redacted), "foo")
-      }).pipe(Effect.provide(HttpLive)))
-  })
+          const ApiLive = HttpRouter.serve(
+            HttpApiBuilder.layer(Api).pipe(Layer.provide(GroupLive)),
+            { disableListenLog: true, disableLogger: true }
+          ).pipe(Layer.provideMerge(NodeHttpServer.layerTest))
 
-  it.effect("client withResponse", () =>
-    Effect.gen(function*() {
-      const client = yield* HttpApiClient.make(Api)
-      const [users, response] = yield* client.users.list({ headers: { page: 1 }, query: {}, withResponse: true })
-      assert.strictEqual(users[0].name, "page 1")
-      assert.strictEqual(response.status, 200)
-    }).pipe(Effect.provide(HttpLive)))
+          return Effect.gen(function*() {
+            // server side
+            const res = yield* HttpClient.get("/a")
+            yield* assertServerJson(res, 200, "a")
+            assert.strictEqual(res.headers["content-type"], "application/scim+json")
 
-  it.effect("multiple payload types", () =>
-    Effect.gen(function*() {
-      const client = yield* HttpApiClient.make(Api)
-      let [group, response] = yield* client.groups.create({
-        payload: { name: "Some group" },
-        withResponse: true
+            // client side
+            const client = yield* HttpApiClient.make(Api)
+            yield* assertClientJson(client.group.a(), "a")
+          }).pipe(Effect.provide(ApiLive))
+        })
       })
-      assert.deepStrictEqual(group, new Group({ id: 1, name: "Some group" }))
-      assert.strictEqual(response.status, 200)
-
-      const data = new FormData()
-      data.set("name", "Some group")
-      ;[group, response] = yield* client.groups.create({
-        payload: data,
-        withResponse: true
-      })
-      assert.deepStrictEqual(group, new Group({ id: 1, name: "Some group" }))
-      assert.strictEqual(response.status, 200)
-
-      group = yield* client.groups.create({
-        payload: { foo: "Some group" }
-      })
-      assert.deepStrictEqual(group, new Group({ id: 1, name: "Some group" }))
-    }).pipe(Effect.provide(HttpLive)))
-
-  it.effect(".handle can return HttpServerResponse", () =>
-    Effect.gen(function*() {
-      const client = yield* HttpApiClient.make(Api)
-      const response = yield* client.groups.handle({
-        params: { id: 1 },
-        payload: { name: "Some group" }
-      })
-      assert.deepStrictEqual(response, {
-        id: 1,
-        name: "Some group"
-      })
-    }).pipe(Effect.provide(HttpLive)))
-
-  it.effect(".handleRaw can manually process body", () =>
-    Effect.gen(function*() {
-      const client = yield* HttpApiClient.make(Api)
-      const response = yield* client.groups.handleRaw({
-        params: { id: 1 },
-        payload: { name: "Some group" }
-      })
-      assert.deepStrictEqual(response, {
-        id: 1,
-        name: "Some group"
-      })
-    }).pipe(Effect.provide(HttpLive)))
-
-  describe("OpenAPI spec", () => {
-    it("fixture", () => {
-      const spec = OpenApi.fromApi(Api)
-      assert.deepStrictEqual(spec, OpenApiFixture as any)
     })
   })
 
-  it.effect("error from plain text", () => {
-    class RateLimitError extends Schema.ErrorClass<RateLimitError>("RateLimitError")({
-      _tag: Schema.tag("RateLimitError"),
-      message: Schema.String
-    }) {}
-
-    const RateLimitErrorSchema = Schema.String.pipe(
-      Schema.decodeTo(
-        RateLimitError,
-        SchemaTransformation.transform({
-          encode: ({ message }) => message,
-          decode: (message) => new RateLimitError({ message })
-        })
-      ),
-      HttpApiSchema.status(429),
-      HttpApiSchema.asText()
-    )
-
-    const Api = HttpApi.make("api").add(
-      HttpApiGroup.make("group").add(
-        HttpApiEndpoint.get("error", "/error", {
-          error: RateLimitErrorSchema
-        })
+  describe("error option", () => {
+    it.effect("no content", () => {
+      const Api = HttpApi.make("api")
+        .add(
+          HttpApiGroup.make("group")
+            .add(
+              HttpApiEndpoint.get("a", "/a", {
+                error: Schema.Void.pipe(HttpApiSchema.status(403))
+              }),
+              HttpApiEndpoint.get("b", "/b", {
+                error: HttpApiSchema.NoContent,
+                success: Schema.String
+              }),
+              HttpApiEndpoint.get("c", "/c", {
+                error: Schema.String.pipe(
+                  HttpApiSchema.asNoContent({ decode: () => "c" }),
+                  HttpApiSchema.status(403)
+                )
+              }),
+              HttpApiEndpoint.get("d", "/d", {
+                error: HttpApiSchema.Empty(400)
+              }),
+              HttpApiEndpoint.get("e", "/e", {
+                error: HttpApiError.UnauthorizedNoContent
+              }),
+              HttpApiEndpoint.get("f", "/f", {
+                error: HttpApiError.BadRequestNoContent
+              })
+            )
+        )
+      const GroupLive = HttpApiBuilder.group(
+        Api,
+        "group",
+        (handlers) =>
+          handlers
+            .handle("a", () => Effect.fail(undefined))
+            .handle("b", () => Effect.fail(HttpApiSchema.NoContent.makeUnsafe()))
+            .handle("c", () => Effect.fail(""))
+            .handle("d", () => Effect.fail(void 0))
+            .handle("e", () => Effect.fail(new HttpApiError.Unauthorized({})))
+            .handle("f", () => Effect.fail(new HttpApiError.BadRequest({})))
       )
-    )
-    const ApiLive = HttpApiBuilder.layer(Api).pipe(
-      Layer.provide(
-        HttpApiBuilder.group(
+
+      const ApiLive = HttpRouter.serve(
+        HttpApiBuilder.layer(Api).pipe(Layer.provide(GroupLive)),
+        { disableListenLog: true, disableLogger: true }
+      ).pipe(Layer.provideMerge(NodeHttpServer.layerTest))
+
+      return Effect.gen(function*() {
+        // server side
+        yield* assertServerText(yield* HttpClient.get("/a"), 403, "")
+        yield* assertServerText(yield* HttpClient.get("/b"), 204, "")
+        yield* assertServerText(yield* HttpClient.get("/c"), 403, "")
+        yield* assertServerText(yield* HttpClient.get("/d"), 400, "")
+        yield* assertServerText(yield* HttpClient.get("/e"), 401, "")
+        yield* assertServerText(yield* HttpClient.get("/f"), 400, "")
+
+        // client side
+        const client = yield* HttpApiClient.make(Api)
+        yield* assertClientError(client.group.a(), undefined)
+        yield* assertClientError(client.group.b(), undefined)
+        yield* assertClientError(client.group.c(), "c")
+        yield* assertClientError(client.group.d(), undefined)
+        yield* assertClientError(client.group.e(), new HttpApiError.Unauthorized({}))
+        yield* assertClientError(client.group.f(), new HttpApiError.BadRequest({}))
+      }).pipe(Effect.provide(ApiLive))
+    })
+  })
+
+  describe("original tests", () => {
+    describe("payload", () => {
+      it.effect("is decoded / encoded", () =>
+        Effect.gen(function*() {
+          const expected = new User({
+            id: 123,
+            name: "Joe",
+            createdAt: DateTime.makeUnsafe(0)
+          })
+          const client = yield* HttpApiClient.make(Api)
+          const clientUsersGroup = yield* HttpApiClient.group(Api, {
+            httpClient: yield* HttpClient.HttpClient,
+            group: "users"
+          })
+          const clientUsersEndpointCreate = yield* HttpApiClient.endpoint(Api, {
+            httpClient: yield* HttpClient.HttpClient,
+            group: "users",
+            endpoint: "create"
+          })
+
+          const apiClientUser = yield* client.users.create({
+            query: { id: 123 },
+            payload: { name: "Joe" }
+          })
+          assert.deepStrictEqual(
+            apiClientUser,
+            expected
+          )
+          const groupClientUser = yield* clientUsersGroup.create({
+            query: { id: 123 },
+            payload: { name: "Joe" }
+          })
+          assert.deepStrictEqual(
+            groupClientUser,
+            expected
+          )
+          const endpointClientUser = yield* clientUsersEndpointCreate({
+            query: { id: 123 },
+            payload: { name: "Joe" }
+          })
+          assert.deepStrictEqual(
+            endpointClientUser,
+            expected
+          )
+        }).pipe(Effect.provide(HttpLive)))
+
+      it.live("multipart", () =>
+        Effect.gen(function*() {
+          const client = yield* HttpApiClient.make(Api)
+          const data = new FormData()
+          data.append("file", new Blob(["hello"], { type: "text/plain" }), "hello.txt")
+          const result = yield* client.users.upload({ payload: data, params: {} })
+          assert.deepStrictEqual(result, {
+            contentType: "text/plain",
+            length: 5
+          })
+        }).pipe(Effect.provide(HttpLive)))
+
+      it.live("multipart stream", () =>
+        Effect.gen(function*() {
+          const client = yield* HttpApiClient.make(Api)
+          const data = new FormData()
+          data.append("file", new Blob(["hello"], { type: "text/plain" }), "hello.txt")
+          const result = yield* client.users.uploadStream({ payload: data })
+          assert.deepStrictEqual(result, {
+            contentType: "text/plain",
+            length: 5
+          })
+        }).pipe(Effect.provide(HttpLive)))
+    })
+
+    describe("headers", () => {
+      it.effect("should accept a record of schemas", () => {
+        const Api = HttpApi.make("api").add(
+          HttpApiGroup.make("group").add(
+            HttpApiEndpoint.get("get", "/:id", {
+              headers: {
+                id: Schema.FiniteFromString
+              },
+              success: Schema.String
+            })
+          )
+        )
+        const GroupLive = HttpApiBuilder.group(
           Api,
           "group",
-          (handlers) =>
-            handlers.handle("error", () => new RateLimitError({ message: "Rate limit exceeded" }).asEffect())
+          (handlers) => handlers.handle("get", (ctx) => Effect.succeed(`User ${ctx.headers.id}`))
         )
-      ),
-      HttpRouter.serve,
-      Layer.provideMerge(NodeHttpServer.layerTest)
-    )
-    return Effect.gen(function*() {
-      const client = yield* HttpApiClient.make(Api)
-      const response = yield* client.group.error().pipe(Effect.flip)
-      assert.deepStrictEqual(response, new RateLimitError({ message: "Rate limit exceeded" }))
-    }).pipe(Effect.provide(ApiLive))
+
+        const ApiLive = HttpRouter.serve(
+          HttpApiBuilder.layer(Api).pipe(Layer.provide(GroupLive)),
+          { disableListenLog: true, disableLogger: true }
+        ).pipe(Layer.provideMerge(NodeHttpServer.layerTest))
+
+        return Effect.gen(function*() {
+          const client = yield* HttpApiClient.make(Api)
+          const result = yield* client.group.get({ headers: { id: 1 } })
+          assert.strictEqual(result, "User 1")
+        }).pipe(Effect.provide(ApiLive))
+      })
+
+      it.effect("is decoded / encoded", () =>
+        Effect.gen(function*() {
+          const client = yield* HttpApiClient.make(Api)
+          const users = yield* client.users.list({
+            headers: { page: 1 },
+            query: {}
+          })
+          const user = users[0]
+          assert.deepStrictEqual(
+            user,
+            new User({
+              id: 1,
+              name: "page 1",
+              createdAt: DateTime.makeUnsafe(0)
+            })
+          )
+        }).pipe(Effect.provide(HttpLive)))
+    })
+
+    describe("errors", () => {
+      it.effect("empty errors have no body", () =>
+        Effect.gen(function*() {
+          const response = yield* HttpClient.get("/groups/0")
+          assert.strictEqual(response.status, 418)
+          const text = yield* response.text
+          assert.strictEqual(text, "")
+        }).pipe(Effect.provide(HttpLive)))
+
+      it.effect("empty errors decode", () =>
+        Effect.gen(function*() {
+          const client = yield* HttpApiClient.make(Api)
+          const error = yield* client.groups.findById({ params: { id: 0 } }).pipe(
+            Effect.flip
+          )
+          assert.deepStrictEqual(error, new GroupError({}))
+        }).pipe(Effect.provide(HttpLive)))
+
+      it.effect("default to 500 status code", () =>
+        Effect.gen(function*() {
+          const response = yield* HttpClientRequest.get("/users").pipe(
+            HttpClientRequest.setHeaders({ page: "0" }),
+            HttpClient.execute
+          )
+          assert.strictEqual(response.status, 500)
+          const body = yield* response.json
+          assert.deepStrictEqual(body, {
+            _tag: "NoStatusError"
+          })
+        }).pipe(Effect.provide(HttpLive)))
+
+      it.effect("class level annotations", () =>
+        Effect.gen(function*() {
+          const response = yield* HttpClientRequest.post("/users").pipe(
+            HttpClientRequest.setUrlParams({ id: "0" }),
+            HttpClientRequest.bodyJsonUnsafe({ name: "boom" }),
+            HttpClient.execute
+          )
+          assert.strictEqual(response.status, 400)
+        }).pipe(Effect.provide(HttpLive)))
+
+      it.effect("HttpApiSchemaError", () =>
+        Effect.gen(function*() {
+          const client = yield* HttpApiClient.make(Api)
+          const error = yield* client.users.upload({ params: {}, payload: new FormData() }).pipe(
+            Effect.flip
+          )
+          assert.strictEqual(error._tag, "HttpApiSchemaError")
+          // TODO: add back issues
+          // assert.deepStrictEqual(error.issues[0].path, ["file"])
+        }).pipe(Effect.provide(HttpLive)))
+    })
+
+    it.effect("handler level context", () =>
+      Effect.gen(function*() {
+        const client = yield* HttpApiClient.make(Api)
+        const users = yield* client.users.list({ headers: { page: 1 }, query: {} })
+        const user = users[0]
+        assert.strictEqual(user.name, "page 1")
+        assert.deepStrictEqual(user.createdAt, DateTime.makeUnsafe(0))
+      }).pipe(Effect.provide(HttpLive)))
+
+    it.effect("custom client context", () =>
+      Effect.gen(function*() {
+        let tapped = false
+        const client = yield* HttpApiClient.makeWith(Api, {
+          httpClient: (yield* HttpClient.HttpClient).pipe(
+            HttpClient.tapRequest(Effect.fnUntraced(function*(_request) {
+              tapped = true
+              yield* CurrentUser
+            }))
+          )
+        })
+        const users = yield* client.users.list({ headers: { page: 1 }, query: {} }).pipe(
+          Effect.provideService(
+            CurrentUser,
+            new User({
+              id: 1,
+              name: "foo",
+              createdAt: DateTime.makeUnsafe(0)
+            })
+          )
+        )
+        const user = users[0]
+        assert.strictEqual(user.name, "page 1")
+        assert.isTrue(tapped)
+      }).pipe(Effect.provide(HttpLive)))
+
+    describe("security", () => {
+      it.effect("security middleware sets current user", () =>
+        Effect.gen(function*() {
+          const ref = yield* Ref.make(Cookies.empty.pipe(
+            Cookies.setUnsafe("token", "foo")
+          ))
+          const client = yield* HttpApiClient.makeWith(Api, {
+            httpClient: HttpClient.withCookiesRef(yield* HttpClient.HttpClient, ref)
+          })
+          const user = yield* client.users.findById({ params: { id: -1 } })
+          assert.strictEqual(user.name, "foo")
+        }).pipe(Effect.provide(HttpLive)))
+
+      it.effect("apiKey header security", () =>
+        Effect.gen(function*() {
+          const decode = HttpApiBuilder.securityDecode(securityHeader).pipe(
+            Effect.provideService(
+              HttpServerRequest.HttpServerRequest,
+              HttpServerRequest.fromWeb(
+                new Request("http://localhost:3000/", {
+                  headers: {
+                    "x-api-key": "foo"
+                  }
+                })
+              )
+            ),
+            Effect.provideService(HttpServerRequest.ParsedSearchParams, {})
+          )
+          const redacted = yield* decode
+          assert.strictEqual(Redacted.value(redacted), "foo")
+        }).pipe(Effect.provide(HttpLive)))
+
+      it.effect("apiKey query security", () =>
+        Effect.gen(function*() {
+          const redacted = yield* HttpApiBuilder.securityDecode(securityQuery).pipe(
+            Effect.provideService(
+              HttpServerRequest.HttpServerRequest,
+              HttpServerRequest.fromWeb(new Request("http://localhost:3000/"))
+            ),
+            Effect.provideService(HttpServerRequest.ParsedSearchParams, {
+              api_key: "foo"
+            })
+          )
+          assert.strictEqual(Redacted.value(redacted), "foo")
+        }).pipe(Effect.provide(HttpLive)))
+    })
+
+    it.effect("client withResponse", () =>
+      Effect.gen(function*() {
+        const client = yield* HttpApiClient.make(Api)
+        const [users, response] = yield* client.users.list({ headers: { page: 1 }, query: {}, withResponse: true })
+        assert.strictEqual(users[0].name, "page 1")
+        assert.strictEqual(response.status, 200)
+      }).pipe(Effect.provide(HttpLive)))
+
+    it.effect("multiple payload types", () =>
+      Effect.gen(function*() {
+        const client = yield* HttpApiClient.make(Api)
+        let [group, response] = yield* client.groups.create({
+          payload: { name: "Some group" },
+          withResponse: true
+        })
+        assert.deepStrictEqual(group, new Group({ id: 1, name: "Some group" }))
+        assert.strictEqual(response.status, 200)
+
+        const data = new FormData()
+        data.set("name", "Some group")
+        ;[group, response] = yield* client.groups.create({
+          payload: data,
+          withResponse: true
+        })
+        assert.deepStrictEqual(group, new Group({ id: 1, name: "Some group" }))
+        assert.strictEqual(response.status, 200)
+
+        group = yield* client.groups.create({
+          payload: { foo: "Some group" }
+        })
+        assert.deepStrictEqual(group, new Group({ id: 1, name: "Some group" }))
+      }).pipe(Effect.provide(HttpLive)))
+
+    it.effect(".handle can return HttpServerResponse", () =>
+      Effect.gen(function*() {
+        const client = yield* HttpApiClient.make(Api)
+        const response = yield* client.groups.handle({
+          params: { id: 1 },
+          payload: { name: "Some group" }
+        })
+        assert.deepStrictEqual(response, {
+          id: 1,
+          name: "Some group"
+        })
+      }).pipe(Effect.provide(HttpLive)))
+
+    it.effect(".handleRaw can manually process body", () =>
+      Effect.gen(function*() {
+        const client = yield* HttpApiClient.make(Api)
+        const response = yield* client.groups.handleRaw({
+          params: { id: 1 },
+          payload: { name: "Some group" }
+        })
+        assert.deepStrictEqual(response, {
+          id: 1,
+          name: "Some group"
+        })
+      }).pipe(Effect.provide(HttpLive)))
+
+    describe("OpenAPI spec", () => {
+      it("fixture", () => {
+        const spec = OpenApi.fromApi(Api)
+        assert.deepStrictEqual(spec, OpenApiFixture as any)
+      })
+    })
+
+    it.effect("error from plain text", () => {
+      class RateLimitError extends Schema.ErrorClass<RateLimitError>("RateLimitError")({
+        _tag: Schema.tag("RateLimitError"),
+        message: Schema.String
+      }) {}
+
+      const RateLimitErrorSchema = Schema.String.pipe(
+        Schema.decodeTo(
+          RateLimitError,
+          SchemaTransformation.transform({
+            encode: ({ message }) => message,
+            decode: (message) => new RateLimitError({ message })
+          })
+        ),
+        HttpApiSchema.status(429),
+        HttpApiSchema.asText()
+      )
+
+      const Api = HttpApi.make("api").add(
+        HttpApiGroup.make("group").add(
+          HttpApiEndpoint.get("error", "/error", {
+            error: RateLimitErrorSchema
+          })
+        )
+      )
+      const ApiLive = HttpApiBuilder.layer(Api).pipe(
+        Layer.provide(
+          HttpApiBuilder.group(
+            Api,
+            "group",
+            (handlers) =>
+              handlers.handle("error", () => new RateLimitError({ message: "Rate limit exceeded" }).asEffect())
+          )
+        ),
+        HttpRouter.serve,
+        Layer.provideMerge(NodeHttpServer.layerTest)
+      )
+      return Effect.gen(function*() {
+        const client = yield* HttpApiClient.make(Api)
+        const response = yield* client.group.error().pipe(Effect.flip)
+        assert.deepStrictEqual(response, new RateLimitError({ message: "Rate limit exceeded" }))
+      }).pipe(Effect.provide(ApiLive))
+    })
   })
 })
 
