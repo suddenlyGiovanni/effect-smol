@@ -135,18 +135,18 @@ export const isExit = (u: unknown): u is Exit.Exit<unknown, unknown> => hasPrope
 export const CauseTypeId = "~effect/Cause"
 
 /** @internal */
-export const CauseFailureTypeId = "~effect/Cause/Failure"
+export const CauseReasonTypeId = "~effect/Cause/Reason"
 
 /** @internal */
 export const isCause = (self: unknown): self is Cause.Cause<unknown> => hasProperty(self, CauseTypeId)
 
 /** @internal */
-export const isCauseFailure = (self: unknown): self is Cause.Failure<unknown> => hasProperty(self, CauseFailureTypeId)
+export const isCauseReason = (self: unknown): self is Cause.Reason<unknown> => hasProperty(self, CauseReasonTypeId)
 
 /** @internal */
 export class CauseImpl<E> implements Cause.Cause<E> {
   readonly [CauseTypeId]: typeof CauseTypeId
-  readonly failures: ReadonlyArray<
+  readonly reasons: ReadonlyArray<
     Cause.Fail<E> | Cause.Die | Cause.Interrupt
   >
   constructor(
@@ -155,7 +155,7 @@ export class CauseImpl<E> implements Cause.Cause<E> {
     >
   ) {
     this[CauseTypeId] = CauseTypeId
-    this.failures = failures
+    this.reasons = failures
   }
   pipe() {
     return pipeArguments(this, arguments)
@@ -163,11 +163,11 @@ export class CauseImpl<E> implements Cause.Cause<E> {
   toJSON(): unknown {
     return {
       _id: "Cause",
-      failures: this.failures.map((f) => f.toJSON())
+      failures: this.reasons.map((f) => f.toJSON())
     }
   }
   toString() {
-    return `Cause(${format(this.failures)})`
+    return `Cause(${format(this.reasons)})`
   }
   [NodeInspectSymbol]() {
     return this.toJSON()
@@ -175,20 +175,20 @@ export class CauseImpl<E> implements Cause.Cause<E> {
   [Equal.symbol](that: any): boolean {
     return (
       isCause(that) &&
-      this.failures.length === that.failures.length &&
-      this.failures.every((e, i) => Equal.equals(e, that.failures[i]))
+      this.reasons.length === that.reasons.length &&
+      this.reasons.every((e, i) => Equal.equals(e, that.reasons[i]))
     )
   }
   [Hash.symbol](): number {
-    return Hash.array(this.failures)
+    return Hash.array(this.reasons)
   }
 }
 
 const annotationsMap = new WeakMap<object, ReadonlyMap<string, unknown>>()
 
 /** @internal */
-export abstract class FailureBase<Tag extends string> implements Cause.Cause.FailureProto<Tag> {
-  readonly [CauseFailureTypeId]: typeof CauseFailureTypeId
+export abstract class ReasonBase<Tag extends string> implements Cause.Cause.ReasonProto<Tag> {
+  readonly [CauseReasonTypeId]: typeof CauseReasonTypeId
   readonly annotations: ReadonlyMap<string, unknown>
   readonly _tag: Tag
 
@@ -197,7 +197,7 @@ export abstract class FailureBase<Tag extends string> implements Cause.Cause.Fai
     annotations: ReadonlyMap<string, unknown>,
     originalError: unknown
   ) {
-    this[CauseFailureTypeId] = CauseFailureTypeId
+    this[CauseReasonTypeId] = CauseReasonTypeId
     this._tag = _tag
     if (
       annotations !== constEmptyAnnotations && typeof originalError === "object" && originalError !== null &&
@@ -251,7 +251,7 @@ export abstract class FailureBase<Tag extends string> implements Cause.Cause.Fai
 export const constEmptyAnnotations = new Map<string, unknown>()
 
 /** @internal */
-export class Fail<E> extends FailureBase<"Fail"> implements Cause.Fail<E> {
+export class Fail<E> extends ReasonBase<"Fail"> implements Cause.Fail<E> {
   readonly error: E
   constructor(
     error: E,
@@ -271,7 +271,7 @@ export class Fail<E> extends FailureBase<"Fail"> implements Cause.Fail<E> {
   }
   [Equal.symbol](that: any): boolean {
     return (
-      failureIsFail(that) &&
+      isFailReason(that) &&
       Equal.equals(this.error, that.error) &&
       Equal.equals(this.annotations, that.annotations)
     )
@@ -284,9 +284,9 @@ export class Fail<E> extends FailureBase<"Fail"> implements Cause.Fail<E> {
 }
 
 /** @internal */
-export const causeFromFailures = <E>(
-  failures: ReadonlyArray<Cause.Failure<E>>
-): Cause.Cause<E> => new CauseImpl(failures)
+export const causeFromReasons = <E>(
+  reasons: ReadonlyArray<Cause.Reason<E>>
+): Cause.Cause<E> => new CauseImpl(reasons)
 
 /** @internal */
 export const causeEmpty: Cause.Cause<never> = new CauseImpl([])
@@ -295,7 +295,7 @@ export const causeEmpty: Cause.Cause<never> = new CauseImpl([])
 export const causeFail = <E>(error: E): Cause.Cause<E> => new CauseImpl([new Fail(error)])
 
 /** @internal */
-export class Die extends FailureBase<"Die"> implements Cause.Die {
+export class Die extends ReasonBase<"Die"> implements Cause.Die {
   readonly defect: unknown
   constructor(
     defect: unknown,
@@ -315,7 +315,7 @@ export class Die extends FailureBase<"Die"> implements Cause.Die {
   }
   [Equal.symbol](that: any): boolean {
     return (
-      failureIsDie(that) &&
+      isDieReason(that) &&
       Equal.equals(this.defect, that.defect) &&
       Equal.equals(this.annotations, that.annotations)
     )
@@ -355,20 +355,20 @@ export const causeAnnotate: {
     }
   ): Cause.Cause<E> => {
     if (annotations.mapUnsafe.size === 0) return self
-    return new CauseImpl(self.failures.map((f) => f.annotate(annotations, options)))
+    return new CauseImpl(self.reasons.map((f) => f.annotate(annotations, options)))
   }
 )
 
 /** @internal */
-export const failureIsFail = <E>(
-  self: Cause.Failure<E>
+export const isFailReason = <E>(
+  self: Cause.Reason<E>
 ): self is Cause.Fail<E> => self._tag === "Fail"
 
 /** @internal */
-export const failureIsDie = <E>(self: Cause.Failure<E>): self is Cause.Die => self._tag === "Die"
+export const isDieReason = <E>(self: Cause.Reason<E>): self is Cause.Die => self._tag === "Die"
 
 /** @internal */
-export const failureIsInterrupt = <E>(self: Cause.Failure<E>): self is Cause.Interrupt => self._tag === "Interrupt"
+export const isInterruptReason = <E>(self: Cause.Reason<E>): self is Cause.Interrupt => self._tag === "Interrupt"
 
 /** @internal */
 export interface Primitive {

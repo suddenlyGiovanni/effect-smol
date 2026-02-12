@@ -214,11 +214,11 @@ export const causeResponse = <E>(
 ): Effect.Effect<readonly [Response.HttpServerResponse, Cause.Cause<E>]> => {
   let response: Response.HttpServerResponse | undefined
   let effect = succeedInternalServerError
-  const failures: Array<Cause.Failure<E>> = []
+  const failures: Array<Cause.Reason<E>> = []
   let interrupt: Cause.Interrupt | undefined
   let isClientInterrupt = false
-  for (let i = 0; i < cause.failures.length; i++) {
-    const f = cause.failures[i]
+  for (let i = 0; i < cause.reasons.length; i++) {
+    const f = cause.reasons[i]
     switch (f._tag) {
       case "Fail": {
         effect = Respondable.toResponseOrElse(f.error, internalServerError)
@@ -243,14 +243,14 @@ export const causeResponse = <E>(
     }
   }
   if (response) {
-    return Effect.succeed([response, Cause.fromFailures(failures)] as const)
+    return Effect.succeed([response, Cause.fromReasons(failures)] as const)
   } else if (interrupt && failures.length === 0) {
-    failures.push(isClientInterrupt ? Cause.failureInterrupt(clientAbortFiberId) : interrupt)
+    failures.push(isClientInterrupt ? Cause.makeInterruptReason(clientAbortFiberId) : interrupt)
     effect = isClientInterrupt ? clientAbortError : serverAbortError
   }
   return Effect.mapEager(effect, (response) => {
-    failures.push(Cause.failureDie(response))
-    return [response, Cause.fromFailures(failures)] as const
+    failures.push(Cause.makeDieReason(response))
+    return [response, Cause.fromReasons(failures)] as const
   })
 }
 
@@ -261,7 +261,7 @@ export const causeResponseStripped = <E>(
   cause: Cause.Cause<E>
 ): readonly [response: Response.HttpServerResponse, cause: Cause.Cause<E> | undefined] => {
   let response: Response.HttpServerResponse | undefined
-  const failures = cause.failures.filter((f) => {
+  const failures = cause.reasons.filter((f) => {
     if (f._tag === "Die" && Response.isHttpServerResponse(f.defect)) {
       response = f.defect
       return false
@@ -270,7 +270,7 @@ export const causeResponseStripped = <E>(
   })
   return [
     response ?? internalServerError,
-    failures.length > 0 ? Cause.fromFailures(failures) : undefined
+    failures.length > 0 ? Cause.fromReasons(failures) : undefined
   ]
 }
 

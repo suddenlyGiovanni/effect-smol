@@ -62,7 +62,7 @@ import {
   args,
   causeAnnotate,
   causeEmpty,
-  causeFromFailures,
+  causeFromReasons,
   CauseImpl,
   constEmptyAnnotations,
   contA,
@@ -76,15 +76,16 @@ import {
   exitSucceed,
   ExitTypeId,
   Fail,
-  FailureBase,
-  failureIsDie,
-  failureIsFail,
   InterruptorStackTrace,
   isCause,
+  isDieReason,
   isEffect,
+  isFailReason,
+  isInterruptReason,
   makePrimitive,
   makePrimitiveProto,
   NoSuchElementError,
+  ReasonBase,
   StackTraceKey as CauseStackTrace,
   TaggedError,
   withFiber,
@@ -100,7 +101,7 @@ import { version } from "./version.ts"
 // ----------------------------------------------------------------------------
 
 /** @internal */
-export class Interrupt extends FailureBase<"Interrupt"> implements Cause.Interrupt {
+export class Interrupt extends ReasonBase<"Interrupt"> implements Cause.Interrupt {
   readonly fiberId: number | undefined
   constructor(
     fiberId: number | undefined,
@@ -120,7 +121,7 @@ export class Interrupt extends FailureBase<"Interrupt"> implements Cause.Interru
   }
   [Equal.symbol](that: any): boolean {
     return (
-      failureIsInterrupt(that) &&
+      isInterruptReason(that) &&
       this.fiberId === that.fiberId &&
       this.annotations === that.annotations
     )
@@ -133,7 +134,7 @@ export class Interrupt extends FailureBase<"Interrupt"> implements Cause.Interru
 }
 
 /** @internal */
-export const failureInterrupt = (fiberId?: number | undefined): Cause.Interrupt => new Interrupt(fiberId)
+export const makeInterruptReason = (fiberId?: number | undefined): Cause.Interrupt => new Interrupt(fiberId)
 
 /** @internal */
 export const causeInterrupt = (
@@ -141,57 +142,57 @@ export const causeInterrupt = (
 ): Cause.Cause<never> => new CauseImpl([new Interrupt(fiberId)])
 
 /** @internal */
-export const causeHasFail = <E>(self: Cause.Cause<E>): boolean => self.failures.some(failureIsFail)
+export const hasFails = <E>(self: Cause.Cause<E>): boolean => self.reasons.some(isFailReason)
 
 /** @internal */
-export const causeFilterFail = <E>(self: Cause.Cause<E>): Cause.Fail<E> | Filter.fail<Cause.Cause<never>> => {
-  const failure = self.failures.find(failureIsFail)
-  return failure ? failure : Filter.fail(self as Cause.Cause<never>)
+export const findFail = <E>(self: Cause.Cause<E>): Cause.Fail<E> | Filter.fail<Cause.Cause<never>> => {
+  const reason = self.reasons.find(isFailReason)
+  return reason ? reason : Filter.fail(self as Cause.Cause<never>)
 }
 
 /** @internal */
-export const causeFilterError = <E>(self: Cause.Cause<E>): E | Filter.fail<Cause.Cause<never>> => {
-  for (let i = 0; i < self.failures.length; i++) {
-    const failure = self.failures[i]
-    if (failure._tag === "Fail") {
-      return failure.error
+export const findError = <E>(self: Cause.Cause<E>): E | Filter.fail<Cause.Cause<never>> => {
+  for (let i = 0; i < self.reasons.length; i++) {
+    const reason = self.reasons[i]
+    if (reason._tag === "Fail") {
+      return reason.error
     }
   }
   return Filter.fail(self as Cause.Cause<never>)
 }
 
 /** @internal */
-export const causeErrorOption = Filter.toOption(causeFilterError)
+export const findErrorOption = Filter.toOption(findError)
 
 /** @internal */
-export const causeHasDie = <E>(self: Cause.Cause<E>): boolean => self.failures.some(failureIsDie)
+export const hasDies = <E>(self: Cause.Cause<E>): boolean => self.reasons.some(isDieReason)
 
 /** @internal */
-export const causeFilterDie = <E>(self: Cause.Cause<E>): Cause.Die | Filter.fail<Cause.Cause<E>> => {
-  const failure = self.failures.find(failureIsDie)
-  return failure ? failure : Filter.fail(self)
+export const findDie = <E>(self: Cause.Cause<E>): Cause.Die | Filter.fail<Cause.Cause<E>> => {
+  const reason = self.reasons.find(isDieReason)
+  return reason ? reason : Filter.fail(self)
 }
 
 /** @internal */
-export const causeFilterDefect = <E>(self: Cause.Cause<E>): {} | Filter.fail<Cause.Cause<E>> => {
-  const failure = self.failures.find(failureIsDie)
-  return failure ? failure.defect as {} : Filter.fail(self)
+export const findDefect = <E>(self: Cause.Cause<E>): {} | Filter.fail<Cause.Cause<E>> => {
+  const reason = self.reasons.find(isDieReason)
+  return reason ? reason.defect as {} : Filter.fail(self)
 }
 
 /** @internal */
-export const causeHasInterrupt = <E>(self: Cause.Cause<E>): boolean => self.failures.some(failureIsInterrupt)
+export const hasInterrupts = <E>(self: Cause.Cause<E>): boolean => self.reasons.some(isInterruptReason)
 
 /** @internal */
-export const causeFilterInterrupt = <E>(self: Cause.Cause<E>): Cause.Interrupt | Filter.fail<Cause.Cause<E>> => {
-  const failure = self.failures.find(failureIsInterrupt)
-  return failure ? failure : Filter.fail(self)
+export const findInterrupt = <E>(self: Cause.Cause<E>): Cause.Interrupt | Filter.fail<Cause.Cause<E>> => {
+  const reason = self.reasons.find(isInterruptReason)
+  return reason ? reason : Filter.fail(self)
 }
 
 /** @internal */
 export const causeFilterInterruptors = <E>(self: Cause.Cause<E>): Set<number> | Filter.fail<Cause.Cause<E>> => {
   let interruptors: Set<number> | undefined
-  for (let i = 0; i < self.failures.length; i++) {
-    const f = self.failures[i]
+  for (let i = 0; i < self.reasons.length; i++) {
+    const f = self.reasons[i]
     if (f._tag !== "Interrupt") continue
     interruptors ??= new Set()
     if (f.fiberId !== undefined) {
@@ -209,16 +210,11 @@ export const causeInterruptors = <E>(self: Cause.Cause<E>): ReadonlySet<number> 
 const emptySet = new Set<number>()
 
 /** @internal */
-export const causeIsInterruptedOnly = <E>(self: Cause.Cause<E>): boolean => self.failures.every(failureIsInterrupt)
+export const hasInterruptsOnly = <E>(self: Cause.Cause<E>): boolean => self.reasons.every(isInterruptReason)
 
 /** @internal */
-export const failureIsInterrupt = <E>(
-  self: Cause.Failure<E>
-): self is Cause.Interrupt => isTagged(self, "Interrupt")
-
-/** @internal */
-export const failureAnnotations = <E>(
-  self: Cause.Failure<E>
+export const reasonAnnotations = <E>(
+  self: Cause.Reason<E>
 ): ServiceMap.ServiceMap<never> => ServiceMap.makeUnsafe(self.annotations)
 
 /** @internal */
@@ -226,7 +222,7 @@ export const causeAnnotations = <E>(
   self: Cause.Cause<E>
 ): ServiceMap.ServiceMap<never> => {
   const map = new Map<string, unknown>()
-  for (const f of self.failures) {
+  for (const f of self.reasons) {
     if (f.annotations.size > 0) {
       for (const [key, value] of f.annotations) {
         map.set(key, value)
@@ -237,19 +233,19 @@ export const causeAnnotations = <E>(
 }
 
 /** @internal */
-export const causeMerge: {
+export const causeCombine: {
   <E2>(that: Cause.Cause<E2>): <E>(self: Cause.Cause<E>) => Cause.Cause<E | E2>
   <E, E2>(self: Cause.Cause<E>, that: Cause.Cause<E2>): Cause.Cause<E | E2>
 } = dual(
   2,
   <E, E2>(self: Cause.Cause<E>, that: Cause.Cause<E2>): Cause.Cause<E | E2> => {
-    if (self.failures.length === 0) {
+    if (self.reasons.length === 0) {
       return that as Cause.Cause<E | E2>
-    } else if (that.failures.length === 0) {
+    } else if (that.reasons.length === 0) {
       return self as Cause.Cause<E | E2>
     }
     const newCause = new CauseImpl<E | E2>(
-      Arr.union(self.failures, that.failures)
+      Arr.union(self.reasons, that.reasons)
     )
     return Equal.equals(self, newCause) ? self : newCause
   }
@@ -263,14 +259,14 @@ export const causeMap: {
   2,
   <E, E2>(self: Cause.Cause<E>, f: (error: NoInfer<E>) => E2): Cause.Cause<E2> => {
     let hasFail = false
-    const failures = self.failures.map((failure) => {
-      if (failureIsFail(failure)) {
+    const failures = self.reasons.map((failure) => {
+      if (isFailReason(failure)) {
         hasFail = true
         return new Fail(f(failure.error))
       }
       return failure
     })
-    return hasFail ? causeFromFailures(failures) : self as any
+    return hasFail ? causeFromReasons(failures) : self as any
   }
 )
 
@@ -287,8 +283,8 @@ export const causePartition = <E>(
     Die: [] as Array<Cause.Die>,
     Interrupt: [] as Array<Cause.Interrupt>
   }
-  for (let i = 0; i < self.failures.length; i++) {
-    obj[self.failures[i]._tag].push(self.failures[i] as any)
+  for (let i = 0; i < self.reasons.length; i++) {
+    obj[self.reasons[i]._tag].push(self.reasons[i] as any)
   }
   return obj
 }
@@ -310,13 +306,13 @@ export const causeSquash = <E>(self: Cause.Cause<E>): unknown => {
 export const causePrettyErrors = <E>(self: Cause.Cause<E>): Array<Error> => {
   const errors: Array<Error> = []
   const interrupts: Array<Cause.Interrupt> = []
-  if (self.failures.length === 0) return errors
+  if (self.reasons.length === 0) return errors
 
   const prevStackLimit = (Error as ErrorWithStackTraceLimit).stackTraceLimit
   ;(Error as ErrorWithStackTraceLimit)
     .stackTraceLimit = 1
 
-  for (const failure of self.failures) {
+  for (const failure of self.reasons) {
     if (failure._tag === "Interrupt") {
       interrupts.push(failure)
       continue
@@ -374,8 +370,7 @@ const causePrettyError = (
   return error
 }
 
-/** @internal */
-export const causePrettyMessage = (u: Record<string, unknown> | Error): string => {
+const causePrettyMessage = (u: Record<string, unknown> | Error): string => {
   if (typeof u.message === "string") {
     return u.message
   } else if (
@@ -459,7 +454,8 @@ const currentStackTrace = (frame: StackFrame): string => {
 export const causePretty = <E>(cause: Cause.Cause<E>): string =>
   causePrettyErrors<E>(cause).map((e) =>
     e.cause ? `${e.stack} {\n${renderErrorCause(e.cause as Error, "  ")}\n}` : e.stack
-  ).join("\n")
+  )
+    .join("\n")
 
 const renderErrorCause = (cause: Error, prefix: string) => {
   const lines = cause.stack!.split("\n")
@@ -579,7 +575,7 @@ export class FiberImpl<A = any, E = any> implements Fiber.Fiber<A, E> {
       cause = causeAnnotate(cause, annotations)
     }
     this._interruptedCause = this._interruptedCause
-      ? causeMerge(this._interruptedCause, cause)
+      ? causeCombine(this._interruptedCause, cause)
       : cause
     if (this.interruptible) {
       this.evaluate(failCause(this._interruptedCause) as any)
@@ -1043,7 +1039,7 @@ const asyncFinalizer: (
     }
   },
   [contE](cause, _fiber) {
-    return causeHasInterrupt(cause)
+    return hasInterrupts(cause)
       ? flatMap(this[args](), () => failCause(cause))
       : failCause(cause)
   }
@@ -1401,13 +1397,13 @@ export const raceAll = <Eff extends Effect.Effect<any, any, any>>(
       let doneCount = 0
       let done = false
       const fibers = new Set<Fiber.Fiber<any, any>>()
-      const failures: Array<Cause.Failure<any>> = []
+      const failures: Array<Cause.Reason<any>> = []
       const onExit = (exit: Exit.Exit<any, any>, fiber: Fiber.Fiber<any, any>, i: number) => {
         doneCount++
         if (exit._tag === "Failure") {
-          failures.push(...exit.cause.failures)
+          failures.push(...exit.cause.reasons)
           if (doneCount >= len) {
-            resume(failCause(causeFromFailures(failures)))
+            resume(failCause(causeFromReasons(failures)))
           }
           return
         }
@@ -1746,7 +1742,7 @@ export const catchEager: {
   ): Effect.Effect<A | B, E2, R | R2> => {
     if (effectIsExit(self)) {
       if (self._tag === "Success") return self as Exit.Exit<A>
-      const error = causeFilterError(self.cause)
+      const error = findError(self.cause)
       if (Filter.isFail(error)) return self as Exit.Exit<never>
       return f(error)
     }
@@ -1795,29 +1791,29 @@ export const exitFilterCause = <A, E>(
 /** @internal */
 export const exitFilterError = Filter.composePassthrough(
   exitFilterCause,
-  causeFilterError
+  findError
 )
 
 /** @internal */
 export const exitFilterDefect = Filter.composePassthrough(
   exitFilterCause,
-  causeFilterDefect
+  findDefect
 )
 
 /** @internal */
 export const exitHasInterrupt = <A, E>(
   self: Exit.Exit<A, E>
-): self is Exit.Failure<A, E> => self._tag === "Failure" && causeHasInterrupt(self.cause)
+): self is Exit.Failure<A, E> => self._tag === "Failure" && hasInterrupts(self.cause)
 
 /** @internal */
 export const exitHasDie = <A, E>(
   self: Exit.Exit<A, E>
-): self is Exit.Failure<A, E> => self._tag === "Failure" && causeHasDie(self.cause)
+): self is Exit.Failure<A, E> => self._tag === "Failure" && hasDies(self.cause)
 
 /** @internal */
 export const exitHasFail = <A, E>(
   self: Exit.Exit<A, E>
-): self is Exit.Failure<A, E> => self._tag === "Failure" && causeHasFail(self.cause)
+): self is Exit.Failure<A, E> => self._tag === "Failure" && hasFails(self.cause)
 
 /** @internal */
 export const exitVoid: Exit.Exit<void> = exitSucceed(void 0)
@@ -1840,7 +1836,7 @@ export const exitMapError: {
   2,
   <A, E, E2>(self: Exit.Exit<A, E>, f: (a: NoInfer<E>) => E2): Exit.Exit<A, E2> => {
     if (self._tag === "Success") return self as Exit.Exit<A>
-    const error = causeFilterError(self.cause)
+    const error = findError(self.cause)
     if (Filter.isFail(error)) return self as Exit.Exit<never>
     return exitFail(f(error))
   }
@@ -1862,7 +1858,7 @@ export const exitMapBoth: {
     options: { readonly onFailure: (e: E) => E2; readonly onSuccess: (a: A) => A2 }
   ): Exit.Exit<A2, E2> => {
     if (self._tag === "Success") return exitSucceed(options.onSuccess(self.value))
-    const error = causeFilterError(self.cause)
+    const error = findError(self.cause)
     if (Filter.isFail(error)) return self as Exit.Exit<never>
     return exitFail(options.onFailure(error))
   }
@@ -1931,13 +1927,13 @@ export const exitAsVoidAll = <I extends Iterable<Exit.Exit<any, any>>>(
   void,
   I extends Iterable<Exit.Exit<infer _A, infer _E>> ? _E : never
 > => {
-  const failures: Array<Cause.Failure<any>> = []
+  const failures: Array<Cause.Reason<any>> = []
   for (const exit of exits) {
     if (exit._tag === "Failure") {
-      failures.push(...exit.cause.failures)
+      failures.push(...exit.cause.reasons)
     }
   }
-  return failures.length === 0 ? exitVoid : exitFailCause(causeFromFailures(failures))
+  return failures.length === 0 ? exitVoid : exitFailCause(causeFromReasons(failures))
 }
 
 /** @internal */
@@ -2426,7 +2422,7 @@ export const catch_: {
   <A, E, R, B, E2, R2>(
     self: Effect.Effect<A, E, R>,
     f: (a: NoInfer<E>) => Effect.Effect<B, E2, R2>
-  ): Effect.Effect<A | B, E2, R | R2> => catchCauseFilter(self, causeFilterError, (e) => f(e))
+  ): Effect.Effect<A | B, E2, R | R2> => catchCauseFilter(self, findError, (e) => f(e))
 )
 
 /** @internal */
@@ -2445,7 +2441,7 @@ export const catchDefect: {
   <A, E, R, B, E2, R2>(
     self: Effect.Effect<A, E, R>,
     f: (defect: unknown) => Effect.Effect<B, E2, R2>
-  ): Effect.Effect<A | B, E | E2, R | R2> => catchCauseFilter(self, causeFilterDefect, f)
+  ): Effect.Effect<A | B, E | E2, R | R2> => catchCauseFilter(self, findDefect, f)
 )
 
 /** @internal */
@@ -2508,7 +2504,7 @@ export const tapError: {
   <A, E, R, B, E2, R2>(
     self: Effect.Effect<A, E, R>,
     f: (e: NoInfer<E>) => Effect.Effect<B, E2, R2>
-  ): Effect.Effect<A, E | E2, R | R2> => tapCauseFilter(self, causeFilterError, (e) => f(e))
+  ): Effect.Effect<A, E | E2, R | R2> => tapCauseFilter(self, findError, (e) => f(e))
 )
 
 /** @internal */
@@ -2575,7 +2571,7 @@ export const tapDefect: {
   <A, E, R, B, E2, R2>(
     self: Effect.Effect<A, E, R>,
     f: (defect: unknown) => Effect.Effect<B, E2, R2>
-  ): Effect.Effect<A, E | E2, R | R2> => tapCauseFilter(self, causeFilterDefect, (_) => f(_))
+  ): Effect.Effect<A, E | E2, R | R2> => tapCauseFilter(self, findDefect, (_) => f(_))
 )
 
 /** @internal */
@@ -2634,7 +2630,7 @@ export const catchFilter: {
     orElse?: ((e: X) => Effect.Effect<A3, E3, R3>) | undefined
   ): Effect.Effect<A | A2 | A3, E2 | E3, R | R2 | R3> =>
     catchCause(self, (cause): Effect.Effect<A2 | A3, E2 | E3, R2 | R3> => {
-      const error = causeFilterError(cause)
+      const error = findError(cause)
       if (Filter.isFail(error)) return failCause(error.fail)
       const result = filter(error)
       if (Filter.isFail(result)) {
@@ -3110,7 +3106,7 @@ export const ignore: <
       const logEffect = logWithLevel(options.log === true ? undefined : options.log)
       return matchCauseEffect(self, {
         onFailure(cause) {
-          const failure = causeFilterFail(cause)
+          const failure = findFail(cause)
           return Filter.isFail(failure) ? failCause(failure.fail) : logEffect(cause)
         },
         onSuccess: (_) => void_
@@ -3255,7 +3251,7 @@ export const matchEffect: {
   ): Effect.Effect<A2 | A3, E2 | E3, R2 | R3 | R> =>
     matchCauseEffect(self, {
       onFailure: (cause) => {
-        const fail = cause.failures.find(failureIsFail)
+        const fail = cause.reasons.find(isFailReason)
         return fail
           ? internalCall(() => options.onFailure(fail.error))
           : failCause(cause as Cause.Cause<never>)
@@ -3316,7 +3312,7 @@ export const matchEager: {
   ): Effect.Effect<A2 | A3, never, R> => {
     if (effectIsExit(self)) {
       if (self._tag === "Success") return exitSucceed(options.onSuccess(self.value))
-      const error = causeFilterError(self.cause)
+      const error = findError(self.cause)
       if (Filter.isFail(error)) return self as Exit.Exit<never>
       return exitSucceed(options.onFailure(error))
     }
@@ -4121,7 +4117,7 @@ export const forEach: {
 
     return callback((resume) => {
       const fibers = new Set<Fiber.Fiber<unknown, unknown>>()
-      const failures: Array<Cause.Failure<E>> = []
+      const failures: Array<Cause.Reason<E>> = []
       let failed = false
       let inProgress = 0
       let doneCount = 0
@@ -4146,10 +4142,10 @@ export const forEach: {
                 if (!failed) {
                   failed = true
                   length = index
-                  failures.push(...exit.cause.failures)
+                  failures.push(...exit.cause.reasons)
                   fibers.forEach((fiber) => fiber.interruptUnsafe(parent.id, annotations))
                 } else {
-                  for (const f of exit.cause.failures) {
+                  for (const f of exit.cause.reasons) {
                     if (f._tag === "Interrupt") continue
                     failures.push(f)
                   }
@@ -4160,7 +4156,7 @@ export const forEach: {
               doneCount++
               inProgress--
               if (doneCount === length) {
-                resume(failures.length > 0 ? exitFailCause(causeFromFailures(failures)) : succeed(out))
+                resume(failures.length > 0 ? exitFailCause(causeFromReasons(failures)) : succeed(out))
               } else if (!pumping && !failed && inProgress < concurrency) {
                 pump()
               }
@@ -5485,7 +5481,7 @@ export const logWithLevel = (level?: LogLevel.LogLevel) =>
       } else {
         message = message.slice(0, i).concat(message.slice(i + 1))
       }
-      cause = cause ? causeFromFailures(cause.failures.concat(msg.failures)) : msg
+      cause = cause ? causeFromReasons(cause.reasons.concat(msg.reasons)) : msg
       i--
     }
   }
@@ -5623,7 +5619,7 @@ const prettyLoggerTty = (options: {
       log(firstLine)
       if (!processIsBun) console.group()
 
-      if (cause.failures.length > 0) {
+      if (cause.reasons.length > 0) {
         log(causePretty(cause))
       }
 
@@ -5686,7 +5682,7 @@ const prettyLoggerBrowser = (options: {
 
       console.groupCollapsed(firstLine, ...firstParams)
 
-      if (cause.failures.length > 0) {
+      if (cause.reasons.length > 0) {
         console.error(causePretty(cause))
       }
 
@@ -5714,7 +5710,7 @@ const prettyLoggerBrowser = (options: {
 /** @internal */
 export const defaultLogger = loggerMake<unknown, void>(({ cause, date, fiber, logLevel, message }) => {
   const message_ = Array.isArray(message) ? message.slice() : [message]
-  if (cause.failures.length > 0) {
+  if (cause.reasons.length > 0) {
     message_.unshift(causePretty(cause))
   }
   const now = date.getTime()
@@ -5744,7 +5740,7 @@ export const tracerLogger = loggerMake<unknown, void>(({ cause, fiber, logLevel,
   }
   attributes["effect.fiberId"] = fiber.id
   attributes["effect.logLevel"] = logLevel.toUpperCase()
-  if (cause.failures.length > 0) {
+  if (cause.reasons.length > 0) {
     attributes["effect.cause"] = causePretty(cause)
   }
   span.event(

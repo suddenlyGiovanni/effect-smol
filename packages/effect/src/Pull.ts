@@ -86,7 +86,7 @@ export const catchDone: {
  * @since 4.0.0
  * @category Done
  */
-export const isDoneCause = <E>(cause: Cause.Cause<E>): boolean => cause.failures.some(isDoneFailure)
+export const isDoneCause = <E>(cause: Cause.Cause<E>): boolean => cause.reasons.some(isDoneFailure)
 
 /**
  * Checks if a Cause failure is a done error.
@@ -95,7 +95,7 @@ export const isDoneCause = <E>(cause: Cause.Cause<E>): boolean => cause.failures
  * @category Done
  */
 export const isDoneFailure = <E>(
-  failure: Cause.Failure<E>
+  failure: Cause.Reason<E>
 ): failure is Cause.Fail<E & Cause.Done<any>> => failure._tag === "Fail" && Cause.isDone(failure.error)
 
 /**
@@ -107,7 +107,7 @@ export const isDoneFailure = <E>(
 export const filterDone: <E>(input: Cause.Cause<E>) => Cause.Done.Only<E> | Filter.fail<Cause.Cause<ExcludeDone<E>>> =
   Filter
     .composePassthrough(
-      Cause.filterError,
+      Cause.findError,
       (e) => Cause.isDone(e) ? e : Filter.fail(e)
     ) as any
 
@@ -120,7 +120,7 @@ export const filterDone: <E>(input: Cause.Cause<E>) => Cause.Done.Only<E> | Filt
 export const filterDoneVoid: <E extends Cause.Done>(
   input: Cause.Cause<E>
 ) => Cause.Done | Filter.fail<Cause.Cause<Exclude<E, Cause.Done>>> = Filter.composePassthrough(
-  Cause.filterError,
+  Cause.findError,
   (e) => Cause.isDone(e) ? e : Filter.fail(e)
 ) as any
 
@@ -131,7 +131,7 @@ export const filterDoneVoid: <E extends Cause.Done>(
 export const filterNoDone: <E>(
   input: Cause.Cause<E>
 ) => Cause.Cause<ExcludeDone<E>> | Filter.fail<Cause.Cause<E>> = Filter
-  .fromPredicate((cause: Cause.Cause<unknown>) => cause.failures.every((failure) => !isDoneFailure(failure))) as any
+  .fromPredicate((cause: Cause.Cause<unknown>) => cause.reasons.every((failure) => !isDoneFailure(failure))) as any
 
 /**
  * Filters a Cause to extract the leftover value from done errors.
@@ -142,7 +142,7 @@ export const filterNoDone: <E>(
 export const filterDoneLeftover: <E>(
   cause: Cause.Cause<E>
 ) => Cause.Done.Extract<E> | Filter.fail<Cause.Cause<ExcludeDone<E>>> = Filter.composePassthrough(
-  Cause.filterError,
+  Cause.findError,
   (e) => Cause.isDone(e) ? e.value : Filter.fail(e)
 ) as any
 

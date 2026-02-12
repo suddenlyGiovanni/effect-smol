@@ -879,8 +879,8 @@ export const failCause = <E>(cause: Cause.Cause<E>): Stream<never, E> => fromCha
  *   const message = Exit.match(exit, {
  *     onSuccess: () => "Exit.Success",
  *     onFailure: (cause) => {
- *       const failure = cause.failures[0]
- *       const defect = Cause.failureIsDie(failure) ? String(failure.defect) : "Unexpected failure"
+ *       const reason = cause.reasons[0]
+ *       const defect = Cause.isDieReason(reason) ? String(reason.defect) : "Unexpected reason"
  *       return `Exit.Failure(${defect})`
  *     }
  *   })
@@ -4592,7 +4592,7 @@ export const catchCause: {
  *
  * const stream = Stream.make(1, 2).pipe(
  *   Stream.concat(Stream.fail("boom")),
- *   Stream.tapCause((cause) => Console.log(Cause.isFailure(cause))),
+ *   Stream.tapCause((cause) => Console.log(Cause.isReason(cause))),
  *   Stream.catch(() => Stream.succeed(0))
  * )
  *
@@ -5345,7 +5345,7 @@ export const mapError: {
  *   const failingStream = Stream.fail("NetworkError")
  *   const recovered = Stream.catchCauseFilter(
  *     failingStream,
- *     Cause.filterError,
+ *     Cause.findError,
  *     (error) => Stream.make(`Recovered: ${error}`)
  *   )
  *
