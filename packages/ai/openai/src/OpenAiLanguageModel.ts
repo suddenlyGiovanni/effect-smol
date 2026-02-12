@@ -1414,7 +1414,7 @@ const makeStreamResponse = Effect.fnUntraced(
           case "response.output_item.added": {
             switch (event.item.type) {
               case "apply_patch_call": {
-                const toolId = event.item.id
+                const toolId = event.item.call_id
                 const toolName = toolNameMapper.getCustomName("apply_patch")
                 const operation = event.item.operation
                 activeToolCalls[event.output_index] = {
@@ -1449,7 +1449,7 @@ const makeStreamResponse = Effect.fnUntraced(
                     type: "tool-params-delta",
                     id: toolId,
                     delta: `{"call_id":"${InternalUtilities.escapeJSONDelta(toolId)}",` +
-                      `"operation"{"type":"${InternalUtilities.escapeJSONDelta(operation.type)}",` +
+                      `"operation":{"type":"${InternalUtilities.escapeJSONDelta(operation.type)}",` +
                       `"path":"${InternalUtilities.escapeJSONDelta(operation.path)}","diff":"`
                   })
                 }
@@ -1752,7 +1752,7 @@ const makeStreamResponse = Effect.fnUntraced(
               }
 
               case "local_shell_call": {
-                const toolName = toolNameMapper.getCustomName("")
+                const toolName = toolNameMapper.getCustomName("local_shell")
                 parts.push({
                   type: "tool-call",
                   id: event.item.call_id,
@@ -2568,7 +2568,7 @@ const getUsage = (usage: Generated.ResponseUsage | null | undefined): Response.U
   const inputTokens = usage.input_tokens
   const outputTokens = usage.output_tokens
   const cachedTokens = usage.input_tokens_details.cached_tokens
-  const reasoningTokens = usage.input_tokens_details.cached_tokens
+  const reasoningTokens = usage.output_tokens_details.reasoning_tokens
 
   return {
     inputTokens: {
