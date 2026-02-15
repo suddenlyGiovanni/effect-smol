@@ -32,7 +32,88 @@ export {
 // @barrel: Auto-generated exports. Do not edit manually.
 
 /**
- * This module provides utility functions for working with arrays in TypeScript.
+ * Utilities for working with immutable arrays (and non-empty arrays) in a
+ * functional style. All functions treat arrays as immutable — they return new
+ * arrays rather than mutating the input.
+ *
+ * ## Mental model
+ *
+ * - **`Array<A>`** is a standard JS array. All functions in this module return
+ *   new arrays; the input is never mutated.
+ * - **`NonEmptyReadonlyArray<A>`** (`readonly [A, ...Array<A>]`) is a readonly
+ *   array guaranteed to have at least one element. Many functions preserve or
+ *   require this guarantee at the type level.
+ * - **`NonEmptyArray<A>`** is the mutable counterpart: `[A, ...Array<A>]`.
+ * - Most functions are **dual** — they can be called either as
+ *   `Array.fn(array, arg)` (data-first) or piped as
+ *   `pipe(array, Array.fn(arg))` (data-last).
+ * - Functions that access elements by index return `Option<A>` for safety; use
+ *   the `*NonEmpty` variants (e.g. {@link headNonEmpty}) when you already know
+ *   the array is non-empty.
+ * - Set-like operations ({@link union}, {@link intersection},
+ *   {@link difference}) use `Equal.equivalence()` by default; use the `*With`
+ *   variants for custom equality.
+ *
+ * ## Common tasks
+ *
+ * - **Create** an array: {@link make}, {@link of}, {@link empty},
+ *   {@link fromIterable}, {@link range}, {@link makeBy}, {@link replicate},
+ *   {@link unfold}
+ * - **Access** elements: {@link head}, {@link last}, {@link get}, {@link tail},
+ *   {@link init}
+ * - **Transform**: {@link map}, {@link flatMap}, {@link flatten},
+ *   {@link filterMap}
+ * - **Filter**: {@link filter}, {@link partition}, {@link dedupe}
+ * - **Combine**: {@link append}, {@link prepend}, {@link appendAll},
+ *   {@link prependAll}, {@link zip}, {@link cartesian}
+ * - **Split**: {@link splitAt}, {@link chunksOf}, {@link span}, {@link window}
+ * - **Search**: {@link findFirst}, {@link findLast}, {@link contains}
+ * - **Sort**: {@link sort}, {@link sortBy}, {@link sortWith}
+ * - **Fold**: {@link reduce}, {@link scan}, {@link join}
+ * - **Group**: {@link groupBy}, {@link group}, {@link groupWith}
+ * - **Set operations**: {@link union}, {@link intersection},
+ *   {@link difference}
+ * - **Match** on empty vs non-empty: {@link match}, {@link matchLeft},
+ *   {@link matchRight}
+ * - **Check** properties: {@link isArray}, {@link isArrayNonEmpty},
+ *   {@link every}, {@link some}
+ *
+ * ## Gotchas
+ *
+ * - {@link fromIterable} returns the original array reference when given an
+ *   array; if you need a copy, use {@link copy}.
+ * - `sort`, `reverse`, etc. always allocate a new array — the input is never
+ *   mutated.
+ * - {@link makeBy} and {@link replicate} normalize `n` to an integer >= 1 —
+ *   they never produce an empty array.
+ * - {@link range}`(start, end)` is inclusive on both ends. If `start > end` it
+ *   returns `[start]`.
+ * - Functions returning `Option` (e.g. {@link head}, {@link findFirst}) return
+ *   `Option.none()` for empty inputs — they never throw.
+ *
+ * ## Quickstart
+ *
+ * **Example** (Basic array operations)
+ *
+ * ```ts
+ * import { Array } from "effect"
+ *
+ * const numbers = Array.make(1, 2, 3, 4, 5)
+ *
+ * const doubled = Array.map(numbers, (n) => n * 2)
+ * console.log(doubled) // [2, 4, 6, 8, 10]
+ *
+ * const evens = Array.filter(numbers, (n) => n % 2 === 0)
+ * console.log(evens) // [2, 4]
+ *
+ * const sum = Array.reduce(numbers, 0, (acc, n) => acc + n)
+ * console.log(sum) // 15
+ * ```
+ *
+ * @see {@link make} — create a non-empty array from elements
+ * @see {@link map} — transform each element
+ * @see {@link filter} — keep elements matching a predicate
+ * @see {@link reduce} — fold an array to a single value
  *
  * @since 2.0.0
  */
@@ -40,7 +121,7 @@ export * as Array from "./Array.ts"
 
 /**
  * This module provides utility functions and type class instances for working with the `BigDecimal` type in TypeScript.
- * It includes functions for basic arithmetic operations, as well as type class instances for `Equivalence` and `Order`.
+ * It includes functions for basic arithmetic operations.
  *
  * A `BigDecimal` allows storing any real number to arbitrary precision; which avoids common floating point errors
  * (such as 0.1 + 0.2 ≠ 0.3) at the cost of complexity.
@@ -57,8 +138,7 @@ export * as BigDecimal from "./BigDecimal.ts"
 
 /**
  * This module provides utility functions and type class instances for working with the `bigint` type in TypeScript.
- * It includes functions for basic arithmetic operations, as well as type class instances for
- * `Equivalence` and `Order`.
+ * It includes functions for basic arithmetic operations.
  *
  * @since 2.0.0
  */
@@ -66,8 +146,7 @@ export * as BigInt from "./BigInt.ts"
 
 /**
  * This module provides utility functions and type class instances for working with the `boolean` type in TypeScript.
- * It includes functions for basic boolean operations, as well as type class instances for
- * `Equivalence` and `Order`.
+ * It includes functions for basic boolean operations.
  *
  * @since 2.0.0
  */
@@ -1872,8 +1951,7 @@ export * as NullOr from "./NullOr.ts"
 
 /**
  * This module provides utility functions and type class instances for working with the `number` type in TypeScript.
- * It includes functions for basic arithmetic operations, as well as type class instances for
- * `Equivalence` and `Order`.
+ * It includes functions for basic arithmetic operations.
  *
  * @since 2.0.0
  */
@@ -2401,8 +2479,7 @@ export * as Stream from "./Stream.ts"
 
 /**
  * This module provides utility functions and type class instances for working with the `string` type in TypeScript.
- * It includes functions for basic string manipulation, as well as type class instances for
- * `Equivalence` and `Order`.
+ * It includes functions for basic string manipulation.
  *
  * @since 2.0.0
  */
@@ -2525,9 +2602,58 @@ export * as TxRef from "./TxRef.ts"
 export * as TxSemaphore from "./TxSemaphore.ts"
 
 /**
- * A collection of types that are commonly used types.
+ * Type-level utility types for TypeScript.
  *
- * @since 2.0.0
+ * This module provides generic type aliases used throughout the Effect
+ * ecosystem. Everything here is compile-time only — there are no runtime
+ * values. Use these types to manipulate object shapes, tagged unions, tuples,
+ * and variance markers at the type level.
+ *
+ * ## Mental model
+ *
+ * - **Tagged union**: a union of objects each having a discriminating
+ *   `_tag: string` field. {@link Tags}, {@link ExtractTag}, and
+ *   {@link ExcludeTag} operate on these.
+ * - **Reason**: a nested error pattern where an error has a `reason` field
+ *   containing a tagged union of sub-errors. {@link ReasonOf},
+ *   {@link ReasonTags}, {@link ExtractReason}, and {@link ExcludeReason} work
+ *   with this pattern.
+ * - **Variance markers**: {@link Covariant}, {@link Contravariant}, and
+ *   {@link Invariant} are function-type aliases encoding variance for phantom
+ *   type parameters.
+ * - **Simplify**: {@link Simplify} flattens intersection types (`A & B`) into
+ *   a single object type for cleaner IDE tooltips.
+ * - **Concurrency**: {@link Concurrency} is a union type
+ *   (`number | "unbounded" | "inherit"`) used across Effect APIs that accept
+ *   concurrency options.
+ * - **Marker types**: {@link unassigned} and {@link unhandled} are branded
+ *   interfaces used internally to represent missing or unhandled type
+ *   parameters.
+ *
+ * ## Common tasks
+ *
+ * - Flatten an intersection for readability → {@link Simplify}
+ * - Check type equality at compile time → {@link Equals} / {@link EqualsWith}
+ * - Merge two object types → {@link MergeLeft} / {@link MergeRight}
+ * - Work with tagged unions → {@link Tags} / {@link ExtractTag} / {@link ExcludeTag}
+ * - Work with nested reason errors → {@link ReasonOf} / {@link ExtractReason}
+ * - Create fixed-length tuples → {@link TupleOf} / {@link TupleOfAtLeast}
+ * - Strip `readonly` modifiers → {@link Mutable} / {@link DeepMutable}
+ * - Encode variance in phantom types → {@link Covariant} / {@link Contravariant} / {@link Invariant}
+ * - Check if a type is a union → {@link IsUnion}
+ *
+ * ## Gotchas
+ *
+ * - {@link TupleOf} with a non-literal `number` (e.g. `TupleOf<number, string>`)
+ *   degrades to `Array<string>`.
+ * - {@link MergeRecord} is an alias for {@link MergeLeft}; prefer
+ *   {@link MergeLeft} or {@link MergeRight} for clarity.
+ * - {@link NoInfer} uses the `[A][A extends any ? 0 : never]` trick, not the
+ *   built-in `NoInfer` from TypeScript 5.4+.
+ * - {@link DeepMutable} recurses into `Map`, `Set`, arrays, and objects but
+ *   stops at primitives and functions.
+ *
+ * @since 4.0.0
  */
 export * as Types from "./Types.ts"
 
