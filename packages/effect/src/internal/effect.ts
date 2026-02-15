@@ -632,7 +632,7 @@ export class FiberImpl<A = any, E = any> implements Fiber.Fiber<A, E> {
           current = flatMap(yieldNow, () => prev as any) as any
         }
         current = this.currentTracerContext
-          ? this.currentTracerContext(() => (current as any)[evaluate](this), this)
+          ? this.currentTracerContext(current as any, this)
           : (current as any)[evaluate](this)
         if (currentLoop !== this.currentLoopCount) {
           // another effect has taken over the loop,
@@ -1992,7 +1992,9 @@ export const updateServices: {
   ): Effect.Effect<A, E, R2> =>
     withFiber<A, E, R2>((fiber) => {
       const prev = fiber.services as ServiceMap.ServiceMap<R2>
-      fiber.setServices(f(prev))
+      const nextServices = f(prev)
+      if (prev === nextServices) return self as any
+      fiber.setServices(nextServices)
       const newServices = new Map<string, unknown>()
       for (const [key, value] of fiber.services.mapUnsafe) {
         if (!prev.mapUnsafe.has(key) || value !== prev.mapUnsafe.get(key)) {
@@ -2034,7 +2036,9 @@ export const updateService: {
   ): Effect.Effect<XA, E, R | I> =>
     withFiber((fiber) => {
       const prev = ServiceMap.getUnsafe(fiber.services, service)
-      fiber.setServices(ServiceMap.add(fiber.services, service, f(prev)))
+      const next = f(prev)
+      if (prev === next) return self
+      fiber.setServices(ServiceMap.add(fiber.services, service, next))
       return onExit(self, () => fiber.setServices(ServiceMap.add(fiber.services, service, prev)))
     })
 )
@@ -2104,6 +2108,7 @@ const provideServiceImpl = <A, E, R, I, S>(
 ): Effect.Effect<A, E, Exclude<R, I>> =>
   withFiber((fiber) => {
     const prev = ServiceMap.getOption(fiber.services, service)
+    if (prev._tag === "Some" && prev.value === implementation) return self
     fiber.setServices(ServiceMap.add(fiber.services, service, implementation))
     return onExit(self, () => fiber.setServices(ServiceMap.addOrOmit(fiber.services, service, prev)))
   }) as any
