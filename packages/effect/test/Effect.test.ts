@@ -1514,7 +1514,7 @@ describe("Effect", () => {
         assert.deepStrictEqual(tapped, [])
       }))
 
-    it.effect("catchIf", () =>
+    it.effect("catchIf with refinement", () =>
       Effect.gen(function*() {
         interface ErrorA {
           readonly _tag: "ErrorA"
@@ -1531,7 +1531,7 @@ describe("Effect", () => {
         assert.deepStrictEqual(result, Exit.fail({ _tag: "ErrorB" as const }))
       }))
 
-    it.effect("catchIf orElse", () =>
+    it.effect("catchIf with refinement orElse", () =>
       Effect.gen(function*() {
         interface ErrorA {
           readonly _tag: "ErrorA"
@@ -1604,25 +1604,259 @@ describe("Effect", () => {
     })
   })
 
-  describe("catchCauseFilter", () => {
+  describe("catchCauseIf", () => {
     it.effect("first argument as success", () =>
       Effect.gen(function*() {
-        const result = yield* Effect.catchCauseFilter(Effect.succeed(1), (_) => Filter.fail(_), () => Effect.fail("e2"))
+        const result = yield* Effect.catchCauseIf(Effect.succeed(1), (_) => Filter.fail(_), () => Effect.fail("e2"))
         assert.deepStrictEqual(result, 1)
       }))
     it.effect("first argument as failure and predicate return false", () =>
       Effect.gen(function*() {
         const result = yield* Effect.flip(
-          Effect.catchCauseFilter(Effect.fail("e1" as const), (_) => Filter.fail(_), () => Effect.fail("e2" as const))
+          Effect.catchCauseIf(Effect.fail("e1" as const), (_) => Filter.fail(_), () => Effect.fail("e2" as const))
         )
         assert.deepStrictEqual(result, "e1")
       }))
     it.effect("first argument as failure and predicate return true", () =>
       Effect.gen(function*() {
         const result = yield* Effect.flip(
-          Effect.catchCauseFilter(Effect.fail("e1" as const), (e) => e, () => Effect.fail("e2" as const))
+          Effect.catchCauseIf(Effect.fail("e1" as const), (e) => Filter.pass(e), () => Effect.fail("e2" as const))
         )
         assert.deepStrictEqual(result, "e2")
+      }))
+  })
+
+  describe("catchIf with predicate", () => {
+    it.effect("predicate match recovers", () =>
+      Effect.gen(function*() {
+        const result = yield* Effect.catchIf(
+          Effect.fail("e1"),
+          (e) => typeof e === "string",
+          (e) => Effect.succeed(`recovered: ${e}`)
+        )
+        assert.deepStrictEqual(result, "recovered: e1")
+      }))
+    it.effect("predicate no match preserves error", () =>
+      Effect.gen(function*() {
+        const result = yield* Effect.exit(
+          Effect.catchIf(
+            Effect.fail("e1" as const),
+            (_e) => false,
+            () => Effect.succeed("recovered")
+          )
+        )
+        assert.deepStrictEqual(result, Exit.fail("e1"))
+      }))
+  })
+
+  describe("catchCauseIf with predicate", () => {
+    it.effect("predicate match recovers", () =>
+      Effect.gen(function*() {
+        const result = yield* Effect.catchCauseIf(
+          Effect.fail("e1"),
+          Cause.hasFails,
+          (cause) => Effect.succeed(`recovered: ${Cause.squash(cause)}`)
+        )
+        assert.deepStrictEqual(result, "recovered: e1")
+      }))
+    it.effect("predicate no match preserves error", () =>
+      Effect.gen(function*() {
+        const result = yield* Effect.exit(
+          Effect.catchCauseIf(
+            Effect.fail("e1" as const),
+            constFalse,
+            () => Effect.succeed("recovered")
+          )
+        )
+        assert.deepStrictEqual(result, Exit.fail("e1"))
+      }))
+  })
+
+  describe("tapCauseIf", () => {
+    it.effect("filter match taps", () =>
+      Effect.gen(function*() {
+        const tapped: Array<string> = []
+        const result = yield* Effect.exit(
+          Effect.tapCauseIf(
+            Effect.fail("e1"),
+            (cause) => Filter.pass(cause),
+            (cause) => Effect.sync(() => tapped.push(Cause.squash(cause) as string))
+          )
+        )
+        assert.deepStrictEqual(tapped, ["e1"])
+        assert.deepStrictEqual(result, Exit.fail("e1"))
+      }))
+    it.effect("filter no match skips tap", () =>
+      Effect.gen(function*() {
+        const tapped: Array<string> = []
+        const result = yield* Effect.exit(
+          Effect.tapCauseIf(
+            Effect.fail("e1"),
+            (cause) => Filter.fail(cause),
+            () => Effect.sync(() => tapped.push("tapped"))
+          )
+        )
+        assert.deepStrictEqual(tapped, [])
+        assert.deepStrictEqual(result, Exit.fail("e1"))
+      }))
+    it.effect("predicate match taps", () =>
+      Effect.gen(function*() {
+        const tapped: Array<string> = []
+        const result = yield* Effect.exit(
+          Effect.tapCauseIf(
+            Effect.fail("e1"),
+            Cause.hasFails,
+            (cause) => Effect.sync(() => tapped.push(Cause.squash(cause) as string))
+          )
+        )
+        assert.deepStrictEqual(tapped, ["e1"])
+        assert.deepStrictEqual(result, Exit.fail("e1"))
+      }))
+    it.effect("predicate no match skips tap", () =>
+      Effect.gen(function*() {
+        const tapped: Array<string> = []
+        const result = yield* Effect.exit(
+          Effect.tapCauseIf(
+            Effect.fail("e1"),
+            constFalse,
+            () => Effect.sync(() => tapped.push("tapped"))
+          )
+        )
+        assert.deepStrictEqual(tapped, [])
+        assert.deepStrictEqual(result, Exit.fail("e1"))
+      }))
+    it.effect("success skips tap", () =>
+      Effect.gen(function*() {
+        const tapped: Array<string> = []
+        const result = yield* Effect.tapCauseIf(
+          Effect.succeed(42),
+          constTrue,
+          () => Effect.sync(() => tapped.push("tapped"))
+        )
+        assert.deepStrictEqual(tapped, [])
+        assert.deepStrictEqual(result, 42)
+      }))
+  })
+
+  describe("onErrorIf", () => {
+    it.effect("predicate match runs finalizer", () =>
+      Effect.gen(function*() {
+        const finalized: Array<string> = []
+        const result = yield* Effect.exit(
+          Effect.onErrorIf(
+            Effect.fail("e1"),
+            Cause.hasFails,
+            (cause) => Effect.sync(() => finalized.push(Cause.squash(cause) as string))
+          )
+        )
+        assert.deepStrictEqual(finalized, ["e1"])
+        assert.deepStrictEqual(result, Exit.fail("e1"))
+      }))
+    it.effect("predicate no match skips finalizer", () =>
+      Effect.gen(function*() {
+        const finalized: Array<string> = []
+        const result = yield* Effect.exit(
+          Effect.onErrorIf(
+            Effect.fail("e1"),
+            constFalse,
+            () => Effect.sync(() => finalized.push("finalized"))
+          )
+        )
+        assert.deepStrictEqual(finalized, [])
+        assert.deepStrictEqual(result, Exit.fail("e1"))
+      }))
+    it.effect("filter match runs finalizer", () =>
+      Effect.gen(function*() {
+        const finalized: Array<string> = []
+        const result = yield* Effect.exit(
+          Effect.onErrorIf(
+            Effect.fail("e1"),
+            Cause.findError as Filter.Filter<Cause.Cause<string>, string>,
+            (error: string) => Effect.sync(() => finalized.push(error))
+          )
+        )
+        assert.deepStrictEqual(finalized, ["e1"])
+        assert.deepStrictEqual(result, Exit.fail("e1"))
+      }))
+    it.effect("success skips finalizer", () =>
+      Effect.gen(function*() {
+        const finalized: Array<string> = []
+        const result = yield* Effect.onErrorIf(
+          Effect.succeed(42),
+          constTrue,
+          () => Effect.sync(() => finalized.push("finalized"))
+        )
+        assert.deepStrictEqual(finalized, [])
+        assert.deepStrictEqual(result, 42)
+      }))
+  })
+
+  describe("onExitIf", () => {
+    it.effect("predicate match on success runs finalizer", () =>
+      Effect.gen(function*() {
+        const finalized: Array<string> = []
+        const result = yield* Effect.onExitIf(
+          Effect.succeed(42),
+          Exit.isSuccess,
+          (exit) => {
+            if (Exit.isSuccess(exit)) {
+              return Effect.sync(() => finalized.push(`success:${exit.value}`))
+            }
+            return Effect.void
+          }
+        )
+        assert.deepStrictEqual(finalized, ["success:42"])
+        assert.deepStrictEqual(result, 42)
+      }))
+    it.effect("predicate no match on failure skips finalizer", () =>
+      Effect.gen(function*() {
+        const finalized: Array<string> = []
+        const result = yield* Effect.exit(
+          Effect.onExitIf(
+            Effect.fail("e1"),
+            Exit.isSuccess,
+            () => Effect.sync(() => finalized.push("finalized"))
+          )
+        )
+        assert.deepStrictEqual(finalized, [])
+        assert.deepStrictEqual(result, Exit.fail("e1"))
+      }))
+    it.effect("predicate match on failure runs finalizer", () =>
+      Effect.gen(function*() {
+        const finalized: Array<string> = []
+        const result = yield* Effect.exit(
+          Effect.onExitIf(
+            Effect.fail("e1"),
+            Exit.isFailure,
+            (exit) => {
+              if (Exit.isFailure(exit)) {
+                return Effect.sync(() => finalized.push(`failure:${Cause.squash(exit.cause)}`))
+              }
+              return Effect.void
+            }
+          )
+        )
+        assert.deepStrictEqual(finalized, ["failure:e1"])
+        assert.deepStrictEqual(result, Exit.fail("e1"))
+      }))
+  })
+
+  describe("filter with predicate/refinement", () => {
+    it.effect("predicate filters iterable", () =>
+      Effect.gen(function*() {
+        const result = yield* Effect.filter(
+          [1, 2, 3, 4, 5],
+          (n: number) => n % 2 === 0
+        )
+        assert.deepStrictEqual(result, [2, 4])
+      }))
+    it.effect("refinement narrows iterable", () =>
+      Effect.gen(function*() {
+        const result = yield* Effect.filter(
+          [1, "a", 2, "b", 3] as Array<number | string>,
+          (x): x is number => typeof x === "number"
+        )
+        assert.deepStrictEqual(result, [1, 2, 3])
       }))
   })
 

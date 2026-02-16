@@ -3907,46 +3907,16 @@ export const race: {
 export const filter: {
   <A, B extends A>(refinement: Refinement<NoInfer<A>, B>): <E, R>(self: Stream<A, E, R>) => Stream<B, E, R>
   <A>(predicate: Predicate<NoInfer<A>>): <E, R>(self: Stream<A, E, R>) => Stream<A, E, R>
+  <A, B, X>(filter: Filter.Filter<A, B, X>): <E, R>(self: Stream<A, E, R>) => Stream<B, E, R>
   <A, E, R, B extends A>(self: Stream<A, E, R>, refinement: Refinement<A, B>): Stream<B, E, R>
   <A, E, R>(self: Stream<A, E, R>, predicate: Predicate<A>): Stream<A, E, R>
-} = dual(
-  2,
-  <A, E, R>(self: Stream<A, E, R>, predicate: Predicate<NoInfer<A>>): Stream<A, E, R> =>
-    fromChannel(Channel.filterArray(toChannel(self), predicate))
-)
-
-/**
- * Filters and maps elements in a single pass using a `Filter`.
- *
- * @example
- * ```ts
- * import { Console, Effect, Filter, Stream } from "effect"
- *
- * const positiveLabels = Filter.make((n: number) =>
- *   n > 0 ? `+${n}` : Filter.fail(n)
- * )
- *
- * const program = Effect.gen(function*() {
- *   const values = yield* Stream.make(2, -1, 3).pipe(
- *     Stream.filterMap(positiveLabels),
- *     Stream.runCollect
- *   )
- *   yield* Console.log(values)
- * })
- *
- * // Output: [ "+2", "+3" ]
- * ```
- *
- * @since 2.0.0
- * @category Filtering
- */
-export const filterMap: {
-  <A, B, X>(filter: Filter.Filter<A, B, X>): <E, R>(self: Stream<A, E, R>) => Stream<B, E, R>
   <A, E, R, B, X>(self: Stream<A, E, R>, filter: Filter.Filter<A, B, X>): Stream<B, E, R>
 } = dual(
   2,
-  <A, E, R, B, X>(self: Stream<A, E, R>, filter: Filter.Filter<A, B, X>): Stream<B, E, R> =>
-    fromChannel(Channel.filterMapArray(toChannel(self), filter))
+  <A, E, R>(
+    self: Stream<A, E, R>,
+    filter: Filter.Filter<any, any, any> | Predicate<A>
+  ): Stream<any, E, R> => fromChannel(Channel.filterArray(toChannel(self), filter as any))
 )
 
 /**
@@ -3957,10 +3927,10 @@ export const filterMap: {
  * import { Console, Effect, Filter, Stream } from "effect"
  *
  * const filter = Filter.makeEffect((n: number) =>
- *   Effect.succeed(n > 2 ? n + 1 : Filter.fail(n))
+ *   Effect.succeed(n > 2 ? Filter.pass(n + 1) : Filter.fail(n))
  * )
  *
- * const stream = Stream.make(1, 2, 3, 4).pipe(Stream.filterMapEffect(filter))
+ * const stream = Stream.make(1, 2, 3, 4).pipe(Stream.filterEffect(filter))
  *
  * const program = Effect.gen(function*() {
  *   const result = yield* Stream.runCollect(stream)
@@ -3974,7 +3944,7 @@ export const filterMap: {
  * @since 2.0.0
  * @category Filtering
  */
-export const filterMapEffect: {
+export const filterEffect: {
   <A, B, X, EX, RX>(
     filter: Filter.FilterEffect<A, B, X, EX, RX>
   ): <E, R>(self: Stream<A, E, R>) => Stream<B, E | EX, R | RX>
@@ -3987,79 +3957,7 @@ export const filterMapEffect: {
   <A, E, R, B, X, EX, RX>(
     self: Stream<A, E, R>,
     filter: Filter.FilterEffect<A, B, X, EX, RX>
-  ): Stream<B, E | EX, R | RX> => fromChannel(Channel.filterMapArrayEffect(toChannel(self), filter))
-)
-
-/**
- * Splits the stream into two streams based on a `Filter`, emitting passed values
- * on the first stream and failed values on the second.
- *
- * If the upstream stream fails, both output streams fail.
- *
- * @example
- * ```ts
- * import { Console, Effect, Filter, Stream } from "effect"
- *
- * const program = Effect.scoped(
- *   Effect.gen(function*() {
- *     const [evens, odds] = yield* Stream.partitionFilter(
- *       Stream.range(0, 5),
- *       (n) => (n % 2 === 0 ? n : Filter.fail(n))
- *     )
- *
- *     const result = yield* Effect.all({
- *       evens: Stream.runCollect(evens),
- *       odds: Stream.runCollect(odds)
- *     })
- *
- *     yield* Console.log(result)
- *   })
- * )
- *
- * Effect.runPromise(program)
- * // Output: { evens: [ 0, 2, 4 ], odds: [ 1, 3, 5 ] }
- * ```
- *
- * @since 2.0.0
- * @category Filtering
- */
-export const partitionFilter: {
-  <A, B, X>(filter: Filter.Filter<A, B, X>, options?: {
-    readonly capacity?: number | "unbounded" | undefined
-  }): <E, R>(self: Stream<A, E, R>) => Effect.Effect<
-    [
-      passes: Stream<B, E>,
-      fails: Stream<X, E>
-    ],
-    never,
-    R | Scope.Scope
-  >
-  <A, E, R, B, X>(self: Stream<A, E, R>, filter: Filter.Filter<A, B, X>, options?: {
-    readonly capacity?: number | "unbounded" | undefined
-  }): Effect.Effect<
-    [
-      passes: Stream<B, E>,
-      fails: Stream<X, E>
-    ],
-    never,
-    R | Scope.Scope
-  >
-} = dual(
-  (args) => isStream(args[0]),
-  <A, E, R, B, X>(self: Stream<A, E, R>, filter: Filter.Filter<A, B, X>, options?: {
-    readonly capacity?: number | "unbounded" | undefined
-  }): Effect.Effect<
-    [
-      passes: Stream<B, E>,
-      fails: Stream<X, E>
-    ],
-    never,
-    R | Scope.Scope
-  > =>
-    Effect.map(
-      partitionFilterQueue(filter, options)(self),
-      ([passes, fails]) => [fromQueue(passes), fromQueue(fails)] as const
-    )
+  ): Stream<B, E | EX, R | RX> => fromChannel(Channel.filterArrayEffect(toChannel(self), filter))
 )
 
 /**
@@ -4073,8 +3971,8 @@ export const partitionFilter: {
  *
  * const program = Effect.gen(function*() {
  *   const [passes, fails] = yield* Stream.make(1, 2, 3, 4).pipe(
- *     Stream.partitionFilterQueue(
- *       Filter.make((n) => (n % 2 === 0 ? n : Filter.fail(n)))
+ *     Stream.partitionQueue(
+ *       Filter.make((n) => (n % 2 === 0 ? Filter.pass(n) : Filter.fail(n)))
  *     )
  *   )
  *
@@ -4093,13 +3991,53 @@ export const partitionFilter: {
  * @since 4.0.0
  * @category Filtering
  */
-export const partitionFilterQueue: {
+export const partitionQueue: {
+  <A, B extends A>(refinement: Refinement<A, B>, options?: {
+    readonly capacity?: number | "unbounded" | undefined
+  }): <E, R>(self: Stream<A, E, R>) => Effect.Effect<
+    [
+      passes: Queue.Dequeue<B, E | Cause.Done>,
+      fails: Queue.Dequeue<Exclude<A, B>, E | Cause.Done>
+    ],
+    never,
+    R | Scope.Scope
+  >
+  <A>(predicate: Predicate<A>, options?: {
+    readonly capacity?: number | "unbounded" | undefined
+  }): <E, R>(self: Stream<A, E, R>) => Effect.Effect<
+    [
+      passes: Queue.Dequeue<A, E | Cause.Done>,
+      fails: Queue.Dequeue<A, E | Cause.Done>
+    ],
+    never,
+    R | Scope.Scope
+  >
   <A, B, X>(filter: Filter.Filter<A, B, X>, options?: {
     readonly capacity?: number | "unbounded" | undefined
   }): <E, R>(self: Stream<A, E, R>) => Effect.Effect<
     [
       passes: Queue.Dequeue<B, E | Cause.Done>,
       fails: Queue.Dequeue<X, E | Cause.Done>
+    ],
+    never,
+    R | Scope.Scope
+  >
+  <A, E, R, B extends A>(self: Stream<A, E, R>, refinement: Refinement<A, B>, options?: {
+    readonly capacity?: number | "unbounded" | undefined
+  }): Effect.Effect<
+    [
+      passes: Queue.Dequeue<B, E | Cause.Done>,
+      fails: Queue.Dequeue<Exclude<A, B>, E | Cause.Done>
+    ],
+    never,
+    R | Scope.Scope
+  >
+  <A, E, R>(self: Stream<A, E, R>, predicate: Predicate<A>, options?: {
+    readonly capacity?: number | "unbounded" | undefined
+  }): Effect.Effect<
+    [
+      passes: Queue.Dequeue<A, E | Cause.Done>,
+      fails: Queue.Dequeue<A, E | Cause.Done>
     ],
     never,
     R | Scope.Scope
@@ -4116,54 +4054,56 @@ export const partitionFilterQueue: {
   >
 } = dual(
   (args) => isStream(args[0]),
-  Effect.fnUntraced(function*<A, E, R, B, X>(self: Stream<A, E, R>, filter: Filter.Filter<A, B, X>, options?: {
-    readonly capacity?: number | "unbounded" | undefined
-  }): Effect.fn.Return<
-    [
-      passes: Queue.Dequeue<B, E | Cause.Done>,
-      fails: Queue.Dequeue<X, E | Cause.Done>
-    ],
-    never,
-    R | Scope.Scope
-  > {
-    const scope = yield* Effect.scope
-    const pull = yield* Channel.toPullScoped(self.channel, scope)
-    const capacity = options?.capacity === "unbounded" ? undefined : options?.capacity ?? DefaultChunkSize
-    const passes = yield* Queue.make<B, E | Cause.Done>({ capacity })
-    const fails = yield* Queue.make<X, E | Cause.Done>({ capacity })
+  Effect.fnUntraced(
+    function*<A, E, R>(self: Stream<A, E, R>, filter: Filter.Filter<any, any, any> | Predicate<A>, options?: {
+      readonly capacity?: number | "unbounded" | undefined
+    }): Effect.fn.Return<
+      [
+        passes: Queue.Dequeue<any, E | Cause.Done>,
+        fails: Queue.Dequeue<any, E | Cause.Done>
+      ],
+      never,
+      R | Scope.Scope
+    > {
+      const scope = yield* Effect.scope
+      const pull = yield* Channel.toPullScoped(self.channel, scope)
+      const capacity = options?.capacity === "unbounded" ? undefined : options?.capacity ?? DefaultChunkSize
+      const passes = yield* Queue.make<any, E | Cause.Done>({ capacity })
+      const fails = yield* Queue.make<any, E | Cause.Done>({ capacity })
 
-    const partition = Arr.partitionFilter(filter)
+      const partitionArr = Arr.partition(filter as any)
 
-    yield* Effect.gen(function*() {
-      while (true) {
-        const chunk = yield* pull
-        const results = partition(chunk)
-        let passFiber: Fiber.Fiber<any> | undefined = undefined
-        if (results[0].length > 0) {
-          const leftover = Queue.offerAllUnsafe(passes, results[0])
-          if (leftover.length > 0) {
-            passFiber = yield* Effect.forkChild(Queue.offerAll(passes, leftover))
+      yield* Effect.gen(function*() {
+        while (true) {
+          const chunk = yield* pull
+          const [excluded, satisfying] = partitionArr(chunk)
+          let passFiber: Fiber.Fiber<any> | undefined = undefined
+          if (satisfying.length > 0) {
+            const leftover = Queue.offerAllUnsafe(passes, satisfying)
+            if (leftover.length > 0) {
+              passFiber = yield* Effect.forkChild(Queue.offerAll(passes, leftover))
+            }
           }
-        }
-        if (results[1].length > 0) {
-          const leftover = Queue.offerAllUnsafe(fails, results[1])
-          if (leftover.length > 0) {
-            yield* Queue.offerAll(fails, leftover)
+          if (excluded.length > 0) {
+            const leftover = Queue.offerAllUnsafe(fails, excluded)
+            if (leftover.length > 0) {
+              yield* Queue.offerAll(fails, leftover)
+            }
           }
+          if (passFiber) yield* Fiber.join(passFiber)
         }
-        if (passFiber) yield* Fiber.join(passFiber)
-      }
-    }).pipe(
-      Effect.onError((cause) => {
-        Queue.failCauseUnsafe(passes, cause)
-        Queue.failCauseUnsafe(fails, cause)
-        return Effect.void
-      }),
-      Effect.forkIn(scope)
-    )
+      }).pipe(
+        Effect.onError((cause) => {
+          Queue.failCauseUnsafe(passes, cause)
+          Queue.failCauseUnsafe(fails, cause)
+          return Effect.void
+        }),
+        Effect.forkIn(scope)
+      )
 
-    return [passes, fails]
-  })
+      return [passes, fails]
+    }
+  )
 )
 
 /**
@@ -4179,8 +4119,8 @@ export const partitionFilterQueue: {
  * const program = Effect.scoped(
  *   Effect.gen(function*() {
  *     const [evens, odds] = yield* Stream.make(1, 2, 3, 4).pipe(
- *       Stream.partitionFilterEffect((n) =>
- *         Effect.succeed(n % 2 === 0 ? n : Filter.fail(n))
+ *       Stream.partitionEffect((n) =>
+ *         Effect.succeed(n % 2 === 0 ? Filter.pass(n) : Filter.fail(n))
  *       )
  *     )
  *     const result = yield* Effect.all({
@@ -4195,7 +4135,7 @@ export const partitionFilterQueue: {
  * // Output: { evens: [ 2, 4 ], odds: [ 1, 3 ] }
  * ```
  */
-export const partitionFilterEffect: {
+export const partitionEffect: {
   <A, B, X, EX, RX>(filter: Filter.FilterEffect<A, B, X, EX, RX>, options?: {
     readonly capacity?: number | "unbounded" | undefined
     readonly concurrency?: number | "unbounded" | undefined
@@ -4231,10 +4171,13 @@ export const partitionFilterEffect: {
     never,
     R | RX | Scope.Scope
   > =>
-    self.pipe(
-      mapEffect(filter, options),
-      partitionFilter(identity, options)
-    )
+    Effect.map(
+      self.pipe(
+        mapEffect(filter, options),
+        partitionQueue(identity as any, options)
+      ),
+      ([passes, fails]) => [fromQueue(passes), fromQueue(fails)]
+    ) as any
 )
 
 /**
@@ -4286,6 +4229,16 @@ export const partition: {
     never,
     R | Scope.Scope
   >
+  <A, B, X>(
+    filter: Filter.Filter<A, B, X>,
+    options?: { readonly bufferSize?: number | undefined }
+  ): <E, R>(
+    self: Stream<A, E, R>
+  ) => Effect.Effect<
+    [excluded: Stream<X, E>, satisfying: Stream<B, E>],
+    never,
+    R | Scope.Scope
+  >
   <C extends A, E, R, B extends A, A = C>(
     self: Stream<C, E, R>,
     refinement: Refinement<A, B>,
@@ -4304,20 +4257,29 @@ export const partition: {
     never,
     R | Scope.Scope
   >
+  <A, E, R, B, X>(
+    self: Stream<A, E, R>,
+    filter: Filter.Filter<A, B, X>,
+    options?: { readonly bufferSize?: number | undefined }
+  ): Effect.Effect<
+    [excluded: Stream<X, E>, satisfying: Stream<B, E>],
+    never,
+    R | Scope.Scope
+  >
 } = dual(
   (args) => isStream(args[0]),
   <A, E, R>(
     self: Stream<A, E, R>,
-    predicate: Predicate<NoInfer<A>>,
+    filter: Filter.Filter<any, any, any> | Predicate<A>,
     options?: { readonly bufferSize?: number | undefined }
   ): Effect.Effect<
-    [excluded: Stream<A, E>, satisfying: Stream<A, E>],
+    [excluded: Stream<any, E>, satisfying: Stream<any, E>],
     never,
     R | Scope.Scope
   > =>
     Effect.map(
-      partitionFilter(self, Filter.fromPredicate(predicate), { capacity: options?.bufferSize ?? 16 }),
-      ([passes, fails]) => [fails, passes] as const
+      partitionQueue(filter as any, { capacity: options?.bufferSize ?? 16 })(self),
+      ([passes, fails]) => [fromQueue(fails), fromQueue(passes)] as const
     )
 )
 
@@ -4674,72 +4636,6 @@ export {
 }
 
 /**
- * Recovers from failures that match a predicate or refinement.
- *
- * Only failure causes are checked; defects and interrupts are not caught, and
- * non-matching errors re-fail with the original cause.
- *
- * @example
- * ```ts
- * import { Console, Effect, Stream } from "effect"
- *
- * class HttpError {
- *   readonly _tag = "HttpError"
- *   constructor(readonly status: number) {}
- * }
- *
- * const stream = Stream.fail(new HttpError(404))
- *
- * const program = Effect.gen(function*() {
- *   const values = yield* stream.pipe(
- *     Stream.catchIf(
- *       (error): error is HttpError => error._tag === "HttpError",
- *       (error) => Stream.make(`recovered:${error.status}`)
- *     ),
- *     Stream.runCollect
- *   )
- *   yield* Console.log(values)
- * })
- *
- * Effect.runPromise(program)
- * // Output: [ "recovered:404" ]
- * ```
- *
- * @since 4.0.0
- * @category Error Handling
- */
-export const catchIf: {
-  <E, EB extends E, A2, E2, R2, A3 = never, E3 = Exclude<E, EB>, R3 = never>(
-    refinement: Refinement<NoInfer<E>, EB>,
-    f: (e: EB) => Stream<A2, E2, R2>,
-    orElse?: ((e: Exclude<E, EB>) => Stream<A3, E3, R3>) | undefined
-  ): <A, R>(self: Stream<A, E, R>) => Stream<A2 | A | A3, E2 | E3, R2 | R | R3>
-  <E, A2, E2, R2, A3 = never, E3 = never, R3 = never>(
-    predicate: Predicate<NoInfer<E>>,
-    f: (e: NoInfer<E>) => Stream<A2, E2, R2>,
-    orElse?: ((e: NoInfer<E>) => Stream<A3, E3, R3>) | undefined
-  ): <A, R>(self: Stream<A, E, R>) => Stream<A2 | A | A3, E | E2 | E3, R2 | R | R3>
-  <A, E, R, EB extends E, A2, E2, R2, A3 = never, E3 = Exclude<E, EB>, R3 = never>(
-    self: Stream<A, E, R>,
-    refinement: Refinement<E, EB>,
-    f: (e: EB) => Stream<A2, E2, R2>,
-    orElse?: ((e: Exclude<E, EB>) => Stream<A3, E3, R3>) | undefined
-  ): Stream<A | A2 | A3, E2 | E3, R | R2 | R3>
-  <A, E, R, A2, E2, R2, A3 = never, E3 = never, R3 = never>(
-    self: Stream<A, E, R>,
-    predicate: Predicate<E>,
-    f: (e: E) => Stream<A2, E2, R2>,
-    orElse?: ((e: E) => Stream<A3, E3, R3>) | undefined
-  ): Stream<A | A2 | A3, E | E2 | E3, R | R2 | R3>
-} = dual((args) => isStream(args[0]), <A, E, R, EB extends E, A2, E2, R2, A3 = never, E3 = never, R3 = never>(
-  self: Stream<A, E, R>,
-  predicate: Predicate<E> | Refinement<E, EB>,
-  f: (e: EB) => Stream<A2, E2, R2>,
-  orElse?: ((e: E) => Stream<A3, E3, R3>) | undefined
-): Stream<A | A2 | A3, E | E2 | E3, R | R2 | R3> =>
-  catchFilter(self, Filter.fromPredicate(predicate as Predicate<E>), f as any, orElse as any) as any)
-
-/**
  * Effectfully peeks at errors without changing the stream unless the tap fails.
  *
  * @example
@@ -4802,7 +4698,7 @@ export const tapError: {
  *
  * const stream = Stream.make(1, 2).pipe(
  *   Stream.concat(Stream.fail(42)),
- *   Stream.catchFilter(
+ *   Stream.catchIf(
  *     Filter.fromPredicate((error): error is 42 => error === 42),
  *     () => Stream.make(999)
  *   )
@@ -4820,12 +4716,34 @@ export const tapError: {
  * @since 4.0.0
  * @category Error Handling
  */
-export const catchFilter: {
+export const catchIf: {
+  <E, EB extends E, A2, E2, R2, A3 = never, E3 = Exclude<E, EB>, R3 = never>(
+    refinement: Refinement<NoInfer<E>, EB>,
+    f: (e: EB) => Stream<A2, E2, R2>,
+    orElse?: ((e: Exclude<E, EB>) => Stream<A3, E3, R3>) | undefined
+  ): <A, R>(self: Stream<A, E, R>) => Stream<A2 | A | A3, E2 | E3, R2 | R | R3>
+  <E, A2, E2, R2, A3 = never, E3 = never, R3 = never>(
+    predicate: Predicate<NoInfer<E>>,
+    f: (e: NoInfer<E>) => Stream<A2, E2, R2>,
+    orElse?: ((e: NoInfer<E>) => Stream<A3, E3, R3>) | undefined
+  ): <A, R>(self: Stream<A, E, R>) => Stream<A2 | A | A3, E | E2 | E3, R2 | R | R3>
   <E, EB, X, A2, E2, R2, A3 = never, E3 = X, R3 = never>(
     filter: Filter.Filter<E, EB, X>,
     f: (failure: EB) => Stream<A2, E2, R2>,
     orElse?: ((failure: X) => Stream<A3, E3, R3>) | undefined
   ): <A, R>(self: Stream<A, E, R>) => Stream<A | A2 | A3, E2 | E3, R | R2 | R3>
+  <A, E, R, EB extends E, A2, E2, R2, A3 = never, E3 = Exclude<E, EB>, R3 = never>(
+    self: Stream<A, E, R>,
+    refinement: Refinement<E, EB>,
+    f: (e: EB) => Stream<A2, E2, R2>,
+    orElse?: ((e: Exclude<E, EB>) => Stream<A3, E3, R3>) | undefined
+  ): Stream<A | A2 | A3, E2 | E3, R | R2 | R3>
+  <A, E, R, A2, E2, R2, A3 = never, E3 = never, R3 = never>(
+    self: Stream<A, E, R>,
+    predicate: Predicate<E>,
+    f: (e: E) => Stream<A2, E2, R2>,
+    orElse?: ((e: E) => Stream<A3, E3, R3>) | undefined
+  ): Stream<A | A2 | A3, E | E2 | E3, R | R2 | R3>
   <A, E, R, EB, X, A2, E2, R2, A3 = never, E3 = X, R3 = never>(
     self: Stream<A, E, R>,
     filter: Filter.Filter<E, EB, X>,
@@ -4834,11 +4752,18 @@ export const catchFilter: {
   ): Stream<A | A2 | A3, E2 | E3, R | R2 | R3>
 } = dual((args) => isStream(args[0]), <A, E, R, EB, X, A2, E2, R2, A3 = never, E3 = X, R3 = never>(
   self: Stream<A, E, R>,
-  filter: Filter.Filter<E, EB, X>,
+  filter: Filter.Filter<E, EB, X> | Predicate<E>,
   f: (failure: EB) => Stream<A2, E2, R2>,
   orElse?: ((failure: X) => Stream<A3, E3, R3>) | undefined
 ): Stream<A | A2 | A3, E2 | E3, R | R2 | R3> =>
-  fromChannel(Channel.catchFilter(toChannel(self), filter, (e) => f(e).channel, orElse && ((e) => orElse(e).channel))))
+  fromChannel(
+    Channel.catchIf(
+      toChannel(self),
+      filter as any,
+      (e: any) => f(e).channel,
+      orElse && ((e: any) => orElse(e).channel)
+    )
+  ) as any)
 
 /**
  * Recovers from failures whose `_tag` matches the provided value by switching to
@@ -4937,7 +4862,7 @@ export const catchTag: {
     const pred = Array.isArray(k)
       ? ((e: E): e is any => hasProperty(e, "_tag") && k.includes(e._tag))
       : isTagged(k as string)
-    return catchFilter(self, Filter.fromPredicate(pred), f, orElse as any) as any
+    return catchIf(self, Filter.fromPredicate(pred), f, orElse as any) as any
   }
 )
 
@@ -5039,11 +4964,13 @@ export const catchTags: {
   >
 } = dual((args) => isStream(args[0]), (self, cases, orElse) => {
   let keys: Array<string>
-  return catchFilter(
+  return catchIf(
     self,
-    (e) => {
+    (e: any) => {
       keys ??= Object.keys(cases)
-      return hasProperty(e, "_tag") && isString(e["_tag"]) && keys.includes(e["_tag"]) ? e : Filter.fail(e)
+      return hasProperty(e, "_tag") && isString(e["_tag"]) && keys.includes(e["_tag"])
+        ? Filter.pass(e)
+        : Filter.fail(e)
     },
     (e: any) => cases[e["_tag"] as string](e),
     orElse
@@ -5343,10 +5270,10 @@ export const mapError: {
  *
  * const program = Effect.gen(function*() {
  *   const failingStream = Stream.fail("NetworkError")
- *   const recovered = Stream.catchCauseFilter(
+ *   const recovered = Stream.catchCauseIf(
  *     failingStream,
- *     Cause.findError,
- *     (error) => Stream.make(`Recovered: ${error}`)
+ *     (cause) => Cause.hasFails(cause),
+ *     (cause) => Stream.make(`Recovered: ${Cause.squash(cause)}`)
  *   )
  *
  *   const output = yield* Stream.runCollect(recovered)
@@ -5360,11 +5287,20 @@ export const mapError: {
  * @since 4.0.0
  * @category Error Handling
  */
-export const catchCauseFilter: {
+export const catchCauseIf: {
+  <E, A2, E2, R2>(
+    predicate: Predicate<Cause.Cause<E>>,
+    f: (cause: Cause.Cause<E>) => Stream<A2, E2, R2>
+  ): <A, R>(self: Stream<A, E, R>) => Stream<A | A2, E | E2, R2 | R>
   <E, EB, X extends Cause.Cause<any>, A2, E2, R2>(
     filter: Filter.Filter<Cause.Cause<E>, EB, X>,
     f: (failure: EB, cause: Cause.Cause<E>) => Stream<A2, E2, R2>
   ): <A, R>(self: Stream<A, E, R>) => Stream<A | A2, Cause.Cause.Error<X> | E2, R2 | R>
+  <A, E, R, A2, E2, R2>(
+    self: Stream<A, E, R>,
+    predicate: Predicate<Cause.Cause<E>>,
+    f: (cause: Cause.Cause<E>) => Stream<A2, E2, R2>
+  ): Stream<A | A2, E | E2, R | R2>
   <A, E, R, EB, X extends Cause.Cause<any>, A2, E2, R2>(
     self: Stream<A, E, R>,
     filter: Filter.Filter<Cause.Cause<E>, EB, X>,
@@ -5372,12 +5308,12 @@ export const catchCauseFilter: {
   ): Stream<A | A2, Cause.Cause.Error<X> | E2, R | R2>
 } = dual(3, <A, E, R, EB, X extends Cause.Cause<any>, A2, E2, R2>(
   self: Stream<A, E, R>,
-  filter: Filter.Filter<Cause.Cause<E>, EB, X>,
-  f: (failure: EB, cause: Cause.Cause<E>) => Stream<A2, E2, R2>
+  filter: Filter.Filter<Cause.Cause<E>, EB, X> | Predicate<Cause.Cause<E>>,
+  f: ((failure: EB, cause: Cause.Cause<E>) => Stream<A2, E2, R2>) | ((cause: Cause.Cause<E>) => Stream<A2, E2, R2>)
 ): Stream<A | A2, Cause.Cause.Error<X> | E2, R | R2> =>
-  self.channel.pipe(
-    Channel.catchCauseFilter(filter, (failure, cause) => f(failure, cause).channel),
-    fromChannel
+  fromChannel(
+    Channel.catchCauseIf(self.channel, filter as any, (failure: any, cause: any) =>
+      (f as any)(failure, cause).channel) as any
   ))
 
 /**
@@ -5983,12 +5919,37 @@ export const takeUntilEffect: {
 export const takeWhile: {
   <A, B extends A>(refinement: (a: NoInfer<A>, n: number) => a is B): <E, R>(self: Stream<A, E, R>) => Stream<B, E, R>
   <A>(predicate: (a: NoInfer<A>, n: number) => boolean): <E, R>(self: Stream<A, E, R>) => Stream<A, E, R>
+  <A, B, X>(f: Filter.Filter<NoInfer<A>, B, X>): <E, R>(self: Stream<A, E, R>) => Stream<B, E, R>
   <A, E, R, B extends A>(self: Stream<A, E, R>, refinement: (a: NoInfer<A>, n: number) => a is B): Stream<B, E, R>
   <A, E, R>(self: Stream<A, E, R>, predicate: (a: NoInfer<A>, n: number) => boolean): Stream<A, E, R>
+  <A, E, R, B, X>(self: Stream<A, E, R>, f: Filter.Filter<NoInfer<A>, B, X>): Stream<B, E, R>
 } = dual(
   2,
-  <A, E, R, B extends A>(self: Stream<A, E, R>, refinement: (a: NoInfer<A>, n: number) => a is B): Stream<B, E, R> =>
-    takeUntil(self, (a, n) => !refinement(a, n), { excludeLast: true }) as any
+  <A, E, R>(
+    self: Stream<A, E, R>,
+    f: Filter.Filter<A, any, any> | ((a: A, n: number) => boolean)
+  ): Stream<any, E, R> =>
+    transformPull(self, (pull, _scope) =>
+      Effect.sync(() => {
+        let i = 0
+        let done = false
+        const pump: Pull.Pull<Arr.NonEmptyReadonlyArray<any>, E, void, R> = Effect.flatMap(
+          Effect.suspend(() => done ? Cause.done() : pull),
+          (chunk) => {
+            const out: Array<any> = []
+            for (let j = 0; j < chunk.length; j++) {
+              const result = Filter.apply(f as any, chunk[j], i++)
+              if (Filter.isFail(result)) {
+                done = true
+                break
+              }
+              out.push(result.pass)
+            }
+            return Arr.isReadonlyArrayNonEmpty(out) ? Effect.succeed(out) : done ? Cause.done() : pump
+          }
+        )
+        return pump
+      }))
 )
 
 /**
@@ -6171,17 +6132,19 @@ export const dropUntilEffect: {
  */
 export const dropWhile: {
   <A>(predicate: (a: NoInfer<A>, index: number) => boolean): <E, R>(self: Stream<A, E, R>) => Stream<A, E, R>
+  <A, B, X>(f: Filter.Filter<NoInfer<A>, B, X>): <E, R>(self: Stream<A, E, R>) => Stream<A, E, R>
   <A, E, R>(self: Stream<A, E, R>, predicate: (a: NoInfer<A>, index: number) => boolean): Stream<A, E, R>
+  <A, E, R, B, X>(self: Stream<A, E, R>, f: Filter.Filter<NoInfer<A>, B, X>): Stream<A, E, R>
 } = dual(2, <A, E, R>(
   self: Stream<A, E, R>,
-  predicate: (a: NoInfer<A>, index: number) => boolean
+  f: Filter.Filter<A, any, any> | ((a: A, index: number) => boolean)
 ): Stream<A, E, R> =>
   transformPull(self, (pull, _scope) =>
     Effect.sync(() => {
       let dropping = true
       let index = 0
       const filtered: Pull.Pull<Arr.NonEmptyReadonlyArray<A>, E> = Effect.flatMap(pull, (arr) => {
-        const found = arr.findIndex((a) => !predicate(a, index++))
+        const found = arr.findIndex((a) => Filter.isFail(Filter.apply(f as any, a, index++)))
         if (found === -1) return filtered
         dropping = false
         return Effect.succeed(arr.slice(found) as Arr.NonEmptyArray<A>)

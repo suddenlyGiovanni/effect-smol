@@ -172,10 +172,10 @@ export class SocketCloseError extends Schema.ErrorClass<SocketCloseError>("effec
   /**
    * @since 4.0.0
    */
-  static filterClean(isClean: (code: number) => boolean): <E>(u: E) => SocketCloseError | Filter.fail<E> {
+  static filterClean(isClean: (code: number) => boolean): <E>(u: E) => Filter.pass<SocketCloseError> | Filter.fail<E> {
     return function<E>(u: E) {
       return SocketError.is(u) && u.reason._tag === "SocketCloseError" && isClean(u.reason.code)
-        ? u.reason
+        ? Filter.pass(u.reason)
         : Filter.fail(u)
     }
   }
@@ -280,9 +280,9 @@ export const toChannelMap = <IE, A>(
         return writeChunk
       }),
       Effect.forever({ autoYield: false }),
-      Effect.catchCauseFilter(
-        Pull.filterNoDone,
-        (cause) => Queue.failCause(queue, cause)
+      Effect.catchCauseIf(
+        Pull.filterNoDone as any,
+        (cause: any) => Queue.failCause(queue, cause)
       ),
       Effect.ensuring(Scope.close(writeScope, Exit.void)),
       Effect.forkIn(scope)
@@ -536,9 +536,9 @@ export const fromWebSocket = <RO>(
         latch.openUnsafe()
         if (opts?.onOpen) yield* opts.onOpen
         return yield* FiberSet.join(fiberSet).pipe(
-          Effect.catchFilter(
-            SocketCloseError.filterClean((_) => !closeCodeIsError(_)),
-            (_) => Effect.void
+          Effect.catchIf(
+            SocketCloseError.filterClean((_) => !closeCodeIsError(_)) as any,
+            (_: any) => Effect.void
           )
         )
       })).pipe(
@@ -684,9 +684,9 @@ export const fromTransformStream = <R>(acquire: Effect.Effect<InputTransformStre
         if (opts?.onOpen) yield* opts.onOpen
 
         return yield* FiberSet.join(fiberSet).pipe(
-          Effect.catchFilter(
-            SocketCloseError.filterClean((_) => !closeCodeIsError(_)),
-            (_) => Effect.void
+          Effect.catchIf(
+            SocketCloseError.filterClean((_) => !closeCodeIsError(_)) as any,
+            (_: any) => Effect.void
           )
         )
       })).pipe(

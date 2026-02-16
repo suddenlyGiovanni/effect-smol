@@ -28,8 +28,7 @@
  *   {@link unfold}
  * - **Access** elements: {@link head}, {@link last}, {@link get}, {@link tail},
  *   {@link init}
- * - **Transform**: {@link map}, {@link flatMap}, {@link flatten},
- *   {@link filterMap}
+ * - **Transform**: {@link map}, {@link flatMap}, {@link flatten}
  * - **Filter**: {@link filter}, {@link partition}, {@link dedupe}
  * - **Combine**: {@link append}, {@link prepend}, {@link appendAll},
  *   {@link prependAll}, {@link zip}, {@link cartesian}
@@ -1237,16 +1236,17 @@ export const takeRight: {
 export const takeWhile: {
   <A, B extends A>(refinement: (a: NoInfer<A>, i: number) => a is B): (self: Iterable<A>) => Array<B>
   <A>(predicate: (a: NoInfer<A>, i: number) => boolean): (self: Iterable<A>) => Array<A>
+  <A, B, X>(f: Filter.Filter<NoInfer<A>, B, X>): (self: Iterable<A>) => Array<B>
   <A, B extends A>(self: Iterable<A>, refinement: (a: A, i: number) => a is B): Array<B>
   <A>(self: Iterable<A>, predicate: (a: A, i: number) => boolean): Array<A>
-} = dual(2, <A>(self: Iterable<A>, predicate: (a: A, i: number) => boolean): Array<A> => {
+  <A, B, X>(self: Iterable<A>, f: Filter.Filter<A, B, X>): Array<B>
+} = dual(2, <A>(self: Iterable<A>, f: Filter.Filter<A, any, any> | ((a: A, i: number) => boolean)): Array<any> => {
   let i = 0
-  const out: Array<A> = []
+  const out: Array<any> = []
   for (const a of self) {
-    if (!predicate(a, i)) {
-      break
-    }
-    out.push(a)
+    const result = Filter.apply(f as any, a, i)
+    if (Filter.isFail(result)) break
+    out.push(result.pass)
     i++
   }
   return out
@@ -1381,12 +1381,19 @@ export const dropRight: {
  */
 export const dropWhile: {
   <A>(predicate: (a: NoInfer<A>, i: number) => boolean): (self: Iterable<A>) => Array<A>
+  <A, B, X>(f: Filter.Filter<NoInfer<A>, B, X>): (self: Iterable<A>) => Array<A>
   <A>(self: Iterable<A>, predicate: (a: A, i: number) => boolean): Array<A>
+  <A, B, X>(self: Iterable<A>, f: Filter.Filter<A, B, X>): Array<A>
 } = dual(
   2,
-  <A>(self: Iterable<A>, predicate: (a: A, i: number) => boolean): Array<A> => {
+  <A>(self: Iterable<A>, f: Filter.Filter<A, any, any> | ((a: A, i: number) => boolean)): Array<A> => {
     const input = fromIterable(self)
-    return input.slice(spanIndex(input, predicate))
+    let i = 0
+    for (const a of input) {
+      if (Filter.isFail(Filter.apply(f as any, a, i))) break
+      i++
+    }
+    return input.slice(i)
   }
 )
 
@@ -3008,7 +3015,6 @@ export declare namespace ReadonlyArray {
  * ```
  *
  * @see {@link flatMap} — map and flatten
- * @see {@link filterMap} — map and filter in one pass
  *
  * @category mapping
  * @since 2.0.0
@@ -3083,85 +3089,6 @@ export const flatten: <const S extends ReadonlyArray<ReadonlyArray<any>>>(self: 
   flatMap(identity) as any
 
 /**
- * Maps each element with a function returning `Option`, keeping only `Some`
- * values. Combines filtering and mapping in a single pass.
- *
- * **Example** (Filter-mapping with Option)
- *
- * ```ts
- * import { Array, Option } from "effect"
- *
- * const evenSquares = (x: number) =>
- *   x % 2 === 0 ? Option.some(x * x) : Option.none()
- *
- * console.log(Array.filterMap([1, 2, 3, 4, 5], evenSquares)) // [4, 16]
- * ```
- *
- * @see {@link filter} — keep elements by predicate
- * @see {@link filterMapWhile} — filter-map until first `None`
- * @see {@link flatMapNullishOr} — similar but with nullable returns
- *
- * @category filtering
- * @since 2.0.0
- */
-export const filterMap: {
-  <A, B>(f: (a: A, i: number) => Option.Option<B>): (self: Iterable<A>) => Array<B>
-  <A, B>(self: Iterable<A>, f: (a: A, i: number) => Option.Option<B>): Array<B>
-} = dual(
-  2,
-  <A, B>(self: Iterable<A>, f: (a: A, i: number) => Option.Option<B>): Array<B> => {
-    const as = fromIterable(self)
-    const out: Array<B> = []
-    for (let i = 0; i < as.length; i++) {
-      const o = f(as[i], i)
-      if (Option.isSome(o)) {
-        out.push(o.value)
-      }
-    }
-    return out
-  }
-)
-
-/**
- * Like {@link filterMap}, but stops processing as soon as the function returns
- * `None`. Collects `Some` values from the prefix only.
- *
- * **Example** (Filter-map until first None)
- *
- * ```ts
- * import { Array, Option } from "effect"
- *
- * const squareIfEven = (x: number) =>
- *   x % 2 === 0 ? Option.some(x * x) : Option.none()
- *
- * console.log(Array.filterMapWhile([2, 4, 5], squareIfEven)) // [4, 16]
- * ```
- *
- * @see {@link filterMap} — processes all elements
- * @see {@link takeWhile} — take while predicate holds (no mapping)
- *
- * @category filtering
- * @since 2.0.0
- */
-export const filterMapWhile: {
-  <A, B>(f: (a: A, i: number) => Option.Option<B>): (self: Iterable<A>) => Array<B>
-  <A, B>(self: Iterable<A>, f: (a: A, i: number) => Option.Option<B>): Array<B>
-} = dual(2, <A, B>(self: Iterable<A>, f: (a: A, i: number) => Option.Option<B>) => {
-  let i = 0
-  const out: Array<B> = []
-  for (const a of self) {
-    const b = f(a, i)
-    if (Option.isSome(b)) {
-      out.push(b.value)
-    } else {
-      break
-    }
-    i++
-  }
-  return out
-})
-
-/**
  * Maps each element to a `Result`, then separates failures and successes into
  * two arrays.
  *
@@ -3206,34 +3133,6 @@ export const partitionMap: {
   }
 )
 /**
- * Partitions an iterable into passes and fails using a `Filter` function.
- *
- * - Returns `[passes, fails]`.
- *
- * @category filtering
- * @since 4.0.0
- */
-export const partitionFilter: {
-  <A, Pass, Fail>(f: Filter.Filter<A, Pass, Fail>): (self: Iterable<A>) => [passes: Array<Pass>, fails: Array<Fail>]
-  <A, Pass, Fail>(self: Iterable<A>, f: Filter.Filter<A, Pass, Fail>): [passes: Array<Pass>, fails: Array<Fail>]
-} = dual(
-  2,
-  <A, Pass, Fail>(self: Iterable<A>, f: Filter.Filter<A, Pass, Fail>): [passes: Array<Pass>, fails: Array<Fail>] => {
-    const passes: Array<Pass> = []
-    const fails: Array<Fail> = []
-    for (const a of self) {
-      const e = f(a)
-      if (Filter.isFail(e)) {
-        fails.push(e.fail)
-      } else {
-        passes.push(e)
-      }
-    }
-    return [passes, fails]
-  }
-)
-
-/**
  * Extracts all `Some` values from an iterable of `Option`s, discarding `None`s.
  *
  * **Example** (Extracting Some values)
@@ -3253,7 +3152,15 @@ export const partitionFilter: {
 
 export const getSomes: <T extends Iterable<Option.Option<X>>, X = any>(
   self: T
-) => Array<Option.Option.Value<ReadonlyArray.Infer<T>>> = filterMap(identity as any)
+) => Array<Option.Option.Value<ReadonlyArray.Infer<T>>> = (self: any) => {
+  const out: Array<any> = []
+  for (const a of self) {
+    if (Option.isSome(a)) {
+      out.push(a.value)
+    }
+  }
+  return out
+}
 
 /**
  * Extracts all failure values from an iterable of `Result`s, discarding
@@ -3333,7 +3240,6 @@ export const getSuccesses = <T extends Iterable<Result.Result<any, any>>>(
  * console.log(Array.filter([1, 2, 3, 4], (x) => x % 2 === 0)) // [2, 4]
  * ```
  *
- * @see {@link filterMap} — filter and map in one pass
  * @see {@link partition} — split into matching and non-matching
  *
  * @category filtering
@@ -3342,16 +3248,19 @@ export const getSuccesses = <T extends Iterable<Result.Result<any, any>>>(
 export const filter: {
   <A, B extends A>(refinement: (a: NoInfer<A>, i: number) => a is B): (self: Iterable<A>) => Array<B>
   <A>(predicate: (a: NoInfer<A>, i: number) => boolean): (self: Iterable<A>) => Array<A>
+  <A, B, X>(f: Filter.Filter<NoInfer<A>, B, X>): (self: Iterable<A>) => Array<B>
   <A, B extends A>(self: Iterable<A>, refinement: (a: A, i: number) => a is B): Array<B>
   <A>(self: Iterable<A>, predicate: (a: A, i: number) => boolean): Array<A>
+  <A, B, X>(self: Iterable<A>, f: Filter.Filter<A, B, X>): Array<B>
 } = dual(
   2,
-  <A>(self: Iterable<A>, predicate: (a: A, i: number) => boolean): Array<A> => {
+  <A>(self: Iterable<A>, f: Filter.Filter<A, any, any> | ((a: A, i: number) => boolean)): Array<any> => {
     const as = fromIterable(self)
-    const out: Array<A> = []
+    const out: Array<any> = []
     for (let i = 0; i < as.length; i++) {
-      if (predicate(as[i], i)) {
-        out.push(as[i])
+      const result = Filter.apply(f as any, as[i], i)
+      if (!Filter.isFail(result)) {
+        out.push(result.pass)
       }
     }
     return out
@@ -3376,6 +3285,8 @@ export const filter: {
  * @see {@link filter} — keep only matching elements
  * @see {@link partitionMap} — partition using a Result-returning function
  *
+ * Also accepts a `Filter` to split elements with custom pass/fail payloads.
+ *
  * @category filtering
  * @since 2.0.0
  */
@@ -3386,22 +3297,33 @@ export const partition: {
   <A>(
     predicate: (a: NoInfer<A>, i: number) => boolean
   ): (self: Iterable<A>) => [excluded: Array<A>, satisfying: Array<A>]
+  <A, Pass, Fail>(
+    f: Filter.Filter<A, Pass, Fail>
+  ): (self: Iterable<A>) => [excluded: Array<Fail>, satisfying: Array<Pass>]
   <A, B extends A>(
     self: Iterable<A>,
     refinement: (a: A, i: number) => a is B
   ): [excluded: Array<Exclude<A, B>>, satisfying: Array<B>]
   <A>(self: Iterable<A>, predicate: (a: A, i: number) => boolean): [excluded: Array<A>, satisfying: Array<A>]
+  <A, Pass, Fail>(
+    self: Iterable<A>,
+    f: Filter.Filter<A, Pass, Fail>
+  ): [excluded: Array<Fail>, satisfying: Array<Pass>]
 } = dual(
   2,
-  <A>(self: Iterable<A>, predicate: (a: A, i: number) => boolean): [excluded: Array<A>, satisfying: Array<A>] => {
-    const excluded: Array<A> = []
-    const satisfying: Array<A> = []
+  <A>(
+    self: Iterable<A>,
+    f: Filter.Filter<A, any, any> | ((a: A, i: number) => boolean)
+  ): [excluded: Array<any>, satisfying: Array<any>] => {
+    const excluded: Array<any> = []
+    const satisfying: Array<any> = []
     const as = fromIterable(self)
     for (let i = 0; i < as.length; i++) {
-      if (predicate(as[i], i)) {
-        satisfying.push(as[i])
+      const result = Filter.apply(f as any, as[i], i)
+      if (Filter.isFail(result)) {
+        excluded.push(result.fail)
       } else {
-        excluded.push(as[i])
+        satisfying.push(result.pass)
       }
     }
     return [excluded, satisfying]
@@ -3599,8 +3521,7 @@ export const liftNullishOr = <A extends Array<unknown>, B>(
 
 /**
  * Maps each element with a nullable-returning function, keeping only non-null /
- * non-undefined results. Similar to {@link filterMap} but for nullable returns
- * instead of `Option`.
+ * non-undefined results.
  *
  * **Example** (FlatMapping with nullable)
  *
@@ -3610,8 +3531,6 @@ export const liftNullishOr = <A extends Array<unknown>, B>(
  * console.log(Array.flatMapNullishOr([1, 2, 3], (n) => (n % 2 === 0 ? null : n)))
  * // [1, 3]
  * ```
- *
- * @see {@link filterMap} — same pattern with Option
  *
  * @category sequencing
  * @since 2.0.0

@@ -1363,9 +1363,11 @@ const makeSocketProtocol: Effect.Effect<
         return writeRaw(parser.encode(ResponseDefectEncoded(cause))!)
       }
     }).pipe(
-      Effect.catchFilter(
-        (error) => (error.reason._tag === "SocketCloseError" ? error.reason : Filter.fail(error)),
-        (_) => Effect.void
+      Effect.catchIf(
+        ((
+          error: any
+        ) => (error.reason._tag === "SocketCloseError" ? Filter.pass(error.reason) : Filter.fail(error))) as any,
+        (_: any) => Effect.void
       ),
       Effect.orDie
     )
