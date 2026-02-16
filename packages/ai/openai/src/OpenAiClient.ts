@@ -172,6 +172,8 @@ export const make = Effect.fnUntraced(
         : identity
     )
 
+    const httpClientOk = HttpClient.filterStatusOk(httpClient)
+
     const client = Generated.make(httpClient, {
       transformClient: Effect.fnUntraced(function*(client) {
         const config = yield* OpenAiConfig.getOrUndefined
@@ -220,18 +222,17 @@ export const make = Effect.fnUntraced(
     }
 
     const createResponseStream: Service["createResponseStream"] = (payload) =>
-      HttpClient.filterStatusOk(httpClient)
-        .execute(
-          HttpClientRequest.post("/responses", {
-            body: HttpBody.jsonUnsafe({ ...payload, stream: true })
-          })
-        ).pipe(
-          Effect.map(buildResponseStream),
-          Effect.catchTag(
-            "HttpClientError",
-            (error) => Errors.mapHttpClientError(error, "createResponseStream")
-          )
+      httpClientOk.execute(
+        HttpClientRequest.post("/responses", {
+          body: HttpBody.jsonUnsafe({ ...payload, stream: true })
+        })
+      ).pipe(
+        Effect.map(buildResponseStream),
+        Effect.catchTag(
+          "HttpClientError",
+          (error) => Errors.mapHttpClientError(error, "createResponseStream")
         )
+      )
 
     const createEmbedding = (
       payload: typeof Generated.CreateEmbeddingRequest.Encoded
