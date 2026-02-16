@@ -26,6 +26,19 @@ const TypeId = "~effect/rpc/Rpc"
 export const isRpc = (u: unknown): u is Rpc<any, any, any> => Predicate.hasProperty(u, TypeId)
 
 /**
+ * @since 4.0.0
+ * @category models
+ */
+export interface DefectSchema extends Schema.Top {
+  readonly Type: unknown
+  makeUnsafe(input: null, options?: Schema.MakeOptions): unknown
+  makeUnsafe(input: undefined, options?: Schema.MakeOptions): unknown
+  makeUnsafe(input: {}, options?: Schema.MakeOptions): unknown
+  readonly DecodingServices: never
+  readonly EncodingServices: never
+}
+
+/**
  * Represents an API endpoint. An API endpoint is mapped to a single route on
  * the underlying `HttpRouter`.
  *
@@ -48,6 +61,7 @@ export interface Rpc<
   readonly payloadSchema: Payload
   readonly successSchema: Success
   readonly errorSchema: Error
+  readonly defectSchema: DefectSchema
   readonly annotations: ServiceMap.ServiceMap<never>
   readonly middlewares: ReadonlySet<Middleware>
   readonly "~requires": Requires
@@ -169,6 +183,7 @@ export interface AnyWithProps extends Pipeable {
   readonly payloadSchema: Schema.Top
   readonly successSchema: Schema.Top
   readonly errorSchema: Schema.Top
+  readonly defectSchema: DefectSchema
   readonly annotations: ServiceMap.ServiceMap<never>
   readonly middlewares: ReadonlySet<RpcMiddleware.AnyServiceWithProps>
   readonly "~requires": any
@@ -596,6 +611,7 @@ const Proto = {
       payloadSchema: this.payloadSchema,
       successSchema,
       errorSchema: this.errorSchema,
+      defectSchema: this.defectSchema,
       annotations: this.annotations,
       middlewares: this.middlewares
     })
@@ -606,6 +622,7 @@ const Proto = {
       payloadSchema: this.payloadSchema,
       successSchema: this.successSchema,
       errorSchema,
+      defectSchema: this.defectSchema,
       annotations: this.annotations,
       middlewares: this.middlewares
     })
@@ -616,6 +633,7 @@ const Proto = {
       payloadSchema: Schema.isSchema(payloadSchema) ? payloadSchema as any : Schema.Struct(payloadSchema as any),
       successSchema: this.successSchema,
       errorSchema: this.errorSchema,
+      defectSchema: this.defectSchema,
       annotations: this.annotations,
       middlewares: this.middlewares
     })
@@ -626,6 +644,7 @@ const Proto = {
       payloadSchema: this.payloadSchema,
       successSchema: this.successSchema,
       errorSchema: this.errorSchema,
+      defectSchema: this.defectSchema,
       annotations: this.annotations,
       middlewares: new Set([...this.middlewares, middleware])
     })
@@ -636,6 +655,7 @@ const Proto = {
       payloadSchema: this.payloadSchema,
       successSchema: this.successSchema,
       errorSchema: this.errorSchema,
+      defectSchema: this.defectSchema,
       annotations: this.annotations,
       middlewares: this.middlewares
     })
@@ -646,6 +666,7 @@ const Proto = {
       payloadSchema: this.payloadSchema,
       successSchema: this.successSchema,
       errorSchema: this.errorSchema,
+      defectSchema: this.defectSchema,
       middlewares: this.middlewares,
       annotations: ServiceMap.add(this.annotations, tag, value)
     })
@@ -656,6 +677,7 @@ const Proto = {
       payloadSchema: this.payloadSchema,
       successSchema: this.successSchema,
       errorSchema: this.errorSchema,
+      defectSchema: this.defectSchema,
       middlewares: this.middlewares,
       annotations: ServiceMap.merge(this.annotations, context)
     })
@@ -674,6 +696,7 @@ const makeProto = <
   readonly payloadSchema: Payload
   readonly successSchema: Success
   readonly errorSchema: Error
+  readonly defectSchema: DefectSchema
   readonly annotations: ServiceMap.ServiceMap<never>
   readonly middlewares: ReadonlySet<Middleware>
 }): Rpc<Tag, Payload, Success, Error, Middleware, Requires> => {
@@ -698,6 +721,7 @@ export const make = <
   readonly payload?: Payload
   readonly success?: Success
   readonly error?: Error
+  readonly defect?: DefectSchema
   readonly stream?: Stream
   readonly primaryKey?: [Payload] extends [Schema.Struct.Fields] ? ((
       payload: Payload extends Schema.Struct.Fields ? Struct.Simplify<Schema.Struct<Payload>["Type"]> : Payload["Type"]
@@ -711,6 +735,7 @@ export const make = <
 > => {
   const successSchema = options?.success ?? Schema.Void
   const errorSchema = options?.error ?? Schema.Never
+  const defectSchema = options?.defect ?? Schema.Defect
   let payloadSchema: any
   if (options?.primaryKey) {
     payloadSchema = class Payload extends Schema.Class<Payload>(`effect/rpc/Rpc/${tag}`)(options.payload as any) {
@@ -732,12 +757,13 @@ export const make = <
       RpcSchema.Stream(successSchema, errorSchema) :
       successSchema,
     errorSchema: options?.stream ? Schema.Never : errorSchema,
+    defectSchema,
     annotations: ServiceMap.empty(),
     middlewares: new Set<never>()
   }) as any
 }
 
-const exitSchemaCache = new WeakMap<Any, Schema.Exit<Schema.Top, Schema.Top, Schema.Defect>>()
+const exitSchemaCache = new WeakMap<Any, Schema.Exit<Schema.Top, Schema.Top, DefectSchema>>()
 
 /**
  * @since 4.0.0
@@ -748,7 +774,7 @@ export const exitSchema = <R extends Any>(
 ): Schema.Exit<
   SuccessExitSchema<R>,
   ErrorExitSchema<R>,
-  Schema.Defect
+  DefectSchema
 > => {
   if (exitSchemaCache.has(self)) {
     return exitSchemaCache.get(self) as any
@@ -765,7 +791,7 @@ export const exitSchema = <R extends Any>(
   const schema = Schema.Exit(
     streamSchemas ? Schema.Void : rpc.successSchema,
     Schema.Union([...failures]),
-    Schema.Defect
+    rpc.defectSchema
   )
   exitSchemaCache.set(self, schema as any)
   return schema as any
