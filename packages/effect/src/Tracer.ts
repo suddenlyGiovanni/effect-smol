@@ -5,54 +5,24 @@ import type * as Exit from "./Exit.ts"
 import type { Fiber } from "./Fiber.ts"
 import { constFalse, type LazyArg } from "./Function.ts"
 import type * as core from "./internal/core.ts"
+import type { LogLevel } from "./LogLevel.ts"
 import * as ServiceMap from "./ServiceMap.ts"
 
 /**
  * @since 2.0.0
  * @category models
- * @example
- * ```ts
- * import type { ServiceMap } from "effect"
- * import { Tracer } from "effect"
- *
- * // Create a custom tracer implementation
- * const customTracer: Tracer.Tracer = {
- *   span: (
- *     name: string,
- *     parent: Tracer.AnySpan | undefined,
- *     annotations: ServiceMap.ServiceMap<never>,
- *     links: ReadonlyArray<Tracer.SpanLink>,
- *     startTime: bigint,
- *     kind: Tracer.SpanKind,
- *     _options: Tracer.SpanOptions | undefined
- *   ) => {
- *     console.log(`Creating span: ${name}`)
- *     return new Tracer.NativeSpan(
- *       name,
- *       parent,
- *       annotations,
- *       links.slice(),
- *       startTime,
- *       kind
- *     )
- *   },
- *   context: <X>(primitive: Tracer.EffectPrimitive<X>, fiber: any) => {
- *     console.log("Running with tracing context")
- *     return primitive["~effect/Effect/evaluate"](fiber)
- *   }
- * }
- * ```
  */
 export interface Tracer {
-  readonly span: (
-    name: string,
-    parent: AnySpan | undefined,
-    annotations: ServiceMap.ServiceMap<never>,
-    links: ReadonlyArray<SpanLink>,
-    startTime: bigint,
-    kind: SpanKind,
-    options?: SpanOptions
-  ) => Span
+  span(this: Tracer, options: {
+    readonly name: string
+    readonly parent: AnySpan | undefined
+    readonly annotations: ServiceMap.ServiceMap<never>
+    readonly links: Array<SpanLink>
+    readonly startTime: bigint
+    readonly kind: SpanKind
+    readonly root: boolean
+    readonly sampled: boolean
+  }): Span
   readonly context?:
     | (<X>(primitive: EffectPrimitive<X>, fiber: Fiber<any, any>) => X)
     | undefined
@@ -214,6 +184,8 @@ export interface SpanOptionsNoTrace {
   readonly root?: boolean | undefined
   readonly annotations?: ServiceMap.ServiceMap<never> | undefined
   readonly kind?: SpanKind | undefined
+  readonly sampled?: boolean | undefined
+  readonly level?: LogLevel | undefined
 }
 
 /**
@@ -313,29 +285,6 @@ export interface SpanLink {
 /**
  * @since 2.0.0
  * @category constructors
- * @example
- * ```ts
- * import { Tracer } from "effect"
- *
- * // Create a custom tracer with logging
- * const loggingTracer = Tracer.make({
- *   span: (name, parent, annotations, links, startTime, kind) => {
- *     console.log(`Starting span: ${name} (${kind})`)
- *     return new Tracer.NativeSpan(
- *       name,
- *       parent,
- *       annotations,
- *       links.slice(),
- *       startTime,
- *       kind
- *     )
- *   },
- *   context: (primitive, fiber) => {
- *     console.log("Executing with tracer context")
- *     return primitive["~effect/Effect/evaluate"](fiber)
- *   }
- * })
- * ```
  */
 export const make = (options: Tracer): Tracer => options
 
@@ -395,6 +344,29 @@ export const DisablePropagation = ServiceMap.Reference<boolean>(
 )
 
 /**
+ * Reference for controlling the current trace level for dynamic filtering.
+ *
+ * @category references
+ * @since 4.0.0
+ */
+export const CurrentTraceLevel: ServiceMap.Reference<LogLevel> = ServiceMap.Reference<LogLevel>(
+  "effect/Tracer/CurrentTraceLevel",
+  { defaultValue: () => "Info" }
+)
+
+/**
+ * Reference for setting the minimum trace level threshold. Spans and their
+ * descendants below this level will have their sampling decision forced to
+ * false, preventing them from being exported.
+ *
+ * @category references
+ * @since 4.0.0
+ */
+export const MinimumTraceLevel = ServiceMap.Reference<
+  LogLevel
+>("effect/Tracer/MinimumTraceLevel", { defaultValue: () => "All" })
+
+/**
  * @since 4.0.0
  * @category references
  */
@@ -423,45 +395,19 @@ export const TracerKey = "effect/Tracer"
 export const Tracer: ServiceMap.Reference<Tracer> = ServiceMap.Reference<Tracer>(TracerKey, {
   defaultValue: () =>
     make({
-      span: (name, parent, annotations, links, startTime, kind) =>
-        new NativeSpan(
-          name,
-          parent,
-          annotations,
-          links.slice(),
-          startTime,
-          kind
-        )
+      span: (options) => new NativeSpan(options)
     })
 })
 
 /**
  * @since 4.0.0
  * @category native tracer
- * @example
- * ```ts
- * import { ServiceMap, Tracer } from "effect"
- *
- * // Create a native span directly
- * const span = new Tracer.NativeSpan(
- *   "my-operation",
- *   undefined,
- *   ServiceMap.empty(),
- *   [],
- *   BigInt(Date.now() * 1000000),
- *   "internal"
- * )
- *
- * // Use the span
- * span.attribute("user.id", "123")
- * span.event("checkpoint", BigInt(Date.now() * 1000000))
- * ```
  */
 export class NativeSpan implements Span {
   readonly _tag = "Span"
   readonly spanId: string
   readonly traceId: string = "native"
-  readonly sampled = true
+  readonly sampled: boolean
 
   readonly name: string
   readonly parent: AnySpan | undefined
@@ -474,26 +420,28 @@ export class NativeSpan implements Span {
   attributes: Map<string, unknown>
   events: Array<[name: string, startTime: bigint, attributes: Record<string, unknown>]> = []
 
-  constructor(
-    name: string,
-    parent: AnySpan | undefined,
-    annotations: ServiceMap.ServiceMap<never>,
-    links: Array<SpanLink>,
-    startTime: bigint,
-    kind: SpanKind
-  ) {
-    this.name = name
-    this.parent = parent
-    this.annotations = annotations
-    this.links = links
-    this.startTime = startTime
-    this.kind = kind
+  constructor(options: {
+    readonly name: string
+    readonly parent: AnySpan | undefined
+    readonly annotations: ServiceMap.ServiceMap<never>
+    readonly links: Array<SpanLink>
+    readonly startTime: bigint
+    readonly kind: SpanKind
+    readonly sampled: boolean
+  }) {
+    this.name = options.name
+    this.parent = options.parent
+    this.annotations = options.annotations
+    this.links = options.links
+    this.startTime = options.startTime
+    this.kind = options.kind
+    this.sampled = options.sampled
     this.status = {
       _tag: "Started",
-      startTime
+      startTime: options.startTime
     }
     this.attributes = new Map()
-    this.traceId = parent ? parent.traceId : randomHexString(32)
+    this.traceId = options.parent?.traceId ?? randomHexString(32)
     this.spanId = randomHexString(16)
   }
 
