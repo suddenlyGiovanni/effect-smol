@@ -11,13 +11,13 @@ import {
   Effect,
   Exit,
   Fiber,
-  Filter,
   Logger,
   type LogLevel,
   Option,
   Queue,
   Ref,
   References,
+  Result,
   Schedule,
   Sink,
   Stream
@@ -371,6 +371,24 @@ describe("Stream", () => {
           Effect.exit
         )
         assert.deepStrictEqual(result, Exit.fail(42))
+      }))
+
+    it.effect("catchIf with filter input", () =>
+      Effect.gen(function*() {
+        const matched = yield* Stream.catchIf(
+          Stream.fail("boom" as string | number),
+          (e: string | number) => typeof e === "string" ? Result.succeed(e.length) : Result.fail(`fallback: ${e}`),
+          (length) => Stream.succeed(`caught: ${length}`),
+          (failure) => Stream.succeed(failure)
+        ).pipe(Stream.runCollect)
+        const unmatched = yield* Stream.catchIf(
+          Stream.fail(42 as string | number),
+          (e: string | number) => typeof e === "string" ? Result.succeed(e.length) : Result.fail(`fallback: ${e}`),
+          (length) => Stream.succeed(`caught: ${length}`),
+          (failure) => Stream.succeed(failure)
+        ).pipe(Stream.runCollect)
+        assert.deepStrictEqual(matched, ["caught: 4"])
+        assert.deepStrictEqual(unmatched, ["fallback: 42"])
       }))
 
     it.effect("catchTag orElse", () =>
@@ -3328,7 +3346,7 @@ describe("Stream", () => {
       Effect.gen(function*() {
         const stream = pipe(
           Stream.fromIterable(Array.empty<number>()),
-          Stream.partitionEffect((n) => Effect.succeed(n % 2 === 0 ? Filter.pass(n) : Filter.fail(n))),
+          Stream.partitionEffect((n) => Effect.succeed(n % 2 === 0 ? Result.succeed(n) : Result.fail(n))),
           Effect.map(([odds, evens]) => pipe(evens, Stream.mergeResult(odds))),
           Effect.flatMap(Stream.runCollect),
           Effect.scoped
@@ -3344,7 +3362,7 @@ describe("Stream", () => {
       Effect.gen(function*() {
         const { result1, result2 } = yield* pipe(
           Stream.range(0, 5),
-          Stream.partition((n) => n % 2 === 0 ? Filter.pass(n) : Filter.fail(n)),
+          Stream.partition((n) => n % 2 === 0 ? Result.succeed(n) : Result.fail(n)),
           Effect.flatMap(([odds, evens]) =>
             Effect.all({
               result1: Stream.runCollect(evens),
@@ -3362,7 +3380,7 @@ describe("Stream", () => {
         const { result1, result2 } = yield* pipe(
           Stream.make(0),
           Stream.concat(Stream.fail("boom")),
-          Stream.partition((n) => n % 2 === 0 ? Filter.pass(n) : Filter.fail(n)),
+          Stream.partition((n) => n % 2 === 0 ? Result.succeed(n) : Result.fail(n)),
           Effect.flatMap(([odds, evens]) =>
             Effect.all({
               result1: Effect.flip(Stream.runCollect(evens)),
@@ -3379,7 +3397,7 @@ describe("Stream", () => {
       Effect.gen(function*() {
         const { result1, result2, result3 } = yield* pipe(
           Stream.range(0, 5),
-          Stream.partition((n) => (n % 2 === 0 ? Filter.pass(n) : Filter.fail(n)), { bufferSize: 1 }),
+          Stream.partition((n) => (n % 2 === 0 ? Result.succeed(n) : Result.fail(n)), { bufferSize: 1 }),
           Effect.flatMap(([odds, evens]) =>
             Effect.gen(function*() {
               const ref = yield* Ref.make(Array.empty<number>())
