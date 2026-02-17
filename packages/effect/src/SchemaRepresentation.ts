@@ -573,7 +573,7 @@ export type StringMeta = Schema.Annotations.BuiltInMetaDefinitions[
   | "isMinLength"
   | "isMaxLength"
   | "isPattern"
-  | "isLength"
+  | "isLengthBetween"
   | "isTrimmed"
   | "isUUID"
   | "isULID"
@@ -639,7 +639,7 @@ export type BigIntMeta = Schema.Annotations.BuiltInMetaDefinitions[
 export type ArraysMeta = Schema.Annotations.BuiltInMetaDefinitions[
   | "isMinLength"
   | "isMaxLength"
-  | "isLength"
+  | "isLengthBetween"
   | "isUnique"
 ]
 
@@ -657,7 +657,7 @@ export type ObjectsMeta =
   | Schema.Annotations.BuiltInMetaDefinitions[
     | "isMinProperties"
     | "isMaxProperties"
-    | "isPropertiesLength"
+    | "isPropertiesLengthBetween"
   ]
   | { readonly _tag: "isPropertyNames"; readonly propertyNames: Representation }
 
@@ -692,7 +692,7 @@ export type DateMeta = Schema.Annotations.BuiltInMetaDefinitions[
 export type SizeMeta = Schema.Annotations.BuiltInMetaDefinitions[
   | "isMinSize"
   | "isMaxSize"
-  | "isSize"
+  | "isSizeBetween"
 ]
 
 /**
@@ -978,10 +978,11 @@ const $IsMaxLength = Schema.Struct({
   maxLength: NonNegativeInt
 }).annotate({ identifier: "IsMaxLength" })
 
-const $IsLength = Schema.Struct({
-  _tag: Schema.tag("isLength"),
-  length: NonNegativeInt
-}).annotate({ identifier: "IsLength" })
+const $IsLengthBetween = Schema.Struct({
+  _tag: Schema.tag("isLengthBetween"),
+  minimum: NonNegativeInt,
+  maximum: NonNegativeInt
+}).annotate({ identifier: "IsLengthBetween" })
 
 const $IsPattern = Schema.Struct({
   _tag: Schema.tag("isPattern"),
@@ -1013,7 +1014,7 @@ export const $StringMeta = Schema.Union([
   $IsMinLength,
   $IsMaxLength,
   $IsPattern,
-  $IsLength
+  $IsLengthBetween
 ]).annotate({ identifier: "StringMeta" })
 
 function makeCheck<T>(meta: Schema.Codec<T>, identifier: string) {
@@ -1287,7 +1288,7 @@ const $IsUnique = Schema.Struct({
 const $ArraysMeta = Schema.Union([
   $IsMinLength,
   $IsMaxLength,
-  $IsLength,
+  $IsLengthBetween,
   $IsUnique
 ]).annotate({ identifier: "ArraysMeta" })
 
@@ -1340,10 +1341,11 @@ const $IsMaxProperties = Schema.Struct({
   maxProperties: NonNegativeInt
 }).annotate({ identifier: "IsMaxProperties" })
 
-const $IsPropertiesLength = Schema.Struct({
-  _tag: Schema.tag("isPropertiesLength"),
-  length: NonNegativeInt
-}).annotate({ identifier: "IsPropertiesLength" })
+const $IsPropertiesLengthBetween = Schema.Struct({
+  _tag: Schema.tag("isPropertiesLengthBetween"),
+  minimum: NonNegativeInt,
+  maximum: NonNegativeInt
+}).annotate({ identifier: "IsPropertiesLengthBetween" })
 
 const $IsPropertyNames = Schema.Struct({
   _tag: Schema.tag("isPropertyNames"),
@@ -1359,7 +1361,7 @@ const $IsPropertyNames = Schema.Struct({
 export const $ObjectsMeta = Schema.Union([
   $IsMinProperties,
   $IsMaxProperties,
-  $IsPropertiesLength,
+  $IsPropertiesLengthBetween,
   $IsPropertyNames
 ]).annotate({ identifier: "ObjectsMeta" })
 
@@ -1458,10 +1460,11 @@ const $IsMaxSize = Schema.Struct({
   maxSize: NonNegativeInt
 }).annotate({ identifier: "IsMaxSize" })
 
-const $IsSize = Schema.Struct({
-  _tag: Schema.tag("isSize"),
-  size: NonNegativeInt
-}).annotate({ identifier: "IsSize" })
+const $IsSizeBetween = Schema.Struct({
+  _tag: Schema.tag("isSizeBetween"),
+  minimum: NonNegativeInt,
+  maximum: NonNegativeInt
+}).annotate({ identifier: "IsSizeBetween" })
 
 /**
  * Schema codec for {@link SizeMeta}.
@@ -1472,7 +1475,7 @@ const $IsSize = Schema.Struct({
 export const $SizeMeta = Schema.Union([
   $IsMinSize,
   $IsMaxSize,
-  $IsSize
+  $IsSizeBetween
 ]).annotate({ identifier: "SizeMeta" })
 
 /**
@@ -1993,8 +1996,8 @@ export function toSchema<S extends Schema.Top = Schema.Top>(document: Document, 
         return Schema.isMinLength(filter.meta.minLength, a)
       case "isMaxLength":
         return Schema.isMaxLength(filter.meta.maxLength, a)
-      case "isLength":
-        return Schema.isLength(filter.meta.length, a)
+      case "isLengthBetween":
+        return Schema.isLengthBetween(filter.meta.minimum, filter.meta.maximum, a)
       case "isPattern":
         return Schema.isPattern(filter.meta.regExp, a)
       case "isTrimmed":
@@ -2057,8 +2060,8 @@ export function toSchema<S extends Schema.Top = Schema.Top>(document: Document, 
         return Schema.isMinProperties(filter.meta.minProperties, a)
       case "isMaxProperties":
         return Schema.isMaxProperties(filter.meta.maxProperties, a)
-      case "isPropertiesLength":
-        return Schema.isPropertiesLength(filter.meta.length, a)
+      case "isPropertiesLengthBetween":
+        return Schema.isPropertiesLengthBetween(filter.meta.minimum, filter.meta.maximum, a)
       case "isPropertyNames":
         return Schema.isPropertyNames(recur(filter.meta.propertyNames) as Schema.Record.Key, a)
 
@@ -2085,8 +2088,8 @@ export function toSchema<S extends Schema.Top = Schema.Top>(document: Document, 
         return Schema.isMinSize(filter.meta.minSize, a)
       case "isMaxSize":
         return Schema.isMaxSize(filter.meta.maxSize, a)
-      case "isSize":
-        return Schema.isSize(filter.meta.size, a)
+      case "isSizeBetween":
+        return Schema.isSizeBetween(filter.meta.minimum, filter.meta.maximum, a)
     }
   }
 }
@@ -2641,8 +2644,8 @@ export function toCodeDocument(multiDocument: MultiDocument, options?: {
         return `Schema.isMinLength(${filter.meta.minLength}${ca})`
       case "isMaxLength":
         return `Schema.isMaxLength(${filter.meta.maxLength}${ca})`
-      case "isLength":
-        return `Schema.isLength(${filter.meta.length}${ca})`
+      case "isLengthBetween":
+        return `Schema.isLengthBetween(${filter.meta.minimum}, ${filter.meta.maximum}${ca})`
       case "isUUID":
         return `Schema.isUUID(${filter.meta.version}${ca})`
       case "isStartsWith":
@@ -2684,8 +2687,8 @@ export function toCodeDocument(multiDocument: MultiDocument, options?: {
         return `Schema.isMinProperties(${filter.meta.minProperties}${ca})`
       case "isMaxProperties":
         return `Schema.isMaxProperties(${filter.meta.maxProperties}${ca})`
-      case "isPropertiesLength":
-        return `Schema.isPropertiesLength(${filter.meta.length}${ca})`
+      case "isPropertiesLengthBetween":
+        return `Schema.isPropertiesLengthBetween(${filter.meta.minimum}, ${filter.meta.maximum}${ca})`
       case "isPropertyNames":
         return `Schema.isPropertyNames(${recur(filter.meta.propertyNames).runtime}${ca})`
 
@@ -2693,8 +2696,8 @@ export function toCodeDocument(multiDocument: MultiDocument, options?: {
         return `Schema.isMinSize(${filter.meta.minSize}${ca})`
       case "isMaxSize":
         return `Schema.isMaxSize(${filter.meta.maxSize}${ca})`
-      case "isSize":
-        return `Schema.isSize(${filter.meta.size}${ca})`
+      case "isSizeBetween":
+        return `Schema.isSizeBetween(${filter.meta.minimum}, ${filter.meta.maximum}${ca})`
     }
   }
 }

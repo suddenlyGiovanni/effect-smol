@@ -647,10 +647,10 @@ export function toJsonSchemaMultiDocument(
           return type === "array" ? { minItems: meta.minLength } : { minLength: meta.minLength }
         case "isMaxLength":
           return type === "array" ? { maxItems: meta.maxLength } : { maxLength: meta.maxLength }
-        case "isLength":
+        case "isLengthBetween":
           return type === "array"
-            ? { allOf: [{ minItems: meta.length }, { maxItems: meta.length }] }
-            : { allOf: [{ minLength: meta.length }, { maxLength: meta.length }] }
+            ? { allOf: [{ minItems: meta.minimum }, { maxItems: meta.maximum }] }
+            : { allOf: [{ minLength: meta.minimum }, { maxLength: meta.maximum }] }
         case "isPattern":
         case "isULID":
         case "isBase64":
@@ -697,8 +697,8 @@ export function toJsonSchemaMultiDocument(
           return { minProperties: meta.minProperties }
         case "isMaxProperties":
           return { maxProperties: meta.maxProperties }
-        case "isPropertiesLength":
-          return { minProperties: meta.length, maxProperties: meta.length }
+        case "isPropertiesLengthBetween":
+          return { minProperties: meta.minimum, maxProperties: meta.maximum }
         case "isPropertyNames":
           return { propertyNames: recur(meta.propertyNames) }
 

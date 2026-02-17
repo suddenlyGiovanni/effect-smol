@@ -4862,43 +4862,46 @@ export function isMaxLength(maxLength: number, annotations?: Annotations.Filter)
 }
 
 /**
- * Validates that a value has exactly the specified length. Works with strings
- * and arrays.
+ * Validates that a value's length is within the specified range. Works with
+ * strings and arrays.
  *
  * **JSON Schema**
  *
- * This check corresponds to both `minLength`/`maxLength` constraints for strings
- * or `minItems`/`maxItems` constraints for arrays in JSON Schema, both set to
- * the same value.
+ * This check corresponds to `minLength`/`maxLength` constraints for strings
+ * or `minItems`/`maxItems` constraints for arrays in JSON Schema.
  *
  * **Arbitrary**
  *
- * When generating test data with fast-check, this applies both `minLength` and
- * `maxLength` constraints set to the same value to ensure generated strings or
- * arrays have exactly the required length.
+ * When generating test data with fast-check, this applies `minLength` and
+ * `maxLength` constraints to ensure generated strings or arrays have a length
+ * within the specified range.
  *
  * @category Length checks
  * @since 4.0.0
  */
-export function isLength(length: number, annotations?: Annotations.Filter) {
-  length = Math.max(0, Math.floor(length))
+export function isLengthBetween(minimum: number, maximum: number, annotations?: Annotations.Filter) {
+  minimum = Math.max(0, Math.floor(minimum))
+  maximum = Math.max(0, Math.floor(maximum))
   return makeFilter<{ readonly length: number }>(
-    (input) => input.length === length,
+    (input) => input.length >= minimum && input.length <= maximum,
     {
-      expected: `a value with a length of ${length}`,
+      expected: minimum === maximum
+        ? `a value with a length of ${minimum}`
+        : `a value with a length between ${minimum} and ${maximum}`,
       meta: {
-        _tag: "isLength",
-        length
+        _tag: "isLengthBetween",
+        minimum,
+        maximum
       },
       [AST.STRUCTURAL_ANNOTATION_KEY]: true,
       toArbitraryConstraint: {
         string: {
-          minLength: length,
-          maxLength: length
+          minLength: minimum,
+          maxLength: maximum
         },
         array: {
-          minLength: length,
-          maxLength: length
+          minLength: minimum,
+          maxLength: maximum
         }
       },
       ...annotations
@@ -4908,7 +4911,7 @@ export function isLength(length: number, annotations?: Annotations.Filter) {
 
 /**
  * Validates that a value has at least the specified size. Works with values
- * that have a `size` property, such as objects with a `size` property.
+ * that have a `size` property, such as `Set` or `Map`.
  *
  * **JSON Schema**
  *
@@ -4947,7 +4950,7 @@ export function isMinSize(minSize: number, annotations?: Annotations.Filter) {
 
 /**
  * Validates that a value has at most the specified size. Works with values
- * that have a `size` property, such as objects with a `size` property.
+ * that have a `size` property, such as `Set` or `Map`.
  *
  * **JSON Schema**
  *
@@ -4985,8 +4988,8 @@ export function isMaxSize(maxSize: number, annotations?: Annotations.Filter) {
 }
 
 /**
- * Validates that a value has exactly the specified size. Works with values
- * that have a `size` property, such as objects with a `size` property.
+ * Validates that a value's size is within the specified range. Works with
+ * values that have a `size` property, such as `Set` or `Map`.
  *
  * **JSON Schema**
  *
@@ -4995,28 +4998,32 @@ export function isMaxSize(maxSize: number, annotations?: Annotations.Filter) {
  *
  * **Arbitrary**
  *
- * When generating test data with fast-check, this applies both `minLength` and
- * `maxLength` constraints set to the same value to ensure generated values have
- * exactly the required size.
+ * When generating test data with fast-check, this applies `minLength` and
+ * `maxLength` constraints to ensure generated values have a size within the
+ * specified range.
  *
  * @category Size checks
  * @since 4.0.0
  */
-export function isSize(size: number, annotations?: Annotations.Filter) {
-  size = Math.max(0, Math.floor(size))
+export function isSizeBetween(minimum: number, maximum: number, annotations?: Annotations.Filter) {
+  minimum = Math.max(0, Math.floor(minimum))
+  maximum = Math.max(0, Math.floor(maximum))
   return makeFilter<{ readonly size: number }>(
-    (input) => input.size === size,
+    (input) => input.size >= minimum && input.size <= maximum,
     {
-      expected: `a value with a size of ${size}`,
+      expected: minimum === maximum
+        ? `a value with a size of ${minimum}`
+        : `a value with a size between ${minimum} and ${maximum}`,
       meta: {
-        _tag: "isSize",
-        size
+        _tag: "isSizeBetween",
+        minimum,
+        maximum
       },
       [AST.STRUCTURAL_ANNOTATION_KEY]: true,
       toArbitraryConstraint: {
         array: {
-          minLength: size,
-          maxLength: size
+          minLength: minimum,
+          maxLength: maximum
         }
       },
       ...annotations
@@ -5104,39 +5111,42 @@ export function isMaxProperties(maxProperties: number, annotations?: Annotations
 }
 
 /**
- * Validates that an object contains exactly the specified number of properties.
+ * Validates that an object contains between `minimum` and `maximum` properties (inclusive).
  * This includes both string and symbol keys when counting properties.
  *
  * **JSON Schema**
  *
- * This check corresponds to both `minProperties` and `maxProperties`
- * constraints in JSON Schema, both set to the same value.
+ * This check corresponds to `minProperties` and `maxProperties`
+ * constraints in JSON Schema.
  *
  * **Arbitrary**
  *
- * When generating test data with fast-check, this applies both `minLength` and
+ * When generating test data with fast-check, this applies `minLength` and
  * `maxLength` constraints to the array of entries that is generated before
- * being converted to an object, ensuring the resulting object has exactly the
- * required number of properties.
+ * being converted to an object.
  *
  * @category Object checks
  * @since 4.0.0
  */
-export function isPropertiesLength(length: number, annotations?: Annotations.Filter) {
-  length = Math.max(0, Math.floor(length))
+export function isPropertiesLengthBetween(minimum: number, maximum: number, annotations?: Annotations.Filter) {
+  minimum = Math.max(0, Math.floor(minimum))
+  maximum = Math.max(0, Math.floor(maximum))
   return makeFilter<object>(
-    (input) => Reflect.ownKeys(input).length === length,
+    (input) => Reflect.ownKeys(input).length >= minimum && Reflect.ownKeys(input).length <= maximum,
     {
-      expected: `a value with exactly ${length === 1 ? "1 entry" : `${length} entries`}`,
+      expected: minimum === maximum
+        ? `a value with exactly ${minimum === 1 ? "1 entry" : `${minimum} entries`}`
+        : `a value with between ${minimum} and ${maximum} entries`,
       meta: {
-        _tag: "isPropertiesLength",
-        length
+        _tag: "isPropertiesLengthBetween",
+        minimum,
+        maximum
       },
       [AST.STRUCTURAL_ANNOTATION_KEY]: true,
       toArbitraryConstraint: {
         array: {
-          minLength: length,
-          maxLength: length
+          minLength: minimum,
+          maxLength: maximum
         }
       },
       ...annotations
@@ -5238,7 +5248,7 @@ export const NonEmptyString = String.check(isNonEmpty())
  *
  * @since 4.0.0
  */
-export const Char = String.check(isLength(1))
+export const Char = String.check(isLengthBetween(1, 1))
 
 /**
  * @category Option
@@ -8856,9 +8866,10 @@ export declare namespace Annotations {
       readonly _tag: "isMaxLength"
       readonly maxLength: number
     }
-    readonly isLength: {
-      readonly _tag: "isLength"
-      readonly length: number
+    readonly isLengthBetween: {
+      readonly _tag: "isLengthBetween"
+      readonly minimum: number
+      readonly maximum: number
     }
     readonly isPattern: {
       readonly _tag: "isPattern"
@@ -9010,9 +9021,10 @@ export declare namespace Annotations {
       readonly _tag: "isMaxProperties"
       readonly maxProperties: number
     }
-    readonly isPropertiesLength: {
-      readonly _tag: "isPropertiesLength"
-      readonly length: number
+    readonly isPropertiesLengthBetween: {
+      readonly _tag: "isPropertiesLengthBetween"
+      readonly minimum: number
+      readonly maximum: number
     }
     readonly isPropertyNames: {
       readonly _tag: "isPropertyNames"
@@ -9031,9 +9043,10 @@ export declare namespace Annotations {
       readonly _tag: "isMaxSize"
       readonly maxSize: number
     }
-    readonly isSize: {
-      readonly _tag: "isSize"
-      readonly size: number
+    readonly isSizeBetween: {
+      readonly _tag: "isSizeBetween"
+      readonly minimum: number
+      readonly maximum: number
     }
   }
 

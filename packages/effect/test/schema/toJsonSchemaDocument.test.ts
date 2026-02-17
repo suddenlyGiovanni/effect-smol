@@ -856,10 +856,10 @@ describe("toJsonSchemaDocument", () => {
         })
       })
 
-      describe("isLength", () => {
+      describe("isLengthBetween", () => {
         it("String", () => {
           assertJsonSchemaDocument(
-            Schema.String.check(Schema.isLength(2)),
+            Schema.String.check(Schema.isLengthBetween(2, 2)),
             {
               schema: {
                 "type": "string",
@@ -874,7 +874,7 @@ describe("toJsonSchemaDocument", () => {
 
         it("Array", () => {
           assertJsonSchemaDocument(
-            Schema.Array(Schema.String).check(Schema.isLength(2)),
+            Schema.Array(Schema.String).check(Schema.isLengthBetween(2, 2)),
             {
               schema: {
                 "type": "array",
@@ -892,7 +892,7 @@ describe("toJsonSchemaDocument", () => {
 
         it("NonEmptyArray", () => {
           assertJsonSchemaDocument(
-            Schema.NonEmptyArray(Schema.String).check(Schema.isLength(2)),
+            Schema.NonEmptyArray(Schema.String).check(Schema.isLengthBetween(2, 2)),
             {
               schema: {
                 "type": "array",
@@ -2687,9 +2687,9 @@ describe("toJsonSchemaDocument", () => {
         )
       })
 
-      it("isPropertiesLength", () => {
+      it("isPropertiesLengthBetween", () => {
         assertJsonSchemaDocument(
-          Schema.Record(Schema.String, Schema.Finite).check(Schema.isPropertiesLength(2)),
+          Schema.Record(Schema.String, Schema.Finite).check(Schema.isPropertiesLengthBetween(2, 2)),
           {
             schema: {
               "type": "object",
@@ -3001,9 +3001,9 @@ describe("toJsonSchemaDocument", () => {
         )
       })
 
-      it("isLength", () => {
+      it("isLengthBetween", () => {
         assertJsonSchemaDocument(
-          Schema.Array(Schema.String).check(Schema.isLength(2)),
+          Schema.Array(Schema.String).check(Schema.isLengthBetween(2, 2)),
           {
             schema: {
               "type": "array",
