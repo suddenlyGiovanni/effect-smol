@@ -449,11 +449,157 @@ export * as Clock from "./Clock.ts"
 export * as Combiner from "./Combiner.ts"
 
 /**
+ * Declarative, schema-driven configuration loading. A `Config<T>` describes
+ * how to read and validate a value of type `T` from a `ConfigProvider`. Configs
+ * can be composed, transformed, and used directly as Effects.
+ *
+ * ## Mental model
+ *
+ * - **Config\<T\>** – a recipe for extracting a typed value from a
+ *   `ConfigProvider`. Created via convenience constructors or {@link schema}.
+ * - **ConfigProvider** – the backing data source (env vars, JSON, `.env`
+ *   files). See the `ConfigProvider` module.
+ * - **ConfigError** – wraps either a `SourceError` (provider I/O failure) or
+ *   a `SchemaError` (validation / decoding failure).
+ * - **parse** – instance method on every `Config` that takes a provider and
+ *   returns `Effect<T, ConfigError>`.
+ * - **Yieldable** – every `Config` can be yielded inside `Effect.gen`. It
+ *   automatically resolves the current `ConfigProvider` from the service map.
+ *
+ * ## Common tasks
+ *
+ * - Read a single env var → {@link string}, {@link number}, {@link boolean},
+ *   {@link int}, {@link port}, {@link url}, {@link date}, {@link duration},
+ *   {@link logLevel}, {@link redacted}
+ * - Read a structured config → {@link schema} with a `Schema.Struct`
+ * - Provide a default → {@link withDefault}
+ * - Make a config optional → {@link option}
+ * - Transform a value → {@link map} / {@link mapOrFail}
+ * - Fall back on error → {@link orElse}
+ * - Combine multiple configs → {@link all}
+ * - Build from a `Schema.Codec` → {@link schema}
+ * - Always succeed or fail → {@link succeed} / {@link fail}
+ *
+ * ## Gotchas
+ *
+ * - `withDefault` and `option` only apply when the error is caused by
+ *   **missing data**. Validation errors (wrong type, out of range) still
+ *   propagate.
+ * - When yielded in `Effect.gen`, the config resolves using the current
+ *   `ConfigProvider` service. To use a specific provider, call `.parse(provider)`
+ *   instead.
+ * - The `name` parameter on convenience constructors (e.g. `Config.string("HOST")`)
+ *   sets the root path segment. Omit it when the config is part of a larger
+ *   schema.
+ *
+ * ## Quickstart
+ *
+ * **Example** (Reading typed config from environment variables)
+ *
+ * ```ts
+ * import { Config, ConfigProvider, Effect, Schema } from "effect"
+ *
+ * const AppConfig = Config.schema(
+ *   Schema.Struct({
+ *     host: Schema.String,
+ *     port: Schema.Int
+ *   }),
+ *   "app"
+ * )
+ *
+ * const provider = ConfigProvider.fromEnv({
+ *   env: { app_host: "localhost", app_port: "8080" }
+ * })
+ *
+ * // Effect.runSync(AppConfig.parse(provider))
+ * // { host: "localhost", port: 8080 }
+ * ```
+ *
+ * @see {@link schema} – build a Config from any Schema.Codec
+ * @see {@link ConfigError} – the error type for config failures
+ * @see {@link make} – low-level Config constructor
+ *
  * @since 4.0.0
  */
 export * as Config from "./Config.ts"
 
 /**
+ * Provides the data source layer for the `Config` module. A `ConfigProvider`
+ * knows how to load raw configuration nodes from a backing store (environment
+ * variables, JSON objects, `.env` files, file trees) and expose them through a
+ * uniform `Node` interface that `Config` schemas consume.
+ *
+ * ## Mental model
+ *
+ * - **Node** – a discriminated union (`Value | Record | Array`) that describes
+ *   what lives at a given path in the configuration tree.
+ * - **Path** – an array of string or numeric segments used to address a node
+ *   (e.g. `["database", "host"]`).
+ * - **ConfigProvider** – an object with a `load(path)` method that resolves a
+ *   path to a `Node | undefined`. Providers can be composed and transformed.
+ * - **ServiceMap.Reference** – `ConfigProvider` is registered as a reference
+ *   service that defaults to `fromEnv()`, so it works without explicit
+ *   provision.
+ * - **SourceError** – the typed error returned when a backing store is
+ *   unreadable (I/O failure, permission error, etc.).
+ *
+ * ## Common tasks
+ *
+ * - Read from environment variables → {@link fromEnv}
+ * - Read from a JSON / plain object → {@link fromUnknown}
+ * - Parse a `.env` string → {@link fromDotEnvContents}
+ * - Load a `.env` file → {@link fromDotEnv}
+ * - Read from a directory tree → {@link fromDir}
+ * - Build a custom provider → {@link make}
+ * - Fall back to another provider → {@link orElse}
+ * - Scope a provider under a prefix → {@link nested}
+ * - Convert path segments to `CONSTANT_CASE` → {@link constantCase}
+ * - Transform path segments arbitrarily → {@link mapInput}
+ * - Install a provider as a Layer → {@link layer} / {@link layerAdd}
+ *
+ * ## Gotchas
+ *
+ * - `fromEnv` joins path segments with `_` for lookup **and** splits env var
+ *   names on `_` to discover child keys. `DATABASE_HOST=x` is therefore
+ *   accessible at both `["DATABASE_HOST"]` and `["DATABASE", "HOST"]`.
+ * - Because of `_` splitting, querying a parent path like `["DATABASE"]`
+ *   returns a `Record` node with child key `"HOST"`, even if no env var
+ *   named `DATABASE` exists.
+ * - When using `fromEnv` with schemas that use camelCase keys, pipe the
+ *   provider through {@link constantCase} so `databaseHost` resolves to
+ *   `DATABASE_HOST`.
+ * - `orElse` only falls back when the primary provider returns `undefined`
+ *   (path not found). It does **not** catch `SourceError`.
+ * - `nested` prepends segments to the path *after* `mapInput` has run, so
+ *   the order of composition matters.
+ *
+ * ## Quickstart
+ *
+ * **Example** (Reading config from environment variables)
+ *
+ * ```ts
+ * import { Config, ConfigProvider, Effect } from "effect"
+ *
+ * const provider = ConfigProvider.fromEnv({
+ *   env: { APP_PORT: "3000", APP_HOST: "localhost" }
+ * })
+ *
+ * const port = Config.number("port")
+ *
+ * const program = port.parse(
+ *   provider.pipe(
+ *     ConfigProvider.nested("app"),
+ *     ConfigProvider.constantCase
+ *   )
+ * )
+ *
+ * // Effect.runSync(program) // 3000
+ * ```
+ *
+ * @see {@link make} – build a provider from a lookup function
+ * @see {@link fromEnv} – the default provider backed by `process.env`
+ * @see {@link fromUnknown} – provider backed by a plain JS object
+ *
  * @since 4.0.0
  */
 export * as ConfigProvider from "./ConfigProvider.ts"
