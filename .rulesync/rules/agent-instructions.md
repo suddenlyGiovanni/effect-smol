@@ -110,3 +110,18 @@ You can run them with `pnpm test-types <filename>`.
 
 Take a look at the existing `.tst.ts` files for examples of how to write type
 level tests. They use the `tstyche` testing library.
+
+## Changesets
+
+All pull requests must include a changeset. You can create changesets in the
+`.changeset/` directory.
+
+The have the following format:
+
+```md
+---
+"package-name": patch | minor | major
+---
+
+A description of the change.
+```
