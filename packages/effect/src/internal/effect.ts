@@ -3771,7 +3771,7 @@ export const onExitIf: {
     ) => Effect.Effect<void, XE, XR>
   ): Effect.Effect<A, E | XE, R | XR> =>
     onExit(self, (exit) => {
-      const pass = Filter.apply(filter as any, exit)
+      const pass = Filter.apply(filter, exit)
       return Result.isFailure(pass) ? void_ : f(pass.success as any, exit)
     })
 )

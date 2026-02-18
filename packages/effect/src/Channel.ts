@@ -3020,8 +3020,11 @@ export const filter: {
       toTransform(self)(upstream, scope),
       (pull) =>
         Effect.flatMap(pull, function loop(elem): Pull.Pull<Filter.Pass<OutElem, Result>, OutErr, OutDone> {
-          const result = Filter.apply(filter, elem)
-          return Result.isFailure(result) ? Effect.flatMap(pull, loop) : Effect.succeed(result.success)
+          const result = filter(elem)
+          if (result === true) return Effect.succeed(elem as Filter.Pass<OutElem, Result>)
+          else if (result === false) return Effect.flatMap(pull, loop)
+          else if (Result.isSuccess(result)) return Effect.succeed(result.success)
+          return Effect.flatMap(pull, loop)
         })
     )
   ))
@@ -3784,8 +3787,11 @@ export const catchCauseIf: {
       InDone1,
       Env1
     > => {
-      const eb = Filter.apply(filter as any, cause)
-      return !Result.isFailure(eb) ? f(eb.success as any, cause) : failCause(eb.failure as any)
+      const eb = filter(cause)
+      if (eb === true) return f(cause as any, cause)
+      else if (eb === false) return failCause(cause as any)
+      else if (Result.isSuccess(eb)) return f(eb.success as any, cause)
+      return failCause(eb.failure)
     }
   ))
 

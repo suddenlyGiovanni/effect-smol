@@ -3319,12 +3319,11 @@ export const partition: {
     const satisfying: Array<any> = []
     const as = fromIterable(self)
     for (let i = 0; i < as.length; i++) {
-      const result = Filter.apply(f as any, as[i], i)
-      if (Result.isFailure(result)) {
-        excluded.push(result.failure)
-      } else {
-        satisfying.push(result.success)
-      }
+      const result = f(as[i], i)
+      if (result === true) satisfying.push(as[i])
+      else if (result === false) excluded.push(as[i])
+      else if (Result.isSuccess(result)) satisfying.push(result.success)
+      else excluded.push(result.failure)
     }
     return [excluded, satisfying]
   }
