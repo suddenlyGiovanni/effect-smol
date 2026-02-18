@@ -1,11 +1,12 @@
 import { Effect, Schema } from "effect"
-import { FetchHttpClient, type HttpClientError, type HttpClientResponse } from "effect/unstable/http"
+import { FetchHttpClient, HttpClient, type HttpClientError, type HttpClientResponse } from "effect/unstable/http"
 import {
   HttpApi,
   HttpApiClient,
   HttpApiEndpoint,
   type HttpApiError,
   HttpApiGroup,
+  HttpApiMiddleware,
   HttpApiSchema
 } from "effect/unstable/httpapi"
 import { describe, expect, it } from "tstyche"
@@ -250,6 +251,151 @@ describe("HttpApiClient", () => {
         Effect.Effect<
           void | [void, HttpClientResponse.HttpClientResponse],
           | { readonly a: number }
+          | HttpApiError.HttpApiSchemaError
+          | HttpClientError.HttpClientError
+          | Schema.SchemaError
+        >
+      >()
+    })
+  })
+
+  describe("client middleware", () => {
+    it("requiredForClient requires layer and includes required client errors", () => {
+      class RequiredClientError extends Schema.ErrorClass<RequiredClientError>("RequiredClientError")({
+        _tag: Schema.tag("RequiredClientError")
+      }) {}
+
+      class OptionalClientError extends Schema.ErrorClass<OptionalClientError>("OptionalClientError")({
+        _tag: Schema.tag("OptionalClientError")
+      }) {}
+
+      class RequiredMiddleware extends HttpApiMiddleware.Service<RequiredMiddleware, {
+        clientError: RequiredClientError
+      }>()("RequiredMiddleware", {
+        requiredForClient: true
+      }) {}
+
+      class OptionalMiddleware extends HttpApiMiddleware.Service<OptionalMiddleware, {
+        clientError: OptionalClientError
+      }>()("OptionalMiddleware") {}
+
+      const Api = HttpApi.make("Api")
+        .add(
+          HttpApiGroup.make("group")
+            .add(
+              HttpApiEndpoint.get("a", "/a", {
+                success: Schema.String
+              })
+                .middleware(RequiredMiddleware)
+                .middleware(OptionalMiddleware)
+            )
+        )
+
+      // @ts-expect-error!
+      Effect.runSync(HttpApiClient.make(Api).pipe(Effect.provide(FetchHttpClient.layer)))
+
+      const client = Effect.runSync(
+        HttpApiClient.make(Api).pipe(
+          Effect.provide([
+            FetchHttpClient.layer,
+            HttpApiMiddleware.layerClient(RequiredMiddleware, ({ next, request }) => next(request))
+          ])
+        )
+      )
+      const f = client.group.a
+      expect<ReturnType<typeof f>>().type.toBe<
+        Effect.Effect<
+          string | [string, HttpClientResponse.HttpClientResponse],
+          | RequiredClientError
+          | HttpApiError.HttpApiSchemaError
+          | HttpClientError.HttpClientError
+          | Schema.SchemaError
+        >
+      >()
+    })
+
+    it("requiredForClient is enforced for makeWith, group, and endpoint", () => {
+      class RequiredClientError extends Schema.ErrorClass<RequiredClientError>("RequiredClientError")({
+        _tag: Schema.tag("RequiredClientError")
+      }) {}
+
+      class RequiredMiddleware extends HttpApiMiddleware.Service<RequiredMiddleware, {
+        clientError: RequiredClientError
+      }>()("RequiredMiddleware", {
+        requiredForClient: true
+      }) {}
+
+      const Api = HttpApi.make("Api")
+        .add(
+          HttpApiGroup.make("group")
+            .add(
+              HttpApiEndpoint.get("a", "/a", {
+                success: Schema.String
+              })
+                .middleware(RequiredMiddleware)
+            )
+        )
+
+      const TestHttpClient = HttpClient.make(() => Effect.die("not used in dtslint"))
+
+      // @ts-expect-error!
+      Effect.runSync(HttpApiClient.makeWith(Api, { httpClient: TestHttpClient }))
+
+      // @ts-expect-error!
+      Effect.runSync(HttpApiClient.group(Api, { group: "group", httpClient: TestHttpClient }))
+
+      // @ts-expect-error!
+      Effect.runSync(HttpApiClient.endpoint(Api, { group: "group", endpoint: "a", httpClient: TestHttpClient }))
+
+      const middlewareLayer = HttpApiMiddleware.layerClient(
+        RequiredMiddleware,
+        ({ next, request }) => next(request)
+      )
+
+      const withClient = Effect.runSync(
+        HttpApiClient.makeWith(Api, { httpClient: TestHttpClient }).pipe(
+          Effect.provide(middlewareLayer)
+        )
+      )
+      const fromClient = withClient.group.a
+
+      const withGroup = Effect.runSync(
+        HttpApiClient.group(Api, { group: "group", httpClient: TestHttpClient }).pipe(
+          Effect.provide(middlewareLayer)
+        )
+      )
+      const fromGroup = withGroup.a
+
+      const fromEndpoint = Effect.runSync(
+        HttpApiClient.endpoint(Api, { group: "group", endpoint: "a", httpClient: TestHttpClient }).pipe(
+          Effect.provide(middlewareLayer)
+        )
+      )
+
+      expect<ReturnType<typeof fromClient>>().type.toBe<
+        Effect.Effect<
+          string | [string, HttpClientResponse.HttpClientResponse],
+          | RequiredClientError
+          | HttpApiError.HttpApiSchemaError
+          | HttpClientError.HttpClientError
+          | Schema.SchemaError
+        >
+      >()
+
+      expect<ReturnType<typeof fromGroup>>().type.toBe<
+        Effect.Effect<
+          string | [string, HttpClientResponse.HttpClientResponse],
+          | RequiredClientError
+          | HttpApiError.HttpApiSchemaError
+          | HttpClientError.HttpClientError
+          | Schema.SchemaError
+        >
+      >()
+
+      expect<ReturnType<typeof fromEndpoint>>().type.toBe<
+        Effect.Effect<
+          string | [string, HttpClientResponse.HttpClientResponse],
+          | RequiredClientError
           | HttpApiError.HttpApiSchemaError
           | HttpClientError.HttpClientError
           | Schema.SchemaError

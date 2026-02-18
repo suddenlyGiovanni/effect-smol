@@ -1,11 +1,16 @@
 /**
  * @since 4.0.0
  */
-import type * as Effect from "../../Effect.ts"
+import * as Effect from "../../Effect.ts"
+import * as Layer from "../../Layer.ts"
 import { hasProperty } from "../../Predicate.ts"
 import type * as Schema from "../../Schema.ts"
+import { Scope } from "../../Scope.ts"
 import * as ServiceMap from "../../ServiceMap.ts"
 import type { unhandled } from "../../Types.ts"
+import type * as HttpClientError from "../http/HttpClientError.ts"
+import type * as HttpClientRequest from "../http/HttpClientRequest.ts"
+import type * as HttpClientResponse from "../http/HttpClientResponse.ts"
 import type * as HttpRouter from "../http/HttpRouter.ts"
 import type { HttpServerResponse } from "../http/HttpServerResponse.ts"
 import type * as HttpApiEndpoint from "./HttpApiEndpoint.ts"
@@ -58,10 +63,36 @@ export type HttpApiMiddlewareSecurity<
  * @since 4.0.0
  * @category models
  */
+export interface HttpApiMiddlewareClient<_E, CE, R> {
+  (options: {
+    readonly endpoint: HttpApiEndpoint.AnyWithProps
+    readonly group: HttpApiGroup.AnyWithProps
+    readonly request: HttpClientRequest.HttpClientRequest
+    readonly next: (
+      request: HttpClientRequest.HttpClientRequest
+    ) => Effect.Effect<HttpClientResponse.HttpClientResponse, HttpClientError.HttpClientError>
+  }): Effect.Effect<HttpClientResponse.HttpClientResponse, CE | HttpClientError.HttpClientError, R>
+}
+
+/**
+ * @since 4.0.0
+ * @category models
+ */
+export interface ForClient<Id> {
+  readonly _: unique symbol
+  readonly id: Id
+}
+
+/**
+ * @since 4.0.0
+ * @category models
+ */
 export interface AnyKey extends ServiceMap.Service<any, any> {
   readonly [TypeId]: typeof TypeId
   readonly provides: any
   readonly error: Schema.Top
+  readonly requiredForClient: boolean
+  readonly "~ClientError": any
 }
 
 /**
@@ -80,6 +111,10 @@ export interface AnyKeySecurity extends AnyKey {
 export interface AnyId {
   readonly [TypeId]: {
     readonly provides: any
+    readonly requires: any
+    readonly error: Schema.Top
+    readonly clientError: any
+    readonly requiredForClient: boolean
   }
 }
 
@@ -119,6 +154,29 @@ export type Error<A> = ErrorSchema<A>["Type"]
  * @since 4.0.0
  * @category models
  */
+export type ClientError<A> = A extends {
+  readonly [TypeId]: {
+    readonly clientError: infer CE
+    readonly requiredForClient: true
+  }
+} ? CE
+  : never
+
+/**
+ * @since 4.0.0
+ * @category models
+ */
+export type MiddlewareClient<A> = A extends {
+  readonly [TypeId]: {
+    readonly requiredForClient: true
+  }
+} ? ForClient<A>
+  : never
+
+/**
+ * @since 4.0.0
+ * @category models
+ */
 export type ErrorServicesEncode<A> = ErrorSchema<A>["EncodingServices"]
 
 /**
@@ -138,6 +196,8 @@ export type ServiceClass<
     requires: any
     provides: any
     error: Schema.Top
+    clientError: any
+    requiredForClient: boolean
     security: Record<string, HttpApiSecurity.HttpApiSecurity>
   },
   Service =
@@ -151,10 +211,14 @@ export type ServiceClass<
         readonly error: Config["error"]
         readonly requires: Config["requires"]
         readonly provides: Config["provides"]
+        readonly clientError: Config["clientError"]
+        readonly requiredForClient: Config["requiredForClient"]
       }
     }
     readonly [TypeId]: typeof TypeId
     readonly error: Config["error"]
+    readonly requiredForClient: Config["requiredForClient"]
+    readonly "~ClientError": Config["clientError"]
   }
   & ([keyof Config["security"]] extends [never] ? {} : {
     readonly [SecurityTypeId]: typeof SecurityTypeId
@@ -170,21 +234,26 @@ export const Service = <
   Config extends {
     requires?: any
     provides?: any
-  } = { requires: never; provides: never }
+    clientError?: any
+  } = { requires: never; provides: never; clientError: never }
 >(): <
   const Id extends string,
   Error extends Schema.Top = never,
-  const Security extends Record<string, HttpApiSecurity.HttpApiSecurity> = never
+  const Security extends Record<string, HttpApiSecurity.HttpApiSecurity> = never,
+  RequiredForClient extends boolean = false
 >(
   id: Id,
   options?: {
     readonly error?: Error | undefined
     readonly security?: Security | undefined
+    readonly requiredForClient?: RequiredForClient | undefined
   } | undefined
 ) => ServiceClass<Self, Id, {
   requires: "requires" extends keyof Config ? Config["requires"] : never
   provides: "provides" extends keyof Config ? Config["provides"] : never
   error: Error
+  clientError: "clientError" extends keyof Config ? Config["clientError"] : never
+  requiredForClient: RequiredForClient
   security: Security
 }> =>
 (
@@ -192,6 +261,7 @@ export const Service = <
   options?: {
     readonly security?: Record<string, HttpApiSecurity.HttpApiSecurity> | undefined
     readonly error?: Schema.Top | undefined
+    readonly requiredForClient?: boolean | undefined
   } | undefined
 ) => {
   const Err = globalThis.Error as any
@@ -208,6 +278,7 @@ export const Service = <
     }
   })
   self[TypeId] = TypeId
+  self.requiredForClient = options?.requiredForClient ?? false
   if (options?.error !== undefined) {
     self.error = options.error
   }
@@ -220,3 +291,34 @@ export const Service = <
   }
   return self
 }
+
+/**
+ * @since 4.0.0
+ * @category client
+ */
+export const layerClient = <Id extends AnyId, S, R, EX = never, RX = never>(
+  tag: ServiceMap.Service<Id, S>,
+  service:
+    | HttpApiMiddlewareClient<Id[typeof TypeId]["error"]["Type"], Id[typeof TypeId]["clientError"], R>
+    | Effect.Effect<
+      HttpApiMiddlewareClient<Id[typeof TypeId]["error"]["Type"], Id[typeof TypeId]["clientError"], R>,
+      EX,
+      RX
+    >
+): Layer.Layer<ForClient<Id>, EX, R | Exclude<RX, Scope>> =>
+  Layer.effectServices(Effect.gen(function*() {
+    const services = (yield* Effect.services<R | Scope>()).pipe(
+      ServiceMap.omit(Scope)
+    ) as ServiceMap.ServiceMap<R>
+    const middleware = Effect.isEffect(service) ? yield* service : service
+    return ServiceMap.makeUnsafe(
+      new Map([[
+        `${tag.key}/Client`,
+        (options: any) =>
+          Effect.updateServices(
+            middleware(options),
+            (requestContext) => ServiceMap.merge(services, requestContext)
+          )
+      ]])
+    )
+  }))
