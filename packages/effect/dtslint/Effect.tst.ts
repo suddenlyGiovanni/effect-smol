@@ -1,6 +1,5 @@
 /** @effect-diagnostics floatingEffect:skip-file */
-import { Data, Effect, pipe } from "effect"
-import type { Types } from "effect"
+import { type Cause, Data, Effect, type Option, pipe, type Types } from "effect"
 import { describe, expect, it } from "tstyche"
 
 // Fixtures
@@ -27,6 +26,8 @@ class SimpleError extends Data.TaggedError("SimpleError")<{
 declare const aiEffect: Effect.Effect<string, AiError>
 declare const mixedEffect: Effect.Effect<string, AiError | OtherError>
 declare const simpleEffect: Effect.Effect<string, SimpleError>
+declare const noSuchOrOther: Effect.Effect<string, Cause.NoSuchElementError | OtherError>
+declare const onlyNoSuch: Effect.Effect<number, Cause.NoSuchElementError>
 
 describe("Types", () => {
   describe("ReasonOf", () => {
@@ -134,6 +135,18 @@ describe("Effect.catchReasons", () => {
       })
     )
     expect(result).type.toBe<Effect.Effect<string>>()
+  })
+})
+
+describe("Effect.catchNoSuchElement", () => {
+  it("removes NoSuchElementError from the error channel", () => {
+    const result = pipe(noSuchOrOther, Effect.catchNoSuchElement)
+    expect(result).type.toBe<Effect.Effect<Option.Option<string>, OtherError>>()
+  })
+
+  it("yields never when NoSuchElementError is the only error", () => {
+    const result = pipe(onlyNoSuch, Effect.catchNoSuchElement)
+    expect(result).type.toBe<Effect.Effect<Option.Option<number>>>()
   })
 })
 
