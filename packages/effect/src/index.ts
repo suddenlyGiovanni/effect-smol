@@ -1406,6 +1406,11 @@ export * as JsonPointer from "./JsonPointer.ts"
 export * as JsonSchema from "./JsonSchema.ts"
 
 /**
+ * @since 3.8.0
+ */
+export * as Latch from "./Latch.ts"
+
+/**
  * A `Layer<ROut, E, RIn>` describes how to build one or more services in your
  * application. Services can be injected into effects via
  * `Effect.provideService`. Effects can require services via `Effect.service`.
@@ -2277,12 +2282,6 @@ export * as Order from "./Order.ts"
 export * as Ordering from "./Ordering.ts"
 
 /**
- * @since 3.19.4
- * @experimental
- */
-export * as PartitionedSemaphore from "./PartitionedSemaphore.ts"
-
-/**
  * @since 4.0.0
  */
 export * as Path from "./Path.ts"
@@ -3143,6 +3142,11 @@ export * as ScopedCache from "./ScopedCache.ts"
  * @since 2.0.0
  */
 export * as ScopedRef from "./ScopedRef.ts"
+
+/**
+ * @since 2.0.0
+ */
+export * as Semaphore from "./Semaphore.ts"
 
 /**
  * This module provides a data structure called `ServiceMap` that can be used
