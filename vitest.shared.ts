@@ -15,6 +15,7 @@ const config: ViteUserConfig = {
       ignored: [
         "**/.context/**",
         "**/.direnv/**",
+        "**/.lalph/**",
         "**/.repos/**"
       ]
     }
@@ -23,6 +24,7 @@ const config: ViteUserConfig = {
     exclude: [
       "**/.context/**",
       "**/.direnv/**",
+      "**/.lalph/**",
       "**/.repos/**",
       "**/node_modules/**"
     ],
