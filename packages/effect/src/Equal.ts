@@ -269,7 +269,7 @@ function compareRecords(
 
 /** @internal */
 export function makeCompareMap<K, V>(keyEquivalence: Equivalence<K>, valueEquivalence: Equivalence<V>) {
-  return function compareMaps(self: ReadonlyMap<K, V>, that: ReadonlyMap<K, V>): boolean {
+  return function compareMaps(self: Iterable<[K, V]>, that: Iterable<[K, V]>): boolean {
     for (const [selfKey, selfValue] of self) {
       let found = false
       for (const [thatKey, thatValue] of that) {
@@ -291,7 +291,7 @@ const compareMaps = makeCompareMap(compareBoth, compareBoth)
 
 /** @internal */
 export function makeCompareSet<A>(equivalence: Equivalence<A>) {
-  return function compareSets(self: ReadonlySet<A>, that: ReadonlySet<A>): boolean {
+  return function compareSets(self: Iterable<A>, that: Iterable<A>): boolean {
     for (const selfValue of self) {
       let found = false
       for (const thatValue of that) {
