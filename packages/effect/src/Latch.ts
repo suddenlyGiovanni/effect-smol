@@ -42,6 +42,12 @@ export interface Latch {
 /**
  * Creates a new Latch unsafely.
  *
+ * **Previously Known As**
+ *
+ * This API replaces the following from Effect 3.x:
+ *
+ * - `Effect.makeLatchUnsafe`
+ *
  * @example
  * ```ts
  * import { Effect, Latch } from "effect"
@@ -70,6 +76,12 @@ export const makeUnsafe: (open?: boolean | undefined) => Latch = internal.makeLa
 
 /**
  * Creates a new Latch.
+ *
+ * **Previously Known As**
+ *
+ * This API replaces the following from Effect 3.x:
+ *
+ * - `Effect.makeLatch`
  *
  * @example
  * ```ts
