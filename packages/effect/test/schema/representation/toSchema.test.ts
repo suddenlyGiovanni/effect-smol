@@ -214,10 +214,10 @@ describe("toSchema", () => {
       )
     })
 
-    it("CauseFailure", () => {
+    it("CauseReason", () => {
       assertToSchemaWithReviver(
-        Schema.CauseFailure(Schema.String, Schema.Number),
-        `Schema.CauseFailure(String_, Number_)`
+        Schema.CauseReason(Schema.String, Schema.Number),
+        `Schema.CauseReason(String_, Number_)`
       )
     })
 
@@ -246,6 +246,13 @@ describe("toSchema", () => {
       assertToSchemaWithReviver(
         Schema.ReadonlyMap(Schema.String, Schema.Number),
         `Schema.ReadonlyMap(String_, Number_)`
+      )
+    })
+
+    it("HashMap", () => {
+      assertToSchemaWithReviver(
+        Schema.HashMap(Schema.String, Schema.Number),
+        `Schema.HashMap(String_, Number_)`
       )
     })
 
