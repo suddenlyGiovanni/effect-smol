@@ -13,6 +13,7 @@
  */
 import type * as Cause from "./Cause.ts"
 import * as core from "./internal/core.ts"
+import * as Pipeable from "./Pipeable.ts"
 import * as Predicate from "./Predicate.ts"
 import type * as Types from "./Types.ts"
 import type { Unify } from "./Unify.ts"
@@ -43,9 +44,12 @@ import type { Unify } from "./Unify.ts"
 export const Class: new<A extends Record<string, any> = {}>(
   args: Types.Equals<A, {}> extends true ? void
     : { readonly [P in keyof A]: A[P] }
-) => Readonly<A> = function(this: any, props: any) {
-  if (props) {
-    Object.assign(this, props)
+) => Readonly<A> & Pipeable.Pipeable = class extends Pipeable.Class {
+  constructor(props: any) {
+    super()
+    if (props) {
+      Object.assign(this, props)
+    }
   }
 } as any
 
@@ -79,12 +83,9 @@ export const TaggedClass = <Tag extends string>(
 ): new<A extends Record<string, any> = {}>(
   args: Types.Equals<A, {}> extends true ? void
     : { readonly [P in keyof A as P extends "_tag" ? never : P]: A[P] }
-) => Readonly<A> & { readonly _tag: Tag } =>
-  function(this: any, props: any) {
-    this._tag = tag
-    if (props) {
-      Object.assign(this, props)
-    }
+) => Readonly<A> & { readonly _tag: Tag } & Pipeable.Pipeable =>
+  class extends Class {
+    readonly _tag = tag
   } as any
 
 /**

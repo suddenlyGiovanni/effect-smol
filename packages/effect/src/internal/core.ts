@@ -103,6 +103,14 @@ export const YieldableProto = {
 }
 
 /** @internal */
+export const YieldableErrorProto = {
+  ...YieldableProto,
+  pipe() {
+    return pipeArguments(this, arguments)
+  }
+}
+
+/** @internal */
 export const EffectProto = {
   [EffectTypeId]: effectVariance,
   ...PipeInspectableProto,
@@ -581,7 +589,7 @@ export const YieldableError: new(
       return exitFail(this)
     }
   }
-  Object.assign(YieldableError.prototype, YieldableProto)
+  Object.assign(YieldableError.prototype, YieldableErrorProto)
   return YieldableError as any
 })()
 
