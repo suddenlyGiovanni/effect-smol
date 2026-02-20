@@ -22,6 +22,7 @@ import type { Formatter } from "./Formatter.ts"
 import { format, formatDate, formatPropertyKey } from "./Formatter.ts"
 import { identity } from "./Function.ts"
 import * as HashMap_ from "./HashMap.ts"
+import * as HashSet_ from "./HashSet.ts"
 import * as core from "./internal/core.ts"
 import * as InternalAnnotations from "./internal/schema/annotations.ts"
 import * as InternalArbitrary from "./internal/schema/arbitrary.ts"
@@ -6344,8 +6345,8 @@ export function HashMap<Key extends Top, Value extends Top>(key: Key, value: Val
         link<HashMap_.HashMap<Key["Encoded"], Value["Encoded"]>>()(
           Array(Tuple([key, value])),
           Transformation.transform({
-            decode: (e) => HashMap_.fromIterable(e),
-            encode: (map) => HashMap_.toEntries(map)
+            decode: HashMap_.fromIterable,
+            encode: HashMap_.toEntries
           })
         ),
       toArbitrary: ([key, value]) => (fc, ctx) => {
@@ -6449,6 +6450,95 @@ export function ReadonlySet<Value extends Top>(value: Value): $ReadonlySet<Value
         }
         const values = globalThis.Array.from(t.values()).sort().map((v) => `${value(v)}`)
         return `ReadonlySet(${size}) { ${values.join(", ")} }`
+      }
+    }
+  )
+  return make(schema.ast, { value })
+}
+
+/**
+ * @category HashSet
+ * @since 4.0.0
+ */
+export interface HashSet<Value extends Top> extends
+  declareConstructor<
+    HashSet_.HashSet<Value["Type"]>,
+    HashSet_.HashSet<Value["Encoded"]>,
+    readonly [Value],
+    HashSetIso<Value>
+  >
+{
+  readonly value: Value
+}
+
+/**
+ * @category HashSet
+ * @since 4.0.0
+ */
+export type HashSetIso<Value extends Top> = ReadonlyArray<Value["Iso"]>
+
+/**
+ * Creates a schema that validates a `HashSet` where values must conform to the
+ * provided schema.
+ *
+ * @category HashSet
+ * @since 4.0.0
+ */
+export function HashSet<Value extends Top>(value: Value): HashSet<Value> {
+  const schema = declareConstructor<
+    HashSet_.HashSet<Value["Type"]>,
+    HashSet_.HashSet<Value["Encoded"]>,
+    HashSetIso<Value>
+  >()(
+    [value],
+    ([value]) => {
+      const values = Array(value)
+      return (input, ast, options) => {
+        if (HashSet_.isHashSet(input)) {
+          return Effect.mapBothEager(
+            Parser.decodeUnknownEffect(values)(Arr.fromIterable(input), options),
+            {
+              onSuccess: HashSet_.fromIterable,
+              onFailure: (issue) =>
+                new Issue.Composite(ast, Option_.some(input), [new Issue.Pointer(["values"], issue)])
+            }
+          )
+        }
+        return Effect.fail(new Issue.InvalidType(ast, Option_.some(input)))
+      }
+    },
+    {
+      typeConstructor: {
+        _tag: "HashSet"
+      },
+      generation: {
+        runtime: `Schema.HashSet(?)`,
+        Type: `HashSet.HashSet<?>`
+      },
+      expected: "HashSet",
+      toCodec: ([value]) =>
+        link<HashSet_.HashSet<Value["Encoded"]>>()(
+          Array(value),
+          Transformation.transform({
+            decode: HashSet_.fromIterable,
+            encode: Arr.fromIterable
+          })
+        ),
+      toArbitrary: ([value]) => (fc, ctx) => {
+        return fc.oneof(
+          ctx?.isSuspend ? { maxDepth: 2, depthIdentifier: "HashSet" } : {},
+          fc.constant([]),
+          fc.array(value, ctx?.constraints?.array)
+        ).map(HashSet_.fromIterable)
+      },
+      toEquivalence: ([value]) => Equal.makeCompareSet(value),
+      toFormatter: ([value]) => (t) => {
+        const size = HashSet_.size(t)
+        if (size === 0) {
+          return "HashSet(0) {}"
+        }
+        const values = globalThis.Array.from(t).sort().map((v) => `${value(v)}`)
+        return `HashSet(${size}) { ${values.join(", ")} }`
       }
     }
   )
