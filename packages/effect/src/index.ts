@@ -1137,6 +1137,57 @@ export * as FileSystem from "./FileSystem.ts"
 export * as Filter from "./Filter.ts"
 
 /**
+ * Utilities for converting arbitrary JavaScript values into human-readable
+ * strings, with support for circular references, redaction, and common JS
+ * types that `JSON.stringify` handles poorly.
+ *
+ * Mental model:
+ * - A `Formatter<Value, Format>` is a callable `(value: Value) => Format`.
+ * - {@link format} is the general-purpose pretty-printer: it handles
+ *   primitives, arrays, objects, `BigInt`, `Symbol`, `Date`, `RegExp`,
+ *   `Set`, `Map`, class instances, and circular references.
+ * - {@link formatJson} is a safe `JSON.stringify` wrapper that silently
+ *   drops circular references and applies redaction.
+ * - Both functions accept a `space` option for indentation control.
+ *
+ * Common tasks:
+ * - Pretty-print any value for debugging / logging -> {@link format}
+ * - Serialize to JSON safely (no circular throws) -> {@link formatJson}
+ * - Format a single object property key -> {@link formatPropertyKey}
+ * - Format a property path like `["a"]["b"]` -> {@link formatPath}
+ * - Format a `Date` to ISO string safely -> {@link formatDate}
+ *
+ * Gotchas:
+ * - {@link format} output is **not** valid JSON; use {@link formatJson} when
+ *   you need parseable JSON.
+ * - {@link format} calls `toString()` on objects by default; pass
+ *   `ignoreToString: true` to disable.
+ * - {@link formatJson} silently omits circular references (the key is
+ *   dropped from the output).
+ * - Values implementing the `Redactable` protocol are automatically
+ *   redacted by both {@link format} and {@link formatJson}.
+ *
+ * **Example** (Pretty-print a value)
+ *
+ * ```ts
+ * import { Formatter } from "effect"
+ *
+ * const obj = { name: "Alice", scores: [100, 97] }
+ * console.log(Formatter.format(obj))
+ * // {"name":"Alice","scores":[100,97]}
+ *
+ * console.log(Formatter.format(obj, { space: 2 }))
+ * // {
+ * //   "name": "Alice",
+ * //   "scores": [
+ * //     100,
+ * //     97
+ * //   ]
+ * // }
+ * ```
+ *
+ * See also: {@link Formatter}, {@link format}, {@link formatJson}
+ *
  * @since 4.0.0
  */
 export * as Formatter from "./Formatter.ts"
@@ -1401,6 +1452,89 @@ export * as JsonPatch from "./JsonPatch.ts"
 export * as JsonPointer from "./JsonPointer.ts"
 
 /**
+ * Convert JSON Schema documents between dialects (Draft-07, Draft-2020-12,
+ * OpenAPI 3.0, OpenAPI 3.1). All dialects are normalized to an internal
+ * `Document<"draft-2020-12">` representation before optional conversion to
+ * an output dialect.
+ *
+ * ## Mental model
+ *
+ * - **JsonSchema** — a plain object with string keys; represents any single
+ *   JSON Schema node.
+ * - **Dialect** — one of `"draft-07"`, `"draft-2020-12"`, `"openapi-3.1"`,
+ *   or `"openapi-3.0"`.
+ * - **Document** — a structured container holding a root `schema`, its
+ *   companion `definitions`, and the target `dialect`. Definitions are
+ *   stored separately from the root schema so they can be relocated when
+ *   converting between dialects.
+ * - **MultiDocument** — same as `Document` but carries multiple root
+ *   schemas (at least one). Useful when generating several schemas that
+ *   share a single definitions pool.
+ * - **Definitions** — a `Record<string, JsonSchema>` keyed by definition
+ *   name. The ref pointer prefix depends on the dialect.
+ * - **`from*` functions** — parse a raw JSON Schema object into the
+ *   canonical `Document<"draft-2020-12">`.
+ * - **`to*` functions** — convert from the canonical representation to a
+ *   specific output dialect.
+ *
+ * ## Common tasks
+ *
+ * - Parse a Draft-07 schema → {@link fromSchemaDraft07}
+ * - Parse a Draft-2020-12 schema → {@link fromSchemaDraft2020_12}
+ * - Parse an OpenAPI 3.1 schema → {@link fromSchemaOpenApi3_1}
+ * - Parse an OpenAPI 3.0 schema → {@link fromSchemaOpenApi3_0}
+ * - Convert to Draft-07 output → {@link toDocumentDraft07}
+ * - Convert to OpenAPI 3.1 output → {@link toMultiDocumentOpenApi3_1}
+ * - Resolve a `$ref` against definitions → {@link resolve$ref}
+ * - Inline the root `$ref` of a document → {@link resolveTopLevel$ref}
+ *
+ * ## Gotchas
+ *
+ * - All `from*` functions normalize to `Document<"draft-2020-12">`
+ *   regardless of the input dialect.
+ * - Unsupported or unrecognized JSON Schema keywords are silently dropped
+ *   during conversion.
+ * - Draft-07 tuple syntax (`items` as array + `additionalItems`) is
+ *   converted to 2020-12 form (`prefixItems` + `items`), and vice-versa.
+ * - OpenAPI 3.0 `nullable: true` is expanded into `type` arrays or
+ *   `anyOf` unions. The `nullable` keyword is removed.
+ * - OpenAPI 3.0 singular `example` is converted to `examples` (array).
+ * - {@link resolve$ref} only looks up the last segment of the ref path in
+ *   the definitions map; it does not follow arbitrary JSON Pointer paths.
+ *
+ * ## Quickstart
+ *
+ * **Example** (Parse a Draft-07 schema and convert to Draft-07 output)
+ *
+ * ```ts
+ * import { JsonSchema } from "effect"
+ *
+ * const raw: JsonSchema.JsonSchema = {
+ *   type: "object",
+ *   properties: {
+ *     name: { type: "string" }
+ *   },
+ *   required: ["name"]
+ * }
+ *
+ * // Parse into canonical form
+ * const doc = JsonSchema.fromSchemaDraft07(raw)
+ *
+ * // Convert back to Draft-07
+ * const draft07 = JsonSchema.toDocumentDraft07(doc)
+ *
+ * console.log(draft07.dialect) // "draft-07"
+ * console.log(draft07.schema) // { type: "object", properties: { name: { type: "string" } }, required: ["name"] }
+ * ```
+ *
+ * ## See also
+ *
+ * - {@link Document}
+ * - {@link MultiDocument}
+ * - {@link fromSchemaDraft07}
+ * - {@link toDocumentDraft07}
+ * - {@link resolve$ref}
+ *
  * @since 4.0.0
  */
 export * as JsonSchema from "./JsonSchema.ts"
