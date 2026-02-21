@@ -992,9 +992,73 @@ export * as Effect from "./Effect.ts"
 export * as Encoding from "./Encoding.ts"
 
 /**
- * This module provides functionality for defining and working with equality between values.
- * It includes the `Equal` interface for types that can determine equality with other values
- * of the same type, and utilities for comparing values.
+ * Structural and custom equality for Effect values.
+ *
+ * The `Equal` module provides deep structural comparison for primitives, plain
+ * objects, arrays, Maps, Sets, Dates, and RegExps. Types that implement the
+ * {@link Equal} interface can supply their own comparison logic while staying
+ * compatible with the rest of the ecosystem (HashMap, HashSet, etc.).
+ *
+ * ## Mental model
+ *
+ * - **Structural equality** — two values are equal when their contents match,
+ *   not when they share the same reference.
+ * - **Hash-first shortcut** — before comparing fields, the module checks
+ *   {@link Hash.hash}. If the hashes differ the objects are unequal without
+ *   further traversal.
+ * - **Equal interface** — any object that implements both {@link symbol} (the
+ *   equality method) and `Hash.symbol` (the hash method) can define custom
+ *   comparison logic.
+ * - **Caching** — comparison results for object pairs are cached in a WeakMap.
+ *   This makes repeated checks fast but **requires immutability** after the
+ *   first comparison.
+ * - **By-reference opt-out** — {@link byReference} and {@link byReferenceUnsafe}
+ *   let you switch individual objects back to reference equality when you need
+ *   mutable identity semantics.
+ *
+ * ## Common tasks
+ *
+ * - Compare two values → {@link equals}
+ * - Check if a value implements `Equal` → {@link isEqual}
+ * - Use `equals` where an `Equivalence` is expected → {@link asEquivalence}
+ * - Implement custom equality on a class → implement {@link Equal} (see
+ *   example on the interface)
+ * - Opt an object out of structural equality → {@link byReference} /
+ *   {@link byReferenceUnsafe}
+ *
+ * ## Gotchas
+ *
+ * - Objects **must be treated as immutable** after their first equality check.
+ *   Results are cached; mutating an object afterwards yields stale results.
+ * - `NaN` is considered equal to `NaN` (unlike `===`).
+ * - Functions without an `Equal` implementation are compared by reference.
+ * - Map and Set comparisons are order-independent but O(n²) in size.
+ * - If only one of two objects implements `Equal`, they are never equal.
+ *
+ * ## Quickstart
+ *
+ * **Example** (basic structural comparison)
+ *
+ * ```ts
+ * import { Equal } from "effect"
+ *
+ * // Primitives
+ * console.log(Equal.equals(1, 1))       // true
+ * console.log(Equal.equals("a", "b"))   // false
+ *
+ * // Objects and arrays
+ * console.log(Equal.equals({ x: 1 }, { x: 1 })) // true
+ * console.log(Equal.equals([1, 2], [1, 2]))       // true
+ *
+ * // Curried form
+ * const is42 = Equal.equals(42)
+ * console.log(is42(42)) // true
+ * console.log(is42(0))  // false
+ * ```
+ *
+ * @see {@link equals} — the main comparison function
+ * @see {@link Equal} — the interface for custom equality
+ * @see {@link Hash} — the companion hashing module
  *
  * @since 2.0.0
  */
@@ -2368,11 +2432,100 @@ export * as NullOr from "./NullOr.ts"
 export * as Number from "./Number.ts"
 
 /**
- * Design: "pretty good" persistency.
- * Real updates copy only the path; unrelated branches keep referential identity.
- * No-op updates may still allocate a new root/parents — callers must not rely on identity for no-ops.
+ * Composable, immutable accessors for reading and updating nested data
+ * structures without mutation.
+ *
+ * **Mental model**
+ *
+ * - **Optic** — a first-class reference to a piece inside a larger structure.
+ *   Compose optics to reach deeply nested values.
+ * - **Iso** — lossless two-way conversion (`get`/`set`) between `S` and `A`.
+ *   Extends both {@link Lens} and {@link Prism}.
+ * - **Lens** — focuses on exactly one part of `S`. `get` always succeeds;
+ *   `replace` needs the original `S` to produce the updated whole.
+ * - **Prism** — focuses on a part that may not be present (e.g. a union
+ *   variant). `getResult` can fail; `set` builds a new `S` from `A` alone.
+ * - **Optional** — the most general optic: both reading and writing can fail.
+ * - **Traversal** — focuses on zero or more elements of an array-like
+ *   structure. Technically `Optional<S, ReadonlyArray<A>>`.
+ * - **Hierarchy** (strongest → weakest):
+ *   `Iso > Lens | Prism > Optional`. Composing a weaker optic with any other
+ *   produces the weaker kind.
+ *
+ * **Common tasks**
+ *
+ * - Start a chain → {@link id} (identity iso)
+ * - Drill into a struct key → `.key("name")` / `.optionalKey("name")`
+ * - Drill into a key that may not exist → `.at("name")`
+ * - Narrow a tagged union → `.tag("MyVariant")`
+ * - Narrow by type guard → `.refine(guard)`
+ * - Add validation → `.check(Schema.isGreaterThan(0))`
+ * - Filter out `undefined` → `.notUndefined()`
+ * - Pick/omit struct keys → `.pick(["a","b"])` / `.omit(["c"])`
+ * - Traverse array elements → `.forEach(el => el.key("field"))`
+ * - Build an iso → {@link makeIso}
+ * - Build a lens → {@link makeLens}
+ * - Build a prism → {@link makePrism}, {@link fromChecks}
+ * - Build an optional → {@link makeOptional}
+ * - Focus into `Option.Some` → {@link some}
+ * - Focus into `Result.Success`/`Failure` → {@link success}, {@link failure}
+ * - Convert record ↔ entries → {@link entries}
+ * - Extract all traversal elements → {@link getAll}
+ *
+ * **Gotchas**
+ *
+ * - Updates are structurally persistent: only nodes on the path are cloned.
+ *   Unrelated branches keep referential identity. However, **no-op updates
+ *   may still allocate** a new root — do not rely on reference identity to
+ *   detect no-ops.
+ * - `replace` silently returns the original `S` when the optic cannot focus
+ *   (e.g. wrong tag). Use `replaceResult` for explicit failure.
+ * - `modify` also returns the original `S` on focus failure — it never throws.
+ * - `.key()` and `.optionalKey()` do not work on union types (compile error).
+ * - Only plain objects (`Object.prototype` or `null` prototype) and arrays can
+ *   be cloned. Class instances cause a runtime error on `replace`/`modify`.
+ *
+ * **Quickstart**
+ *
+ * **Example** (reading and updating nested state)
+ *
+ * ```ts
+ * import { Optic } from "effect"
+ *
+ * type State = { user: { name: string; age: number } }
+ *
+ * const _age = Optic.id<State>().key("user").key("age")
+ *
+ * const s1: State = { user: { name: "Alice", age: 30 } }
+ *
+ * // Read
+ * console.log(_age.get(s1))
+ * // Output: 30
+ *
+ * // Update immutably
+ * const s2 = _age.replace(31, s1)
+ * console.log(s2)
+ * // Output: { user: { name: "Alice", age: 31 } }
+ *
+ * // Modify with a function
+ * const s3 = _age.modify((n) => n + 1)(s1)
+ * console.log(s3)
+ * // Output: { user: { name: "Alice", age: 31 } }
+ *
+ * // Referential identity is preserved for unrelated branches
+ * console.log(s2.user !== s1.user)
+ * // Output: true (on the path)
+ * ```
+ *
+ * **See also**
+ *
+ * - {@link id} — entry point for optic chains
+ * - {@link Lens} / {@link Prism} / {@link Optional} — core optic types
+ * - {@link Traversal} / {@link getAll} — multi-focus optics
+ * - {@link some} / {@link success} / {@link failure} — built-in prisms
  *
  * @since 4.0.0
+ * @module
  */
 export * as Optic from "./Optic.ts"
 
