@@ -490,17 +490,33 @@ const fiberIdStore = { id: 0 }
 export const getCurrentFiber = (): Fiber.Fiber<any, any> | undefined => (globalThis as any)[currentFiberTypeId]
 
 const keepAlive = (() => {
+  const start = (() => {
+    const setInterval = globalThis.setInterval
+    const clearInterval = globalThis.clearInterval
+    try {
+      const running = setInterval(constVoid, 2_147_483_647)
+      clearInterval(running)
+      return {
+        setInterval,
+        clearInterval
+      }
+    } catch {
+      return undefined
+    }
+  })()
   let count = 0
   let running: ReturnType<typeof globalThis.setInterval> | undefined = undefined
   return ({
     increment() {
       count++
-      running ??= globalThis.setInterval(constVoid, 2_147_483_647)
+      if (start !== undefined && running === undefined) {
+        running = start.setInterval(constVoid, 2_147_483_647)
+      }
     },
     decrement() {
       count--
-      if (count === 0 && running !== undefined) {
-        globalThis.clearInterval(running)
+      if (count === 0 && start !== undefined && running !== undefined) {
+        start.clearInterval(running)
         running = undefined
       }
     }
