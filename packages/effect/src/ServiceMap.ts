@@ -246,6 +246,7 @@ export interface Reference<in out Shape> extends Service<never, Shape> {
   readonly [ReferenceTypeId]: typeof ReferenceTypeId
   readonly defaultValue: () => Shape
   [Symbol.iterator](): EffectIterator<Reference<Shape>>
+  new(_: never): {}
 }
 
 /**
