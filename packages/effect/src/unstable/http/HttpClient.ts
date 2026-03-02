@@ -8,7 +8,7 @@ import * as Duration from "../../Duration.ts"
 import * as Effect from "../../Effect.ts"
 import * as Exit from "../../Exit.ts"
 import * as Fiber from "../../Fiber.ts"
-import { constFalse, constTrue, dual, flow, identity } from "../../Function.ts"
+import { constant, constFalse, constTrue, dual, flow, identity } from "../../Function.ts"
 import * as Inspectable from "../../Inspectable.ts"
 import * as Layer from "../../Layer.ts"
 import { type Pipeable, pipeArguments } from "../../Pipeable.ts"
@@ -948,6 +948,7 @@ export const withRateLimiter: {
   options: WithRateLimiter.Options
 ): HttpClient.With<E | RateLimiter.RateLimiterError, R> => {
   const initialState: RateLimiterState = {
+    initial: true,
     limit: options.limit,
     window: Duration.max(Duration.fromInputUnsafe(options.window), Duration.millis(1))
   }
@@ -956,10 +957,11 @@ export const withRateLimiter: {
   const keyOption = options.key
   const resolveKey: (request: HttpClientRequest.HttpClientRequest) => string = typeof keyOption === "function"
     ? keyOption
-    : () => keyOption
+    : constant(keyOption)
   const tokensOption = options.tokens
-  const resolveTokens: (request: HttpClientRequest.HttpClientRequest) => number | undefined =
-    typeof tokensOption === "function" ? tokensOption : () => tokensOption
+  const resolveTokens: (request: HttpClientRequest.HttpClientRequest) => number = typeof tokensOption === "function"
+    ? tokensOption
+    : constant(tokensOption ?? 1)
 
   const getState = (key: string): RateLimiterState => {
     const current = states.get(key)
@@ -972,7 +974,7 @@ export const withRateLimiter: {
 
   const onResponse = options.disableResponseInspection
     ? undefined
-    : (clock: Clock, key: string, headers: Headers.Headers, tokens: number | undefined) => {
+    : (clock: Clock, key: string, headers: Headers.Headers, tokens: number) => {
       const current = getState(key)
       const next = parseRateLimiterState(current, clock, headers, tokens)
       if (next.limit !== current.limit || !Duration.equals(next.window, current.window)) {
@@ -988,7 +990,7 @@ export const withRateLimiter: {
     const fiber = Fiber.getCurrent()!
     const clock = fiber.getRef(Clock)
     const key = resolveKey(request)
-    const tokens = resolveTokens(request)
+    const tokens = Math.max(resolveTokens(request), 1)
     const current = getState(key)
     function retry(response: HttpClientResponse.HttpClientResponse) {
       if (options.disableResponseInspection) return loop(effect, request)
@@ -1030,23 +1032,28 @@ export const withRateLimiter: {
 interface RateLimiterState {
   readonly limit: number
   readonly window: Duration.Duration
+  readonly initial: boolean
 }
 
 const parseRateLimiterState = (
   state: RateLimiterState,
   clock: Clock,
   headers: Headers.Headers,
-  tokens: number | undefined
+  tokens: number
 ): RateLimiterState => {
-  const limit = parseRateLimitLimit(headers, tokens) ?? state.limit
+  const limit = parseRateLimitLimit(state, headers, tokens) ?? state.limit
   const window = parseRateLimitWindow(clock, headers) ?? state.window
   if (limit === state.limit && Duration.equals(window, state.window)) {
     return state
   }
-  return { limit, window }
+  return { limit, window, initial: false }
 }
 
-const parseRateLimitLimit = (headers: Headers.Headers, tokens: number | undefined): number | undefined => {
+const parseRateLimitLimit = (
+  state: RateLimiterState,
+  headers: Headers.Headers,
+  tokens: number
+): number | undefined => {
   const raw = getHeader(headers, "ratelimit-limit", "x-ratelimit-limit")
   const value = parseNumberHeader(raw)
   if (value !== undefined && value > 0) {
@@ -1056,7 +1063,7 @@ const parseRateLimitLimit = (headers: Headers.Headers, tokens: number | undefine
   if (remaining === undefined) {
     return undefined
   }
-  return Math.max(remaining + (tokens !== undefined && tokens > 0 ? tokens : 1), 1)
+  return state.initial ? remaining + tokens : Math.max(remaining + tokens, state.limit)
 }
 
 const parseRateLimitRemaining = (headers: Headers.Headers): number | undefined => {
