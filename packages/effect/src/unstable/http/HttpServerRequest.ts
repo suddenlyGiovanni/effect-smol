@@ -17,6 +17,8 @@ import * as Stream from "../../Stream.ts"
 import * as Socket from "../socket/Socket.ts"
 import * as Cookies from "./Cookies.ts"
 import * as Headers from "./Headers.ts"
+import * as HttpBody from "./HttpBody.ts"
+import * as HttpClientRequest from "./HttpClientRequest.ts"
 import * as HttpIncomingMessage from "./HttpIncomingMessage.ts"
 import { hasBody, type HttpMethod } from "./HttpMethod.ts"
 import { HttpServerError, type RequestError, RequestParseError } from "./HttpServerError.ts"
@@ -282,6 +284,40 @@ export const schemaBodyFormJson = <A, I, RD, RE>(
  */
 export const fromWeb = (request: globalThis.Request): HttpServerRequest =>
   new ServerRequestImpl(request, removeHost(request.url))
+
+/**
+ * @since 4.0.0
+ * @category conversions
+ */
+export const toClientRequest = (request: HttpServerRequest): HttpClientRequest.HttpClientRequest =>
+  HttpClientRequest.setUrl(
+    HttpClientRequest.makeWith(
+      request.method,
+      "",
+      UrlParams.empty,
+      undefined,
+      request.headers,
+      toClientBody(request)
+    ),
+    toURL(request) ?? request.url
+  )
+
+const toClientBody = (request: HttpServerRequest): HttpBody.HttpBody =>
+  hasBody(request.method)
+    ? HttpBody.stream(
+      request.stream,
+      request.headers["content-type"],
+      parseContentLength(request.headers["content-length"])
+    )
+    : HttpBody.empty
+
+const parseContentLength = (contentLength: string | undefined): number | undefined => {
+  if (contentLength === undefined) {
+    return undefined
+  }
+  const parsed = Number.parseInt(contentLength, 10)
+  return Number.isNaN(parsed) ? undefined : parsed
+}
 
 const removeHost = (url: string) => {
   if (url[0] === "/") {
