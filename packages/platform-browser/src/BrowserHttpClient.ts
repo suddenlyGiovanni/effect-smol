@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect"
 import type { LazyArg } from "effect/Function"
 import * as Inspectable from "effect/Inspectable"
 import type * as Layer from "effect/Layer"
+import { type Pipeable, pipeArguments } from "effect/Pipeable"
 import * as Queue from "effect/Queue"
 import * as ServiceMap from "effect/ServiceMap"
 import * as Stream from "effect/Stream"
@@ -334,7 +335,7 @@ abstract class IncomingMessageImpl<E> extends Inspectable.Class implements HttpI
 }
 
 class ClientResponseImpl extends IncomingMessageImpl<HttpClientError.HttpClientError>
-  implements HttpClientResponse.HttpClientResponse
+  implements HttpClientResponse.HttpClientResponse, Pipeable
 {
   readonly [HttpClientResponse.TypeId]: typeof HttpClientResponse.TypeId
   readonly request: HttpClientRequest.HttpClientRequest
@@ -373,6 +374,10 @@ class ClientResponseImpl extends IncomingMessageImpl<HttpClientError.HttpClientE
       request: this.request.toJSON(),
       status: this.status
     })
+  }
+
+  pipe() {
+    return pipeArguments(this, arguments)
   }
 }
 
