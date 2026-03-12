@@ -21,70 +21,30 @@ const TimeZoneTypeId = Internal.TimeZoneTypeId
  * A `DateTime` represents a point in time. It can optionally have a time zone
  * associated with it.
  *
- * @example
- * ```ts
- * import { DateTime } from "effect"
- *
- * // Create a UTC DateTime
- * const utc: DateTime.DateTime = DateTime.nowUnsafe()
- *
- * // Create a zoned DateTime
- * const zoned: DateTime.DateTime = DateTime.makeZonedUnsafe(new Date(), {
- *   timeZone: "Europe/London"
- * })
- * ```
- *
  * @since 3.6.0
  * @category models
  */
 export type DateTime = Utc | Zoned
 
 /**
- * @example
- * ```ts
- * import { DateTime } from "effect"
- *
- * const utc = DateTime.nowUnsafe()
- *
- * if (DateTime.isUtc(utc)) {
- *   console.log(utc._tag) // "Utc"
- *   console.log(utc.epochMillis) // timestamp in milliseconds
- * }
- * ```
- *
  * @since 3.6.0
  * @category models
  */
 export interface Utc extends DateTime.Proto {
   readonly _tag: "Utc"
-  readonly epochMillis: number
+  readonly epochMilliseconds: number
   partsUtc: DateTime.PartsWithWeekday | undefined
 }
 
 /**
- * @example
- * ```ts
- * import { DateTime } from "effect"
- *
- * const zoned = DateTime.makeZonedUnsafe(new Date(), {
- *   timeZone: "Europe/London"
- * })
- *
- * if (DateTime.isZoned(zoned)) {
- *   console.log(zoned._tag) // "Zoned"
- *   console.log(zoned.epochMillis) // timestamp in milliseconds
- *   console.log(DateTime.zoneToString(zoned.zone)) // "Europe/London"
- * }
- * ```
- *
  * @since 3.6.0
  * @category models
  */
 export interface Zoned extends DateTime.Proto {
   readonly _tag: "Zoned"
-  readonly epochMillis: number
+  readonly epochMilliseconds: number
   readonly zone: TimeZone
-  adjustedEpochMillis: number | undefined
+  adjustedEpochMilliseconds: number | undefined
   partsAdjusted: DateTime.PartsWithWeekday | undefined
   partsUtc: DateTime.PartsWithWeekday | undefined
 }
@@ -95,29 +55,10 @@ export interface Zoned extends DateTime.Proto {
  */
 export declare namespace DateTime {
   /**
-   * @example
-   * ```ts
-   * import { DateTime } from "effect"
-   *
-   * // All valid inputs for DateTime constructors
-   * const date = new Date()
-   * const stringDate = "2024-01-01"
-   * const epochMillis = 1704067200000
-   * const partsObj = { year: 2024, month: 1, day: 1 }
-   * const existing = DateTime.nowUnsafe()
-   *
-   * // All these can be used as DateTime.Input
-   * const dt1 = DateTime.makeUnsafe(date)
-   * const dt2 = DateTime.makeUnsafe(stringDate)
-   * const dt3 = DateTime.makeUnsafe(epochMillis)
-   * const dt4 = DateTime.makeUnsafe(partsObj)
-   * const dt5 = DateTime.makeUnsafe(existing)
-   * ```
-   *
    * @since 3.6.0
    * @category models
    */
-  export type Input = DateTime | Partial<Parts> | Date | number | string
+  export type Input = DateTime | Partial<Parts> | Instant | InstantWithZone | Date | number | string
 
   /**
    * @since 3.6.0
@@ -136,7 +77,7 @@ export declare namespace DateTime {
    * @category models
    */
   export type UnitSingular =
-    | "milli"
+    | "millisecond"
     | "second"
     | "minute"
     | "hour"
@@ -150,7 +91,7 @@ export declare namespace DateTime {
    * @category models
    */
   export type UnitPlural =
-    | "millis"
+    | "milliseconds"
     | "seconds"
     | "minutes"
     | "hours"
@@ -164,10 +105,10 @@ export declare namespace DateTime {
    * @category models
    */
   export interface PartsWithWeekday {
-    readonly millis: number
-    readonly seconds: number
-    readonly minutes: number
-    readonly hours: number
+    readonly millisecond: number
+    readonly second: number
+    readonly minute: number
+    readonly hour: number
     readonly day: number
     readonly weekDay: number
     readonly month: number
@@ -179,10 +120,10 @@ export declare namespace DateTime {
    * @category models
    */
   export interface Parts {
-    readonly millis: number
-    readonly seconds: number
-    readonly minutes: number
-    readonly hours: number
+    readonly millisecond: number
+    readonly second: number
+    readonly minute: number
+    readonly hour: number
     readonly day: number
     readonly month: number
     readonly year: number
@@ -193,7 +134,7 @@ export declare namespace DateTime {
    * @category models
    */
   export interface PartsForMath {
-    readonly millis: number
+    readonly milliseconds: number
     readonly seconds: number
     readonly minutes: number
     readonly hours: number
@@ -201,6 +142,23 @@ export declare namespace DateTime {
     readonly weeks: number
     readonly months: number
     readonly years: number
+  }
+
+  /**
+   * @since 4.0.0
+   * @category models
+   */
+  export interface Instant {
+    readonly epochMilliseconds: number
+  }
+
+  /**
+   * @since 4.0.0
+   * @category models
+   */
+  export interface InstantWithZone {
+    readonly timeZoneId: string
+    readonly epochMilliseconds: number
   }
 
   /**
@@ -1513,7 +1471,7 @@ export const setParts: {
  * const dt = DateTime.makeUnsafe("2024-01-01T12:00:00Z")
  * const updated = DateTime.setPartsUtc(dt, {
  *   year: 2025,
- *   hours: 18
+ *   hour: 18
  * })
  *
  * console.log(DateTime.formatIso(updated)) // "2025-01-01T18:00:00.000Z"

@@ -23,7 +23,7 @@ import { NodeInspectSymbol } from "./Inspectable.ts"
 import * as order from "./Order.ts"
 import type { Pipeable } from "./Pipeable.ts"
 import { pipeArguments } from "./Pipeable.ts"
-import { hasProperty, isBigInt, isNumber, isString } from "./Predicate.ts"
+import { hasProperty, isNumber } from "./Predicate.ts"
 import * as Reducer from "./Reducer.ts"
 import * as UndefinedOr from "./UndefinedOr.ts"
 
@@ -96,6 +96,36 @@ export type Input =
   | bigint // nanos
   | readonly [seconds: number, nanos: number]
   | `${number} ${Unit}`
+  | DurationObject
+
+/**
+ * An object with optional duration components that can be combined to create
+ * a Duration. All fields are optional and additive.
+ *
+ * Compatible with Temporal.Duration-like objects.
+ *
+ * @example
+ * ```ts
+ * import { Duration } from "effect"
+ *
+ * Duration.fromInputUnsafe({ seconds: 30 })
+ * Duration.fromInputUnsafe({ days: 1 })
+ * Duration.fromInputUnsafe({ seconds: 1, nanoseconds: 500 })
+ * ```
+ *
+ * @since 4.0.0
+ * @category models
+ */
+export interface DurationObject {
+  readonly weeks?: number | undefined
+  readonly days?: number | undefined
+  readonly hours?: number | undefined
+  readonly minutes?: number | undefined
+  readonly seconds?: number | undefined
+  readonly milliseconds?: number | undefined
+  readonly microseconds?: number | undefined
+  readonly nanoseconds?: number | undefined
+}
 
 const DURATION_REGEXP = /^(-?\d+(?:\.\d+)?)\s+(nanos?|micros?|millis?|seconds?|minutes?|hours?|days?|weeks?)$/
 
@@ -117,27 +147,14 @@ const DURATION_REGEXP = /^(-?\d+(?:\.\d+)?)\s+(nanos?|micros?|millis?|seconds?|m
  * @category constructors
  */
 export const fromInputUnsafe = (input: Input): Duration => {
-  if (isDuration(input)) return input
-  if (isNumber(input)) return millis(input)
-  if (isBigInt(input)) return nanos(input)
-  if (Array.isArray(input) && input.length === 2 && input.every(isNumber)) {
-    if (Number.isNaN(input[0]) || Number.isNaN(input[1])) {
-      return zero
-    }
-
-    if (input[0] === -Infinity || input[1] === -Infinity) {
-      return negativeInfinity
-    }
-
-    if (input[0] === Infinity || input[1] === Infinity) {
-      return infinity
-    }
-
-    return nanos(BigInt(Math.round(input[0] * 1_000_000_000)) + BigInt(Math.round(input[1])))
-  }
-  if (isString(input)) {
-    const match = DURATION_REGEXP.exec(input)
-    if (match) {
+  switch (typeof input) {
+    case "number":
+      return millis(input)
+    case "bigint":
+      return nanos(input)
+    case "string": {
+      const match = DURATION_REGEXP.exec(input)
+      if (!match) break
       const [_, valueStr, unit] = match
       const value = Number(valueStr)
       switch (unit) {
@@ -166,8 +183,46 @@ export const fromInputUnsafe = (input: Input): Duration => {
         case "weeks":
           return weeks(value)
       }
+      break
+    }
+    case "object": {
+      if (input === null) break
+      if (TypeId in input) return input as Duration
+      if (Array.isArray(input)) {
+        if (input.length !== 2 || !input.every(isNumber)) {
+          return invalid(input)
+        }
+        if (Number.isNaN(input[0]) || Number.isNaN(input[1])) {
+          return zero
+        }
+        if (input[0] === -Infinity || input[1] === -Infinity) {
+          return negativeInfinity
+        }
+        if (input[0] === Infinity || input[1] === Infinity) {
+          return infinity
+        }
+        return make(BigInt(Math.round(input[0] * 1_000_000_000)) + BigInt(Math.round(input[1])))
+      }
+      const obj = input as DurationObject
+      let millis = 0
+      // we can use truthy checks here, because 0 can be ignored
+      if (obj.weeks) millis += obj.weeks * 604_800_000
+      if (obj.days) millis += obj.days * 86_400_000
+      if (obj.hours) millis += obj.hours * 3_600_000
+      if (obj.minutes) millis += obj.minutes * 60_000
+      if (obj.seconds) millis += obj.seconds * 1_000
+      if (obj.milliseconds) millis += obj.milliseconds
+      if (!obj.microseconds && !obj.nanoseconds) return make(millis)
+      let nanos = BigInt(millis) * bigint1e6
+      if (obj.microseconds) nanos += BigInt(obj.microseconds) * bigint1e3
+      if (obj.nanoseconds) nanos += BigInt(obj.nanoseconds)
+      return make(nanos)
     }
   }
+  return invalid(input)
+}
+
+const invalid = (input: unknown): never => {
   throw new Error(`Invalid Input: ${input}`)
 }
 
@@ -238,7 +293,7 @@ const DurationProto: Omit<Duration, "value"> = {
 
 const make = (input: number | bigint): Duration => {
   const duration = Object.create(DurationProto)
-  if (isNumber(input)) {
+  if (typeof input === "number") {
     if (isNaN(input) || input === 0 || Object.is(input, -0)) {
       duration.value = zeroDurationValue
     } else if (!Number.isFinite(input)) {
