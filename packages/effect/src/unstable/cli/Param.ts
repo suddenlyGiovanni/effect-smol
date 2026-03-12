@@ -734,7 +734,7 @@ export const fileParse = <Kind extends ParamKind>(
  * const configSchema = Schema.Struct({
  *   port: Schema.Number,
  *   host: Schema.String
- * }).pipe(Schema.fromJsonString)
+ * })
  *
  * const config = Param.fileSchema(Param.flagKind, "config", configSchema, {
  *   format: "json"
@@ -754,7 +754,7 @@ export const fileParse = <Kind extends ParamKind>(
 export const fileSchema = <Kind extends ParamKind, A>(
   kind: Kind,
   name: string,
-  schema: Schema.Codec<A, string>,
+  schema: Schema.Decoder<A>,
   options?: Primitive.FileSchemaOptions | undefined
 ): Param<Kind, A> =>
   makeSingle({
