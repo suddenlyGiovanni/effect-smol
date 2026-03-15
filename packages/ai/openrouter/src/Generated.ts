@@ -242,6 +242,181 @@ export const ResponsesWebSearchUserLocation = Schema.Struct({
   "region": Schema.optionalKey(Schema.String),
   "timezone": Schema.optionalKey(Schema.String)
 }).annotate({ "description": "User location information for web search" })
+export type CompoundFilter = { readonly "type": "and" | "or"; readonly "filters": ReadonlyArray<{}> }
+export const CompoundFilter = Schema.Struct({
+  "type": Schema.Literals(["and", "or"]),
+  "filters": Schema.Array(Schema.Struct({}))
+}).annotate({ "description": "A compound filter that combines multiple comparison or compound filters" })
+export type OpenResponsesComputerTool = {
+  readonly "type": "computer_use_preview"
+  readonly "display_height": number
+  readonly "display_width": number
+  readonly "environment": "windows" | "mac" | "linux" | "ubuntu" | "browser"
+}
+export const OpenResponsesComputerTool = Schema.Struct({
+  "type": Schema.Literal("computer_use_preview"),
+  "display_height": Schema.Number.check(Schema.isFinite()),
+  "display_width": Schema.Number.check(Schema.isFinite()),
+  "environment": Schema.Literals(["windows", "mac", "linux", "ubuntu", "browser"])
+}).annotate({ "description": "Computer use preview tool configuration" })
+export type OpenResponsesCodeInterpreterTool = {
+  readonly "type": "code_interpreter"
+  readonly "container": string | {
+    readonly "type": "auto"
+    readonly "file_ids"?: ReadonlyArray<string>
+    readonly "memory_limit"?: "1g" | "4g" | "16g" | "64g"
+  }
+}
+export const OpenResponsesCodeInterpreterTool = Schema.Struct({
+  "type": Schema.Literal("code_interpreter"),
+  "container": Schema.Union([
+    Schema.String,
+    Schema.Struct({
+      "type": Schema.Literal("auto"),
+      "file_ids": Schema.optionalKey(Schema.Array(Schema.String)),
+      "memory_limit": Schema.optionalKey(Schema.Literals(["1g", "4g", "16g", "64g"]))
+    })
+  ])
+}).annotate({ "description": "Code interpreter tool configuration" })
+export type OpenResponsesMcpTool = {
+  readonly "type": "mcp"
+  readonly "server_label": string
+  readonly "allowed_tools"?:
+    | ReadonlyArray<string>
+    | { readonly "tool_names"?: ReadonlyArray<string>; readonly "read_only"?: boolean }
+    | unknown
+    | unknown
+  readonly "authorization"?: string
+  readonly "connector_id"?:
+    | "connector_dropbox"
+    | "connector_gmail"
+    | "connector_googlecalendar"
+    | "connector_googledrive"
+    | "connector_microsoftteams"
+    | "connector_outlookcalendar"
+    | "connector_outlookemail"
+    | "connector_sharepoint"
+  readonly "headers"?: {}
+  readonly "require_approval"?:
+    | {
+      readonly "never"?: { readonly "tool_names"?: ReadonlyArray<string> }
+      readonly "always"?: { readonly "tool_names"?: ReadonlyArray<string> }
+    }
+    | "always"
+    | "never"
+    | unknown
+    | unknown
+  readonly "server_description"?: string
+  readonly "server_url"?: string
+}
+export const OpenResponsesMcpTool = Schema.Struct({
+  "type": Schema.Literal("mcp"),
+  "server_label": Schema.String,
+  "allowed_tools": Schema.optionalKey(
+    Schema.Union([
+      Schema.Array(Schema.String),
+      Schema.Struct({
+        "tool_names": Schema.optionalKey(Schema.Array(Schema.String)),
+        "read_only": Schema.optionalKey(Schema.Boolean)
+      }),
+      Schema.Unknown,
+      Schema.Unknown
+    ])
+  ),
+  "authorization": Schema.optionalKey(Schema.String),
+  "connector_id": Schema.optionalKey(
+    Schema.Literals([
+      "connector_dropbox",
+      "connector_gmail",
+      "connector_googlecalendar",
+      "connector_googledrive",
+      "connector_microsoftteams",
+      "connector_outlookcalendar",
+      "connector_outlookemail",
+      "connector_sharepoint"
+    ])
+  ),
+  "headers": Schema.optionalKey(Schema.Struct({})),
+  "require_approval": Schema.optionalKey(
+    Schema.Union([
+      Schema.Struct({
+        "never": Schema.optionalKey(Schema.Struct({ "tool_names": Schema.optionalKey(Schema.Array(Schema.String)) })),
+        "always": Schema.optionalKey(Schema.Struct({ "tool_names": Schema.optionalKey(Schema.Array(Schema.String)) }))
+      }),
+      Schema.Literal("always"),
+      Schema.Literal("never"),
+      Schema.Unknown,
+      Schema.Unknown
+    ])
+  ),
+  "server_description": Schema.optionalKey(Schema.String),
+  "server_url": Schema.optionalKey(Schema.String)
+}).annotate({ "description": "MCP (Model Context Protocol) tool configuration" })
+export type OpenResponsesImageGenerationTool = {
+  readonly "type": "image_generation"
+  readonly "background"?: "transparent" | "opaque" | "auto"
+  readonly "input_fidelity"?: "high" | "low"
+  readonly "input_image_mask"?: { readonly "image_url"?: string; readonly "file_id"?: string }
+  readonly "model"?: "gpt-image-1" | "gpt-image-1-mini"
+  readonly "moderation"?: "auto" | "low"
+  readonly "output_compression"?: number
+  readonly "output_format"?: "png" | "webp" | "jpeg"
+  readonly "partial_images"?: number
+  readonly "quality"?: "low" | "medium" | "high" | "auto"
+  readonly "size"?: "1024x1024" | "1024x1536" | "1536x1024" | "auto"
+}
+export const OpenResponsesImageGenerationTool = Schema.Struct({
+  "type": Schema.Literal("image_generation"),
+  "background": Schema.optionalKey(Schema.Literals(["transparent", "opaque", "auto"])),
+  "input_fidelity": Schema.optionalKey(Schema.Literals(["high", "low"])),
+  "input_image_mask": Schema.optionalKey(
+    Schema.Struct({ "image_url": Schema.optionalKey(Schema.String), "file_id": Schema.optionalKey(Schema.String) })
+  ),
+  "model": Schema.optionalKey(Schema.Literals(["gpt-image-1", "gpt-image-1-mini"])),
+  "moderation": Schema.optionalKey(Schema.Literals(["auto", "low"])),
+  "output_compression": Schema.optionalKey(Schema.Number.check(Schema.isFinite())),
+  "output_format": Schema.optionalKey(Schema.Literals(["png", "webp", "jpeg"])),
+  "partial_images": Schema.optionalKey(Schema.Number.check(Schema.isFinite())),
+  "quality": Schema.optionalKey(Schema.Literals(["low", "medium", "high", "auto"])),
+  "size": Schema.optionalKey(Schema.Literals(["1024x1024", "1024x1536", "1536x1024", "auto"]))
+}).annotate({ "description": "Image generation tool configuration" })
+export type OpenResponsesLocalShellTool = { readonly "type": "local_shell" }
+export const OpenResponsesLocalShellTool = Schema.Struct({ "type": Schema.Literal("local_shell") }).annotate({
+  "description": "Local shell tool configuration"
+})
+export type OpenResponsesFunctionShellTool = { readonly "type": "shell" }
+export const OpenResponsesFunctionShellTool = Schema.Struct({ "type": Schema.Literal("shell") }).annotate({
+  "description": "Shell tool configuration"
+})
+export type OpenResponsesApplyPatchTool = { readonly "type": "apply_patch" }
+export const OpenResponsesApplyPatchTool = Schema.Struct({ "type": Schema.Literal("apply_patch") }).annotate({
+  "description": "Apply patch tool configuration"
+})
+export type OpenResponsesCustomTool = {
+  readonly "type": "custom"
+  readonly "name": string
+  readonly "description"?: string
+  readonly "format"?: { readonly "type": "text" } | {
+    readonly "type": "grammar"
+    readonly "definition": string
+    readonly "syntax": "lark" | "regex"
+  }
+}
+export const OpenResponsesCustomTool = Schema.Struct({
+  "type": Schema.Literal("custom"),
+  "name": Schema.String,
+  "description": Schema.optionalKey(Schema.String),
+  "format": Schema.optionalKey(
+    Schema.Union([
+      Schema.Struct({ "type": Schema.Literal("text") }),
+      Schema.Struct({
+        "type": Schema.Literal("grammar"),
+        "definition": Schema.String,
+        "syntax": Schema.Literals(["lark", "regex"])
+      })
+    ])
+  )
+}).annotate({ "description": "Custom tool configuration" })
 export type OpenAIResponsesToolChoice = "auto" | "none" | "required" | {
   readonly "type": "function"
   readonly "name": string
@@ -269,10 +444,6 @@ export const OpenAIResponsesTruncation = Schema.Literals(["auto", "disabled"])
 export type ResponsesFormatText = { readonly "type": "text" }
 export const ResponsesFormatText = Schema.Struct({ "type": Schema.Literal("text") }).annotate({
   "description": "Plain text response format"
-})
-export type ResponsesFormatJSONObject = { readonly "type": "json_object" }
-export const ResponsesFormatJSONObject = Schema.Struct({ "type": Schema.Literal("json_object") }).annotate({
-  "description": "JSON object response format"
 })
 export type ResponsesFormatTextJSONSchemaConfig = {
   readonly "type": "json_schema"
@@ -302,10 +473,15 @@ export const OpenResponsesErrorEvent = Schema.Struct({
   "param": Schema.String,
   "sequence_number": Schema.Number.check(Schema.isFinite())
 }).annotate({ "description": "Event emitted when an error occurs during streaming" })
-export type OpenResponsesTopLogprobs = { readonly "token"?: string; readonly "logprob"?: number }
+export type OpenResponsesTopLogprobs = {
+  readonly "token"?: string
+  readonly "logprob"?: number
+  readonly "bytes"?: ReadonlyArray<number>
+}
 export const OpenResponsesTopLogprobs = Schema.Struct({
   "token": Schema.optionalKey(Schema.String),
-  "logprob": Schema.optionalKey(Schema.Number.check(Schema.isFinite()))
+  "logprob": Schema.optionalKey(Schema.Number.check(Schema.isFinite())),
+  "bytes": Schema.optionalKey(Schema.Array(Schema.Number.check(Schema.isFinite())))
 }).annotate({ "description": "Alternative token with its log probability" })
 export type OpenResponsesRefusalDeltaEvent = {
   readonly "type": "response.refusal.delta"
@@ -643,6 +819,7 @@ export const DataCollection = Schema.Literals(["deny", "allow"]).annotate({
     "Data collection setting. If no available model provider meets the requirement, your request will return an error.\n- allow: (default) allow providers which store user data non-transiently and may train on it\n\n- deny: use only providers which do not collect user data."
 })
 export type ProviderName =
+  | "AkashML"
   | "AI21"
   | "AionLabs"
   | "Alibaba"
@@ -677,6 +854,7 @@ export type ProviderName =
   | "Inception"
   | "Inceptron"
   | "InferenceNet"
+  | "Ionstream"
   | "Infermatic"
   | "Io Net"
   | "Inflection"
@@ -717,6 +895,7 @@ export type ProviderName =
   | "Z.AI"
   | "FakeProvider"
 export const ProviderName = Schema.Literals([
+  "AkashML",
   "AI21",
   "AionLabs",
   "Alibaba",
@@ -751,6 +930,7 @@ export const ProviderName = Schema.Literals([
   "Inception",
   "Inceptron",
   "InferenceNet",
+  "Ionstream",
   "Infermatic",
   "Io Net",
   "Inflection",
@@ -793,8 +973,27 @@ export const ProviderName = Schema.Literals([
 ])
 export type Quantization = "int4" | "int8" | "fp4" | "fp6" | "fp8" | "fp16" | "bf16" | "fp32" | "unknown"
 export const Quantization = Schema.Literals(["int4", "int8", "fp4", "fp6", "fp8", "fp16", "bf16", "fp32", "unknown"])
-export type ProviderSort = "price" | "throughput" | "latency"
-export const ProviderSort = Schema.Literals(["price", "throughput", "latency"])
+export type ProviderSort = "price" | "throughput" | "latency" | "exacto"
+export const ProviderSort = Schema.Literals(["price", "throughput", "latency", "exacto"]).annotate({
+  "description": "The provider sorting strategy (price, throughput, latency)"
+})
+export type ProviderSortConfig = {
+  readonly "by"?: "price" | "throughput" | "latency" | "exacto"
+  readonly "partition"?: "model" | "none"
+}
+export const ProviderSortConfig = Schema.Struct({
+  "by": Schema.optionalKey(
+    Schema.Literals(["price", "throughput", "latency", "exacto"]).annotate({
+      "description": "The provider sorting strategy (price, throughput, latency)"
+    })
+  ),
+  "partition": Schema.optionalKey(
+    Schema.Literals(["model", "none"]).annotate({
+      "description":
+        "Partitioning strategy for sorting: \"model\" (default) groups endpoints by model before sorting (fallback models remain fallbacks), \"none\" sorts all endpoints together regardless of model."
+    })
+  )
+}).annotate({ "description": "The provider sorting strategy (price, throughput, latency)" })
 export type BigNumberUnion = string
 export const BigNumberUnion = Schema.String.annotate({ "description": "Price per million prompt tokens" })
 export type PercentileThroughputCutoffs = {
@@ -842,8 +1041,8 @@ export const PercentileLatencyCutoffs = Schema.Struct({
 }).annotate({
   "description": "Percentile-based latency cutoffs. All specified cutoffs must be met for an endpoint to be preferred."
 })
-export type WebSearchEngine = "native" | "exa"
-export const WebSearchEngine = Schema.Literals(["native", "exa"]).annotate({
+export type WebSearchEngine = "native" | "exa" | "firecrawl" | "parallel"
+export const WebSearchEngine = Schema.Literals(["native", "exa", "firecrawl", "parallel"]).annotate({
   "description": "The search engine to use for web search."
 })
 export type PDFParserEngine = "mistral-ocr" | "pdf-text" | "native"
@@ -854,6 +1053,7 @@ export type AnthropicMessagesResponse = {
   readonly "id": string
   readonly "type": "message"
   readonly "role": "assistant"
+  readonly "container": { readonly "id": string; readonly "expires_at": string }
   readonly "content": ReadonlyArray<
     | {
       readonly "type": "text"
@@ -900,17 +1100,41 @@ export type AnthropicMessagesResponse = {
         }
       >
     }
-    | { readonly "type": "tool_use"; readonly "id": string; readonly "name": string; readonly "input"?: unknown }
+    | {
+      readonly "type": "tool_use"
+      readonly "id": string
+      readonly "caller": { readonly "type": "direct" } | {
+        readonly "type": "code_execution_20250825"
+        readonly "tool_id": string
+      } | { readonly "type": "code_execution_20260120"; readonly "tool_id": string }
+      readonly "name": string
+      readonly "input"?: unknown
+    }
     | { readonly "type": "thinking"; readonly "thinking": string; readonly "signature": string }
     | { readonly "type": "redacted_thinking"; readonly "data": string }
     | {
       readonly "type": "server_tool_use"
       readonly "id": string
-      readonly "name": "web_search"
+      readonly "caller": { readonly "type": "direct" } | {
+        readonly "type": "code_execution_20250825"
+        readonly "tool_id": string
+      } | { readonly "type": "code_execution_20260120"; readonly "tool_id": string }
+      readonly "name":
+        | "web_search"
+        | "web_fetch"
+        | "code_execution"
+        | "bash_code_execution"
+        | "text_editor_code_execution"
+        | "tool_search_tool_regex"
+        | "tool_search_tool_bm25"
       readonly "input"?: unknown
     }
     | {
       readonly "type": "web_search_tool_result"
+      readonly "caller": { readonly "type": "direct" } | {
+        readonly "type": "code_execution_20250825"
+        readonly "tool_id": string
+      } | { readonly "type": "code_execution_20260120"; readonly "tool_id": string }
       readonly "tool_use_id": string
       readonly "content":
         | ReadonlyArray<
@@ -930,8 +1154,127 @@ export type AnthropicMessagesResponse = {
             | "max_uses_exceeded"
             | "too_many_requests"
             | "query_too_long"
+            | "request_too_large"
         }
     }
+    | {
+      readonly "type": "web_fetch_tool_result"
+      readonly "caller": { readonly "type": "direct" } | {
+        readonly "type": "code_execution_20250825"
+        readonly "tool_id": string
+      } | { readonly "type": "code_execution_20260120"; readonly "tool_id": string }
+      readonly "content": {
+        readonly "type": "web_fetch_tool_result_error"
+        readonly "error_code":
+          | "invalid_tool_input"
+          | "url_too_long"
+          | "url_not_allowed"
+          | "url_not_accessible"
+          | "unsupported_content_type"
+          | "too_many_requests"
+          | "max_uses_exceeded"
+          | "unavailable"
+      } | {
+        readonly "content": {
+          readonly "citations": { readonly "enabled": boolean }
+          readonly "source": {
+            readonly "data": string
+            readonly "media_type": "application/pdf"
+            readonly "type": "base64"
+          } | { readonly "data": string; readonly "media_type": "text/plain"; readonly "type": "text" }
+          readonly "title": string
+          readonly "type": "document"
+        }
+        readonly "retrieved_at": string
+        readonly "type": "web_fetch_result"
+        readonly "url": string
+      }
+      readonly "tool_use_id": string
+    }
+    | {
+      readonly "type": "code_execution_tool_result"
+      readonly "content": {
+        readonly "error_code": "invalid_tool_input" | "unavailable" | "too_many_requests" | "execution_time_exceeded"
+        readonly "type": "code_execution_tool_result_error"
+      } | {
+        readonly "content": ReadonlyArray<{ readonly "file_id": string; readonly "type": "code_execution_output" }>
+        readonly "return_code": number
+        readonly "stderr": string
+        readonly "stdout": string
+        readonly "type": "code_execution_result"
+      } | {
+        readonly "content": ReadonlyArray<{ readonly "file_id": string; readonly "type": "code_execution_output" }>
+        readonly "encrypted_stdout": string
+        readonly "return_code": number
+        readonly "stderr": string
+        readonly "type": "encrypted_code_execution_result"
+      }
+      readonly "tool_use_id": string
+    }
+    | {
+      readonly "type": "bash_code_execution_tool_result"
+      readonly "content": {
+        readonly "error_code":
+          | "invalid_tool_input"
+          | "unavailable"
+          | "too_many_requests"
+          | "execution_time_exceeded"
+          | "output_file_too_large"
+        readonly "type": "bash_code_execution_tool_result_error"
+      } | {
+        readonly "content": ReadonlyArray<{ readonly "file_id": string; readonly "type": "bash_code_execution_output" }>
+        readonly "return_code": number
+        readonly "stderr": string
+        readonly "stdout": string
+        readonly "type": "bash_code_execution_result"
+      }
+      readonly "tool_use_id": string
+    }
+    | {
+      readonly "type": "text_editor_code_execution_tool_result"
+      readonly "content":
+        | {
+          readonly "error_code":
+            | "invalid_tool_input"
+            | "unavailable"
+            | "too_many_requests"
+            | "execution_time_exceeded"
+            | "file_not_found"
+          readonly "error_message": string
+          readonly "type": "text_editor_code_execution_tool_result_error"
+        }
+        | {
+          readonly "content": string
+          readonly "file_type": "text" | "image" | "pdf"
+          readonly "num_lines": number
+          readonly "start_line": number
+          readonly "total_lines": number
+          readonly "type": "text_editor_code_execution_view_result"
+        }
+        | { readonly "is_file_update": boolean; readonly "type": "text_editor_code_execution_create_result" }
+        | {
+          readonly "lines": ReadonlyArray<string>
+          readonly "new_lines": number
+          readonly "new_start": number
+          readonly "old_lines": number
+          readonly "old_start": number
+          readonly "type": "text_editor_code_execution_str_replace_result"
+        }
+      readonly "tool_use_id": string
+    }
+    | {
+      readonly "type": "tool_search_tool_result"
+      readonly "content": {
+        readonly "error_code": "invalid_tool_input" | "unavailable" | "too_many_requests" | "execution_time_exceeded"
+        readonly "error_message": string
+        readonly "type": "tool_search_tool_result_error"
+      } | {
+        readonly "tool_references": ReadonlyArray<{ readonly "tool_name": string; readonly "type": "tool_reference" }>
+        readonly "type": "tool_search_tool_search_result"
+      }
+      readonly "tool_use_id": string
+    }
+    | { readonly "type": "container_upload"; readonly "file_id": string }
   >
   readonly "model": string
   readonly "stop_reason": "end_turn" | "max_tokens" | "stop_sequence" | "tool_use" | "pause_turn" | "refusal"
@@ -946,14 +1289,119 @@ export type AnthropicMessagesResponse = {
       readonly "ephemeral_1h_input_tokens": number
     }
     readonly "inference_geo": string
-    readonly "server_tool_use": { readonly "web_search_requests": number }
+    readonly "server_tool_use": { readonly "web_search_requests": number; readonly "web_fetch_requests": number }
     readonly "service_tier": "standard" | "priority" | "batch"
   }
+  readonly "provider"?:
+    | "AnyScale"
+    | "Atoma"
+    | "Cent-ML"
+    | "CrofAI"
+    | "Enfer"
+    | "GoPomelo"
+    | "HuggingFace"
+    | "Hyperbolic 2"
+    | "InoCloud"
+    | "Kluster"
+    | "Lambda"
+    | "Lepton"
+    | "Lynn 2"
+    | "Lynn"
+    | "Mancer"
+    | "Meta"
+    | "Modal"
+    | "Nineteen"
+    | "OctoAI"
+    | "Recursal"
+    | "Reflection"
+    | "Replicate"
+    | "SambaNova 2"
+    | "SF Compute"
+    | "Targon"
+    | "Together 2"
+    | "Ubicloud"
+    | "01.AI"
+    | "AkashML"
+    | "AI21"
+    | "AionLabs"
+    | "Alibaba"
+    | "Ambient"
+    | "Amazon Bedrock"
+    | "Amazon Nova"
+    | "Anthropic"
+    | "Arcee AI"
+    | "AtlasCloud"
+    | "Avian"
+    | "Azure"
+    | "BaseTen"
+    | "BytePlus"
+    | "Black Forest Labs"
+    | "Cerebras"
+    | "Chutes"
+    | "Cirrascale"
+    | "Clarifai"
+    | "Cloudflare"
+    | "Cohere"
+    | "Crusoe"
+    | "DeepInfra"
+    | "DeepSeek"
+    | "Featherless"
+    | "Fireworks"
+    | "Friendli"
+    | "GMICloud"
+    | "Google"
+    | "Google AI Studio"
+    | "Groq"
+    | "Hyperbolic"
+    | "Inception"
+    | "Inceptron"
+    | "InferenceNet"
+    | "Ionstream"
+    | "Infermatic"
+    | "Io Net"
+    | "Inflection"
+    | "Liquid"
+    | "Mara"
+    | "Mancer 2"
+    | "Minimax"
+    | "ModelRun"
+    | "Mistral"
+    | "Modular"
+    | "Moonshot AI"
+    | "Morph"
+    | "NCompass"
+    | "Nebius"
+    | "NextBit"
+    | "Novita"
+    | "Nvidia"
+    | "OpenAI"
+    | "OpenInference"
+    | "Parasail"
+    | "Perplexity"
+    | "Phala"
+    | "Relace"
+    | "SambaNova"
+    | "Seed"
+    | "SiliconFlow"
+    | "Sourceful"
+    | "StepFun"
+    | "Stealth"
+    | "StreamLake"
+    | "Switchpoint"
+    | "Together"
+    | "Upstage"
+    | "Venice"
+    | "WandB"
+    | "Xiaomi"
+    | "xAI"
+    | "Z.AI"
+    | "FakeProvider"
 }
 export const AnthropicMessagesResponse = Schema.Struct({
   "id": Schema.String,
   "type": Schema.Literal("message"),
   "role": Schema.Literal("assistant"),
+  "container": Schema.Struct({ "id": Schema.String, "expires_at": Schema.String }),
   "content": Schema.Array(Schema.Union([
     Schema.Struct({
       "type": Schema.Literal("text"),
@@ -1007,6 +1455,11 @@ export const AnthropicMessagesResponse = Schema.Struct({
     Schema.Struct({
       "type": Schema.Literal("tool_use"),
       "id": Schema.String,
+      "caller": Schema.Union([
+        Schema.Struct({ "type": Schema.Literal("direct") }),
+        Schema.Struct({ "type": Schema.Literal("code_execution_20250825"), "tool_id": Schema.String }),
+        Schema.Struct({ "type": Schema.Literal("code_execution_20260120"), "tool_id": Schema.String })
+      ], { mode: "oneOf" }),
       "name": Schema.String,
       "input": Schema.optionalKey(Schema.Unknown)
     }),
@@ -1015,11 +1468,29 @@ export const AnthropicMessagesResponse = Schema.Struct({
     Schema.Struct({
       "type": Schema.Literal("server_tool_use"),
       "id": Schema.String,
-      "name": Schema.Literal("web_search"),
+      "caller": Schema.Union([
+        Schema.Struct({ "type": Schema.Literal("direct") }),
+        Schema.Struct({ "type": Schema.Literal("code_execution_20250825"), "tool_id": Schema.String }),
+        Schema.Struct({ "type": Schema.Literal("code_execution_20260120"), "tool_id": Schema.String })
+      ], { mode: "oneOf" }),
+      "name": Schema.Literals([
+        "web_search",
+        "web_fetch",
+        "code_execution",
+        "bash_code_execution",
+        "text_editor_code_execution",
+        "tool_search_tool_regex",
+        "tool_search_tool_bm25"
+      ]),
       "input": Schema.optionalKey(Schema.Unknown)
     }),
     Schema.Struct({
       "type": Schema.Literal("web_search_tool_result"),
+      "caller": Schema.Union([
+        Schema.Struct({ "type": Schema.Literal("direct") }),
+        Schema.Struct({ "type": Schema.Literal("code_execution_20250825"), "tool_id": Schema.String }),
+        Schema.Struct({ "type": Schema.Literal("code_execution_20260120"), "tool_id": Schema.String })
+      ], { mode: "oneOf" }),
       "tool_use_id": Schema.String,
       "content": Schema.Union([
         Schema.Array(
@@ -1038,11 +1509,176 @@ export const AnthropicMessagesResponse = Schema.Struct({
             "unavailable",
             "max_uses_exceeded",
             "too_many_requests",
-            "query_too_long"
+            "query_too_long",
+            "request_too_large"
           ])
         })
       ])
-    })
+    }),
+    Schema.Struct({
+      "type": Schema.Literal("web_fetch_tool_result"),
+      "caller": Schema.Union([
+        Schema.Struct({ "type": Schema.Literal("direct") }),
+        Schema.Struct({ "type": Schema.Literal("code_execution_20250825"), "tool_id": Schema.String }),
+        Schema.Struct({ "type": Schema.Literal("code_execution_20260120"), "tool_id": Schema.String })
+      ], { mode: "oneOf" }),
+      "content": Schema.Union([
+        Schema.Struct({
+          "type": Schema.Literal("web_fetch_tool_result_error"),
+          "error_code": Schema.Literals([
+            "invalid_tool_input",
+            "url_too_long",
+            "url_not_allowed",
+            "url_not_accessible",
+            "unsupported_content_type",
+            "too_many_requests",
+            "max_uses_exceeded",
+            "unavailable"
+          ])
+        }),
+        Schema.Struct({
+          "content": Schema.Struct({
+            "citations": Schema.Struct({ "enabled": Schema.Boolean }),
+            "source": Schema.Union([
+              Schema.Struct({
+                "data": Schema.String,
+                "media_type": Schema.Literal("application/pdf"),
+                "type": Schema.Literal("base64")
+              }),
+              Schema.Struct({
+                "data": Schema.String,
+                "media_type": Schema.Literal("text/plain"),
+                "type": Schema.Literal("text")
+              })
+            ]),
+            "title": Schema.String,
+            "type": Schema.Literal("document")
+          }),
+          "retrieved_at": Schema.String,
+          "type": Schema.Literal("web_fetch_result"),
+          "url": Schema.String
+        })
+      ], { mode: "oneOf" }),
+      "tool_use_id": Schema.String
+    }),
+    Schema.Struct({
+      "type": Schema.Literal("code_execution_tool_result"),
+      "content": Schema.Union([
+        Schema.Struct({
+          "error_code": Schema.Literals([
+            "invalid_tool_input",
+            "unavailable",
+            "too_many_requests",
+            "execution_time_exceeded"
+          ]),
+          "type": Schema.Literal("code_execution_tool_result_error")
+        }),
+        Schema.Struct({
+          "content": Schema.Array(
+            Schema.Struct({ "file_id": Schema.String, "type": Schema.Literal("code_execution_output") })
+          ),
+          "return_code": Schema.Number.check(Schema.isFinite()),
+          "stderr": Schema.String,
+          "stdout": Schema.String,
+          "type": Schema.Literal("code_execution_result")
+        }),
+        Schema.Struct({
+          "content": Schema.Array(
+            Schema.Struct({ "file_id": Schema.String, "type": Schema.Literal("code_execution_output") })
+          ),
+          "encrypted_stdout": Schema.String,
+          "return_code": Schema.Number.check(Schema.isFinite()),
+          "stderr": Schema.String,
+          "type": Schema.Literal("encrypted_code_execution_result")
+        })
+      ], { mode: "oneOf" }),
+      "tool_use_id": Schema.String
+    }),
+    Schema.Struct({
+      "type": Schema.Literal("bash_code_execution_tool_result"),
+      "content": Schema.Union([
+        Schema.Struct({
+          "error_code": Schema.Literals([
+            "invalid_tool_input",
+            "unavailable",
+            "too_many_requests",
+            "execution_time_exceeded",
+            "output_file_too_large"
+          ]),
+          "type": Schema.Literal("bash_code_execution_tool_result_error")
+        }),
+        Schema.Struct({
+          "content": Schema.Array(
+            Schema.Struct({ "file_id": Schema.String, "type": Schema.Literal("bash_code_execution_output") })
+          ),
+          "return_code": Schema.Number.check(Schema.isFinite()),
+          "stderr": Schema.String,
+          "stdout": Schema.String,
+          "type": Schema.Literal("bash_code_execution_result")
+        })
+      ], { mode: "oneOf" }),
+      "tool_use_id": Schema.String
+    }),
+    Schema.Struct({
+      "type": Schema.Literal("text_editor_code_execution_tool_result"),
+      "content": Schema.Union([
+        Schema.Struct({
+          "error_code": Schema.Literals([
+            "invalid_tool_input",
+            "unavailable",
+            "too_many_requests",
+            "execution_time_exceeded",
+            "file_not_found"
+          ]),
+          "error_message": Schema.String,
+          "type": Schema.Literal("text_editor_code_execution_tool_result_error")
+        }),
+        Schema.Struct({
+          "content": Schema.String,
+          "file_type": Schema.Literals(["text", "image", "pdf"]),
+          "num_lines": Schema.Number.check(Schema.isFinite()),
+          "start_line": Schema.Number.check(Schema.isFinite()),
+          "total_lines": Schema.Number.check(Schema.isFinite()),
+          "type": Schema.Literal("text_editor_code_execution_view_result")
+        }),
+        Schema.Struct({
+          "is_file_update": Schema.Boolean,
+          "type": Schema.Literal("text_editor_code_execution_create_result")
+        }),
+        Schema.Struct({
+          "lines": Schema.Array(Schema.String),
+          "new_lines": Schema.Number.check(Schema.isFinite()),
+          "new_start": Schema.Number.check(Schema.isFinite()),
+          "old_lines": Schema.Number.check(Schema.isFinite()),
+          "old_start": Schema.Number.check(Schema.isFinite()),
+          "type": Schema.Literal("text_editor_code_execution_str_replace_result")
+        })
+      ], { mode: "oneOf" }),
+      "tool_use_id": Schema.String
+    }),
+    Schema.Struct({
+      "type": Schema.Literal("tool_search_tool_result"),
+      "content": Schema.Union([
+        Schema.Struct({
+          "error_code": Schema.Literals([
+            "invalid_tool_input",
+            "unavailable",
+            "too_many_requests",
+            "execution_time_exceeded"
+          ]),
+          "error_message": Schema.String,
+          "type": Schema.Literal("tool_search_tool_result_error")
+        }),
+        Schema.Struct({
+          "tool_references": Schema.Array(
+            Schema.Struct({ "tool_name": Schema.String, "type": Schema.Literal("tool_reference") })
+          ),
+          "type": Schema.Literal("tool_search_tool_search_result")
+        })
+      ], { mode: "oneOf" }),
+      "tool_use_id": Schema.String
+    }),
+    Schema.Struct({ "type": Schema.Literal("container_upload"), "file_id": Schema.String })
   ], { mode: "oneOf" })),
   "model": Schema.String,
   "stop_reason": Schema.Literals(["end_turn", "max_tokens", "stop_sequence", "tool_use", "pause_turn", "refusal"]),
@@ -1057,133 +1693,128 @@ export const AnthropicMessagesResponse = Schema.Struct({
       "ephemeral_1h_input_tokens": Schema.Number.check(Schema.isFinite())
     }),
     "inference_geo": Schema.String,
-    "server_tool_use": Schema.Struct({ "web_search_requests": Schema.Number.check(Schema.isFinite()) }),
+    "server_tool_use": Schema.Struct({
+      "web_search_requests": Schema.Number.check(Schema.isFinite()),
+      "web_fetch_requests": Schema.Number.check(Schema.isFinite())
+    }),
     "service_tier": Schema.Literals(["standard", "priority", "batch"])
-  })
+  }),
+  "provider": Schema.optionalKey(
+    Schema.Literals([
+      "AnyScale",
+      "Atoma",
+      "Cent-ML",
+      "CrofAI",
+      "Enfer",
+      "GoPomelo",
+      "HuggingFace",
+      "Hyperbolic 2",
+      "InoCloud",
+      "Kluster",
+      "Lambda",
+      "Lepton",
+      "Lynn 2",
+      "Lynn",
+      "Mancer",
+      "Meta",
+      "Modal",
+      "Nineteen",
+      "OctoAI",
+      "Recursal",
+      "Reflection",
+      "Replicate",
+      "SambaNova 2",
+      "SF Compute",
+      "Targon",
+      "Together 2",
+      "Ubicloud",
+      "01.AI",
+      "AkashML",
+      "AI21",
+      "AionLabs",
+      "Alibaba",
+      "Ambient",
+      "Amazon Bedrock",
+      "Amazon Nova",
+      "Anthropic",
+      "Arcee AI",
+      "AtlasCloud",
+      "Avian",
+      "Azure",
+      "BaseTen",
+      "BytePlus",
+      "Black Forest Labs",
+      "Cerebras",
+      "Chutes",
+      "Cirrascale",
+      "Clarifai",
+      "Cloudflare",
+      "Cohere",
+      "Crusoe",
+      "DeepInfra",
+      "DeepSeek",
+      "Featherless",
+      "Fireworks",
+      "Friendli",
+      "GMICloud",
+      "Google",
+      "Google AI Studio",
+      "Groq",
+      "Hyperbolic",
+      "Inception",
+      "Inceptron",
+      "InferenceNet",
+      "Ionstream",
+      "Infermatic",
+      "Io Net",
+      "Inflection",
+      "Liquid",
+      "Mara",
+      "Mancer 2",
+      "Minimax",
+      "ModelRun",
+      "Mistral",
+      "Modular",
+      "Moonshot AI",
+      "Morph",
+      "NCompass",
+      "Nebius",
+      "NextBit",
+      "Novita",
+      "Nvidia",
+      "OpenAI",
+      "OpenInference",
+      "Parasail",
+      "Perplexity",
+      "Phala",
+      "Relace",
+      "SambaNova",
+      "Seed",
+      "SiliconFlow",
+      "Sourceful",
+      "StepFun",
+      "Stealth",
+      "StreamLake",
+      "Switchpoint",
+      "Together",
+      "Upstage",
+      "Venice",
+      "WandB",
+      "Xiaomi",
+      "xAI",
+      "Z.AI",
+      "FakeProvider"
+    ])
+  )
 }).annotate({ "description": "Non-streaming response from the Anthropic Messages API with OpenRouter extensions" })
-export type AnthropicMessagesStreamEvent =
-  | {
-    readonly "type": "message_start"
-    readonly "message": {
-      readonly "id": string
-      readonly "type": "message"
-      readonly "role": "assistant"
-      readonly "content": ReadonlyArray<
-        | {
-          readonly "type": "text"
-          readonly "text": string
-          readonly "citations": ReadonlyArray<
-            {
-              readonly "type": "char_location"
-              readonly "cited_text": string
-              readonly "document_index": number
-              readonly "document_title": string
-              readonly "start_char_index": number
-              readonly "end_char_index": number
-              readonly "file_id": string
-            } | {
-              readonly "type": "page_location"
-              readonly "cited_text": string
-              readonly "document_index": number
-              readonly "document_title": string
-              readonly "start_page_number": number
-              readonly "end_page_number": number
-              readonly "file_id": string
-            } | {
-              readonly "type": "content_block_location"
-              readonly "cited_text": string
-              readonly "document_index": number
-              readonly "document_title": string
-              readonly "start_block_index": number
-              readonly "end_block_index": number
-              readonly "file_id": string
-            } | {
-              readonly "type": "web_search_result_location"
-              readonly "cited_text": string
-              readonly "encrypted_index": string
-              readonly "title": string
-              readonly "url": string
-            } | {
-              readonly "type": "search_result_location"
-              readonly "cited_text": string
-              readonly "search_result_index": number
-              readonly "source": string
-              readonly "title": string
-              readonly "start_block_index": number
-              readonly "end_block_index": number
-            }
-          >
-        }
-        | { readonly "type": "tool_use"; readonly "id": string; readonly "name": string; readonly "input"?: unknown }
-        | { readonly "type": "thinking"; readonly "thinking": string; readonly "signature": string }
-        | { readonly "type": "redacted_thinking"; readonly "data": string }
-        | {
-          readonly "type": "server_tool_use"
-          readonly "id": string
-          readonly "name": "web_search"
-          readonly "input"?: unknown
-        }
-        | {
-          readonly "type": "web_search_tool_result"
-          readonly "tool_use_id": string
-          readonly "content":
-            | ReadonlyArray<
-              {
-                readonly "type": "web_search_result"
-                readonly "encrypted_content": string
-                readonly "page_age": string
-                readonly "title": string
-                readonly "url": string
-              }
-            >
-            | {
-              readonly "type": "web_search_tool_result_error"
-              readonly "error_code":
-                | "invalid_tool_input"
-                | "unavailable"
-                | "max_uses_exceeded"
-                | "too_many_requests"
-                | "query_too_long"
-            }
-        }
-      >
-      readonly "model": string
-      readonly "stop_reason": unknown
-      readonly "stop_sequence": unknown
-      readonly "usage": {
-        readonly "input_tokens": number
-        readonly "output_tokens": number
-        readonly "cache_creation_input_tokens": number
-        readonly "cache_read_input_tokens": number
-        readonly "cache_creation": {
-          readonly "ephemeral_5m_input_tokens": number
-          readonly "ephemeral_1h_input_tokens": number
-        }
-        readonly "inference_geo": string
-        readonly "server_tool_use": { readonly "web_search_requests": number }
-        readonly "service_tier": "standard" | "priority" | "batch"
-      }
-    }
-  }
-  | {
-    readonly "type": "message_delta"
-    readonly "delta": {
-      readonly "stop_reason": "end_turn" | "max_tokens" | "stop_sequence" | "tool_use" | "pause_turn" | "refusal"
-      readonly "stop_sequence": string
-    }
-    readonly "usage": {
-      readonly "input_tokens": number
-      readonly "output_tokens": number
-      readonly "cache_creation_input_tokens": number
-      readonly "cache_read_input_tokens": number
-      readonly "server_tool_use": { readonly "web_search_requests": number }
-    }
-  }
-  | { readonly "type": "message_stop" }
-  | {
-    readonly "type": "content_block_start"
-    readonly "index": number
-    readonly "content_block":
+export type AnthropicMessagesMessageStartEvent = {
+  readonly "type": "message_start"
+  readonly "message": {
+    readonly "id": string
+    readonly "type": "message"
+    readonly "role": "assistant"
+    readonly "container": { readonly "id": string; readonly "expires_at": string }
+    readonly "content": ReadonlyArray<
       | {
         readonly "type": "text"
         readonly "text": string
@@ -1229,17 +1860,41 @@ export type AnthropicMessagesStreamEvent =
           }
         >
       }
-      | { readonly "type": "tool_use"; readonly "id": string; readonly "name": string; readonly "input"?: unknown }
+      | {
+        readonly "type": "tool_use"
+        readonly "id": string
+        readonly "caller": { readonly "type": "direct" } | {
+          readonly "type": "code_execution_20250825"
+          readonly "tool_id": string
+        } | { readonly "type": "code_execution_20260120"; readonly "tool_id": string }
+        readonly "name": string
+        readonly "input"?: unknown
+      }
       | { readonly "type": "thinking"; readonly "thinking": string; readonly "signature": string }
       | { readonly "type": "redacted_thinking"; readonly "data": string }
       | {
         readonly "type": "server_tool_use"
         readonly "id": string
-        readonly "name": "web_search"
+        readonly "caller": { readonly "type": "direct" } | {
+          readonly "type": "code_execution_20250825"
+          readonly "tool_id": string
+        } | { readonly "type": "code_execution_20260120"; readonly "tool_id": string }
+        readonly "name":
+          | "web_search"
+          | "web_fetch"
+          | "code_execution"
+          | "bash_code_execution"
+          | "text_editor_code_execution"
+          | "tool_search_tool_regex"
+          | "tool_search_tool_bm25"
         readonly "input"?: unknown
       }
       | {
         readonly "type": "web_search_tool_result"
+        readonly "caller": { readonly "type": "direct" } | {
+          readonly "type": "code_execution_20250825"
+          readonly "tool_id": string
+        } | { readonly "type": "code_execution_20260120"; readonly "tool_id": string }
         readonly "tool_use_id": string
         readonly "content":
           | ReadonlyArray<
@@ -1259,197 +1914,260 @@ export type AnthropicMessagesStreamEvent =
               | "max_uses_exceeded"
               | "too_many_requests"
               | "query_too_long"
+              | "request_too_large"
           }
       }
-  }
-  | {
-    readonly "type": "content_block_delta"
-    readonly "index": number
-    readonly "delta":
-      | { readonly "type": "text_delta"; readonly "text": string }
-      | { readonly "type": "input_json_delta"; readonly "partial_json": string }
-      | { readonly "type": "thinking_delta"; readonly "thinking": string }
-      | { readonly "type": "signature_delta"; readonly "signature": string }
       | {
-        readonly "type": "citations_delta"
-        readonly "citation": {
-          readonly "type": "char_location"
-          readonly "cited_text": string
-          readonly "document_index": number
-          readonly "document_title": string
-          readonly "start_char_index": number
-          readonly "end_char_index": number
-          readonly "file_id": string
+        readonly "type": "web_fetch_tool_result"
+        readonly "caller": { readonly "type": "direct" } | {
+          readonly "type": "code_execution_20250825"
+          readonly "tool_id": string
+        } | { readonly "type": "code_execution_20260120"; readonly "tool_id": string }
+        readonly "content": {
+          readonly "type": "web_fetch_tool_result_error"
+          readonly "error_code":
+            | "invalid_tool_input"
+            | "url_too_long"
+            | "url_not_allowed"
+            | "url_not_accessible"
+            | "unsupported_content_type"
+            | "too_many_requests"
+            | "max_uses_exceeded"
+            | "unavailable"
         } | {
-          readonly "type": "page_location"
-          readonly "cited_text": string
-          readonly "document_index": number
-          readonly "document_title": string
-          readonly "start_page_number": number
-          readonly "end_page_number": number
-          readonly "file_id": string
-        } | {
-          readonly "type": "content_block_location"
-          readonly "cited_text": string
-          readonly "document_index": number
-          readonly "document_title": string
-          readonly "start_block_index": number
-          readonly "end_block_index": number
-          readonly "file_id": string
-        } | {
-          readonly "type": "web_search_result_location"
-          readonly "cited_text": string
-          readonly "encrypted_index": string
-          readonly "title": string
+          readonly "content": {
+            readonly "citations": { readonly "enabled": boolean }
+            readonly "source": {
+              readonly "data": string
+              readonly "media_type": "application/pdf"
+              readonly "type": "base64"
+            } | { readonly "data": string; readonly "media_type": "text/plain"; readonly "type": "text" }
+            readonly "title": string
+            readonly "type": "document"
+          }
+          readonly "retrieved_at": string
+          readonly "type": "web_fetch_result"
           readonly "url": string
-        } | {
-          readonly "type": "search_result_location"
-          readonly "cited_text": string
-          readonly "search_result_index": number
-          readonly "source": string
-          readonly "title": string
-          readonly "start_block_index": number
-          readonly "end_block_index": number
         }
+        readonly "tool_use_id": string
       }
+      | {
+        readonly "type": "code_execution_tool_result"
+        readonly "content": {
+          readonly "error_code": "invalid_tool_input" | "unavailable" | "too_many_requests" | "execution_time_exceeded"
+          readonly "type": "code_execution_tool_result_error"
+        } | {
+          readonly "content": ReadonlyArray<{ readonly "file_id": string; readonly "type": "code_execution_output" }>
+          readonly "return_code": number
+          readonly "stderr": string
+          readonly "stdout": string
+          readonly "type": "code_execution_result"
+        } | {
+          readonly "content": ReadonlyArray<{ readonly "file_id": string; readonly "type": "code_execution_output" }>
+          readonly "encrypted_stdout": string
+          readonly "return_code": number
+          readonly "stderr": string
+          readonly "type": "encrypted_code_execution_result"
+        }
+        readonly "tool_use_id": string
+      }
+      | {
+        readonly "type": "bash_code_execution_tool_result"
+        readonly "content": {
+          readonly "error_code":
+            | "invalid_tool_input"
+            | "unavailable"
+            | "too_many_requests"
+            | "execution_time_exceeded"
+            | "output_file_too_large"
+          readonly "type": "bash_code_execution_tool_result_error"
+        } | {
+          readonly "content": ReadonlyArray<
+            { readonly "file_id": string; readonly "type": "bash_code_execution_output" }
+          >
+          readonly "return_code": number
+          readonly "stderr": string
+          readonly "stdout": string
+          readonly "type": "bash_code_execution_result"
+        }
+        readonly "tool_use_id": string
+      }
+      | {
+        readonly "type": "text_editor_code_execution_tool_result"
+        readonly "content":
+          | {
+            readonly "error_code":
+              | "invalid_tool_input"
+              | "unavailable"
+              | "too_many_requests"
+              | "execution_time_exceeded"
+              | "file_not_found"
+            readonly "error_message": string
+            readonly "type": "text_editor_code_execution_tool_result_error"
+          }
+          | {
+            readonly "content": string
+            readonly "file_type": "text" | "image" | "pdf"
+            readonly "num_lines": number
+            readonly "start_line": number
+            readonly "total_lines": number
+            readonly "type": "text_editor_code_execution_view_result"
+          }
+          | { readonly "is_file_update": boolean; readonly "type": "text_editor_code_execution_create_result" }
+          | {
+            readonly "lines": ReadonlyArray<string>
+            readonly "new_lines": number
+            readonly "new_start": number
+            readonly "old_lines": number
+            readonly "old_start": number
+            readonly "type": "text_editor_code_execution_str_replace_result"
+          }
+        readonly "tool_use_id": string
+      }
+      | {
+        readonly "type": "tool_search_tool_result"
+        readonly "content": {
+          readonly "error_code": "invalid_tool_input" | "unavailable" | "too_many_requests" | "execution_time_exceeded"
+          readonly "error_message": string
+          readonly "type": "tool_search_tool_result_error"
+        } | {
+          readonly "tool_references": ReadonlyArray<{ readonly "tool_name": string; readonly "type": "tool_reference" }>
+          readonly "type": "tool_search_tool_search_result"
+        }
+        readonly "tool_use_id": string
+      }
+      | { readonly "type": "container_upload"; readonly "file_id": string }
+    >
+    readonly "model": string
+    readonly "stop_reason": unknown
+    readonly "stop_sequence": unknown
+    readonly "usage": {
+      readonly "input_tokens": number
+      readonly "output_tokens": number
+      readonly "cache_creation_input_tokens": number
+      readonly "cache_read_input_tokens": number
+      readonly "cache_creation": {
+        readonly "ephemeral_5m_input_tokens": number
+        readonly "ephemeral_1h_input_tokens": number
+      }
+      readonly "inference_geo": string
+      readonly "server_tool_use": { readonly "web_search_requests": number; readonly "web_fetch_requests": number }
+      readonly "service_tier": "standard" | "priority" | "batch"
+    }
+    readonly "provider"?:
+      | "AnyScale"
+      | "Atoma"
+      | "Cent-ML"
+      | "CrofAI"
+      | "Enfer"
+      | "GoPomelo"
+      | "HuggingFace"
+      | "Hyperbolic 2"
+      | "InoCloud"
+      | "Kluster"
+      | "Lambda"
+      | "Lepton"
+      | "Lynn 2"
+      | "Lynn"
+      | "Mancer"
+      | "Meta"
+      | "Modal"
+      | "Nineteen"
+      | "OctoAI"
+      | "Recursal"
+      | "Reflection"
+      | "Replicate"
+      | "SambaNova 2"
+      | "SF Compute"
+      | "Targon"
+      | "Together 2"
+      | "Ubicloud"
+      | "01.AI"
+      | "AkashML"
+      | "AI21"
+      | "AionLabs"
+      | "Alibaba"
+      | "Ambient"
+      | "Amazon Bedrock"
+      | "Amazon Nova"
+      | "Anthropic"
+      | "Arcee AI"
+      | "AtlasCloud"
+      | "Avian"
+      | "Azure"
+      | "BaseTen"
+      | "BytePlus"
+      | "Black Forest Labs"
+      | "Cerebras"
+      | "Chutes"
+      | "Cirrascale"
+      | "Clarifai"
+      | "Cloudflare"
+      | "Cohere"
+      | "Crusoe"
+      | "DeepInfra"
+      | "DeepSeek"
+      | "Featherless"
+      | "Fireworks"
+      | "Friendli"
+      | "GMICloud"
+      | "Google"
+      | "Google AI Studio"
+      | "Groq"
+      | "Hyperbolic"
+      | "Inception"
+      | "Inceptron"
+      | "InferenceNet"
+      | "Ionstream"
+      | "Infermatic"
+      | "Io Net"
+      | "Inflection"
+      | "Liquid"
+      | "Mara"
+      | "Mancer 2"
+      | "Minimax"
+      | "ModelRun"
+      | "Mistral"
+      | "Modular"
+      | "Moonshot AI"
+      | "Morph"
+      | "NCompass"
+      | "Nebius"
+      | "NextBit"
+      | "Novita"
+      | "Nvidia"
+      | "OpenAI"
+      | "OpenInference"
+      | "Parasail"
+      | "Perplexity"
+      | "Phala"
+      | "Relace"
+      | "SambaNova"
+      | "Seed"
+      | "SiliconFlow"
+      | "Sourceful"
+      | "StepFun"
+      | "Stealth"
+      | "StreamLake"
+      | "Switchpoint"
+      | "Together"
+      | "Upstage"
+      | "Venice"
+      | "WandB"
+      | "Xiaomi"
+      | "xAI"
+      | "Z.AI"
+      | "FakeProvider"
   }
-  | { readonly "type": "content_block_stop"; readonly "index": number }
-  | { readonly "type": "ping" }
-  | { readonly "type": "error"; readonly "error": { readonly "type": string; readonly "message": string } }
-export const AnthropicMessagesStreamEvent = Schema.Union([
-  Schema.Struct({
-    "type": Schema.Literal("message_start"),
-    "message": Schema.Struct({
-      "id": Schema.String,
-      "type": Schema.Literal("message"),
-      "role": Schema.Literal("assistant"),
-      "content": Schema.Array(Schema.Union([
-        Schema.Struct({
-          "type": Schema.Literal("text"),
-          "text": Schema.String,
-          "citations": Schema.Array(Schema.Union([
-            Schema.Struct({
-              "type": Schema.Literal("char_location"),
-              "cited_text": Schema.String,
-              "document_index": Schema.Number.check(Schema.isFinite()),
-              "document_title": Schema.String,
-              "start_char_index": Schema.Number.check(Schema.isFinite()),
-              "end_char_index": Schema.Number.check(Schema.isFinite()),
-              "file_id": Schema.String
-            }),
-            Schema.Struct({
-              "type": Schema.Literal("page_location"),
-              "cited_text": Schema.String,
-              "document_index": Schema.Number.check(Schema.isFinite()),
-              "document_title": Schema.String,
-              "start_page_number": Schema.Number.check(Schema.isFinite()),
-              "end_page_number": Schema.Number.check(Schema.isFinite()),
-              "file_id": Schema.String
-            }),
-            Schema.Struct({
-              "type": Schema.Literal("content_block_location"),
-              "cited_text": Schema.String,
-              "document_index": Schema.Number.check(Schema.isFinite()),
-              "document_title": Schema.String,
-              "start_block_index": Schema.Number.check(Schema.isFinite()),
-              "end_block_index": Schema.Number.check(Schema.isFinite()),
-              "file_id": Schema.String
-            }),
-            Schema.Struct({
-              "type": Schema.Literal("web_search_result_location"),
-              "cited_text": Schema.String,
-              "encrypted_index": Schema.String,
-              "title": Schema.String,
-              "url": Schema.String
-            }),
-            Schema.Struct({
-              "type": Schema.Literal("search_result_location"),
-              "cited_text": Schema.String,
-              "search_result_index": Schema.Number.check(Schema.isFinite()),
-              "source": Schema.String,
-              "title": Schema.String,
-              "start_block_index": Schema.Number.check(Schema.isFinite()),
-              "end_block_index": Schema.Number.check(Schema.isFinite())
-            })
-          ], { mode: "oneOf" }))
-        }),
-        Schema.Struct({
-          "type": Schema.Literal("tool_use"),
-          "id": Schema.String,
-          "name": Schema.String,
-          "input": Schema.optionalKey(Schema.Unknown)
-        }),
-        Schema.Struct({ "type": Schema.Literal("thinking"), "thinking": Schema.String, "signature": Schema.String }),
-        Schema.Struct({ "type": Schema.Literal("redacted_thinking"), "data": Schema.String }),
-        Schema.Struct({
-          "type": Schema.Literal("server_tool_use"),
-          "id": Schema.String,
-          "name": Schema.Literal("web_search"),
-          "input": Schema.optionalKey(Schema.Unknown)
-        }),
-        Schema.Struct({
-          "type": Schema.Literal("web_search_tool_result"),
-          "tool_use_id": Schema.String,
-          "content": Schema.Union([
-            Schema.Array(
-              Schema.Struct({
-                "type": Schema.Literal("web_search_result"),
-                "encrypted_content": Schema.String,
-                "page_age": Schema.String,
-                "title": Schema.String,
-                "url": Schema.String
-              })
-            ),
-            Schema.Struct({
-              "type": Schema.Literal("web_search_tool_result_error"),
-              "error_code": Schema.Literals([
-                "invalid_tool_input",
-                "unavailable",
-                "max_uses_exceeded",
-                "too_many_requests",
-                "query_too_long"
-              ])
-            })
-          ])
-        })
-      ], { mode: "oneOf" })),
-      "model": Schema.String,
-      "stop_reason": Schema.Unknown,
-      "stop_sequence": Schema.Unknown,
-      "usage": Schema.Struct({
-        "input_tokens": Schema.Number.check(Schema.isFinite()),
-        "output_tokens": Schema.Number.check(Schema.isFinite()),
-        "cache_creation_input_tokens": Schema.Number.check(Schema.isFinite()),
-        "cache_read_input_tokens": Schema.Number.check(Schema.isFinite()),
-        "cache_creation": Schema.Struct({
-          "ephemeral_5m_input_tokens": Schema.Number.check(Schema.isFinite()),
-          "ephemeral_1h_input_tokens": Schema.Number.check(Schema.isFinite())
-        }),
-        "inference_geo": Schema.String,
-        "server_tool_use": Schema.Struct({ "web_search_requests": Schema.Number.check(Schema.isFinite()) }),
-        "service_tier": Schema.Literals(["standard", "priority", "batch"])
-      })
-    })
-  }),
-  Schema.Struct({
-    "type": Schema.Literal("message_delta"),
-    "delta": Schema.Struct({
-      "stop_reason": Schema.Literals(["end_turn", "max_tokens", "stop_sequence", "tool_use", "pause_turn", "refusal"]),
-      "stop_sequence": Schema.String
-    }),
-    "usage": Schema.Struct({
-      "input_tokens": Schema.Number.check(Schema.isFinite()),
-      "output_tokens": Schema.Number.check(Schema.isFinite()),
-      "cache_creation_input_tokens": Schema.Number.check(Schema.isFinite()),
-      "cache_read_input_tokens": Schema.Number.check(Schema.isFinite()),
-      "server_tool_use": Schema.Struct({ "web_search_requests": Schema.Number.check(Schema.isFinite()) })
-    })
-  }),
-  Schema.Struct({ "type": Schema.Literal("message_stop") }),
-  Schema.Struct({
-    "type": Schema.Literal("content_block_start"),
-    "index": Schema.Number.check(Schema.isFinite()),
-    "content_block": Schema.Union([
+}
+export const AnthropicMessagesMessageStartEvent = Schema.Struct({
+  "type": Schema.Literal("message_start"),
+  "message": Schema.Struct({
+    "id": Schema.String,
+    "type": Schema.Literal("message"),
+    "role": Schema.Literal("assistant"),
+    "container": Schema.Struct({ "id": Schema.String, "expires_at": Schema.String }),
+    "content": Schema.Array(Schema.Union([
       Schema.Struct({
         "type": Schema.Literal("text"),
         "text": Schema.String,
@@ -1502,6 +2220,11 @@ export const AnthropicMessagesStreamEvent = Schema.Union([
       Schema.Struct({
         "type": Schema.Literal("tool_use"),
         "id": Schema.String,
+        "caller": Schema.Union([
+          Schema.Struct({ "type": Schema.Literal("direct") }),
+          Schema.Struct({ "type": Schema.Literal("code_execution_20250825"), "tool_id": Schema.String }),
+          Schema.Struct({ "type": Schema.Literal("code_execution_20260120"), "tool_id": Schema.String })
+        ], { mode: "oneOf" }),
         "name": Schema.String,
         "input": Schema.optionalKey(Schema.Unknown)
       }),
@@ -1510,11 +2233,29 @@ export const AnthropicMessagesStreamEvent = Schema.Union([
       Schema.Struct({
         "type": Schema.Literal("server_tool_use"),
         "id": Schema.String,
-        "name": Schema.Literal("web_search"),
+        "caller": Schema.Union([
+          Schema.Struct({ "type": Schema.Literal("direct") }),
+          Schema.Struct({ "type": Schema.Literal("code_execution_20250825"), "tool_id": Schema.String }),
+          Schema.Struct({ "type": Schema.Literal("code_execution_20260120"), "tool_id": Schema.String })
+        ], { mode: "oneOf" }),
+        "name": Schema.Literals([
+          "web_search",
+          "web_fetch",
+          "code_execution",
+          "bash_code_execution",
+          "text_editor_code_execution",
+          "tool_search_tool_regex",
+          "tool_search_tool_bm25"
+        ]),
         "input": Schema.optionalKey(Schema.Unknown)
       }),
       Schema.Struct({
         "type": Schema.Literal("web_search_tool_result"),
+        "caller": Schema.Union([
+          Schema.Struct({ "type": Schema.Literal("direct") }),
+          Schema.Struct({ "type": Schema.Literal("code_execution_20250825"), "tool_id": Schema.String }),
+          Schema.Struct({ "type": Schema.Literal("code_execution_20260120"), "tool_id": Schema.String })
+        ], { mode: "oneOf" }),
         "tool_use_id": Schema.String,
         "content": Schema.Union([
           Schema.Array(
@@ -1533,78 +2274,305 @@ export const AnthropicMessagesStreamEvent = Schema.Union([
               "unavailable",
               "max_uses_exceeded",
               "too_many_requests",
-              "query_too_long"
+              "query_too_long",
+              "request_too_large"
             ])
           })
         ])
-      })
-    ], { mode: "oneOf" })
-  }),
-  Schema.Struct({
-    "type": Schema.Literal("content_block_delta"),
-    "index": Schema.Number.check(Schema.isFinite()),
-    "delta": Schema.Union([
-      Schema.Struct({ "type": Schema.Literal("text_delta"), "text": Schema.String }),
-      Schema.Struct({ "type": Schema.Literal("input_json_delta"), "partial_json": Schema.String }),
-      Schema.Struct({ "type": Schema.Literal("thinking_delta"), "thinking": Schema.String }),
-      Schema.Struct({ "type": Schema.Literal("signature_delta"), "signature": Schema.String }),
+      }),
       Schema.Struct({
-        "type": Schema.Literal("citations_delta"),
-        "citation": Schema.Union([
+        "type": Schema.Literal("web_fetch_tool_result"),
+        "caller": Schema.Union([
+          Schema.Struct({ "type": Schema.Literal("direct") }),
+          Schema.Struct({ "type": Schema.Literal("code_execution_20250825"), "tool_id": Schema.String }),
+          Schema.Struct({ "type": Schema.Literal("code_execution_20260120"), "tool_id": Schema.String })
+        ], { mode: "oneOf" }),
+        "content": Schema.Union([
           Schema.Struct({
-            "type": Schema.Literal("char_location"),
-            "cited_text": Schema.String,
-            "document_index": Schema.Number.check(Schema.isFinite()),
-            "document_title": Schema.String,
-            "start_char_index": Schema.Number.check(Schema.isFinite()),
-            "end_char_index": Schema.Number.check(Schema.isFinite()),
-            "file_id": Schema.String
+            "type": Schema.Literal("web_fetch_tool_result_error"),
+            "error_code": Schema.Literals([
+              "invalid_tool_input",
+              "url_too_long",
+              "url_not_allowed",
+              "url_not_accessible",
+              "unsupported_content_type",
+              "too_many_requests",
+              "max_uses_exceeded",
+              "unavailable"
+            ])
           }),
           Schema.Struct({
-            "type": Schema.Literal("page_location"),
-            "cited_text": Schema.String,
-            "document_index": Schema.Number.check(Schema.isFinite()),
-            "document_title": Schema.String,
-            "start_page_number": Schema.Number.check(Schema.isFinite()),
-            "end_page_number": Schema.Number.check(Schema.isFinite()),
-            "file_id": Schema.String
-          }),
-          Schema.Struct({
-            "type": Schema.Literal("content_block_location"),
-            "cited_text": Schema.String,
-            "document_index": Schema.Number.check(Schema.isFinite()),
-            "document_title": Schema.String,
-            "start_block_index": Schema.Number.check(Schema.isFinite()),
-            "end_block_index": Schema.Number.check(Schema.isFinite()),
-            "file_id": Schema.String
-          }),
-          Schema.Struct({
-            "type": Schema.Literal("web_search_result_location"),
-            "cited_text": Schema.String,
-            "encrypted_index": Schema.String,
-            "title": Schema.String,
+            "content": Schema.Struct({
+              "citations": Schema.Struct({ "enabled": Schema.Boolean }),
+              "source": Schema.Union([
+                Schema.Struct({
+                  "data": Schema.String,
+                  "media_type": Schema.Literal("application/pdf"),
+                  "type": Schema.Literal("base64")
+                }),
+                Schema.Struct({
+                  "data": Schema.String,
+                  "media_type": Schema.Literal("text/plain"),
+                  "type": Schema.Literal("text")
+                })
+              ]),
+              "title": Schema.String,
+              "type": Schema.Literal("document")
+            }),
+            "retrieved_at": Schema.String,
+            "type": Schema.Literal("web_fetch_result"),
             "url": Schema.String
+          })
+        ], { mode: "oneOf" }),
+        "tool_use_id": Schema.String
+      }),
+      Schema.Struct({
+        "type": Schema.Literal("code_execution_tool_result"),
+        "content": Schema.Union([
+          Schema.Struct({
+            "error_code": Schema.Literals([
+              "invalid_tool_input",
+              "unavailable",
+              "too_many_requests",
+              "execution_time_exceeded"
+            ]),
+            "type": Schema.Literal("code_execution_tool_result_error")
           }),
           Schema.Struct({
-            "type": Schema.Literal("search_result_location"),
-            "cited_text": Schema.String,
-            "search_result_index": Schema.Number.check(Schema.isFinite()),
-            "source": Schema.String,
-            "title": Schema.String,
-            "start_block_index": Schema.Number.check(Schema.isFinite()),
-            "end_block_index": Schema.Number.check(Schema.isFinite())
+            "content": Schema.Array(
+              Schema.Struct({ "file_id": Schema.String, "type": Schema.Literal("code_execution_output") })
+            ),
+            "return_code": Schema.Number.check(Schema.isFinite()),
+            "stderr": Schema.String,
+            "stdout": Schema.String,
+            "type": Schema.Literal("code_execution_result")
+          }),
+          Schema.Struct({
+            "content": Schema.Array(
+              Schema.Struct({ "file_id": Schema.String, "type": Schema.Literal("code_execution_output") })
+            ),
+            "encrypted_stdout": Schema.String,
+            "return_code": Schema.Number.check(Schema.isFinite()),
+            "stderr": Schema.String,
+            "type": Schema.Literal("encrypted_code_execution_result")
           })
-        ], { mode: "oneOf" })
-      })
-    ], { mode: "oneOf" })
-  }),
-  Schema.Struct({ "type": Schema.Literal("content_block_stop"), "index": Schema.Number.check(Schema.isFinite()) }),
-  Schema.Struct({ "type": Schema.Literal("ping") }),
-  Schema.Struct({
-    "type": Schema.Literal("error"),
-    "error": Schema.Struct({ "type": Schema.String, "message": Schema.String })
+        ], { mode: "oneOf" }),
+        "tool_use_id": Schema.String
+      }),
+      Schema.Struct({
+        "type": Schema.Literal("bash_code_execution_tool_result"),
+        "content": Schema.Union([
+          Schema.Struct({
+            "error_code": Schema.Literals([
+              "invalid_tool_input",
+              "unavailable",
+              "too_many_requests",
+              "execution_time_exceeded",
+              "output_file_too_large"
+            ]),
+            "type": Schema.Literal("bash_code_execution_tool_result_error")
+          }),
+          Schema.Struct({
+            "content": Schema.Array(
+              Schema.Struct({ "file_id": Schema.String, "type": Schema.Literal("bash_code_execution_output") })
+            ),
+            "return_code": Schema.Number.check(Schema.isFinite()),
+            "stderr": Schema.String,
+            "stdout": Schema.String,
+            "type": Schema.Literal("bash_code_execution_result")
+          })
+        ], { mode: "oneOf" }),
+        "tool_use_id": Schema.String
+      }),
+      Schema.Struct({
+        "type": Schema.Literal("text_editor_code_execution_tool_result"),
+        "content": Schema.Union([
+          Schema.Struct({
+            "error_code": Schema.Literals([
+              "invalid_tool_input",
+              "unavailable",
+              "too_many_requests",
+              "execution_time_exceeded",
+              "file_not_found"
+            ]),
+            "error_message": Schema.String,
+            "type": Schema.Literal("text_editor_code_execution_tool_result_error")
+          }),
+          Schema.Struct({
+            "content": Schema.String,
+            "file_type": Schema.Literals(["text", "image", "pdf"]),
+            "num_lines": Schema.Number.check(Schema.isFinite()),
+            "start_line": Schema.Number.check(Schema.isFinite()),
+            "total_lines": Schema.Number.check(Schema.isFinite()),
+            "type": Schema.Literal("text_editor_code_execution_view_result")
+          }),
+          Schema.Struct({
+            "is_file_update": Schema.Boolean,
+            "type": Schema.Literal("text_editor_code_execution_create_result")
+          }),
+          Schema.Struct({
+            "lines": Schema.Array(Schema.String),
+            "new_lines": Schema.Number.check(Schema.isFinite()),
+            "new_start": Schema.Number.check(Schema.isFinite()),
+            "old_lines": Schema.Number.check(Schema.isFinite()),
+            "old_start": Schema.Number.check(Schema.isFinite()),
+            "type": Schema.Literal("text_editor_code_execution_str_replace_result")
+          })
+        ], { mode: "oneOf" }),
+        "tool_use_id": Schema.String
+      }),
+      Schema.Struct({
+        "type": Schema.Literal("tool_search_tool_result"),
+        "content": Schema.Union([
+          Schema.Struct({
+            "error_code": Schema.Literals([
+              "invalid_tool_input",
+              "unavailable",
+              "too_many_requests",
+              "execution_time_exceeded"
+            ]),
+            "error_message": Schema.String,
+            "type": Schema.Literal("tool_search_tool_result_error")
+          }),
+          Schema.Struct({
+            "tool_references": Schema.Array(
+              Schema.Struct({ "tool_name": Schema.String, "type": Schema.Literal("tool_reference") })
+            ),
+            "type": Schema.Literal("tool_search_tool_search_result")
+          })
+        ], { mode: "oneOf" }),
+        "tool_use_id": Schema.String
+      }),
+      Schema.Struct({ "type": Schema.Literal("container_upload"), "file_id": Schema.String })
+    ], { mode: "oneOf" })),
+    "model": Schema.String,
+    "stop_reason": Schema.Unknown,
+    "stop_sequence": Schema.Unknown,
+    "usage": Schema.Struct({
+      "input_tokens": Schema.Number.check(Schema.isFinite()),
+      "output_tokens": Schema.Number.check(Schema.isFinite()),
+      "cache_creation_input_tokens": Schema.Number.check(Schema.isFinite()),
+      "cache_read_input_tokens": Schema.Number.check(Schema.isFinite()),
+      "cache_creation": Schema.Struct({
+        "ephemeral_5m_input_tokens": Schema.Number.check(Schema.isFinite()),
+        "ephemeral_1h_input_tokens": Schema.Number.check(Schema.isFinite())
+      }),
+      "inference_geo": Schema.String,
+      "server_tool_use": Schema.Struct({
+        "web_search_requests": Schema.Number.check(Schema.isFinite()),
+        "web_fetch_requests": Schema.Number.check(Schema.isFinite())
+      }),
+      "service_tier": Schema.Literals(["standard", "priority", "batch"])
+    }),
+    "provider": Schema.optionalKey(
+      Schema.Literals([
+        "AnyScale",
+        "Atoma",
+        "Cent-ML",
+        "CrofAI",
+        "Enfer",
+        "GoPomelo",
+        "HuggingFace",
+        "Hyperbolic 2",
+        "InoCloud",
+        "Kluster",
+        "Lambda",
+        "Lepton",
+        "Lynn 2",
+        "Lynn",
+        "Mancer",
+        "Meta",
+        "Modal",
+        "Nineteen",
+        "OctoAI",
+        "Recursal",
+        "Reflection",
+        "Replicate",
+        "SambaNova 2",
+        "SF Compute",
+        "Targon",
+        "Together 2",
+        "Ubicloud",
+        "01.AI",
+        "AkashML",
+        "AI21",
+        "AionLabs",
+        "Alibaba",
+        "Ambient",
+        "Amazon Bedrock",
+        "Amazon Nova",
+        "Anthropic",
+        "Arcee AI",
+        "AtlasCloud",
+        "Avian",
+        "Azure",
+        "BaseTen",
+        "BytePlus",
+        "Black Forest Labs",
+        "Cerebras",
+        "Chutes",
+        "Cirrascale",
+        "Clarifai",
+        "Cloudflare",
+        "Cohere",
+        "Crusoe",
+        "DeepInfra",
+        "DeepSeek",
+        "Featherless",
+        "Fireworks",
+        "Friendli",
+        "GMICloud",
+        "Google",
+        "Google AI Studio",
+        "Groq",
+        "Hyperbolic",
+        "Inception",
+        "Inceptron",
+        "InferenceNet",
+        "Ionstream",
+        "Infermatic",
+        "Io Net",
+        "Inflection",
+        "Liquid",
+        "Mara",
+        "Mancer 2",
+        "Minimax",
+        "ModelRun",
+        "Mistral",
+        "Modular",
+        "Moonshot AI",
+        "Morph",
+        "NCompass",
+        "Nebius",
+        "NextBit",
+        "Novita",
+        "Nvidia",
+        "OpenAI",
+        "OpenInference",
+        "Parasail",
+        "Perplexity",
+        "Phala",
+        "Relace",
+        "SambaNova",
+        "Seed",
+        "SiliconFlow",
+        "Sourceful",
+        "StepFun",
+        "Stealth",
+        "StreamLake",
+        "Switchpoint",
+        "Together",
+        "Upstage",
+        "Venice",
+        "WandB",
+        "Xiaomi",
+        "xAI",
+        "Z.AI",
+        "FakeProvider"
+      ])
+    )
   })
-], { mode: "oneOf" }).annotate({ "description": "Union of all possible streaming events" })
+}).annotate({ "description": "Event sent at the start of a streaming message" })
 export type OpenRouterAnthropicMessageParam = {
   readonly "role": "user" | "assistant"
   readonly "content":
@@ -1744,7 +2712,7 @@ export type OpenRouterAnthropicMessageParam = {
         readonly "content"?:
           | string
           | ReadonlyArray<
-            {
+            | {
               readonly "type": "text"
               readonly "text": string
               readonly "citations"?: ReadonlyArray<
@@ -1786,13 +2754,136 @@ export type OpenRouterAnthropicMessageParam = {
                 }
               >
               readonly "cache_control"?: { readonly "type": "ephemeral"; readonly "ttl"?: "5m" | "1h" }
-            } | {
+            }
+            | {
               readonly "type": "image"
               readonly "source": {
                 readonly "type": "base64"
                 readonly "media_type": "image/jpeg" | "image/png" | "image/gif" | "image/webp"
                 readonly "data": string
               } | { readonly "type": "url"; readonly "url": string }
+              readonly "cache_control"?: { readonly "type": "ephemeral"; readonly "ttl"?: "5m" | "1h" }
+            }
+            | { readonly "type": "tool_reference"; readonly "tool_name": string }
+            | {
+              readonly "type": "search_result"
+              readonly "source": string
+              readonly "title": string
+              readonly "content": ReadonlyArray<
+                {
+                  readonly "type": "text"
+                  readonly "text": string
+                  readonly "citations"?: ReadonlyArray<
+                    {
+                      readonly "type": "char_location"
+                      readonly "cited_text": string
+                      readonly "document_index": number
+                      readonly "document_title": string
+                      readonly "start_char_index": number
+                      readonly "end_char_index": number
+                    } | {
+                      readonly "type": "page_location"
+                      readonly "cited_text": string
+                      readonly "document_index": number
+                      readonly "document_title": string
+                      readonly "start_page_number": number
+                      readonly "end_page_number": number
+                    } | {
+                      readonly "type": "content_block_location"
+                      readonly "cited_text": string
+                      readonly "document_index": number
+                      readonly "document_title": string
+                      readonly "start_block_index": number
+                      readonly "end_block_index": number
+                    } | {
+                      readonly "type": "web_search_result_location"
+                      readonly "cited_text": string
+                      readonly "encrypted_index": string
+                      readonly "title": string
+                      readonly "url": string
+                    } | {
+                      readonly "type": "search_result_location"
+                      readonly "cited_text": string
+                      readonly "search_result_index": number
+                      readonly "source": string
+                      readonly "title": string
+                      readonly "start_block_index": number
+                      readonly "end_block_index": number
+                    }
+                  >
+                  readonly "cache_control"?: { readonly "type": "ephemeral"; readonly "ttl"?: "5m" | "1h" }
+                }
+              >
+              readonly "citations"?: { readonly "enabled"?: boolean }
+              readonly "cache_control"?: { readonly "type": "ephemeral"; readonly "ttl"?: "5m" | "1h" }
+            }
+            | {
+              readonly "type": "document"
+              readonly "source":
+                | { readonly "type": "base64"; readonly "media_type": "application/pdf"; readonly "data": string }
+                | { readonly "type": "text"; readonly "media_type": "text/plain"; readonly "data": string }
+                | {
+                  readonly "type": "content"
+                  readonly "content":
+                    | string
+                    | ReadonlyArray<
+                      {
+                        readonly "type": "text"
+                        readonly "text": string
+                        readonly "citations"?: ReadonlyArray<
+                          {
+                            readonly "type": "char_location"
+                            readonly "cited_text": string
+                            readonly "document_index": number
+                            readonly "document_title": string
+                            readonly "start_char_index": number
+                            readonly "end_char_index": number
+                          } | {
+                            readonly "type": "page_location"
+                            readonly "cited_text": string
+                            readonly "document_index": number
+                            readonly "document_title": string
+                            readonly "start_page_number": number
+                            readonly "end_page_number": number
+                          } | {
+                            readonly "type": "content_block_location"
+                            readonly "cited_text": string
+                            readonly "document_index": number
+                            readonly "document_title": string
+                            readonly "start_block_index": number
+                            readonly "end_block_index": number
+                          } | {
+                            readonly "type": "web_search_result_location"
+                            readonly "cited_text": string
+                            readonly "encrypted_index": string
+                            readonly "title": string
+                            readonly "url": string
+                          } | {
+                            readonly "type": "search_result_location"
+                            readonly "cited_text": string
+                            readonly "search_result_index": number
+                            readonly "source": string
+                            readonly "title": string
+                            readonly "start_block_index": number
+                            readonly "end_block_index": number
+                          }
+                        >
+                        readonly "cache_control"?: { readonly "type": "ephemeral"; readonly "ttl"?: "5m" | "1h" }
+                      } | {
+                        readonly "type": "image"
+                        readonly "source": {
+                          readonly "type": "base64"
+                          readonly "media_type": "image/jpeg" | "image/png" | "image/gif" | "image/webp"
+                          readonly "data": string
+                        } | { readonly "type": "url"; readonly "url": string }
+                        readonly "cache_control"?: { readonly "type": "ephemeral"; readonly "ttl"?: "5m" | "1h" }
+                      }
+                    >
+                }
+                | { readonly "type": "url"; readonly "url": string }
+              readonly "citations"?: { readonly "enabled"?: boolean }
+              readonly "context"?: string
+              readonly "title"?: string
               readonly "cache_control"?: { readonly "type": "ephemeral"; readonly "ttl"?: "5m" | "1h" }
             }
           >
@@ -1804,7 +2895,14 @@ export type OpenRouterAnthropicMessageParam = {
       | {
         readonly "type": "server_tool_use"
         readonly "id": string
-        readonly "name": "web_search"
+        readonly "name":
+          | "web_search"
+          | "web_fetch"
+          | "code_execution"
+          | "bash_code_execution"
+          | "text_editor_code_execution"
+          | "tool_search_tool_regex"
+          | "tool_search_tool_bm25"
         readonly "input"?: unknown
         readonly "cache_control"?: { readonly "type": "ephemeral"; readonly "ttl"?: "5m" | "1h" }
       }
@@ -2148,6 +3246,173 @@ export const OpenRouterAnthropicMessageParam = Schema.Struct({
                   "ttl": Schema.optionalKey(Schema.Literals(["5m", "1h"]))
                 })
               )
+            }),
+            Schema.Struct({ "type": Schema.Literal("tool_reference"), "tool_name": Schema.String }),
+            Schema.Struct({
+              "type": Schema.Literal("search_result"),
+              "source": Schema.String,
+              "title": Schema.String,
+              "content": Schema.Array(Schema.Struct({
+                "type": Schema.Literal("text"),
+                "text": Schema.String,
+                "citations": Schema.optionalKey(Schema.Array(Schema.Union([
+                  Schema.Struct({
+                    "type": Schema.Literal("char_location"),
+                    "cited_text": Schema.String,
+                    "document_index": Schema.Number.check(Schema.isFinite()),
+                    "document_title": Schema.String,
+                    "start_char_index": Schema.Number.check(Schema.isFinite()),
+                    "end_char_index": Schema.Number.check(Schema.isFinite())
+                  }),
+                  Schema.Struct({
+                    "type": Schema.Literal("page_location"),
+                    "cited_text": Schema.String,
+                    "document_index": Schema.Number.check(Schema.isFinite()),
+                    "document_title": Schema.String,
+                    "start_page_number": Schema.Number.check(Schema.isFinite()),
+                    "end_page_number": Schema.Number.check(Schema.isFinite())
+                  }),
+                  Schema.Struct({
+                    "type": Schema.Literal("content_block_location"),
+                    "cited_text": Schema.String,
+                    "document_index": Schema.Number.check(Schema.isFinite()),
+                    "document_title": Schema.String,
+                    "start_block_index": Schema.Number.check(Schema.isFinite()),
+                    "end_block_index": Schema.Number.check(Schema.isFinite())
+                  }),
+                  Schema.Struct({
+                    "type": Schema.Literal("web_search_result_location"),
+                    "cited_text": Schema.String,
+                    "encrypted_index": Schema.String,
+                    "title": Schema.String,
+                    "url": Schema.String
+                  }),
+                  Schema.Struct({
+                    "type": Schema.Literal("search_result_location"),
+                    "cited_text": Schema.String,
+                    "search_result_index": Schema.Number.check(Schema.isFinite()),
+                    "source": Schema.String,
+                    "title": Schema.String,
+                    "start_block_index": Schema.Number.check(Schema.isFinite()),
+                    "end_block_index": Schema.Number.check(Schema.isFinite())
+                  })
+                ], { mode: "oneOf" }))),
+                "cache_control": Schema.optionalKey(
+                  Schema.Struct({
+                    "type": Schema.Literal("ephemeral"),
+                    "ttl": Schema.optionalKey(Schema.Literals(["5m", "1h"]))
+                  })
+                )
+              })),
+              "citations": Schema.optionalKey(Schema.Struct({ "enabled": Schema.optionalKey(Schema.Boolean) })),
+              "cache_control": Schema.optionalKey(
+                Schema.Struct({
+                  "type": Schema.Literal("ephemeral"),
+                  "ttl": Schema.optionalKey(Schema.Literals(["5m", "1h"]))
+                })
+              )
+            }),
+            Schema.Struct({
+              "type": Schema.Literal("document"),
+              "source": Schema.Union([
+                Schema.Struct({
+                  "type": Schema.Literal("base64"),
+                  "media_type": Schema.Literal("application/pdf"),
+                  "data": Schema.String
+                }),
+                Schema.Struct({
+                  "type": Schema.Literal("text"),
+                  "media_type": Schema.Literal("text/plain"),
+                  "data": Schema.String
+                }),
+                Schema.Struct({
+                  "type": Schema.Literal("content"),
+                  "content": Schema.Union([
+                    Schema.String,
+                    Schema.Array(Schema.Union([
+                      Schema.Struct({
+                        "type": Schema.Literal("text"),
+                        "text": Schema.String,
+                        "citations": Schema.optionalKey(Schema.Array(Schema.Union([
+                          Schema.Struct({
+                            "type": Schema.Literal("char_location"),
+                            "cited_text": Schema.String,
+                            "document_index": Schema.Number.check(Schema.isFinite()),
+                            "document_title": Schema.String,
+                            "start_char_index": Schema.Number.check(Schema.isFinite()),
+                            "end_char_index": Schema.Number.check(Schema.isFinite())
+                          }),
+                          Schema.Struct({
+                            "type": Schema.Literal("page_location"),
+                            "cited_text": Schema.String,
+                            "document_index": Schema.Number.check(Schema.isFinite()),
+                            "document_title": Schema.String,
+                            "start_page_number": Schema.Number.check(Schema.isFinite()),
+                            "end_page_number": Schema.Number.check(Schema.isFinite())
+                          }),
+                          Schema.Struct({
+                            "type": Schema.Literal("content_block_location"),
+                            "cited_text": Schema.String,
+                            "document_index": Schema.Number.check(Schema.isFinite()),
+                            "document_title": Schema.String,
+                            "start_block_index": Schema.Number.check(Schema.isFinite()),
+                            "end_block_index": Schema.Number.check(Schema.isFinite())
+                          }),
+                          Schema.Struct({
+                            "type": Schema.Literal("web_search_result_location"),
+                            "cited_text": Schema.String,
+                            "encrypted_index": Schema.String,
+                            "title": Schema.String,
+                            "url": Schema.String
+                          }),
+                          Schema.Struct({
+                            "type": Schema.Literal("search_result_location"),
+                            "cited_text": Schema.String,
+                            "search_result_index": Schema.Number.check(Schema.isFinite()),
+                            "source": Schema.String,
+                            "title": Schema.String,
+                            "start_block_index": Schema.Number.check(Schema.isFinite()),
+                            "end_block_index": Schema.Number.check(Schema.isFinite())
+                          })
+                        ], { mode: "oneOf" }))),
+                        "cache_control": Schema.optionalKey(
+                          Schema.Struct({
+                            "type": Schema.Literal("ephemeral"),
+                            "ttl": Schema.optionalKey(Schema.Literals(["5m", "1h"]))
+                          })
+                        )
+                      }),
+                      Schema.Struct({
+                        "type": Schema.Literal("image"),
+                        "source": Schema.Union([
+                          Schema.Struct({
+                            "type": Schema.Literal("base64"),
+                            "media_type": Schema.Literals(["image/jpeg", "image/png", "image/gif", "image/webp"]),
+                            "data": Schema.String
+                          }),
+                          Schema.Struct({ "type": Schema.Literal("url"), "url": Schema.String })
+                        ], { mode: "oneOf" }),
+                        "cache_control": Schema.optionalKey(
+                          Schema.Struct({
+                            "type": Schema.Literal("ephemeral"),
+                            "ttl": Schema.optionalKey(Schema.Literals(["5m", "1h"]))
+                          })
+                        )
+                      })
+                    ], { mode: "oneOf" }))
+                  ])
+                }),
+                Schema.Struct({ "type": Schema.Literal("url"), "url": Schema.String })
+              ], { mode: "oneOf" }),
+              "citations": Schema.optionalKey(Schema.Struct({ "enabled": Schema.optionalKey(Schema.Boolean) })),
+              "context": Schema.optionalKey(Schema.String),
+              "title": Schema.optionalKey(Schema.String),
+              "cache_control": Schema.optionalKey(
+                Schema.Struct({
+                  "type": Schema.Literal("ephemeral"),
+                  "ttl": Schema.optionalKey(Schema.Literals(["5m", "1h"]))
+                })
+              )
             })
           ]))
         ])),
@@ -2164,7 +3429,15 @@ export const OpenRouterAnthropicMessageParam = Schema.Struct({
       Schema.Struct({
         "type": Schema.Literal("server_tool_use"),
         "id": Schema.String,
-        "name": Schema.Literal("web_search"),
+        "name": Schema.Literals([
+          "web_search",
+          "web_fetch",
+          "code_execution",
+          "bash_code_execution",
+          "text_editor_code_execution",
+          "tool_search_tool_regex",
+          "tool_search_tool_bm25"
+        ]),
         "input": Schema.optionalKey(Schema.Unknown),
         "cache_control": Schema.optionalKey(
           Schema.Struct({
@@ -2271,17 +3544,26 @@ export const OpenRouterAnthropicMessageParam = Schema.Struct({
     ], { mode: "oneOf" }))
   ])
 }).annotate({ "description": "Anthropic message with OpenRouter extensions" })
-export type AnthropicOutputConfig = { readonly "effort"?: "low" | "medium" | "high" | "max" }
+export type AnthropicOutputConfig = {
+  readonly "effort"?: "low" | "medium" | "high" | "max"
+  readonly "format"?: { readonly "type": "json_schema"; readonly "schema": {} }
+}
 export const AnthropicOutputConfig = Schema.Struct({
   "effort": Schema.optionalKey(
     Schema.Literals(["low", "medium", "high", "max"]).annotate({
       "description":
         "How much effort the model should put into its response. Higher effort levels may result in more thorough analysis but take longer. Valid values are `low`, `medium`, `high`, or `max`."
     })
+  ),
+  "format": Schema.optionalKey(
+    Schema.Struct({ "type": Schema.Literal("json_schema"), "schema": Schema.Struct({}) }).annotate({
+      "description":
+        "A schema to specify Claude's output format in responses. See [structured outputs](https://platform.claude.com/docs/en/build-with-claude/structured-outputs)."
+    })
   )
 }).annotate({
   "description":
-    "Configuration for controlling output behavior. Currently supports the effort parameter for Claude Opus 4.5."
+    "Configuration for controlling output behavior. Supports the effort parameter and structured output format."
 })
 export type ActivityItem = {
   readonly "date": string
@@ -2325,6 +3607,358 @@ export const ForbiddenResponseErrorData = Schema.Struct({
   "message": Schema.String,
   "metadata": Schema.optionalKey(Schema.Struct({}))
 }).annotate({ "description": "Error data for ForbiddenResponse" })
+export type ChatCompletionFinishReason = "tool_calls" | "stop" | "length" | "content_filter" | "error"
+export const ChatCompletionFinishReason = Schema.Literals(["tool_calls", "stop", "length", "content_filter", "error"])
+export type ChatMessageContentItemCacheControl = { readonly "type": "ephemeral"; readonly "ttl"?: "5m" | "1h" }
+export const ChatMessageContentItemCacheControl = Schema.Struct({
+  "type": Schema.Literal("ephemeral"),
+  "ttl": Schema.optionalKey(Schema.Literals(["5m", "1h"]))
+}).annotate({ "description": "Cache control for the content part" })
+export type ChatMessageContentItemImage = {
+  readonly "type": "image_url"
+  readonly "image_url": { readonly "url": string; readonly "detail"?: "auto" | "low" | "high" }
+}
+export const ChatMessageContentItemImage = Schema.Struct({
+  "type": Schema.Literal("image_url"),
+  "image_url": Schema.Struct({
+    "url": Schema.String.annotate({ "description": "URL of the image (data: URLs supported)" }),
+    "detail": Schema.optionalKey(
+      Schema.Literals(["auto", "low", "high"]).annotate({ "description": "Image detail level for vision models" })
+    )
+  })
+}).annotate({ "description": "Image content part for vision models" })
+export type ChatMessageContentItemAudio = {
+  readonly "type": "input_audio"
+  readonly "input_audio": { readonly "data": string; readonly "format": string }
+}
+export const ChatMessageContentItemAudio = Schema.Struct({
+  "type": Schema.Literal("input_audio"),
+  "input_audio": Schema.Struct({
+    "data": Schema.String.annotate({ "description": "Base64 encoded audio data" }),
+    "format": Schema.String.annotate({
+      "description":
+        "Audio format (e.g., wav, mp3, flac, m4a, ogg, aiff, aac, pcm16, pcm24). Supported formats vary by provider."
+    })
+  })
+}).annotate({ "description": "Audio input content part. Supported audio formats vary by provider." })
+export type VideoInput = { readonly "url": string }
+export const VideoInput = Schema.Struct({
+  "url": Schema.String.annotate({ "description": "URL of the video (data: URLs supported)" })
+}).annotate({ "description": "Video input object" })
+export type ChatMessageContentItemFile = {
+  readonly "type": "file"
+  readonly "file": { readonly "file_data"?: string; readonly "file_id"?: string; readonly "filename"?: string }
+}
+export const ChatMessageContentItemFile = Schema.Struct({
+  "type": Schema.Literal("file"),
+  "file": Schema.Struct({
+    "file_data": Schema.optionalKey(
+      Schema.String.annotate({ "description": "File content as base64 data URL or URL" })
+    ),
+    "file_id": Schema.optionalKey(Schema.String.annotate({ "description": "File ID for previously uploaded files" })),
+    "filename": Schema.optionalKey(Schema.String.annotate({ "description": "Original filename" }))
+  })
+}).annotate({ "description": "File content part for document processing" })
+export type ChatMessageToolCall = {
+  readonly "id": string
+  readonly "type": "function"
+  readonly "function": { readonly "name": string; readonly "arguments": string }
+}
+export const ChatMessageToolCall = Schema.Struct({
+  "id": Schema.String.annotate({ "description": "Tool call identifier" }),
+  "type": Schema.Literal("function"),
+  "function": Schema.Struct({
+    "name": Schema.String.annotate({ "description": "Function name to call" }),
+    "arguments": Schema.String.annotate({ "description": "Function arguments as JSON string" })
+  })
+}).annotate({ "description": "Tool call made by the assistant" })
+export type ReasoningDetailSummary = {
+  readonly "type": "reasoning.summary"
+  readonly "summary": string
+  readonly "id"?: string
+  readonly "format"?:
+    | "unknown"
+    | "openai-responses-v1"
+    | "azure-openai-responses-v1"
+    | "xai-responses-v1"
+    | "anthropic-claude-v1"
+    | "google-gemini-v1"
+  readonly "index"?: number
+}
+export const ReasoningDetailSummary = Schema.Struct({
+  "type": Schema.Literal("reasoning.summary"),
+  "summary": Schema.String,
+  "id": Schema.optionalKey(Schema.String),
+  "format": Schema.optionalKey(
+    Schema.Literals([
+      "unknown",
+      "openai-responses-v1",
+      "azure-openai-responses-v1",
+      "xai-responses-v1",
+      "anthropic-claude-v1",
+      "google-gemini-v1"
+    ])
+  ),
+  "index": Schema.optionalKey(Schema.Number.check(Schema.isFinite()))
+}).annotate({ "description": "Reasoning detail summary schema" })
+export type ReasoningDetailEncrypted = {
+  readonly "type": "reasoning.encrypted"
+  readonly "data": string
+  readonly "id"?: string
+  readonly "format"?:
+    | "unknown"
+    | "openai-responses-v1"
+    | "azure-openai-responses-v1"
+    | "xai-responses-v1"
+    | "anthropic-claude-v1"
+    | "google-gemini-v1"
+  readonly "index"?: number
+}
+export const ReasoningDetailEncrypted = Schema.Struct({
+  "type": Schema.Literal("reasoning.encrypted"),
+  "data": Schema.String,
+  "id": Schema.optionalKey(Schema.String),
+  "format": Schema.optionalKey(
+    Schema.Literals([
+      "unknown",
+      "openai-responses-v1",
+      "azure-openai-responses-v1",
+      "xai-responses-v1",
+      "anthropic-claude-v1",
+      "google-gemini-v1"
+    ])
+  ),
+  "index": Schema.optionalKey(Schema.Number.check(Schema.isFinite()))
+}).annotate({ "description": "Reasoning detail encrypted schema" })
+export type ReasoningDetailText = {
+  readonly "type": "reasoning.text"
+  readonly "text"?: string
+  readonly "signature"?: string
+  readonly "id"?: string
+  readonly "format"?:
+    | "unknown"
+    | "openai-responses-v1"
+    | "azure-openai-responses-v1"
+    | "xai-responses-v1"
+    | "anthropic-claude-v1"
+    | "google-gemini-v1"
+  readonly "index"?: number
+}
+export const ReasoningDetailText = Schema.Struct({
+  "type": Schema.Literal("reasoning.text"),
+  "text": Schema.optionalKey(Schema.String),
+  "signature": Schema.optionalKey(Schema.String),
+  "id": Schema.optionalKey(Schema.String),
+  "format": Schema.optionalKey(
+    Schema.Literals([
+      "unknown",
+      "openai-responses-v1",
+      "azure-openai-responses-v1",
+      "xai-responses-v1",
+      "anthropic-claude-v1",
+      "google-gemini-v1"
+    ])
+  ),
+  "index": Schema.optionalKey(Schema.Number.check(Schema.isFinite()))
+}).annotate({ "description": "Reasoning detail text schema" })
+export type ChatCompletionAudioOutput = {
+  readonly "id"?: string
+  readonly "expires_at"?: number
+  readonly "data"?: string
+  readonly "transcript"?: string
+}
+export const ChatCompletionAudioOutput = Schema.Struct({
+  "id": Schema.optionalKey(Schema.String.annotate({ "description": "Audio output identifier" })),
+  "expires_at": Schema.optionalKey(
+    Schema.Number.annotate({ "description": "Audio expiration timestamp" }).check(Schema.isFinite())
+  ),
+  "data": Schema.optionalKey(Schema.String.annotate({ "description": "Base64 encoded audio data" })),
+  "transcript": Schema.optionalKey(Schema.String.annotate({ "description": "Audio transcript" }))
+}).annotate({ "description": "Audio output data or reference" })
+export type ChatMessageTokenLogprob = {
+  readonly "token": string
+  readonly "logprob": number
+  readonly "bytes": ReadonlyArray<number>
+  readonly "top_logprobs": ReadonlyArray<
+    { readonly "token": string; readonly "logprob": number; readonly "bytes": ReadonlyArray<number> }
+  >
+}
+export const ChatMessageTokenLogprob = Schema.Struct({
+  "token": Schema.String.annotate({ "description": "The token" }),
+  "logprob": Schema.Number.annotate({ "description": "Log probability of the token" }).check(Schema.isFinite()),
+  "bytes": Schema.Array(Schema.Number.check(Schema.isFinite())).annotate({ "description": "UTF-8 bytes of the token" }),
+  "top_logprobs": Schema.Array(
+    Schema.Struct({
+      "token": Schema.String,
+      "logprob": Schema.Number.check(Schema.isFinite()),
+      "bytes": Schema.Array(Schema.Number.check(Schema.isFinite()))
+    })
+  ).annotate({ "description": "Top alternative tokens with probabilities" })
+}).annotate({ "description": "Token log probability information" })
+export type ChatGenerationTokenUsage = {
+  readonly "completion_tokens": number
+  readonly "prompt_tokens": number
+  readonly "total_tokens": number
+  readonly "completion_tokens_details"?: {
+    readonly "reasoning_tokens"?: number
+    readonly "audio_tokens"?: number
+    readonly "accepted_prediction_tokens"?: number
+    readonly "rejected_prediction_tokens"?: number
+  }
+  readonly "prompt_tokens_details"?: {
+    readonly "cached_tokens"?: number
+    readonly "cache_write_tokens"?: number
+    readonly "audio_tokens"?: number
+    readonly "video_tokens"?: number
+  }
+}
+export const ChatGenerationTokenUsage = Schema.Struct({
+  "completion_tokens": Schema.Number.annotate({ "description": "Number of tokens in the completion" }).check(
+    Schema.isFinite()
+  ),
+  "prompt_tokens": Schema.Number.annotate({ "description": "Number of tokens in the prompt" }).check(Schema.isFinite()),
+  "total_tokens": Schema.Number.annotate({ "description": "Total number of tokens" }).check(Schema.isFinite()),
+  "completion_tokens_details": Schema.optionalKey(
+    Schema.Struct({
+      "reasoning_tokens": Schema.optionalKey(
+        Schema.Number.annotate({ "description": "Tokens used for reasoning" }).check(Schema.isFinite())
+      ),
+      "audio_tokens": Schema.optionalKey(
+        Schema.Number.annotate({ "description": "Tokens used for audio output" }).check(Schema.isFinite())
+      ),
+      "accepted_prediction_tokens": Schema.optionalKey(
+        Schema.Number.annotate({ "description": "Accepted prediction tokens" }).check(Schema.isFinite())
+      ),
+      "rejected_prediction_tokens": Schema.optionalKey(
+        Schema.Number.annotate({ "description": "Rejected prediction tokens" }).check(Schema.isFinite())
+      )
+    }).annotate({ "description": "Detailed completion token usage" })
+  ),
+  "prompt_tokens_details": Schema.optionalKey(
+    Schema.Struct({
+      "cached_tokens": Schema.optionalKey(
+        Schema.Number.annotate({ "description": "Cached prompt tokens" }).check(Schema.isFinite())
+      ),
+      "cache_write_tokens": Schema.optionalKey(
+        Schema.Number.annotate({
+          "description":
+            "Tokens written to cache. Only returned for models with explicit caching and cache write pricing."
+        }).check(Schema.isFinite())
+      ),
+      "audio_tokens": Schema.optionalKey(
+        Schema.Number.annotate({ "description": "Audio input tokens" }).check(Schema.isFinite())
+      ),
+      "video_tokens": Schema.optionalKey(
+        Schema.Number.annotate({ "description": "Video input tokens" }).check(Schema.isFinite())
+      )
+    }).annotate({ "description": "Detailed prompt token usage" })
+  )
+}).annotate({ "description": "Token usage statistics" })
+export type ChatStreamingMessageToolCall = {
+  readonly "index": number
+  readonly "id"?: string | null
+  readonly "type"?: "function" | null
+  readonly "function"?: { readonly "name"?: string | null; readonly "arguments"?: string }
+}
+export const ChatStreamingMessageToolCall = Schema.Struct({
+  "index": Schema.Number.annotate({ "description": "Tool call index in the array" }).check(Schema.isFinite()),
+  "id": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null])),
+  "type": Schema.optionalKey(Schema.Union([Schema.Literal("function"), Schema.Null])),
+  "function": Schema.optionalKey(
+    Schema.Struct({
+      "name": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null])),
+      "arguments": Schema.optionalKey(Schema.String.annotate({ "description": "Function arguments as JSON string" }))
+    }).annotate({ "description": "Function call details" })
+  )
+}).annotate({ "description": "Tool call delta for streaming responses" })
+export type ModelName = string
+export const ModelName = Schema.String.annotate({ "description": "Model to use for completion" })
+export type ModelNames = ReadonlyArray<string>
+export const ModelNames = Schema.Array(
+  Schema.String.annotate({ "description": "Available OpenRouter chat completion models" })
+).annotate({ "description": "Models to use for completion" })
+export type ResponseFormatText = { readonly "type": "text" }
+export const ResponseFormatText = Schema.Struct({ "type": Schema.Literal("text") }).annotate({
+  "description": "Default text response format"
+})
+export type ResponseFormatJSONObject = { readonly "type": "json_object" }
+export const ResponseFormatJSONObject = Schema.Struct({ "type": Schema.Literal("json_object") }).annotate({
+  "description": "JSON object response format"
+})
+export type JSONSchemaConfig = {
+  readonly "name": string
+  readonly "description"?: string
+  readonly "schema"?: {}
+  readonly "strict"?: boolean
+}
+export const JSONSchemaConfig = Schema.Struct({
+  "name": Schema.String.annotate({ "description": "Schema name (a-z, A-Z, 0-9, underscores, dashes, max 64 chars)" })
+    .check(Schema.isMaxLength(64)),
+  "description": Schema.optionalKey(Schema.String.annotate({ "description": "Schema description for the model" })),
+  "schema": Schema.optionalKey(Schema.Struct({}).annotate({ "description": "JSON Schema object" })),
+  "strict": Schema.optionalKey(Schema.Boolean.annotate({ "description": "Enable strict schema adherence" }))
+}).annotate({ "description": "JSON Schema configuration object" })
+export type ResponseFormatTextGrammar = { readonly "type": "grammar"; readonly "grammar": string }
+export const ResponseFormatTextGrammar = Schema.Struct({
+  "type": Schema.Literal("grammar"),
+  "grammar": Schema.String.annotate({ "description": "Custom grammar for text generation" })
+}).annotate({ "description": "Custom grammar response format" })
+export type ResponseFormatTextPython = { readonly "type": "python" }
+export const ResponseFormatTextPython = Schema.Struct({ "type": Schema.Literal("python") }).annotate({
+  "description": "Python code response format"
+})
+export type ChatStreamOptions = { readonly "include_usage"?: boolean }
+export const ChatStreamOptions = Schema.Struct({
+  "include_usage": Schema.optionalKey(
+    Schema.Boolean.annotate({
+      "description": "Deprecated: This field has no effect. Full usage details are always included."
+    })
+  )
+}).annotate({ "description": "Streaming configuration options" })
+export type NamedToolChoice = { readonly "type": "function"; readonly "function": { readonly "name": string } }
+export const NamedToolChoice = Schema.Struct({
+  "type": Schema.Literal("function"),
+  "function": Schema.Struct({ "name": Schema.String.annotate({ "description": "Function name to call" }) })
+}).annotate({ "description": "Named tool choice for specific function" })
+export type DatetimeServerTool = {
+  readonly "type": "openrouter:datetime"
+  readonly "parameters"?: { readonly "timezone"?: string }
+}
+export const DatetimeServerTool = Schema.Struct({
+  "type": Schema.Literal("openrouter:datetime"),
+  "parameters": Schema.optionalKey(
+    Schema.Struct({
+      "timezone": Schema.optionalKey(
+        Schema.String.annotate({ "description": "IANA timezone name (e.g. \"America/New_York\"). Defaults to UTC." })
+      )
+    })
+  )
+}).annotate({ "description": "OpenRouter built-in server tool: returns the current date and time" })
+export type WebSearchServerTool = {
+  readonly "type": "openrouter:web_search"
+  readonly "parameters"?: { readonly "max_results"?: number }
+}
+export const WebSearchServerTool = Schema.Struct({
+  "type": Schema.Literal("openrouter:web_search"),
+  "parameters": Schema.optionalKey(
+    Schema.Struct({
+      "max_results": Schema.optionalKey(
+        Schema.Number.annotate({ "description": "Maximum number of search results to return. Defaults to 5." }).check(
+          Schema.isFinite()
+        ).check(Schema.isGreaterThanOrEqualTo(1)).check(Schema.isLessThanOrEqualTo(25))
+      )
+    })
+  )
+}).annotate({ "description": "OpenRouter built-in server tool: searches the web for current information" })
+export type DebugOptions = { readonly "echo_upstream_body"?: boolean }
+export const DebugOptions = Schema.Struct({
+  "echo_upstream_body": Schema.optionalKey(
+    Schema.Boolean.annotate({
+      "description":
+        "If true, includes the transformed upstream request body in a debug chunk at the start of the stream. Only works with streaming mode."
+    })
+  )
+}).annotate({ "description": "Debug options for inspecting request transformations (streaming only)" })
 export type CreateChargeRequest = {
   readonly "amount": number
   readonly "sender": string
@@ -2432,8 +4066,8 @@ export const ModelGroup = Schema.Literals([
 ]).annotate({ "description": "Tokenizer type used by the model" })
 export type InputModality = "text" | "image" | "file" | "audio" | "video"
 export const InputModality = Schema.Literals(["text", "image", "file", "audio", "video"])
-export type OutputModality = "text" | "image" | "embeddings" | "audio"
-export const OutputModality = Schema.Literals(["text", "image", "embeddings", "audio"])
+export type OutputModality = "text" | "image" | "embeddings" | "audio" | "video"
+export const OutputModality = Schema.Literals(["text", "image", "embeddings", "audio", "video"])
 export type TopProviderInfo = {
   readonly "context_length"?: number
   readonly "max_completion_tokens"?: number
@@ -2513,7 +4147,10 @@ export const Parameter = Schema.Literals([
 export type DefaultParameters = {
   readonly "temperature"?: number
   readonly "top_p"?: number
+  readonly "top_k"?: number
   readonly "frequency_penalty"?: number
+  readonly "presence_penalty"?: number
+  readonly "repetition_penalty"?: number
 }
 export const DefaultParameters = Schema.Struct({
   "temperature": Schema.optionalKey(
@@ -2522,8 +4159,15 @@ export const DefaultParameters = Schema.Struct({
   "top_p": Schema.optionalKey(
     Schema.Number.check(Schema.isFinite()).check(Schema.isGreaterThanOrEqualTo(0)).check(Schema.isLessThanOrEqualTo(1))
   ),
+  "top_k": Schema.optionalKey(Schema.Number.check(Schema.isInt()).check(Schema.isGreaterThanOrEqualTo(0))),
   "frequency_penalty": Schema.optionalKey(
     Schema.Number.check(Schema.isFinite()).check(Schema.isGreaterThanOrEqualTo(-2)).check(Schema.isLessThanOrEqualTo(2))
+  ),
+  "presence_penalty": Schema.optionalKey(
+    Schema.Number.check(Schema.isFinite()).check(Schema.isGreaterThanOrEqualTo(-2)).check(Schema.isLessThanOrEqualTo(2))
+  ),
+  "repetition_penalty": Schema.optionalKey(
+    Schema.Number.check(Schema.isFinite()).check(Schema.isGreaterThanOrEqualTo(0)).check(Schema.isLessThanOrEqualTo(2))
   )
 }).annotate({ "description": "Default parameters for this model" })
 export type ModelsCountResponse = { readonly "data": { readonly "count": number } }
@@ -2549,351 +4193,6 @@ export const PercentileStats = Schema.Struct({
   "description":
     "Latency percentiles in milliseconds over the last 30 minutes. Latency measures time to first token. Only visible when authenticated with an API key or cookie; returns null for unauthenticated requests."
 })
-export type __schema5 = ReadonlyArray<
-  | "AI21"
-  | "AionLabs"
-  | "Alibaba"
-  | "Ambient"
-  | "Amazon Bedrock"
-  | "Amazon Nova"
-  | "Anthropic"
-  | "Arcee AI"
-  | "AtlasCloud"
-  | "Avian"
-  | "Azure"
-  | "BaseTen"
-  | "BytePlus"
-  | "Black Forest Labs"
-  | "Cerebras"
-  | "Chutes"
-  | "Cirrascale"
-  | "Clarifai"
-  | "Cloudflare"
-  | "Cohere"
-  | "Crusoe"
-  | "DeepInfra"
-  | "DeepSeek"
-  | "Featherless"
-  | "Fireworks"
-  | "Friendli"
-  | "GMICloud"
-  | "Google"
-  | "Google AI Studio"
-  | "Groq"
-  | "Hyperbolic"
-  | "Inception"
-  | "Inceptron"
-  | "InferenceNet"
-  | "Infermatic"
-  | "Io Net"
-  | "Inflection"
-  | "Liquid"
-  | "Mara"
-  | "Mancer 2"
-  | "Minimax"
-  | "ModelRun"
-  | "Mistral"
-  | "Modular"
-  | "Moonshot AI"
-  | "Morph"
-  | "NCompass"
-  | "Nebius"
-  | "NextBit"
-  | "Novita"
-  | "Nvidia"
-  | "OpenAI"
-  | "OpenInference"
-  | "Parasail"
-  | "Perplexity"
-  | "Phala"
-  | "Relace"
-  | "SambaNova"
-  | "Seed"
-  | "SiliconFlow"
-  | "Sourceful"
-  | "StepFun"
-  | "Stealth"
-  | "StreamLake"
-  | "Switchpoint"
-  | "Together"
-  | "Upstage"
-  | "Venice"
-  | "WandB"
-  | "Xiaomi"
-  | "xAI"
-  | "Z.AI"
-  | "FakeProvider"
-  | string
->
-export const __schema5 = Schema.Array(
-  Schema.Union([
-    Schema.Literals([
-      "AI21",
-      "AionLabs",
-      "Alibaba",
-      "Ambient",
-      "Amazon Bedrock",
-      "Amazon Nova",
-      "Anthropic",
-      "Arcee AI",
-      "AtlasCloud",
-      "Avian",
-      "Azure",
-      "BaseTen",
-      "BytePlus",
-      "Black Forest Labs",
-      "Cerebras",
-      "Chutes",
-      "Cirrascale",
-      "Clarifai",
-      "Cloudflare",
-      "Cohere",
-      "Crusoe",
-      "DeepInfra",
-      "DeepSeek",
-      "Featherless",
-      "Fireworks",
-      "Friendli",
-      "GMICloud",
-      "Google",
-      "Google AI Studio",
-      "Groq",
-      "Hyperbolic",
-      "Inception",
-      "Inceptron",
-      "InferenceNet",
-      "Infermatic",
-      "Io Net",
-      "Inflection",
-      "Liquid",
-      "Mara",
-      "Mancer 2",
-      "Minimax",
-      "ModelRun",
-      "Mistral",
-      "Modular",
-      "Moonshot AI",
-      "Morph",
-      "NCompass",
-      "Nebius",
-      "NextBit",
-      "Novita",
-      "Nvidia",
-      "OpenAI",
-      "OpenInference",
-      "Parasail",
-      "Perplexity",
-      "Phala",
-      "Relace",
-      "SambaNova",
-      "Seed",
-      "SiliconFlow",
-      "Sourceful",
-      "StepFun",
-      "Stealth",
-      "StreamLake",
-      "Switchpoint",
-      "Together",
-      "Upstage",
-      "Venice",
-      "WandB",
-      "Xiaomi",
-      "xAI",
-      "Z.AI",
-      "FakeProvider"
-    ]),
-    Schema.String
-  ])
-)
-export type __schema11 = number
-export const __schema11 = Schema.Number.check(Schema.isFinite())
-export type __schema13 = unknown
-export const __schema13 = Schema.Unknown
-export type __schema21 = string | null
-export const __schema21 = Schema.Union([Schema.String, Schema.Null])
-export type __schema22 =
-  | "unknown"
-  | "openai-responses-v1"
-  | "azure-openai-responses-v1"
-  | "xai-responses-v1"
-  | "anthropic-claude-v1"
-  | "google-gemini-v1"
-  | null
-export const __schema22 = Schema.Union([
-  Schema.Literals([
-    "unknown",
-    "openai-responses-v1",
-    "azure-openai-responses-v1",
-    "xai-responses-v1",
-    "anthropic-claude-v1",
-    "google-gemini-v1"
-  ]),
-  Schema.Null
-])
-export type ModelName = string
-export const ModelName = Schema.String
-export type ChatMessageContentItemImage = {
-  readonly "type": "image_url"
-  readonly "image_url": { readonly "url": string; readonly "detail"?: "auto" | "low" | "high" }
-}
-export const ChatMessageContentItemImage = Schema.Struct({
-  "type": Schema.Literal("image_url"),
-  "image_url": Schema.Struct({
-    "url": Schema.String,
-    "detail": Schema.optionalKey(Schema.Literals(["auto", "low", "high"]))
-  })
-})
-export type ChatMessageContentItemAudio = {
-  readonly "type": "input_audio"
-  readonly "input_audio": { readonly "data": string; readonly "format": string }
-}
-export const ChatMessageContentItemAudio = Schema.Struct({
-  "type": Schema.Literal("input_audio"),
-  "input_audio": Schema.Struct({ "data": Schema.String, "format": Schema.String })
-})
-export type ChatMessageContentItemVideo = {
-  readonly "type": "input_video"
-  readonly "video_url": { readonly "url": string }
-} | { readonly "type": "video_url"; readonly "video_url": { readonly "url": string } }
-export const ChatMessageContentItemVideo = Schema.Union([
-  Schema.Struct({ "type": Schema.Literal("input_video"), "video_url": Schema.Struct({ "url": Schema.String }) }),
-  Schema.Struct({ "type": Schema.Literal("video_url"), "video_url": Schema.Struct({ "url": Schema.String }) })
-], { mode: "oneOf" })
-export type ChatMessageToolCall = {
-  readonly "id": string
-  readonly "type": "function"
-  readonly "function": { readonly "name": string; readonly "arguments": string }
-}
-export const ChatMessageToolCall = Schema.Struct({
-  "id": Schema.String,
-  "type": Schema.Literal("function"),
-  "function": Schema.Struct({ "name": Schema.String, "arguments": Schema.String })
-})
-export type ChatMessageTokenLogprob = {
-  readonly "token": string
-  readonly "logprob": number
-  readonly "bytes": ReadonlyArray<number> | null
-  readonly "top_logprobs": ReadonlyArray<
-    { readonly "token": string; readonly "logprob": number; readonly "bytes": ReadonlyArray<number> | null }
-  >
-}
-export const ChatMessageTokenLogprob = Schema.Struct({
-  "token": Schema.String,
-  "logprob": Schema.Number.check(Schema.isFinite()),
-  "bytes": Schema.Union([Schema.Array(Schema.Number.check(Schema.isFinite())), Schema.Null]),
-  "top_logprobs": Schema.Array(
-    Schema.Struct({
-      "token": Schema.String,
-      "logprob": Schema.Number.check(Schema.isFinite()),
-      "bytes": Schema.Union([Schema.Array(Schema.Number.check(Schema.isFinite())), Schema.Null])
-    })
-  )
-})
-export type ChatGenerationTokenUsage = {
-  readonly "completion_tokens": number
-  readonly "prompt_tokens": number
-  readonly "total_tokens": number
-  readonly "completion_tokens_details"?: {
-    readonly "reasoning_tokens"?: number | null
-    readonly "audio_tokens"?: number | null
-    readonly "accepted_prediction_tokens"?: number | null
-    readonly "rejected_prediction_tokens"?: number | null
-  } | null
-  readonly "prompt_tokens_details"?: {
-    readonly "cached_tokens"?: number
-    readonly "cache_write_tokens"?: number
-    readonly "audio_tokens"?: number
-    readonly "video_tokens"?: number
-  } | null
-}
-export const ChatGenerationTokenUsage = Schema.Struct({
-  "completion_tokens": Schema.Number.check(Schema.isFinite()),
-  "prompt_tokens": Schema.Number.check(Schema.isFinite()),
-  "total_tokens": Schema.Number.check(Schema.isFinite()),
-  "completion_tokens_details": Schema.optionalKey(Schema.Union([
-    Schema.Struct({
-      "reasoning_tokens": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isFinite()), Schema.Null])),
-      "audio_tokens": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isFinite()), Schema.Null])),
-      "accepted_prediction_tokens": Schema.optionalKey(
-        Schema.Union([Schema.Number.check(Schema.isFinite()), Schema.Null])
-      ),
-      "rejected_prediction_tokens": Schema.optionalKey(
-        Schema.Union([Schema.Number.check(Schema.isFinite()), Schema.Null])
-      )
-    }),
-    Schema.Null
-  ])),
-  "prompt_tokens_details": Schema.optionalKey(Schema.Union([
-    Schema.Struct({
-      "cached_tokens": Schema.optionalKey(Schema.Number.check(Schema.isFinite())),
-      "cache_write_tokens": Schema.optionalKey(Schema.Number.check(Schema.isFinite())),
-      "audio_tokens": Schema.optionalKey(Schema.Number.check(Schema.isFinite())),
-      "video_tokens": Schema.optionalKey(Schema.Number.check(Schema.isFinite()))
-    }),
-    Schema.Null
-  ]))
-})
-export type ChatCompletionFinishReason = "tool_calls" | "stop" | "length" | "content_filter" | "error"
-export const ChatCompletionFinishReason = Schema.Literals(["tool_calls", "stop", "length", "content_filter", "error"])
-export type JSONSchemaConfig = {
-  readonly "name": string
-  readonly "description"?: string
-  readonly "schema"?: {}
-  readonly "strict"?: boolean | null
-}
-export const JSONSchemaConfig = Schema.Struct({
-  "name": Schema.String.check(Schema.isMaxLength(64)),
-  "description": Schema.optionalKey(Schema.String),
-  "schema": Schema.optionalKey(Schema.Struct({}).check(Schema.isPropertyNames(Schema.String))),
-  "strict": Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Null]))
-})
-export type ResponseFormatTextGrammar = { readonly "type": "grammar"; readonly "grammar": string }
-export const ResponseFormatTextGrammar = Schema.Struct({ "type": Schema.Literal("grammar"), "grammar": Schema.String })
-export type ChatMessageContentItemCacheControl = { readonly "type": "ephemeral"; readonly "ttl"?: "5m" | "1h" }
-export const ChatMessageContentItemCacheControl = Schema.Struct({
-  "type": Schema.Literal("ephemeral"),
-  "ttl": Schema.optionalKey(Schema.Literals(["5m", "1h"]))
-})
-export type NamedToolChoice = { readonly "type": "function"; readonly "function": { readonly "name": string } }
-export const NamedToolChoice = Schema.Struct({
-  "type": Schema.Literal("function"),
-  "function": Schema.Struct({ "name": Schema.String })
-})
-export type ChatStreamOptions = { readonly "include_usage"?: boolean }
-export const ChatStreamOptions = Schema.Struct({ "include_usage": Schema.optionalKey(Schema.Boolean) })
-export type ChatStreamingMessageToolCall = {
-  readonly "index": number
-  readonly "id"?: string | null
-  readonly "type"?: "function" | null
-  readonly "function"?: { readonly "name"?: string | null; readonly "arguments"?: string }
-}
-export const ChatStreamingMessageToolCall = Schema.Struct({
-  "index": Schema.Number.check(Schema.isFinite()),
-  "id": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null])),
-  "type": Schema.optionalKey(Schema.Union([Schema.Literal("function"), Schema.Null])),
-  "function": Schema.optionalKey(
-    Schema.Struct({
-      "name": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null])),
-      "arguments": Schema.optionalKey(Schema.String)
-    })
-  )
-})
-export type ChatError = {
-  readonly "error": {
-    readonly "code": string | number | null
-    readonly "message": string
-    readonly "param"?: string | null
-    readonly "type"?: string | null
-  }
-}
-export const ChatError = Schema.Struct({
-  "error": Schema.Struct({
-    "code": Schema.Union([Schema.Union([Schema.String, Schema.Number.check(Schema.isFinite())]), Schema.Null]),
-    "message": Schema.String,
-    "param": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null])),
-    "type": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null]))
-  })
-})
 export type OpenAIResponsesAnnotation = FileCitation | URLCitation | FilePath
 export const OpenAIResponsesAnnotation = Schema.Union([FileCitation, URLCitation, FilePath])
 export type OutputItemReasoning = {
@@ -2915,7 +4214,7 @@ export const OutputItemReasoning = Schema.Struct({
 export type ResponsesOutputItemReasoning = {
   readonly "type": "reasoning"
   readonly "id": string
-  readonly "content"?: ReadonlyArray<ReasoningTextContent>
+  readonly "content"?: ReadonlyArray<{ readonly "type": "reasoning_text"; readonly "text": string }>
   readonly "summary": ReadonlyArray<ReasoningSummaryText>
   readonly "encrypted_content"?: string
   readonly "status"?: "completed" | "incomplete" | "in_progress"
@@ -2931,7 +4230,9 @@ export type ResponsesOutputItemReasoning = {
 export const ResponsesOutputItemReasoning = Schema.Struct({
   "type": Schema.Literal("reasoning"),
   "id": Schema.String,
-  "content": Schema.optionalKey(Schema.Array(ReasoningTextContent)),
+  "content": Schema.optionalKey(
+    Schema.Array(Schema.Struct({ "type": Schema.Literal("reasoning_text"), "text": Schema.String }))
+  ),
   "summary": Schema.Array(ReasoningSummaryText),
   "encrypted_content": Schema.optionalKey(Schema.String),
   "status": Schema.optionalKey(Schema.Literals(["completed", "incomplete", "in_progress"])),
@@ -2984,7 +4285,7 @@ export const OpenResponsesReasoningSummaryPartDoneEvent = Schema.Struct({
 export type OpenResponsesReasoning = {
   readonly "type": "reasoning"
   readonly "id": string
-  readonly "content"?: ReadonlyArray<ReasoningTextContent>
+  readonly "content"?: ReadonlyArray<{ readonly "type": "reasoning_text"; readonly "text": string }>
   readonly "summary": ReadonlyArray<ReasoningSummaryText>
   readonly "encrypted_content"?: string
   readonly "status"?: "completed" | "incomplete" | "in_progress"
@@ -3000,7 +4301,9 @@ export type OpenResponsesReasoning = {
 export const OpenResponsesReasoning = Schema.Struct({
   "type": Schema.Literal("reasoning"),
   "id": Schema.String,
-  "content": Schema.optionalKey(Schema.Array(ReasoningTextContent)),
+  "content": Schema.optionalKey(
+    Schema.Array(Schema.Struct({ "type": Schema.Literal("reasoning_text"), "text": Schema.String }))
+  ),
   "summary": Schema.Array(ReasoningSummaryText),
   "encrypted_content": Schema.optionalKey(Schema.String),
   "status": Schema.optionalKey(Schema.Literals(["completed", "incomplete", "in_progress"])),
@@ -3019,21 +4322,63 @@ export const OpenResponsesReasoning = Schema.Struct({
 export type OutputItemWebSearchCall = {
   readonly "type": "web_search_call"
   readonly "id": string
+  readonly "action":
+    | {
+      readonly "type": "search"
+      readonly "query": string
+      readonly "queries"?: ReadonlyArray<string>
+      readonly "sources"?: ReadonlyArray<{ readonly "type": "url"; readonly "url": string }>
+    }
+    | { readonly "type": "open_page"; readonly "url"?: string }
+    | { readonly "type": "find_in_page"; readonly "pattern": string; readonly "url": string }
   readonly "status": WebSearchStatus
 }
 export const OutputItemWebSearchCall = Schema.Struct({
   "type": Schema.Literal("web_search_call"),
   "id": Schema.String,
+  "action": Schema.Union([
+    Schema.Struct({
+      "type": Schema.Literal("search"),
+      "query": Schema.String,
+      "queries": Schema.optionalKey(Schema.Array(Schema.String)),
+      "sources": Schema.optionalKey(
+        Schema.Array(Schema.Struct({ "type": Schema.Literal("url"), "url": Schema.String }))
+      )
+    }),
+    Schema.Struct({ "type": Schema.Literal("open_page"), "url": Schema.optionalKey(Schema.String) }),
+    Schema.Struct({ "type": Schema.Literal("find_in_page"), "pattern": Schema.String, "url": Schema.String })
+  ], { mode: "oneOf" }),
   "status": WebSearchStatus
 })
 export type ResponsesWebSearchCallOutput = {
   readonly "type": "web_search_call"
   readonly "id": string
+  readonly "action":
+    | {
+      readonly "type": "search"
+      readonly "query": string
+      readonly "queries"?: ReadonlyArray<string>
+      readonly "sources"?: ReadonlyArray<{ readonly "type": "url"; readonly "url": string }>
+    }
+    | { readonly "type": "open_page"; readonly "url"?: string }
+    | { readonly "type": "find_in_page"; readonly "pattern": string; readonly "url": string }
   readonly "status": WebSearchStatus
 }
 export const ResponsesWebSearchCallOutput = Schema.Struct({
   "type": Schema.Literal("web_search_call"),
   "id": Schema.String,
+  "action": Schema.Union([
+    Schema.Struct({
+      "type": Schema.Literal("search"),
+      "query": Schema.String,
+      "queries": Schema.optionalKey(Schema.Array(Schema.String)),
+      "sources": Schema.optionalKey(
+        Schema.Array(Schema.Struct({ "type": Schema.Literal("url"), "url": Schema.String }))
+      )
+    }),
+    Schema.Struct({ "type": Schema.Literal("open_page"), "url": Schema.optionalKey(Schema.String) }),
+    Schema.Struct({ "type": Schema.Literal("find_in_page"), "pattern": Schema.String, "url": Schema.String })
+  ], { mode: "oneOf" }),
   "status": WebSearchStatus
 })
 export type OutputItemFileSearchCall = {
@@ -3104,14 +4449,35 @@ export type OpenResponsesFunctionCallOutput = {
   readonly "type": "function_call_output"
   readonly "id"?: string
   readonly "call_id": string
-  readonly "output": string
+  readonly "output":
+    | string
+    | ReadonlyArray<
+      ResponseInputText | {
+        readonly "type": "input_image"
+        readonly "detail": "auto" | "high" | "low"
+        readonly "image_url"?: string
+      } | ResponseInputFile
+    >
   readonly "status"?: ToolCallStatus
 }
 export const OpenResponsesFunctionCallOutput = Schema.Struct({
   "type": Schema.Literal("function_call_output"),
   "id": Schema.optionalKey(Schema.String),
   "call_id": Schema.String,
-  "output": Schema.String,
+  "output": Schema.Union([
+    Schema.String,
+    Schema.Array(
+      Schema.Union([
+        ResponseInputText,
+        Schema.Struct({
+          "type": Schema.Literal("input_image"),
+          "detail": Schema.Literals(["auto", "high", "low"]),
+          "image_url": Schema.optionalKey(Schema.String)
+        }).annotate({ "description": "Image input content item" }),
+        ResponseInputFile
+      ], { mode: "oneOf" })
+    )
+  ]),
   "status": Schema.optionalKey(ToolCallStatus)
 }).annotate({ "description": "The output from a function call execution" })
 export type OpenResponsesWebSearchPreviewTool = {
@@ -3158,6 +4524,50 @@ export const OpenResponsesWebSearch20250826Tool = Schema.Struct({
   "search_context_size": Schema.optionalKey(ResponsesSearchContextSize),
   "user_location": Schema.optionalKey(ResponsesWebSearchUserLocation)
 }).annotate({ "description": "Web search tool configuration (2025-08-26 version)" })
+export type OpenResponsesFileSearchTool = {
+  readonly "type": "file_search"
+  readonly "vector_store_ids": ReadonlyArray<string>
+  readonly "filters"?:
+    | {
+      readonly "key": string
+      readonly "type": "eq" | "ne" | "gt" | "gte" | "lt" | "lte"
+      readonly "value": string | number | boolean | ReadonlyArray<string | number>
+    }
+    | CompoundFilter
+    | unknown
+  readonly "max_num_results"?: number
+  readonly "ranking_options"?: {
+    readonly "ranker"?: "auto" | "default-2024-11-15"
+    readonly "score_threshold"?: number
+  }
+}
+export const OpenResponsesFileSearchTool = Schema.Struct({
+  "type": Schema.Literal("file_search"),
+  "vector_store_ids": Schema.Array(Schema.String),
+  "filters": Schema.optionalKey(Schema.Union([
+    Schema.Struct({
+      "key": Schema.String,
+      "type": Schema.Literals(["eq", "ne", "gt", "gte", "lt", "lte"]),
+      "value": Schema.Union([
+        Schema.String,
+        Schema.Number.check(Schema.isFinite()),
+        Schema.Boolean,
+        Schema.Array(Schema.Union([Schema.String, Schema.Number.check(Schema.isFinite())]))
+      ])
+    }),
+    CompoundFilter,
+    Schema.Unknown
+  ])),
+  "max_num_results": Schema.optionalKey(
+    Schema.Number.check(Schema.isInt()).check(Schema.isGreaterThanOrEqualTo(1)).check(Schema.isLessThanOrEqualTo(50))
+  ),
+  "ranking_options": Schema.optionalKey(
+    Schema.Struct({
+      "ranker": Schema.optionalKey(Schema.Literals(["auto", "default-2024-11-15"])),
+      "score_threshold": Schema.optionalKey(Schema.Number.check(Schema.isFinite()))
+    })
+  )
+}).annotate({ "description": "File search tool configuration" })
 export type OpenAIResponsesReasoningConfig = {
   readonly "effort"?: OpenAIResponsesReasoningEffort
   readonly "summary"?: ReasoningSummaryVerbosity
@@ -3178,24 +4588,17 @@ export const OpenResponsesReasoningConfig = Schema.Struct({
   "max_tokens": Schema.optionalKey(Schema.Number.check(Schema.isFinite())),
   "enabled": Schema.optionalKey(Schema.Boolean)
 }).annotate({ "description": "Configuration for reasoning mode in the response" })
-export type ResponseFormatTextConfig =
-  | ResponsesFormatText
-  | ResponsesFormatJSONObject
-  | ResponsesFormatTextJSONSchemaConfig
-export const ResponseFormatTextConfig = Schema.Union([
-  ResponsesFormatText,
-  ResponsesFormatJSONObject,
-  ResponsesFormatTextJSONSchemaConfig
-]).annotate({ "description": "Text response format configuration" })
 export type OpenResponsesLogProbs = {
   readonly "logprob": number
   readonly "token": string
   readonly "top_logprobs"?: ReadonlyArray<OpenResponsesTopLogprobs>
+  readonly "bytes"?: ReadonlyArray<number>
 }
 export const OpenResponsesLogProbs = Schema.Struct({
   "logprob": Schema.Number.check(Schema.isFinite()),
   "token": Schema.String,
-  "top_logprobs": Schema.optionalKey(Schema.Array(OpenResponsesTopLogprobs))
+  "top_logprobs": Schema.optionalKey(Schema.Array(OpenResponsesTopLogprobs)),
+  "bytes": Schema.optionalKey(Schema.Array(Schema.Number.check(Schema.isFinite())))
 }).annotate({ "description": "Log probability information for a token" })
 export type BadRequestResponse = { readonly "error": BadRequestResponseErrorData; readonly "user_id"?: string }
 export const BadRequestResponse = Schema.Struct({
@@ -3286,7 +4689,7 @@ export const ProviderOverloadedResponse = Schema.Struct({
 export type OpenResponsesEasyInputMessage = {
   readonly "type"?: "message"
   readonly "role": "user" | "system" | "assistant" | "developer"
-  readonly "content":
+  readonly "content"?:
     | ReadonlyArray<
       | ResponseInputText
       | { readonly "type": "input_image"; readonly "detail": "auto" | "high" | "low"; readonly "image_url"?: string }
@@ -3295,11 +4698,55 @@ export type OpenResponsesEasyInputMessage = {
       | ResponseInputVideo
     >
     | string
+    | unknown
+  readonly "phase"?: "commentary" | "final_answer" | unknown
 }
 export const OpenResponsesEasyInputMessage = Schema.Struct({
   "type": Schema.optionalKey(Schema.Literal("message")),
   "role": Schema.Literals(["user", "system", "assistant", "developer"]),
-  "content": Schema.Union([
+  "content": Schema.optionalKey(
+    Schema.Union([
+      Schema.Array(
+        Schema.Union([
+          ResponseInputText,
+          Schema.Struct({
+            "type": Schema.Literal("input_image"),
+            "detail": Schema.Literals(["auto", "high", "low"]),
+            "image_url": Schema.optionalKey(Schema.String)
+          }).annotate({ "description": "Image input content item" }),
+          ResponseInputFile,
+          ResponseInputAudio,
+          ResponseInputVideo
+        ], { mode: "oneOf" })
+      ),
+      Schema.String,
+      Schema.Unknown
+    ])
+  ),
+  "phase": Schema.optionalKey(
+    Schema.Union([Schema.Literal("commentary"), Schema.Literal("final_answer"), Schema.Unknown]).annotate({
+      "description":
+        "The phase of an assistant message. Use `commentary` for an intermediate assistant message and `final_answer` for the final assistant message. For follow-up requests with models like `gpt-5.3-codex` and later, preserve and resend phase on all assistant messages. Omitting it can degrade performance. Not used for user messages."
+    })
+  )
+})
+export type OpenResponsesInputMessageItem = {
+  readonly "id"?: string
+  readonly "type"?: "message"
+  readonly "role": "user" | "system" | "developer"
+  readonly "content"?: ReadonlyArray<
+    | ResponseInputText
+    | { readonly "type": "input_image"; readonly "detail": "auto" | "high" | "low"; readonly "image_url"?: string }
+    | ResponseInputFile
+    | ResponseInputAudio
+    | ResponseInputVideo
+  >
+}
+export const OpenResponsesInputMessageItem = Schema.Struct({
+  "id": Schema.optionalKey(Schema.String),
+  "type": Schema.optionalKey(Schema.Literal("message")),
+  "role": Schema.Literals(["user", "system", "developer"]),
+  "content": Schema.optionalKey(
     Schema.Array(
       Schema.Union([
         ResponseInputText,
@@ -3312,44 +4759,8 @@ export const OpenResponsesEasyInputMessage = Schema.Struct({
         ResponseInputAudio,
         ResponseInputVideo
       ], { mode: "oneOf" })
-    ),
-    Schema.String
-  ])
-})
-export type OpenResponsesInputMessageItem = {
-  readonly "id"?: string
-  readonly "type"?: "message"
-  readonly "role": "user" | "system" | "developer"
-  readonly "content": ReadonlyArray<
-    | ResponseInputText
-    | { readonly "type": "input_image"; readonly "detail": "auto" | "high" | "low"; readonly "image_url"?: string }
-    | ResponseInputFile
-    | ResponseInputAudio
-    | ResponseInputVideo
-  >
-}
-export const OpenResponsesInputMessageItem = Schema.Struct({
-  "id": Schema.optionalKey(Schema.String),
-  "type": Schema.optionalKey(Schema.Literal("message")),
-  "role": Schema.Literals(["user", "system", "developer"]),
-  "content": Schema.Array(
-    Schema.Union([
-      ResponseInputText,
-      Schema.Struct({
-        "type": Schema.Literal("input_image"),
-        "detail": Schema.Literals(["auto", "high", "low"]),
-        "image_url": Schema.optionalKey(Schema.String)
-      }).annotate({ "description": "Image input content item" }),
-      ResponseInputFile,
-      ResponseInputAudio,
-      ResponseInputVideo
-    ], { mode: "oneOf" })
+    )
   )
-})
-export type ProviderSortConfig = { readonly "by"?: ProviderSort | null; readonly "partition"?: "model" | "none" | null }
-export const ProviderSortConfig = Schema.Struct({
-  "by": Schema.optionalKey(Schema.Union([ProviderSort, Schema.Null])),
-  "partition": Schema.optionalKey(Schema.Union([Schema.Literals(["model", "none"]), Schema.Null]))
 })
 export type PreferredMinThroughput = number | PercentileThroughputCutoffs | unknown
 export const PreferredMinThroughput = Schema.Union([
@@ -3373,11 +4784,770 @@ export type PDFParserOptions = { readonly "engine"?: PDFParserEngine }
 export const PDFParserOptions = Schema.Struct({ "engine": Schema.optionalKey(PDFParserEngine) }).annotate({
   "description": "Options for PDF parsing."
 })
+export type AnthropicMessagesStreamEvent =
+  | AnthropicMessagesMessageStartEvent
+  | {
+    readonly "type": "message_delta"
+    readonly "delta": {
+      readonly "container": { readonly "id": string; readonly "expires_at": string }
+      readonly "stop_reason": "end_turn" | "max_tokens" | "stop_sequence" | "tool_use" | "pause_turn" | "refusal"
+      readonly "stop_sequence": string
+    }
+    readonly "usage": {
+      readonly "input_tokens": number
+      readonly "output_tokens": number
+      readonly "cache_creation_input_tokens": number
+      readonly "cache_read_input_tokens": number
+      readonly "server_tool_use": { readonly "web_search_requests": number; readonly "web_fetch_requests": number }
+    }
+  }
+  | { readonly "type": "message_stop" }
+  | {
+    readonly "type": "content_block_start"
+    readonly "index": number
+    readonly "content_block":
+      | {
+        readonly "type": "text"
+        readonly "text": string
+        readonly "citations": ReadonlyArray<
+          {
+            readonly "type": "char_location"
+            readonly "cited_text": string
+            readonly "document_index": number
+            readonly "document_title": string
+            readonly "start_char_index": number
+            readonly "end_char_index": number
+            readonly "file_id": string
+          } | {
+            readonly "type": "page_location"
+            readonly "cited_text": string
+            readonly "document_index": number
+            readonly "document_title": string
+            readonly "start_page_number": number
+            readonly "end_page_number": number
+            readonly "file_id": string
+          } | {
+            readonly "type": "content_block_location"
+            readonly "cited_text": string
+            readonly "document_index": number
+            readonly "document_title": string
+            readonly "start_block_index": number
+            readonly "end_block_index": number
+            readonly "file_id": string
+          } | {
+            readonly "type": "web_search_result_location"
+            readonly "cited_text": string
+            readonly "encrypted_index": string
+            readonly "title": string
+            readonly "url": string
+          } | {
+            readonly "type": "search_result_location"
+            readonly "cited_text": string
+            readonly "search_result_index": number
+            readonly "source": string
+            readonly "title": string
+            readonly "start_block_index": number
+            readonly "end_block_index": number
+          }
+        >
+      }
+      | {
+        readonly "type": "tool_use"
+        readonly "id": string
+        readonly "caller": { readonly "type": "direct" } | {
+          readonly "type": "code_execution_20250825"
+          readonly "tool_id": string
+        } | { readonly "type": "code_execution_20260120"; readonly "tool_id": string }
+        readonly "name": string
+        readonly "input"?: unknown
+      }
+      | { readonly "type": "thinking"; readonly "thinking": string; readonly "signature": string }
+      | { readonly "type": "redacted_thinking"; readonly "data": string }
+      | {
+        readonly "type": "server_tool_use"
+        readonly "id": string
+        readonly "caller": { readonly "type": "direct" } | {
+          readonly "type": "code_execution_20250825"
+          readonly "tool_id": string
+        } | { readonly "type": "code_execution_20260120"; readonly "tool_id": string }
+        readonly "name":
+          | "web_search"
+          | "web_fetch"
+          | "code_execution"
+          | "bash_code_execution"
+          | "text_editor_code_execution"
+          | "tool_search_tool_regex"
+          | "tool_search_tool_bm25"
+        readonly "input"?: unknown
+      }
+      | {
+        readonly "type": "web_search_tool_result"
+        readonly "caller": { readonly "type": "direct" } | {
+          readonly "type": "code_execution_20250825"
+          readonly "tool_id": string
+        } | { readonly "type": "code_execution_20260120"; readonly "tool_id": string }
+        readonly "tool_use_id": string
+        readonly "content":
+          | ReadonlyArray<
+            {
+              readonly "type": "web_search_result"
+              readonly "encrypted_content": string
+              readonly "page_age": string
+              readonly "title": string
+              readonly "url": string
+            }
+          >
+          | {
+            readonly "type": "web_search_tool_result_error"
+            readonly "error_code":
+              | "invalid_tool_input"
+              | "unavailable"
+              | "max_uses_exceeded"
+              | "too_many_requests"
+              | "query_too_long"
+              | "request_too_large"
+          }
+      }
+      | {
+        readonly "type": "web_fetch_tool_result"
+        readonly "caller": { readonly "type": "direct" } | {
+          readonly "type": "code_execution_20250825"
+          readonly "tool_id": string
+        } | { readonly "type": "code_execution_20260120"; readonly "tool_id": string }
+        readonly "content": {
+          readonly "type": "web_fetch_tool_result_error"
+          readonly "error_code":
+            | "invalid_tool_input"
+            | "url_too_long"
+            | "url_not_allowed"
+            | "url_not_accessible"
+            | "unsupported_content_type"
+            | "too_many_requests"
+            | "max_uses_exceeded"
+            | "unavailable"
+        } | {
+          readonly "content": {
+            readonly "citations": { readonly "enabled": boolean }
+            readonly "source": {
+              readonly "data": string
+              readonly "media_type": "application/pdf"
+              readonly "type": "base64"
+            } | { readonly "data": string; readonly "media_type": "text/plain"; readonly "type": "text" }
+            readonly "title": string
+            readonly "type": "document"
+          }
+          readonly "retrieved_at": string
+          readonly "type": "web_fetch_result"
+          readonly "url": string
+        }
+        readonly "tool_use_id": string
+      }
+      | {
+        readonly "type": "code_execution_tool_result"
+        readonly "content": {
+          readonly "error_code": "invalid_tool_input" | "unavailable" | "too_many_requests" | "execution_time_exceeded"
+          readonly "type": "code_execution_tool_result_error"
+        } | {
+          readonly "content": ReadonlyArray<{ readonly "file_id": string; readonly "type": "code_execution_output" }>
+          readonly "return_code": number
+          readonly "stderr": string
+          readonly "stdout": string
+          readonly "type": "code_execution_result"
+        } | {
+          readonly "content": ReadonlyArray<{ readonly "file_id": string; readonly "type": "code_execution_output" }>
+          readonly "encrypted_stdout": string
+          readonly "return_code": number
+          readonly "stderr": string
+          readonly "type": "encrypted_code_execution_result"
+        }
+        readonly "tool_use_id": string
+      }
+      | {
+        readonly "type": "bash_code_execution_tool_result"
+        readonly "content": {
+          readonly "error_code":
+            | "invalid_tool_input"
+            | "unavailable"
+            | "too_many_requests"
+            | "execution_time_exceeded"
+            | "output_file_too_large"
+          readonly "type": "bash_code_execution_tool_result_error"
+        } | {
+          readonly "content": ReadonlyArray<
+            { readonly "file_id": string; readonly "type": "bash_code_execution_output" }
+          >
+          readonly "return_code": number
+          readonly "stderr": string
+          readonly "stdout": string
+          readonly "type": "bash_code_execution_result"
+        }
+        readonly "tool_use_id": string
+      }
+      | {
+        readonly "type": "text_editor_code_execution_tool_result"
+        readonly "content":
+          | {
+            readonly "error_code":
+              | "invalid_tool_input"
+              | "unavailable"
+              | "too_many_requests"
+              | "execution_time_exceeded"
+              | "file_not_found"
+            readonly "error_message": string
+            readonly "type": "text_editor_code_execution_tool_result_error"
+          }
+          | {
+            readonly "content": string
+            readonly "file_type": "text" | "image" | "pdf"
+            readonly "num_lines": number
+            readonly "start_line": number
+            readonly "total_lines": number
+            readonly "type": "text_editor_code_execution_view_result"
+          }
+          | { readonly "is_file_update": boolean; readonly "type": "text_editor_code_execution_create_result" }
+          | {
+            readonly "lines": ReadonlyArray<string>
+            readonly "new_lines": number
+            readonly "new_start": number
+            readonly "old_lines": number
+            readonly "old_start": number
+            readonly "type": "text_editor_code_execution_str_replace_result"
+          }
+        readonly "tool_use_id": string
+      }
+      | {
+        readonly "type": "tool_search_tool_result"
+        readonly "content": {
+          readonly "error_code": "invalid_tool_input" | "unavailable" | "too_many_requests" | "execution_time_exceeded"
+          readonly "error_message": string
+          readonly "type": "tool_search_tool_result_error"
+        } | {
+          readonly "tool_references": ReadonlyArray<{ readonly "tool_name": string; readonly "type": "tool_reference" }>
+          readonly "type": "tool_search_tool_search_result"
+        }
+        readonly "tool_use_id": string
+      }
+      | { readonly "type": "container_upload"; readonly "file_id": string }
+  }
+  | {
+    readonly "type": "content_block_delta"
+    readonly "index": number
+    readonly "delta":
+      | { readonly "type": "text_delta"; readonly "text": string }
+      | { readonly "type": "input_json_delta"; readonly "partial_json": string }
+      | { readonly "type": "thinking_delta"; readonly "thinking": string }
+      | { readonly "type": "signature_delta"; readonly "signature": string }
+      | {
+        readonly "type": "citations_delta"
+        readonly "citation": {
+          readonly "type": "char_location"
+          readonly "cited_text": string
+          readonly "document_index": number
+          readonly "document_title": string
+          readonly "start_char_index": number
+          readonly "end_char_index": number
+          readonly "file_id": string
+        } | {
+          readonly "type": "page_location"
+          readonly "cited_text": string
+          readonly "document_index": number
+          readonly "document_title": string
+          readonly "start_page_number": number
+          readonly "end_page_number": number
+          readonly "file_id": string
+        } | {
+          readonly "type": "content_block_location"
+          readonly "cited_text": string
+          readonly "document_index": number
+          readonly "document_title": string
+          readonly "start_block_index": number
+          readonly "end_block_index": number
+          readonly "file_id": string
+        } | {
+          readonly "type": "web_search_result_location"
+          readonly "cited_text": string
+          readonly "encrypted_index": string
+          readonly "title": string
+          readonly "url": string
+        } | {
+          readonly "type": "search_result_location"
+          readonly "cited_text": string
+          readonly "search_result_index": number
+          readonly "source": string
+          readonly "title": string
+          readonly "start_block_index": number
+          readonly "end_block_index": number
+        }
+      }
+  }
+  | { readonly "type": "content_block_stop"; readonly "index": number }
+  | { readonly "type": "ping" }
+  | { readonly "type": "error"; readonly "error": { readonly "type": string; readonly "message": string } }
+export const AnthropicMessagesStreamEvent = Schema.Union([
+  AnthropicMessagesMessageStartEvent,
+  Schema.Struct({
+    "type": Schema.Literal("message_delta"),
+    "delta": Schema.Struct({
+      "container": Schema.Struct({ "id": Schema.String, "expires_at": Schema.String }),
+      "stop_reason": Schema.Literals(["end_turn", "max_tokens", "stop_sequence", "tool_use", "pause_turn", "refusal"]),
+      "stop_sequence": Schema.String
+    }),
+    "usage": Schema.Struct({
+      "input_tokens": Schema.Number.check(Schema.isFinite()),
+      "output_tokens": Schema.Number.check(Schema.isFinite()),
+      "cache_creation_input_tokens": Schema.Number.check(Schema.isFinite()),
+      "cache_read_input_tokens": Schema.Number.check(Schema.isFinite()),
+      "server_tool_use": Schema.Struct({
+        "web_search_requests": Schema.Number.check(Schema.isFinite()),
+        "web_fetch_requests": Schema.Number.check(Schema.isFinite())
+      })
+    })
+  }),
+  Schema.Struct({ "type": Schema.Literal("message_stop") }),
+  Schema.Struct({
+    "type": Schema.Literal("content_block_start"),
+    "index": Schema.Number.check(Schema.isFinite()),
+    "content_block": Schema.Union([
+      Schema.Struct({
+        "type": Schema.Literal("text"),
+        "text": Schema.String,
+        "citations": Schema.Array(Schema.Union([
+          Schema.Struct({
+            "type": Schema.Literal("char_location"),
+            "cited_text": Schema.String,
+            "document_index": Schema.Number.check(Schema.isFinite()),
+            "document_title": Schema.String,
+            "start_char_index": Schema.Number.check(Schema.isFinite()),
+            "end_char_index": Schema.Number.check(Schema.isFinite()),
+            "file_id": Schema.String
+          }),
+          Schema.Struct({
+            "type": Schema.Literal("page_location"),
+            "cited_text": Schema.String,
+            "document_index": Schema.Number.check(Schema.isFinite()),
+            "document_title": Schema.String,
+            "start_page_number": Schema.Number.check(Schema.isFinite()),
+            "end_page_number": Schema.Number.check(Schema.isFinite()),
+            "file_id": Schema.String
+          }),
+          Schema.Struct({
+            "type": Schema.Literal("content_block_location"),
+            "cited_text": Schema.String,
+            "document_index": Schema.Number.check(Schema.isFinite()),
+            "document_title": Schema.String,
+            "start_block_index": Schema.Number.check(Schema.isFinite()),
+            "end_block_index": Schema.Number.check(Schema.isFinite()),
+            "file_id": Schema.String
+          }),
+          Schema.Struct({
+            "type": Schema.Literal("web_search_result_location"),
+            "cited_text": Schema.String,
+            "encrypted_index": Schema.String,
+            "title": Schema.String,
+            "url": Schema.String
+          }),
+          Schema.Struct({
+            "type": Schema.Literal("search_result_location"),
+            "cited_text": Schema.String,
+            "search_result_index": Schema.Number.check(Schema.isFinite()),
+            "source": Schema.String,
+            "title": Schema.String,
+            "start_block_index": Schema.Number.check(Schema.isFinite()),
+            "end_block_index": Schema.Number.check(Schema.isFinite())
+          })
+        ], { mode: "oneOf" }))
+      }),
+      Schema.Struct({
+        "type": Schema.Literal("tool_use"),
+        "id": Schema.String,
+        "caller": Schema.Union([
+          Schema.Struct({ "type": Schema.Literal("direct") }),
+          Schema.Struct({ "type": Schema.Literal("code_execution_20250825"), "tool_id": Schema.String }),
+          Schema.Struct({ "type": Schema.Literal("code_execution_20260120"), "tool_id": Schema.String })
+        ], { mode: "oneOf" }),
+        "name": Schema.String,
+        "input": Schema.optionalKey(Schema.Unknown)
+      }),
+      Schema.Struct({ "type": Schema.Literal("thinking"), "thinking": Schema.String, "signature": Schema.String }),
+      Schema.Struct({ "type": Schema.Literal("redacted_thinking"), "data": Schema.String }),
+      Schema.Struct({
+        "type": Schema.Literal("server_tool_use"),
+        "id": Schema.String,
+        "caller": Schema.Union([
+          Schema.Struct({ "type": Schema.Literal("direct") }),
+          Schema.Struct({ "type": Schema.Literal("code_execution_20250825"), "tool_id": Schema.String }),
+          Schema.Struct({ "type": Schema.Literal("code_execution_20260120"), "tool_id": Schema.String })
+        ], { mode: "oneOf" }),
+        "name": Schema.Literals([
+          "web_search",
+          "web_fetch",
+          "code_execution",
+          "bash_code_execution",
+          "text_editor_code_execution",
+          "tool_search_tool_regex",
+          "tool_search_tool_bm25"
+        ]),
+        "input": Schema.optionalKey(Schema.Unknown)
+      }),
+      Schema.Struct({
+        "type": Schema.Literal("web_search_tool_result"),
+        "caller": Schema.Union([
+          Schema.Struct({ "type": Schema.Literal("direct") }),
+          Schema.Struct({ "type": Schema.Literal("code_execution_20250825"), "tool_id": Schema.String }),
+          Schema.Struct({ "type": Schema.Literal("code_execution_20260120"), "tool_id": Schema.String })
+        ], { mode: "oneOf" }),
+        "tool_use_id": Schema.String,
+        "content": Schema.Union([
+          Schema.Array(
+            Schema.Struct({
+              "type": Schema.Literal("web_search_result"),
+              "encrypted_content": Schema.String,
+              "page_age": Schema.String,
+              "title": Schema.String,
+              "url": Schema.String
+            })
+          ),
+          Schema.Struct({
+            "type": Schema.Literal("web_search_tool_result_error"),
+            "error_code": Schema.Literals([
+              "invalid_tool_input",
+              "unavailable",
+              "max_uses_exceeded",
+              "too_many_requests",
+              "query_too_long",
+              "request_too_large"
+            ])
+          })
+        ])
+      }),
+      Schema.Struct({
+        "type": Schema.Literal("web_fetch_tool_result"),
+        "caller": Schema.Union([
+          Schema.Struct({ "type": Schema.Literal("direct") }),
+          Schema.Struct({ "type": Schema.Literal("code_execution_20250825"), "tool_id": Schema.String }),
+          Schema.Struct({ "type": Schema.Literal("code_execution_20260120"), "tool_id": Schema.String })
+        ], { mode: "oneOf" }),
+        "content": Schema.Union([
+          Schema.Struct({
+            "type": Schema.Literal("web_fetch_tool_result_error"),
+            "error_code": Schema.Literals([
+              "invalid_tool_input",
+              "url_too_long",
+              "url_not_allowed",
+              "url_not_accessible",
+              "unsupported_content_type",
+              "too_many_requests",
+              "max_uses_exceeded",
+              "unavailable"
+            ])
+          }),
+          Schema.Struct({
+            "content": Schema.Struct({
+              "citations": Schema.Struct({ "enabled": Schema.Boolean }),
+              "source": Schema.Union([
+                Schema.Struct({
+                  "data": Schema.String,
+                  "media_type": Schema.Literal("application/pdf"),
+                  "type": Schema.Literal("base64")
+                }),
+                Schema.Struct({
+                  "data": Schema.String,
+                  "media_type": Schema.Literal("text/plain"),
+                  "type": Schema.Literal("text")
+                })
+              ]),
+              "title": Schema.String,
+              "type": Schema.Literal("document")
+            }),
+            "retrieved_at": Schema.String,
+            "type": Schema.Literal("web_fetch_result"),
+            "url": Schema.String
+          })
+        ], { mode: "oneOf" }),
+        "tool_use_id": Schema.String
+      }),
+      Schema.Struct({
+        "type": Schema.Literal("code_execution_tool_result"),
+        "content": Schema.Union([
+          Schema.Struct({
+            "error_code": Schema.Literals([
+              "invalid_tool_input",
+              "unavailable",
+              "too_many_requests",
+              "execution_time_exceeded"
+            ]),
+            "type": Schema.Literal("code_execution_tool_result_error")
+          }),
+          Schema.Struct({
+            "content": Schema.Array(
+              Schema.Struct({ "file_id": Schema.String, "type": Schema.Literal("code_execution_output") })
+            ),
+            "return_code": Schema.Number.check(Schema.isFinite()),
+            "stderr": Schema.String,
+            "stdout": Schema.String,
+            "type": Schema.Literal("code_execution_result")
+          }),
+          Schema.Struct({
+            "content": Schema.Array(
+              Schema.Struct({ "file_id": Schema.String, "type": Schema.Literal("code_execution_output") })
+            ),
+            "encrypted_stdout": Schema.String,
+            "return_code": Schema.Number.check(Schema.isFinite()),
+            "stderr": Schema.String,
+            "type": Schema.Literal("encrypted_code_execution_result")
+          })
+        ], { mode: "oneOf" }),
+        "tool_use_id": Schema.String
+      }),
+      Schema.Struct({
+        "type": Schema.Literal("bash_code_execution_tool_result"),
+        "content": Schema.Union([
+          Schema.Struct({
+            "error_code": Schema.Literals([
+              "invalid_tool_input",
+              "unavailable",
+              "too_many_requests",
+              "execution_time_exceeded",
+              "output_file_too_large"
+            ]),
+            "type": Schema.Literal("bash_code_execution_tool_result_error")
+          }),
+          Schema.Struct({
+            "content": Schema.Array(
+              Schema.Struct({ "file_id": Schema.String, "type": Schema.Literal("bash_code_execution_output") })
+            ),
+            "return_code": Schema.Number.check(Schema.isFinite()),
+            "stderr": Schema.String,
+            "stdout": Schema.String,
+            "type": Schema.Literal("bash_code_execution_result")
+          })
+        ], { mode: "oneOf" }),
+        "tool_use_id": Schema.String
+      }),
+      Schema.Struct({
+        "type": Schema.Literal("text_editor_code_execution_tool_result"),
+        "content": Schema.Union([
+          Schema.Struct({
+            "error_code": Schema.Literals([
+              "invalid_tool_input",
+              "unavailable",
+              "too_many_requests",
+              "execution_time_exceeded",
+              "file_not_found"
+            ]),
+            "error_message": Schema.String,
+            "type": Schema.Literal("text_editor_code_execution_tool_result_error")
+          }),
+          Schema.Struct({
+            "content": Schema.String,
+            "file_type": Schema.Literals(["text", "image", "pdf"]),
+            "num_lines": Schema.Number.check(Schema.isFinite()),
+            "start_line": Schema.Number.check(Schema.isFinite()),
+            "total_lines": Schema.Number.check(Schema.isFinite()),
+            "type": Schema.Literal("text_editor_code_execution_view_result")
+          }),
+          Schema.Struct({
+            "is_file_update": Schema.Boolean,
+            "type": Schema.Literal("text_editor_code_execution_create_result")
+          }),
+          Schema.Struct({
+            "lines": Schema.Array(Schema.String),
+            "new_lines": Schema.Number.check(Schema.isFinite()),
+            "new_start": Schema.Number.check(Schema.isFinite()),
+            "old_lines": Schema.Number.check(Schema.isFinite()),
+            "old_start": Schema.Number.check(Schema.isFinite()),
+            "type": Schema.Literal("text_editor_code_execution_str_replace_result")
+          })
+        ], { mode: "oneOf" }),
+        "tool_use_id": Schema.String
+      }),
+      Schema.Struct({
+        "type": Schema.Literal("tool_search_tool_result"),
+        "content": Schema.Union([
+          Schema.Struct({
+            "error_code": Schema.Literals([
+              "invalid_tool_input",
+              "unavailable",
+              "too_many_requests",
+              "execution_time_exceeded"
+            ]),
+            "error_message": Schema.String,
+            "type": Schema.Literal("tool_search_tool_result_error")
+          }),
+          Schema.Struct({
+            "tool_references": Schema.Array(
+              Schema.Struct({ "tool_name": Schema.String, "type": Schema.Literal("tool_reference") })
+            ),
+            "type": Schema.Literal("tool_search_tool_search_result")
+          })
+        ], { mode: "oneOf" }),
+        "tool_use_id": Schema.String
+      }),
+      Schema.Struct({ "type": Schema.Literal("container_upload"), "file_id": Schema.String })
+    ], { mode: "oneOf" })
+  }),
+  Schema.Struct({
+    "type": Schema.Literal("content_block_delta"),
+    "index": Schema.Number.check(Schema.isFinite()),
+    "delta": Schema.Union([
+      Schema.Struct({ "type": Schema.Literal("text_delta"), "text": Schema.String }),
+      Schema.Struct({ "type": Schema.Literal("input_json_delta"), "partial_json": Schema.String }),
+      Schema.Struct({ "type": Schema.Literal("thinking_delta"), "thinking": Schema.String }),
+      Schema.Struct({ "type": Schema.Literal("signature_delta"), "signature": Schema.String }),
+      Schema.Struct({
+        "type": Schema.Literal("citations_delta"),
+        "citation": Schema.Union([
+          Schema.Struct({
+            "type": Schema.Literal("char_location"),
+            "cited_text": Schema.String,
+            "document_index": Schema.Number.check(Schema.isFinite()),
+            "document_title": Schema.String,
+            "start_char_index": Schema.Number.check(Schema.isFinite()),
+            "end_char_index": Schema.Number.check(Schema.isFinite()),
+            "file_id": Schema.String
+          }),
+          Schema.Struct({
+            "type": Schema.Literal("page_location"),
+            "cited_text": Schema.String,
+            "document_index": Schema.Number.check(Schema.isFinite()),
+            "document_title": Schema.String,
+            "start_page_number": Schema.Number.check(Schema.isFinite()),
+            "end_page_number": Schema.Number.check(Schema.isFinite()),
+            "file_id": Schema.String
+          }),
+          Schema.Struct({
+            "type": Schema.Literal("content_block_location"),
+            "cited_text": Schema.String,
+            "document_index": Schema.Number.check(Schema.isFinite()),
+            "document_title": Schema.String,
+            "start_block_index": Schema.Number.check(Schema.isFinite()),
+            "end_block_index": Schema.Number.check(Schema.isFinite()),
+            "file_id": Schema.String
+          }),
+          Schema.Struct({
+            "type": Schema.Literal("web_search_result_location"),
+            "cited_text": Schema.String,
+            "encrypted_index": Schema.String,
+            "title": Schema.String,
+            "url": Schema.String
+          }),
+          Schema.Struct({
+            "type": Schema.Literal("search_result_location"),
+            "cited_text": Schema.String,
+            "search_result_index": Schema.Number.check(Schema.isFinite()),
+            "source": Schema.String,
+            "title": Schema.String,
+            "start_block_index": Schema.Number.check(Schema.isFinite()),
+            "end_block_index": Schema.Number.check(Schema.isFinite())
+          })
+        ], { mode: "oneOf" })
+      })
+    ], { mode: "oneOf" })
+  }),
+  Schema.Struct({ "type": Schema.Literal("content_block_stop"), "index": Schema.Number.check(Schema.isFinite()) }),
+  Schema.Struct({ "type": Schema.Literal("ping") }),
+  Schema.Struct({
+    "type": Schema.Literal("error"),
+    "error": Schema.Struct({ "type": Schema.String, "message": Schema.String })
+  })
+], { mode: "oneOf" }).annotate({ "description": "Union of all possible streaming events" })
 export type ForbiddenResponse = { readonly "error": ForbiddenResponseErrorData; readonly "user_id"?: string }
 export const ForbiddenResponse = Schema.Struct({
   "error": ForbiddenResponseErrorData,
   "user_id": Schema.optionalKey(Schema.String)
 }).annotate({ "description": "Forbidden - Authentication successful but insufficient permissions" })
+export type ChatMessageContentItemText = {
+  readonly "type": "text"
+  readonly "text": string
+  readonly "cache_control"?: ChatMessageContentItemCacheControl
+}
+export const ChatMessageContentItemText = Schema.Struct({
+  "type": Schema.Literal("text"),
+  "text": Schema.String,
+  "cache_control": Schema.optionalKey(ChatMessageContentItemCacheControl)
+}).annotate({ "description": "Text content part" })
+export type ChatMessageContentItemVideoLegacy = { readonly "type": "input_video"; readonly "video_url": VideoInput }
+export const ChatMessageContentItemVideoLegacy = Schema.Struct({
+  "type": Schema.Literal("input_video"),
+  "video_url": VideoInput
+}).annotate({ "description": "Video input content part (legacy format - deprecated)" })
+export type ChatMessageContentItemVideo = { readonly "type": "video_url"; readonly "video_url": VideoInput }
+export const ChatMessageContentItemVideo = Schema.Struct({
+  "type": Schema.Literal("video_url"),
+  "video_url": VideoInput
+}).annotate({ "description": "Video input content part" })
+export type ReasoningDetailUnion = ReasoningDetailSummary | ReasoningDetailEncrypted | ReasoningDetailText
+export const ReasoningDetailUnion = Schema.Union([
+  ReasoningDetailSummary,
+  ReasoningDetailEncrypted,
+  ReasoningDetailText
+], { mode: "oneOf" }).annotate({ "description": "Reasoning detail union schema" })
+export type ChatMessageTokenLogprobs = {
+  readonly "content": ReadonlyArray<ChatMessageTokenLogprob>
+  readonly "refusal"?: ReadonlyArray<ChatMessageTokenLogprob>
+}
+export const ChatMessageTokenLogprobs = Schema.Struct({
+  "content": Schema.Array(ChatMessageTokenLogprob).annotate({ "description": "Log probabilities for content tokens" }),
+  "refusal": Schema.optionalKey(
+    Schema.Array(ChatMessageTokenLogprob).annotate({ "description": "Log probabilities for refusal tokens" })
+  )
+}).annotate({ "description": "Log probabilities for the completion" })
+export type ResponseFormatTextConfig =
+  | ResponsesFormatText
+  | ResponseFormatJSONObject
+  | ResponsesFormatTextJSONSchemaConfig
+export const ResponseFormatTextConfig = Schema.Union([
+  ResponsesFormatText,
+  ResponseFormatJSONObject,
+  ResponsesFormatTextJSONSchemaConfig
+]).annotate({ "description": "Text response format configuration" })
+export type ResponseFormatJSONSchema = { readonly "type": "json_schema"; readonly "json_schema": JSONSchemaConfig }
+export const ResponseFormatJSONSchema = Schema.Struct({
+  "type": Schema.Literal("json_schema"),
+  "json_schema": JSONSchemaConfig
+}).annotate({ "description": "JSON Schema response format for structured outputs" })
+export type ToolChoiceOption = "none" | "auto" | "required" | NamedToolChoice
+export const ToolChoiceOption = Schema.Union([
+  Schema.Literal("none"),
+  Schema.Literal("auto"),
+  Schema.Literal("required"),
+  NamedToolChoice
+]).annotate({ "description": "Tool choice configuration" })
+export type ToolDefinitionJson =
+  | {
+    readonly "type": "function"
+    readonly "function": {
+      readonly "name": string
+      readonly "description"?: string
+      readonly "parameters"?: {}
+      readonly "strict"?: boolean
+    }
+    readonly "cache_control"?: ChatMessageContentItemCacheControl
+  }
+  | DatetimeServerTool
+  | WebSearchServerTool
+export const ToolDefinitionJson = Schema.Union([
+  Schema.Struct({
+    "type": Schema.Literal("function"),
+    "function": Schema.Struct({
+      "name": Schema.String.annotate({
+        "description": "Function name (a-z, A-Z, 0-9, underscores, dashes, max 64 chars)"
+      }).check(Schema.isMaxLength(64)),
+      "description": Schema.optionalKey(
+        Schema.String.annotate({ "description": "Function description for the model" })
+      ),
+      "parameters": Schema.optionalKey(
+        Schema.Struct({}).annotate({ "description": "Function parameters as JSON Schema object" })
+      ),
+      "strict": Schema.optionalKey(Schema.Boolean.annotate({ "description": "Enable strict schema adherence" }))
+    }).annotate({ "description": "Function definition for tool calling" }),
+    "cache_control": Schema.optionalKey(ChatMessageContentItemCacheControl)
+  }),
+  DatetimeServerTool,
+  WebSearchServerTool
+]).annotate({
+  "description": "Tool definition for function calling (regular function or OpenRouter built-in server tool)"
+})
 export type ModelArchitecture = {
   readonly "tokenizer"?: ModelGroup
   readonly "instruct_type"?:
@@ -3540,104 +5710,6 @@ export const PublicEndpoint = Schema.Struct({
       "Throughput percentiles in tokens per second over the last 30 minutes. Throughput measures output token generation speed. Only visible when authenticated with an API key or cookie; returns null for unauthenticated requests."
   })
 }).annotate({ "description": "Information about a specific model endpoint" })
-export type __schema20 = {
-  readonly "type": "reasoning.summary"
-  readonly "summary": string
-  readonly "id"?: __schema21
-  readonly "format"?: __schema22
-  readonly "index"?: __schema11
-} | {
-  readonly "type": "reasoning.encrypted"
-  readonly "data": string
-  readonly "id"?: __schema21
-  readonly "format"?: __schema22
-  readonly "index"?: __schema11
-} | {
-  readonly "type": "reasoning.text"
-  readonly "text"?: string | null
-  readonly "signature"?: string | null
-  readonly "id"?: __schema21
-  readonly "format"?: __schema22
-  readonly "index"?: __schema11
-}
-export const __schema20 = Schema.Union([
-  Schema.Struct({
-    "type": Schema.Literal("reasoning.summary"),
-    "summary": Schema.String,
-    "id": Schema.optionalKey(__schema21),
-    "format": Schema.optionalKey(__schema22),
-    "index": Schema.optionalKey(__schema11)
-  }),
-  Schema.Struct({
-    "type": Schema.Literal("reasoning.encrypted"),
-    "data": Schema.String,
-    "id": Schema.optionalKey(__schema21),
-    "format": Schema.optionalKey(__schema22),
-    "index": Schema.optionalKey(__schema11)
-  }),
-  Schema.Struct({
-    "type": Schema.Literal("reasoning.text"),
-    "text": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null])),
-    "signature": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null])),
-    "id": Schema.optionalKey(__schema21),
-    "format": Schema.optionalKey(__schema22),
-    "index": Schema.optionalKey(__schema11)
-  })
-], { mode: "oneOf" })
-export type __schema14 = __schema11 | ModelName | __schema13
-export const __schema14 = Schema.Union([__schema11, ModelName, __schema13])
-export type ChatMessageTokenLogprobs = {
-  readonly "content": ReadonlyArray<ChatMessageTokenLogprob> | null
-  readonly "refusal": ReadonlyArray<ChatMessageTokenLogprob> | null
-}
-export const ChatMessageTokenLogprobs = Schema.Struct({
-  "content": Schema.Union([Schema.Array(ChatMessageTokenLogprob), Schema.Null]),
-  "refusal": Schema.Union([Schema.Array(ChatMessageTokenLogprob), Schema.Null])
-})
-export type __schema26 = ChatCompletionFinishReason | null
-export const __schema26 = Schema.Union([ChatCompletionFinishReason, Schema.Null])
-export type ResponseFormatJSONSchema = { readonly "type": "json_schema"; readonly "json_schema": JSONSchemaConfig }
-export const ResponseFormatJSONSchema = Schema.Struct({
-  "type": Schema.Literal("json_schema"),
-  "json_schema": JSONSchemaConfig
-})
-export type ChatMessageContentItemText = {
-  readonly "type": "text"
-  readonly "text": string
-  readonly "cache_control"?: ChatMessageContentItemCacheControl
-}
-export const ChatMessageContentItemText = Schema.Struct({
-  "type": Schema.Literal("text"),
-  "text": Schema.String,
-  "cache_control": Schema.optionalKey(ChatMessageContentItemCacheControl)
-})
-export type ToolDefinitionJson = {
-  readonly "type": "function"
-  readonly "function": {
-    readonly "name": string
-    readonly "description"?: string
-    readonly "parameters"?: {}
-    readonly "strict"?: boolean | null
-  }
-  readonly "cache_control"?: ChatMessageContentItemCacheControl
-}
-export const ToolDefinitionJson = Schema.Struct({
-  "type": Schema.Literal("function"),
-  "function": Schema.Struct({
-    "name": Schema.String.check(Schema.isMaxLength(64)),
-    "description": Schema.optionalKey(Schema.String),
-    "parameters": Schema.optionalKey(Schema.Struct({}).check(Schema.isPropertyNames(Schema.String))),
-    "strict": Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Null]))
-  }),
-  "cache_control": Schema.optionalKey(ChatMessageContentItemCacheControl)
-})
-export type ToolChoiceOption = "none" | "auto" | "required" | NamedToolChoice
-export const ToolChoiceOption = Schema.Union([
-  Schema.Literal("none"),
-  Schema.Literal("auto"),
-  Schema.Literal("required"),
-  NamedToolChoice
-])
 export type ResponseOutputText = {
   readonly "type": "output_text"
   readonly "text": string
@@ -3688,22 +5760,6 @@ export const OpenResponsesOutputTextAnnotationAddedEvent = Schema.Struct({
   "annotation_index": Schema.Number.check(Schema.isFinite()),
   "annotation": OpenAIResponsesAnnotation
 }).annotate({ "description": "Event emitted when a text annotation is added to output" })
-export type ResponseTextConfig = {
-  readonly "format"?: ResponseFormatTextConfig
-  readonly "verbosity"?: "high" | "low" | "medium"
-}
-export const ResponseTextConfig = Schema.Struct({
-  "format": Schema.optionalKey(ResponseFormatTextConfig),
-  "verbosity": Schema.optionalKey(Schema.Literals(["high", "low", "medium"]))
-}).annotate({ "description": "Text output configuration including format and verbosity" })
-export type OpenResponsesResponseText = {
-  readonly "format"?: ResponseFormatTextConfig
-  readonly "verbosity"?: "high" | "low" | "medium"
-}
-export const OpenResponsesResponseText = Schema.Struct({
-  "format": Schema.optionalKey(ResponseFormatTextConfig),
-  "verbosity": Schema.optionalKey(Schema.Literals(["high", "low", "medium"]))
-}).annotate({ "description": "Text output configuration including format and verbosity" })
 export type OpenResponsesTextDeltaEvent = {
   readonly "type": "response.output_text.delta"
   readonly "logprobs": ReadonlyArray<OpenResponsesLogProbs>
@@ -3740,8 +5796,6 @@ export const OpenResponsesTextDoneEvent = Schema.Struct({
   "sequence_number": Schema.Number.check(Schema.isFinite()),
   "logprobs": Schema.Array(OpenResponsesLogProbs)
 }).annotate({ "description": "Event emitted when text streaming is complete" })
-export type ProviderSortUnion = ProviderSort | ProviderSortConfig
-export const ProviderSortUnion = Schema.Union([ProviderSort, ProviderSortConfig])
 export type ProviderPreferences = {
   readonly "allow_fallbacks"?: boolean
   readonly "require_parameters"?: boolean
@@ -3752,7 +5806,7 @@ export type ProviderPreferences = {
   readonly "only"?: ReadonlyArray<ProviderName | string>
   readonly "ignore"?: ReadonlyArray<ProviderName | string>
   readonly "quantizations"?: ReadonlyArray<Quantization>
-  readonly "sort"?: "price" | "price" | "throughput" | "throughput" | "latency" | "latency"
+  readonly "sort"?: "price" | "price" | "throughput" | "throughput" | "latency" | "latency" | "exacto" | "exacto"
   readonly "max_price"?: {
     readonly "prompt"?: BigNumberUnion
     readonly "completion"?: string
@@ -3810,19 +5864,43 @@ export const ProviderPreferences = Schema.Struct({
   ),
   "sort": Schema.optionalKey(
     Schema.Union([
-      Schema.Union([Schema.Literal("price"), Schema.Literal("price")]).annotate({
+      Schema.Union([
+        Schema.Literal("price").annotate({
+          "description": "The provider sorting strategy (price, throughput, latency)"
+        }),
+        Schema.Literal("price")
+      ]).annotate({
         "description":
           "The sorting strategy to use for this request, if \"order\" is not specified. When set, no load balancing is performed."
       }),
-      Schema.Union([Schema.Literal("throughput"), Schema.Literal("throughput")]).annotate({
+      Schema.Union([
+        Schema.Literal("throughput").annotate({
+          "description": "The provider sorting strategy (price, throughput, latency)"
+        }),
+        Schema.Literal("throughput")
+      ]).annotate({
         "description":
           "The sorting strategy to use for this request, if \"order\" is not specified. When set, no load balancing is performed."
       }),
-      Schema.Union([Schema.Literal("latency"), Schema.Literal("latency")]).annotate({
+      Schema.Union([
+        Schema.Literal("latency").annotate({
+          "description": "The provider sorting strategy (price, throughput, latency)"
+        }),
+        Schema.Literal("latency")
+      ]).annotate({
+        "description":
+          "The sorting strategy to use for this request, if \"order\" is not specified. When set, no load balancing is performed."
+      }),
+      Schema.Union([
+        Schema.Literal("exacto").annotate({
+          "description": "The provider sorting strategy (price, throughput, latency)"
+        }),
+        Schema.Literal("exacto")
+      ]).annotate({
         "description":
           "The sorting strategy to use for this request, if \"order\" is not specified. When set, no load balancing is performed."
       })
-    ])
+    ]).annotate({ "description": "The provider sorting strategy (price, throughput, latency)" })
   ),
   "max_price": Schema.optionalKey(
     Schema.Struct({
@@ -3843,7 +5921,7 @@ export const ProviderPreferences = Schema.Struct({
 }).annotate({ "description": "Provider routing preferences for the request." })
 export type AnthropicMessagesRequest = {
   readonly "model": string
-  readonly "max_tokens": number
+  readonly "max_tokens"?: number
   readonly "messages": ReadonlyArray<OpenRouterAnthropicMessageParam>
   readonly "system"?:
     | string
@@ -3894,30 +5972,32 @@ export type AnthropicMessagesRequest = {
     >
   readonly "metadata"?: { readonly "user_id"?: string }
   readonly "stop_sequences"?: ReadonlyArray<string>
-  readonly "stream"?: boolean
   readonly "temperature"?: number
   readonly "top_p"?: number
   readonly "top_k"?: number
   readonly "tools"?: ReadonlyArray<
-    {
+    | {
       readonly "name": string
       readonly "description"?: string
       readonly "input_schema": {
-        readonly "type": "object"
+        readonly "type"?: string
         readonly "properties"?: unknown
         readonly "required"?: ReadonlyArray<string>
       }
       readonly "type"?: "custom"
       readonly "cache_control"?: { readonly "type": "ephemeral"; readonly "ttl"?: "5m" | "1h" }
-    } | {
+    }
+    | {
       readonly "type": "bash_20250124"
       readonly "name": "bash"
       readonly "cache_control"?: { readonly "type": "ephemeral"; readonly "ttl"?: "5m" | "1h" }
-    } | {
+    }
+    | {
       readonly "type": "text_editor_20250124"
       readonly "name": "str_replace_editor"
       readonly "cache_control"?: { readonly "type": "ephemeral"; readonly "ttl"?: "5m" | "1h" }
-    } | {
+    }
+    | {
       readonly "type": "web_search_20250305"
       readonly "name": "web_search"
       readonly "allowed_domains"?: ReadonlyArray<string>
@@ -3932,6 +6012,8 @@ export type AnthropicMessagesRequest = {
       }
       readonly "cache_control"?: { readonly "type": "ephemeral"; readonly "ttl"?: "5m" | "1h" }
     }
+    | DatetimeServerTool
+    | WebSearchServerTool
   >
   readonly "tool_choice"?:
     | { readonly "type": "auto"; readonly "disable_parallel_tool_use"?: boolean }
@@ -3942,6 +6024,35 @@ export type AnthropicMessagesRequest = {
     readonly "type": "disabled"
   } | { readonly "type": "adaptive" }
   readonly "service_tier"?: "auto" | "standard_only"
+  readonly "output_config"?: AnthropicOutputConfig
+  readonly "cache_control"?: { readonly "type": "ephemeral"; readonly "ttl"?: "5m" | "1h" }
+  readonly "stream"?: boolean
+  readonly "context_management"?: {
+    readonly "edits"?: ReadonlyArray<
+      {
+        readonly "type": "clear_tool_uses_20250919"
+        readonly "clear_at_least"?: { readonly "type": "input_tokens"; readonly "value": number }
+        readonly "clear_tool_inputs"?: boolean | ReadonlyArray<string> | unknown
+        readonly "exclude_tools"?: ReadonlyArray<string>
+        readonly "keep"?: { readonly "type": "tool_uses"; readonly "value": number }
+        readonly "trigger"?: { readonly "type": "input_tokens"; readonly "value": number } | {
+          readonly "type": "tool_uses"
+          readonly "value": number
+        }
+      } | {
+        readonly "type": "clear_thinking_20251015"
+        readonly "keep"?:
+          | { readonly "type": "thinking_turns"; readonly "value": number }
+          | { readonly "type": "all" }
+          | "all"
+      } | {
+        readonly "type": "compact_20260112"
+        readonly "instructions"?: string
+        readonly "pause_after_compaction"?: boolean
+        readonly "trigger"?: { readonly "type": "input_tokens"; readonly "value": number }
+      }
+    >
+  }
   readonly "provider"?: {
     readonly "allow_fallbacks"?: boolean
     readonly "require_parameters"?: boolean
@@ -3952,7 +6063,7 @@ export type AnthropicMessagesRequest = {
     readonly "only"?: ReadonlyArray<ProviderName | string>
     readonly "ignore"?: ReadonlyArray<ProviderName | string>
     readonly "quantizations"?: ReadonlyArray<Quantization>
-    readonly "sort"?: "price" | "price" | "throughput" | "throughput" | "latency" | "latency"
+    readonly "sort"?: "price" | "price" | "throughput" | "throughput" | "latency" | "latency" | "exacto" | "exacto"
     readonly "max_price"?: {
       readonly "prompt"?: BigNumberUnion
       readonly "completion"?: string
@@ -3972,6 +6083,8 @@ export type AnthropicMessagesRequest = {
       readonly "max_results"?: number
       readonly "search_prompt"?: string
       readonly "engine"?: WebSearchEngine
+      readonly "include_domains"?: ReadonlyArray<string>
+      readonly "exclude_domains"?: ReadonlyArray<string>
     }
     | { readonly "id": "file-parser"; readonly "enabled"?: boolean; readonly "pdf"?: PDFParserOptions }
     | { readonly "id": "response-healing"; readonly "enabled"?: boolean }
@@ -3987,11 +6100,10 @@ export type AnthropicMessagesRequest = {
     readonly "parent_span_id"?: string
   }
   readonly "models"?: ReadonlyArray<string>
-  readonly "output_config"?: AnthropicOutputConfig
 }
 export const AnthropicMessagesRequest = Schema.Struct({
   "model": Schema.String,
-  "max_tokens": Schema.Number.check(Schema.isFinite()),
+  "max_tokens": Schema.optionalKey(Schema.Number.check(Schema.isFinite())),
   "messages": Schema.Array(OpenRouterAnthropicMessageParam),
   "system": Schema.optionalKey(Schema.Union([
     Schema.String,
@@ -4047,7 +6159,6 @@ export const AnthropicMessagesRequest = Schema.Struct({
   ])),
   "metadata": Schema.optionalKey(Schema.Struct({ "user_id": Schema.optionalKey(Schema.String) })),
   "stop_sequences": Schema.optionalKey(Schema.Array(Schema.String)),
-  "stream": Schema.optionalKey(Schema.Boolean),
   "temperature": Schema.optionalKey(Schema.Number.check(Schema.isFinite())),
   "top_p": Schema.optionalKey(Schema.Number.check(Schema.isFinite())),
   "top_k": Schema.optionalKey(Schema.Number.check(Schema.isFinite())),
@@ -4056,7 +6167,7 @@ export const AnthropicMessagesRequest = Schema.Struct({
       "name": Schema.String,
       "description": Schema.optionalKey(Schema.String),
       "input_schema": Schema.Struct({
-        "type": Schema.Literal("object"),
+        "type": Schema.optionalKey(Schema.String),
         "properties": Schema.optionalKey(Schema.Unknown),
         "required": Schema.optionalKey(Schema.Array(Schema.String))
       }),
@@ -4097,8 +6208,10 @@ export const AnthropicMessagesRequest = Schema.Struct({
       "cache_control": Schema.optionalKey(
         Schema.Struct({ "type": Schema.Literal("ephemeral"), "ttl": Schema.optionalKey(Schema.Literals(["5m", "1h"])) })
       )
-    })
-  ], { mode: "oneOf" }))),
+    }),
+    DatetimeServerTool,
+    WebSearchServerTool
+  ]))),
   "tool_choice": Schema.optionalKey(
     Schema.Union([
       Schema.Struct({
@@ -4122,6 +6235,55 @@ export const AnthropicMessagesRequest = Schema.Struct({
     ], { mode: "oneOf" })
   ),
   "service_tier": Schema.optionalKey(Schema.Literals(["auto", "standard_only"])),
+  "output_config": Schema.optionalKey(AnthropicOutputConfig),
+  "cache_control": Schema.optionalKey(
+    Schema.Struct({ "type": Schema.Literal("ephemeral"), "ttl": Schema.optionalKey(Schema.Literals(["5m", "1h"])) })
+  ),
+  "stream": Schema.optionalKey(Schema.Boolean),
+  "context_management": Schema.optionalKey(Schema.Struct({
+    "edits": Schema.optionalKey(Schema.Array(Schema.Union([
+      Schema.Struct({
+        "type": Schema.Literal("clear_tool_uses_20250919"),
+        "clear_at_least": Schema.optionalKey(
+          Schema.Struct({ "type": Schema.Literal("input_tokens"), "value": Schema.Number.check(Schema.isFinite()) })
+        ),
+        "clear_tool_inputs": Schema.optionalKey(
+          Schema.Union([Schema.Boolean, Schema.Array(Schema.String), Schema.Unknown])
+        ),
+        "exclude_tools": Schema.optionalKey(Schema.Array(Schema.String)),
+        "keep": Schema.optionalKey(
+          Schema.Struct({ "type": Schema.Literal("tool_uses"), "value": Schema.Number.check(Schema.isFinite()) })
+        ),
+        "trigger": Schema.optionalKey(
+          Schema.Union([
+            Schema.Struct({ "type": Schema.Literal("input_tokens"), "value": Schema.Number.check(Schema.isFinite()) }),
+            Schema.Struct({ "type": Schema.Literal("tool_uses"), "value": Schema.Number.check(Schema.isFinite()) })
+          ], { mode: "oneOf" })
+        )
+      }),
+      Schema.Struct({
+        "type": Schema.Literal("clear_thinking_20251015"),
+        "keep": Schema.optionalKey(
+          Schema.Union([
+            Schema.Struct({
+              "type": Schema.Literal("thinking_turns"),
+              "value": Schema.Number.check(Schema.isFinite())
+            }),
+            Schema.Struct({ "type": Schema.Literal("all") }),
+            Schema.Literal("all")
+          ])
+        )
+      }),
+      Schema.Struct({
+        "type": Schema.Literal("compact_20260112"),
+        "instructions": Schema.optionalKey(Schema.String),
+        "pause_after_compaction": Schema.optionalKey(Schema.Boolean),
+        "trigger": Schema.optionalKey(
+          Schema.Struct({ "type": Schema.Literal("input_tokens"), "value": Schema.Number.check(Schema.isFinite()) })
+        )
+      })
+    ], { mode: "oneOf" })))
+  })),
   "provider": Schema.optionalKey(
     Schema.Struct({
       "allow_fallbacks": Schema.optionalKey(Schema.Boolean.annotate({
@@ -4172,19 +6334,43 @@ export const AnthropicMessagesRequest = Schema.Struct({
       ),
       "sort": Schema.optionalKey(
         Schema.Union([
-          Schema.Union([Schema.Literal("price"), Schema.Literal("price")]).annotate({
+          Schema.Union([
+            Schema.Literal("price").annotate({
+              "description": "The provider sorting strategy (price, throughput, latency)"
+            }),
+            Schema.Literal("price")
+          ]).annotate({
             "description":
               "The sorting strategy to use for this request, if \"order\" is not specified. When set, no load balancing is performed."
           }),
-          Schema.Union([Schema.Literal("throughput"), Schema.Literal("throughput")]).annotate({
+          Schema.Union([
+            Schema.Literal("throughput").annotate({
+              "description": "The provider sorting strategy (price, throughput, latency)"
+            }),
+            Schema.Literal("throughput")
+          ]).annotate({
             "description":
               "The sorting strategy to use for this request, if \"order\" is not specified. When set, no load balancing is performed."
           }),
-          Schema.Union([Schema.Literal("latency"), Schema.Literal("latency")]).annotate({
+          Schema.Union([
+            Schema.Literal("latency").annotate({
+              "description": "The provider sorting strategy (price, throughput, latency)"
+            }),
+            Schema.Literal("latency")
+          ]).annotate({
+            "description":
+              "The sorting strategy to use for this request, if \"order\" is not specified. When set, no load balancing is performed."
+          }),
+          Schema.Union([
+            Schema.Literal("exacto").annotate({
+              "description": "The provider sorting strategy (price, throughput, latency)"
+            }),
+            Schema.Literal("exacto")
+          ]).annotate({
             "description":
               "The sorting strategy to use for this request, if \"order\" is not specified. When set, no load balancing is performed."
           })
-        ])
+        ]).annotate({ "description": "The provider sorting strategy (price, throughput, latency)" })
       ),
       "max_price": Schema.optionalKey(
         Schema.Struct({
@@ -4232,7 +6418,19 @@ export const AnthropicMessagesRequest = Schema.Struct({
         ),
         "max_results": Schema.optionalKey(Schema.Number.check(Schema.isFinite())),
         "search_prompt": Schema.optionalKey(Schema.String),
-        "engine": Schema.optionalKey(WebSearchEngine)
+        "engine": Schema.optionalKey(WebSearchEngine),
+        "include_domains": Schema.optionalKey(
+          Schema.Array(Schema.String).annotate({
+            "description":
+              "A list of domains to restrict web search results to. Supports wildcards (e.g. \"*.substack.com\") and path filtering (e.g. \"openai.com/blog\")."
+          })
+        ),
+        "exclude_domains": Schema.optionalKey(
+          Schema.Array(Schema.String).annotate({
+            "description":
+              "A list of domains to exclude from web search results. Supports wildcards (e.g. \"*.substack.com\") and path filtering (e.g. \"openai.com/blog\")."
+          })
+        )
       }),
       Schema.Struct({
         "id": Schema.Literal("file-parser"),
@@ -4285,9 +6483,66 @@ export const AnthropicMessagesRequest = Schema.Struct({
         "Metadata for observability and tracing. Known keys (trace_id, trace_name, span_name, generation_name, parent_span_id) have special handling. Additional keys are passed through as custom metadata to configured broadcast destinations."
     })
   ),
-  "models": Schema.optionalKey(Schema.Array(Schema.String)),
-  "output_config": Schema.optionalKey(AnthropicOutputConfig)
+  "models": Schema.optionalKey(Schema.Array(Schema.String))
 }).annotate({ "description": "Request schema for Anthropic Messages API endpoint" })
+export type SystemMessage = {
+  readonly "role": "system"
+  readonly "content": string | ReadonlyArray<ChatMessageContentItemText>
+  readonly "name"?: string
+}
+export const SystemMessage = Schema.Struct({
+  "role": Schema.Literal("system"),
+  "content": Schema.Union([Schema.String, Schema.Array(ChatMessageContentItemText)]).annotate({
+    "description": "System message content"
+  }),
+  "name": Schema.optionalKey(Schema.String.annotate({ "description": "Optional name for the system message" }))
+}).annotate({ "description": "System message for setting behavior" })
+export type DeveloperMessage = {
+  readonly "role": "developer"
+  readonly "content": string | ReadonlyArray<ChatMessageContentItemText>
+  readonly "name"?: string
+}
+export const DeveloperMessage = Schema.Struct({
+  "role": Schema.Literal("developer"),
+  "content": Schema.Union([Schema.String, Schema.Array(ChatMessageContentItemText)]).annotate({
+    "description": "Developer message content"
+  }),
+  "name": Schema.optionalKey(Schema.String.annotate({ "description": "Optional name for the developer message" }))
+}).annotate({ "description": "Developer message" })
+export type ChatMessageContentItem =
+  | ChatMessageContentItemText
+  | ChatMessageContentItemImage
+  | ChatMessageContentItemAudio
+  | ChatMessageContentItemVideoLegacy
+  | ChatMessageContentItemVideo
+  | ChatMessageContentItemFile
+export const ChatMessageContentItem = Schema.Union([
+  ChatMessageContentItemText,
+  ChatMessageContentItemImage,
+  ChatMessageContentItemAudio,
+  Schema.Union([ChatMessageContentItemVideoLegacy, ChatMessageContentItemVideo], { mode: "oneOf" }),
+  ChatMessageContentItemFile
+], { mode: "oneOf" }).annotate({ "description": "Content part for chat completion messages" })
+export type AssistantMessageReasoningDetails = ReadonlyArray<ReasoningDetailUnion>
+export const AssistantMessageReasoningDetails = Schema.Array(ReasoningDetailUnion).annotate({
+  "description": "Reasoning details for extended thinking models"
+})
+export type ResponseTextConfig = {
+  readonly "format"?: ResponseFormatTextConfig
+  readonly "verbosity"?: "high" | "low" | "medium"
+}
+export const ResponseTextConfig = Schema.Struct({
+  "format": Schema.optionalKey(ResponseFormatTextConfig),
+  "verbosity": Schema.optionalKey(Schema.Literals(["high", "low", "medium"]))
+}).annotate({ "description": "Text output configuration including format and verbosity" })
+export type OpenResponsesResponseText = {
+  readonly "format"?: ResponseFormatTextConfig
+  readonly "verbosity"?: "high" | "low" | "medium"
+}
+export const OpenResponsesResponseText = Schema.Struct({
+  "format": Schema.optionalKey(ResponseFormatTextConfig),
+  "verbosity": Schema.optionalKey(Schema.Literals(["high", "low", "medium"]))
+}).annotate({ "description": "Text output configuration including format and verbosity" })
 export type Model = {
   readonly "id": string
   readonly "canonical_slug": string
@@ -4384,7 +6639,7 @@ export type ListEndpointsResponse = {
       | "qwen3"
     readonly "modality": string
     readonly "input_modalities": ReadonlyArray<"text" | "image" | "file" | "audio" | "video">
-    readonly "output_modalities": ReadonlyArray<"text" | "image" | "embeddings" | "audio">
+    readonly "output_modalities": ReadonlyArray<"text" | "image" | "embeddings" | "audio" | "video">
   }
   readonly "endpoints": ReadonlyArray<PublicEndpoint>
 }
@@ -4456,136 +6711,33 @@ export const ListEndpointsResponse = Schema.Struct({
         Schema.Literal("text"),
         Schema.Literal("image"),
         Schema.Literal("embeddings"),
-        Schema.Literal("audio")
+        Schema.Literal("audio"),
+        Schema.Literal("video")
       ])
     ).annotate({ "description": "Supported output modalities" })
   }).annotate({ "description": "Model architecture information" }),
   "endpoints": Schema.Array(PublicEndpoint).annotate({ "description": "List of available endpoints for this model" })
 }).annotate({ "description": "List of available endpoints for a model" })
-export type ChatStreamingMessageChunk = {
-  readonly "role"?: "assistant"
-  readonly "content"?: string | null
-  readonly "reasoning"?: string | null
-  readonly "refusal"?: string | null
-  readonly "tool_calls"?: ReadonlyArray<ChatStreamingMessageToolCall>
-  readonly "reasoning_details"?: ReadonlyArray<__schema20>
-  readonly "images"?:
-    | ReadonlyArray<{ readonly "type": "image_url"; readonly "image_url": { readonly "url": string } }>
-    | null
-  readonly "annotations"?:
-    | ReadonlyArray<
-      {
-        readonly "type": "url_citation"
-        readonly "url_citation": {
-          readonly "url": string
-          readonly "title"?: string
-          readonly "start_index"?: number
-          readonly "end_index"?: number
-          readonly "content"?: string
-        }
-      } | {
-        readonly "type": "file_annotation"
-        readonly "file_annotation": { readonly "file_id": string; readonly "quote"?: string }
-      } | {
-        readonly "type": "file"
-        readonly "file": {
-          readonly "hash": string
-          readonly "name": string
-          readonly "content"?: ReadonlyArray<{ readonly "type": string; readonly "text"?: string }>
-        }
-      }
-    >
-    | null
-}
-export const ChatStreamingMessageChunk = Schema.Struct({
-  "role": Schema.optionalKey(Schema.Literal("assistant")),
-  "content": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null])),
-  "reasoning": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null])),
-  "refusal": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null])),
-  "tool_calls": Schema.optionalKey(Schema.Array(ChatStreamingMessageToolCall)),
-  "reasoning_details": Schema.optionalKey(Schema.Array(__schema20)),
-  "images": Schema.optionalKey(
-    Schema.Union([
-      Schema.Array(
-        Schema.Struct({ "type": Schema.Literal("image_url"), "image_url": Schema.Struct({ "url": Schema.String }) })
-      ),
-      Schema.Null
-    ])
-  ),
-  "annotations": Schema.optionalKey(Schema.Union([
-    Schema.Array(Schema.Union([
-      Schema.Struct({
-        "type": Schema.Literal("url_citation"),
-        "url_citation": Schema.Struct({
-          "url": Schema.String,
-          "title": Schema.optionalKey(Schema.String),
-          "start_index": Schema.optionalKey(Schema.Number.check(Schema.isFinite())),
-          "end_index": Schema.optionalKey(Schema.Number.check(Schema.isFinite())),
-          "content": Schema.optionalKey(Schema.String)
-        })
-      }),
-      Schema.Struct({
-        "type": Schema.Literal("file_annotation"),
-        "file_annotation": Schema.Struct({ "file_id": Schema.String, "quote": Schema.optionalKey(Schema.String) })
-      }),
-      Schema.Struct({
-        "type": Schema.Literal("file"),
-        "file": Schema.Struct({
-          "hash": Schema.String,
-          "name": Schema.String,
-          "content": Schema.optionalKey(
-            Schema.Array(Schema.Struct({ "type": Schema.String, "text": Schema.optionalKey(Schema.String) }))
-          )
-        })
-      })
-    ], { mode: "oneOf" })),
-    Schema.Null
-  ]))
-})
-export type ChatMessageContentItem =
-  | ChatMessageContentItemText
-  | ChatMessageContentItemImage
-  | ChatMessageContentItemAudio
-  | ChatMessageContentItemVideo
-export const ChatMessageContentItem = Schema.Union([
-  ChatMessageContentItemText,
-  ChatMessageContentItemImage,
-  ChatMessageContentItemAudio,
-  ChatMessageContentItemVideo
-], { mode: "oneOf" })
-export type SystemMessage = {
-  readonly "role": "system"
-  readonly "content": string | ReadonlyArray<ChatMessageContentItemText>
-  readonly "name"?: string
-}
-export const SystemMessage = Schema.Struct({
-  "role": Schema.Literal("system"),
-  "content": Schema.Union([Schema.String, Schema.Array(ChatMessageContentItemText)]),
-  "name": Schema.optionalKey(Schema.String)
-})
-export type DeveloperMessage = {
-  readonly "role": "developer"
-  readonly "content": string | ReadonlyArray<ChatMessageContentItemText>
-  readonly "name"?: string
-}
-export const DeveloperMessage = Schema.Struct({
-  "role": Schema.Literal("developer"),
-  "content": Schema.Union([Schema.String, Schema.Array(ChatMessageContentItemText)]),
-  "name": Schema.optionalKey(Schema.String)
-})
 export type OutputMessage = {
   readonly "id": string
   readonly "role": "assistant"
   readonly "type": "message"
   readonly "status"?: "completed" | "incomplete" | "in_progress"
   readonly "content": ReadonlyArray<ResponseOutputText | OpenAIResponsesRefusalContent>
+  readonly "phase"?: "commentary" | "final_answer" | unknown
 }
 export const OutputMessage = Schema.Struct({
   "id": Schema.String,
   "role": Schema.Literal("assistant"),
   "type": Schema.Literal("message"),
   "status": Schema.optionalKey(Schema.Literals(["completed", "incomplete", "in_progress"])),
-  "content": Schema.Array(Schema.Union([ResponseOutputText, OpenAIResponsesRefusalContent]))
+  "content": Schema.Array(Schema.Union([ResponseOutputText, OpenAIResponsesRefusalContent])),
+  "phase": Schema.optionalKey(
+    Schema.Union([Schema.Literal("commentary"), Schema.Literal("final_answer"), Schema.Unknown]).annotate({
+      "description":
+        "The phase of an assistant message. Use `commentary` for an intermediate assistant message and `final_answer` for the final assistant message. For follow-up requests with models like `gpt-5.3-codex` and later, preserve and resend phase on all assistant messages. Omitting it can degrade performance. Not used for user messages."
+    })
+  )
 })
 export type ResponsesOutputMessage = {
   readonly "id": string
@@ -4593,13 +6745,20 @@ export type ResponsesOutputMessage = {
   readonly "type": "message"
   readonly "status"?: "completed" | "incomplete" | "in_progress"
   readonly "content": ReadonlyArray<ResponseOutputText | OpenAIResponsesRefusalContent>
+  readonly "phase"?: "commentary" | "final_answer" | unknown
 }
 export const ResponsesOutputMessage = Schema.Struct({
   "id": Schema.String,
   "role": Schema.Literal("assistant"),
   "type": Schema.Literal("message"),
   "status": Schema.optionalKey(Schema.Literals(["completed", "incomplete", "in_progress"])),
-  "content": Schema.Array(Schema.Union([ResponseOutputText, OpenAIResponsesRefusalContent]))
+  "content": Schema.Array(Schema.Union([ResponseOutputText, OpenAIResponsesRefusalContent])),
+  "phase": Schema.optionalKey(
+    Schema.Union([Schema.Literal("commentary"), Schema.Literal("final_answer"), Schema.Unknown]).annotate({
+      "description":
+        "The phase of an assistant message. Use `commentary` for an intermediate assistant message and `final_answer` for the final assistant message. For follow-up requests with models like `gpt-5.3-codex` and later, preserve and resend phase on all assistant messages. Omitting it can degrade performance. Not used for user messages."
+    })
+  )
 }).annotate({ "description": "An output message item" })
 export type OpenResponsesContentPartAddedEvent = {
   readonly "type": "response.content_part.added"
@@ -4633,20 +6792,341 @@ export const OpenResponsesContentPartDoneEvent = Schema.Struct({
   "part": Schema.Union([ResponseOutputText, OpenAIResponsesRefusalContent]),
   "sequence_number": Schema.Number.check(Schema.isFinite())
 }).annotate({ "description": "Event emitted when a content part is complete" })
-export type ModelsListResponseData = ReadonlyArray<Model>
-export const ModelsListResponseData = Schema.Array(Model).annotate({ "description": "List of available models" })
-export type ChatStreamingChoice = {
-  readonly "delta": ChatStreamingMessageChunk
-  readonly "finish_reason"?: __schema26
-  readonly "index": number
-  readonly "logprobs"?: ChatMessageTokenLogprobs | null
-}
-export const ChatStreamingChoice = Schema.Struct({
-  "delta": ChatStreamingMessageChunk,
-  "finish_reason": Schema.optionalKey(__schema26),
-  "index": Schema.Number.check(Schema.isFinite()),
-  "logprobs": Schema.optionalKey(Schema.Union([ChatMessageTokenLogprobs, Schema.Null]))
-})
+export type OpenResponsesInput =
+  | string
+  | ReadonlyArray<
+    | OpenResponsesReasoning
+    | OpenResponsesEasyInputMessage
+    | OpenResponsesInputMessageItem
+    | OpenResponsesFunctionToolCall
+    | OpenResponsesFunctionCallOutput
+    | {
+      readonly "id": string
+      readonly "role": "assistant"
+      readonly "type": "message"
+      readonly "status"?: "completed" | "incomplete" | "in_progress"
+      readonly "content":
+        | ReadonlyArray<
+          {
+            readonly "type": "output_text"
+            readonly "text": string
+            readonly "annotations"?: ReadonlyArray<
+              {
+                readonly "type": "file_citation"
+                readonly "file_id": string
+                readonly "filename": string
+                readonly "index": number
+              } | {
+                readonly "type": never
+                readonly "url": string
+                readonly "title": string
+                readonly "start_index": number
+                readonly "end_index": number
+                readonly "file_id": string
+                readonly "filename": string
+                readonly "index": number
+              } | {
+                readonly "type": never
+                readonly "file_id": string
+                readonly "index": number
+                readonly "filename": string
+              } | {
+                readonly "type": never
+                readonly "file_id": string
+                readonly "filename": string
+                readonly "index": number
+                readonly "url": string
+                readonly "title": string
+                readonly "start_index": number
+                readonly "end_index": number
+              } | {
+                readonly "type": "url_citation"
+                readonly "url": string
+                readonly "title": string
+                readonly "start_index": number
+                readonly "end_index": number
+              } | {
+                readonly "type": never
+                readonly "file_id": string
+                readonly "index": number
+                readonly "url": string
+                readonly "title": string
+                readonly "start_index": number
+                readonly "end_index": number
+              } | {
+                readonly "type": never
+                readonly "file_id": string
+                readonly "filename": string
+                readonly "index": number
+              } | {
+                readonly "type": never
+                readonly "url": string
+                readonly "title": string
+                readonly "start_index": number
+                readonly "end_index": number
+                readonly "file_id": string
+                readonly "index": number
+              } | { readonly "type": "file_path"; readonly "file_id": string; readonly "index": number }
+            >
+            readonly "logprobs"?: ReadonlyArray<
+              {
+                readonly "token": string
+                readonly "bytes": ReadonlyArray<number>
+                readonly "logprob": number
+                readonly "top_logprobs": ReadonlyArray<
+                  { readonly "token": string; readonly "bytes": ReadonlyArray<number>; readonly "logprob": number }
+                >
+              }
+            >
+          } | {
+            readonly "type": never
+            readonly "refusal": string
+            readonly "text": string
+            readonly "annotations"?: ReadonlyArray<OpenAIResponsesAnnotation>
+            readonly "logprobs"?: ReadonlyArray<
+              {
+                readonly "token": string
+                readonly "bytes": ReadonlyArray<number>
+                readonly "logprob": number
+                readonly "top_logprobs": ReadonlyArray<
+                  { readonly "token": string; readonly "bytes": ReadonlyArray<number>; readonly "logprob": number }
+                >
+              }
+            >
+          } | {
+            readonly "type": never
+            readonly "text": string
+            readonly "annotations"?: ReadonlyArray<OpenAIResponsesAnnotation>
+            readonly "logprobs"?: ReadonlyArray<
+              {
+                readonly "token": string
+                readonly "bytes": ReadonlyArray<number>
+                readonly "logprob": number
+                readonly "top_logprobs": ReadonlyArray<
+                  { readonly "token": string; readonly "bytes": ReadonlyArray<number>; readonly "logprob": number }
+                >
+              }
+            >
+            readonly "refusal": string
+          } | { readonly "type": "refusal"; readonly "refusal": string }
+        >
+        | ReadonlyArray<ResponseOutputText | OpenAIResponsesRefusalContent>
+      readonly "phase"?: "commentary" | "final_answer" | unknown
+    }
+    | {
+      readonly "type": "reasoning"
+      readonly "id": string
+      readonly "content"?: ReadonlyArray<{ readonly "type": "reasoning_text"; readonly "text": string }>
+      readonly "summary": ReadonlyArray<{ readonly "type": "summary_text"; readonly "text": string }>
+      readonly "encrypted_content"?: string
+      readonly "status"?: "completed" | "incomplete" | "in_progress"
+      readonly "signature"?: string
+      readonly "format"?:
+        | "unknown"
+        | "openai-responses-v1"
+        | "azure-openai-responses-v1"
+        | "xai-responses-v1"
+        | "anthropic-claude-v1"
+        | "google-gemini-v1"
+    }
+    | ResponsesOutputItemFunctionCall
+    | ResponsesWebSearchCallOutput
+    | ResponsesOutputItemFileSearchCall
+    | ResponsesImageGenerationCall
+  >
+export const OpenResponsesInput = Schema.Union([
+  Schema.String,
+  Schema.Array(
+    Schema.Union([
+      OpenResponsesReasoning,
+      OpenResponsesEasyInputMessage,
+      OpenResponsesInputMessageItem,
+      OpenResponsesFunctionToolCall,
+      OpenResponsesFunctionCallOutput,
+      Schema.Struct({
+        "id": Schema.String,
+        "role": Schema.Literal("assistant"),
+        "type": Schema.Literal("message"),
+        "status": Schema.optionalKey(Schema.Literals(["completed", "incomplete", "in_progress"])),
+        "content": Schema.Union([
+          Schema.Array(Schema.Union([
+            Schema.Union([
+              Schema.Struct({
+                "type": Schema.Literal("output_text"),
+                "text": Schema.String,
+                "annotations": Schema.optionalKey(
+                  Schema.Array(
+                    Schema.Union([
+                      Schema.Union([
+                        Schema.Struct({
+                          "type": Schema.Literal("file_citation"),
+                          "file_id": Schema.String,
+                          "filename": Schema.String,
+                          "index": Schema.Number.check(Schema.isFinite())
+                        }),
+                        Schema.Struct({
+                          "type": Schema.Never,
+                          "url": Schema.String,
+                          "title": Schema.String,
+                          "start_index": Schema.Number.check(Schema.isFinite()),
+                          "end_index": Schema.Number.check(Schema.isFinite()),
+                          "file_id": Schema.String,
+                          "filename": Schema.String,
+                          "index": Schema.Number.check(Schema.isFinite())
+                        }),
+                        Schema.Struct({
+                          "type": Schema.Never,
+                          "file_id": Schema.String,
+                          "index": Schema.Number.check(Schema.isFinite()),
+                          "filename": Schema.String
+                        })
+                      ]),
+                      Schema.Union([
+                        Schema.Struct({
+                          "type": Schema.Never,
+                          "file_id": Schema.String,
+                          "filename": Schema.String,
+                          "index": Schema.Number.check(Schema.isFinite()),
+                          "url": Schema.String,
+                          "title": Schema.String,
+                          "start_index": Schema.Number.check(Schema.isFinite()),
+                          "end_index": Schema.Number.check(Schema.isFinite())
+                        }),
+                        Schema.Struct({
+                          "type": Schema.Literal("url_citation"),
+                          "url": Schema.String,
+                          "title": Schema.String,
+                          "start_index": Schema.Number.check(Schema.isFinite()),
+                          "end_index": Schema.Number.check(Schema.isFinite())
+                        }),
+                        Schema.Struct({
+                          "type": Schema.Never,
+                          "file_id": Schema.String,
+                          "index": Schema.Number.check(Schema.isFinite()),
+                          "url": Schema.String,
+                          "title": Schema.String,
+                          "start_index": Schema.Number.check(Schema.isFinite()),
+                          "end_index": Schema.Number.check(Schema.isFinite())
+                        })
+                      ]),
+                      Schema.Union([
+                        Schema.Struct({
+                          "type": Schema.Never,
+                          "file_id": Schema.String,
+                          "filename": Schema.String,
+                          "index": Schema.Number.check(Schema.isFinite())
+                        }),
+                        Schema.Struct({
+                          "type": Schema.Never,
+                          "url": Schema.String,
+                          "title": Schema.String,
+                          "start_index": Schema.Number.check(Schema.isFinite()),
+                          "end_index": Schema.Number.check(Schema.isFinite()),
+                          "file_id": Schema.String,
+                          "index": Schema.Number.check(Schema.isFinite())
+                        }),
+                        Schema.Struct({
+                          "type": Schema.Literal("file_path"),
+                          "file_id": Schema.String,
+                          "index": Schema.Number.check(Schema.isFinite())
+                        })
+                      ])
+                    ])
+                  )
+                ),
+                "logprobs": Schema.optionalKey(Schema.Array(Schema.Struct({
+                  "token": Schema.String,
+                  "bytes": Schema.Array(Schema.Number.check(Schema.isFinite())),
+                  "logprob": Schema.Number.check(Schema.isFinite()),
+                  "top_logprobs": Schema.Array(
+                    Schema.Struct({
+                      "token": Schema.String,
+                      "bytes": Schema.Array(Schema.Number.check(Schema.isFinite())),
+                      "logprob": Schema.Number.check(Schema.isFinite())
+                    })
+                  )
+                })))
+              }),
+              Schema.Struct({
+                "type": Schema.Never,
+                "refusal": Schema.String,
+                "text": Schema.String,
+                "annotations": Schema.optionalKey(Schema.Array(OpenAIResponsesAnnotation)),
+                "logprobs": Schema.optionalKey(Schema.Array(Schema.Struct({
+                  "token": Schema.String,
+                  "bytes": Schema.Array(Schema.Number.check(Schema.isFinite())),
+                  "logprob": Schema.Number.check(Schema.isFinite()),
+                  "top_logprobs": Schema.Array(
+                    Schema.Struct({
+                      "token": Schema.String,
+                      "bytes": Schema.Array(Schema.Number.check(Schema.isFinite())),
+                      "logprob": Schema.Number.check(Schema.isFinite())
+                    })
+                  )
+                })))
+              })
+            ]),
+            Schema.Union([
+              Schema.Struct({
+                "type": Schema.Never,
+                "text": Schema.String,
+                "annotations": Schema.optionalKey(Schema.Array(OpenAIResponsesAnnotation)),
+                "logprobs": Schema.optionalKey(Schema.Array(Schema.Struct({
+                  "token": Schema.String,
+                  "bytes": Schema.Array(Schema.Number.check(Schema.isFinite())),
+                  "logprob": Schema.Number.check(Schema.isFinite()),
+                  "top_logprobs": Schema.Array(
+                    Schema.Struct({
+                      "token": Schema.String,
+                      "bytes": Schema.Array(Schema.Number.check(Schema.isFinite())),
+                      "logprob": Schema.Number.check(Schema.isFinite())
+                    })
+                  )
+                }))),
+                "refusal": Schema.String
+              }),
+              Schema.Struct({ "type": Schema.Literal("refusal"), "refusal": Schema.String })
+            ])
+          ])),
+          Schema.Array(Schema.Union([ResponseOutputText, OpenAIResponsesRefusalContent]))
+        ]),
+        "phase": Schema.optionalKey(
+          Schema.Union([Schema.Literal("commentary"), Schema.Literal("final_answer"), Schema.Unknown]).annotate({
+            "description":
+              "The phase of an assistant message. Use `commentary` for an intermediate assistant message and `final_answer` for the final assistant message. For follow-up requests with models like `gpt-5.3-codex` and later, preserve and resend phase on all assistant messages. Omitting it can degrade performance. Not used for user messages."
+          })
+        )
+      }).annotate({ "description": "An output message item" }),
+      Schema.Struct({
+        "type": Schema.Literal("reasoning"),
+        "id": Schema.String,
+        "content": Schema.optionalKey(
+          Schema.Array(Schema.Struct({ "type": Schema.Literal("reasoning_text"), "text": Schema.String }))
+        ),
+        "summary": Schema.Array(Schema.Struct({ "type": Schema.Literal("summary_text"), "text": Schema.String })),
+        "encrypted_content": Schema.optionalKey(Schema.String),
+        "status": Schema.optionalKey(Schema.Literals(["completed", "incomplete", "in_progress"])),
+        "signature": Schema.optionalKey(
+          Schema.String.annotate({ "description": "A signature for the reasoning content, used for verification" })
+        ),
+        "format": Schema.optionalKey(
+          Schema.Literals([
+            "unknown",
+            "openai-responses-v1",
+            "azure-openai-responses-v1",
+            "xai-responses-v1",
+            "anthropic-claude-v1",
+            "google-gemini-v1"
+          ]).annotate({ "description": "The format of the reasoning content" })
+        )
+      }).annotate({ "description": "An output item containing reasoning" }),
+      ResponsesOutputItemFunctionCall,
+      ResponsesWebSearchCallOutput,
+      ResponsesOutputItemFileSearchCall,
+      ResponsesImageGenerationCall
+    ])
+  )
+]).annotate({ "description": "Input for a response request - can be a string or array of items" })
 export type UserMessage = {
   readonly "role": "user"
   readonly "content": string | ReadonlyArray<ChatMessageContentItem>
@@ -4654,20 +7134,37 @@ export type UserMessage = {
 }
 export const UserMessage = Schema.Struct({
   "role": Schema.Literal("user"),
-  "content": Schema.Union([Schema.String, Schema.Array(ChatMessageContentItem)]),
-  "name": Schema.optionalKey(Schema.String)
-})
+  "content": Schema.Union([Schema.String, Schema.Array(ChatMessageContentItem)]).annotate({
+    "description": "User message content"
+  }),
+  "name": Schema.optionalKey(Schema.String.annotate({ "description": "Optional name for the user" }))
+}).annotate({ "description": "User message" })
+export type ToolResponseMessage = {
+  readonly "role": "tool"
+  readonly "content": string | ReadonlyArray<ChatMessageContentItem>
+  readonly "tool_call_id": string
+}
+export const ToolResponseMessage = Schema.Struct({
+  "role": Schema.Literal("tool"),
+  "content": Schema.Union([Schema.String, Schema.Array(ChatMessageContentItem)]).annotate({
+    "description": "Tool response content"
+  }),
+  "tool_call_id": Schema.String.annotate({
+    "description": "ID of the assistant message tool call this message responds to"
+  })
+}).annotate({ "description": "Tool response message" })
 export type AssistantMessage = {
   readonly "role": "assistant"
-  readonly "content"?: string | ReadonlyArray<ChatMessageContentItem> | null
+  readonly "content"?: string | ReadonlyArray<ChatMessageContentItem> | unknown
   readonly "name"?: string
   readonly "tool_calls"?: ReadonlyArray<ChatMessageToolCall>
-  readonly "refusal"?: string | null
-  readonly "reasoning"?: string | null
-  readonly "reasoning_details"?: ReadonlyArray<__schema20>
+  readonly "refusal"?: string
+  readonly "reasoning"?: string
+  readonly "reasoning_details"?: AssistantMessageReasoningDetails
   readonly "images"?:
     | ReadonlyArray<{ readonly "type": "image_url"; readonly "image_url": { readonly "url": string } }>
     | null
+  readonly "audio"?: ChatCompletionAudioOutput
   readonly "annotations"?:
     | ReadonlyArray<
       {
@@ -4696,13 +7193,116 @@ export type AssistantMessage = {
 export const AssistantMessage = Schema.Struct({
   "role": Schema.Literal("assistant"),
   "content": Schema.optionalKey(
-    Schema.Union([Schema.Union([Schema.String, Schema.Array(ChatMessageContentItem)]), Schema.Null])
+    Schema.Union([Schema.String, Schema.Array(ChatMessageContentItem), Schema.Unknown]).annotate({
+      "description": "Assistant message content"
+    })
   ),
-  "name": Schema.optionalKey(Schema.String),
-  "tool_calls": Schema.optionalKey(Schema.Array(ChatMessageToolCall)),
-  "refusal": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null])),
-  "reasoning": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null])),
-  "reasoning_details": Schema.optionalKey(Schema.Array(__schema20)),
+  "name": Schema.optionalKey(Schema.String.annotate({ "description": "Optional name for the assistant" })),
+  "tool_calls": Schema.optionalKey(
+    Schema.Array(ChatMessageToolCall).annotate({ "description": "Tool calls made by the assistant" })
+  ),
+  "refusal": Schema.optionalKey(Schema.String.annotate({ "description": "Refusal message if content was refused" })),
+  "reasoning": Schema.optionalKey(Schema.String.annotate({ "description": "Reasoning output" })),
+  "reasoning_details": Schema.optionalKey(AssistantMessageReasoningDetails),
+  "images": Schema.optionalKey(
+    Schema.Union([
+      Schema.Array(
+        Schema.Struct({ "type": Schema.Literal("image_url"), "image_url": Schema.Struct({ "url": Schema.String }) })
+      ),
+      Schema.Null
+    ])
+  ),
+  "audio": Schema.optionalKey(ChatCompletionAudioOutput),
+  "annotations": Schema.optionalKey(Schema.Union([
+    Schema.Array(Schema.Union([
+      Schema.Struct({
+        "type": Schema.Literal("url_citation"),
+        "url_citation": Schema.Struct({
+          "url": Schema.String,
+          "title": Schema.optionalKey(Schema.String),
+          "start_index": Schema.optionalKey(Schema.Number.check(Schema.isFinite())),
+          "end_index": Schema.optionalKey(Schema.Number.check(Schema.isFinite())),
+          "content": Schema.optionalKey(Schema.String)
+        })
+      }),
+      Schema.Struct({
+        "type": Schema.Literal("file_annotation"),
+        "file_annotation": Schema.Struct({ "file_id": Schema.String, "quote": Schema.optionalKey(Schema.String) })
+      }),
+      Schema.Struct({
+        "type": Schema.Literal("file"),
+        "file": Schema.Struct({
+          "hash": Schema.String,
+          "name": Schema.String,
+          "content": Schema.optionalKey(
+            Schema.Array(Schema.Struct({ "type": Schema.String, "text": Schema.optionalKey(Schema.String) }))
+          )
+        })
+      })
+    ], { mode: "oneOf" })),
+    Schema.Null
+  ]))
+}).annotate({ "description": "Assistant message for requests and responses" })
+export type ChatStreamingMessageChunk = {
+  readonly "role"?: "assistant"
+  readonly "content"?: string
+  readonly "reasoning"?: string
+  readonly "refusal"?: string
+  readonly "tool_calls"?: ReadonlyArray<ChatStreamingMessageToolCall>
+  readonly "reasoning_details"?: AssistantMessageReasoningDetails
+  readonly "audio"?: {
+    readonly "id"?: string
+    readonly "expires_at"?: number
+    readonly "data"?: string
+    readonly "transcript"?: string
+  }
+  readonly "images"?:
+    | ReadonlyArray<{ readonly "type": "image_url"; readonly "image_url": { readonly "url": string } }>
+    | null
+  readonly "annotations"?:
+    | ReadonlyArray<
+      {
+        readonly "type": "url_citation"
+        readonly "url_citation": {
+          readonly "url": string
+          readonly "title"?: string
+          readonly "start_index"?: number
+          readonly "end_index"?: number
+          readonly "content"?: string
+        }
+      } | {
+        readonly "type": "file_annotation"
+        readonly "file_annotation": { readonly "file_id": string; readonly "quote"?: string }
+      } | {
+        readonly "type": "file"
+        readonly "file": {
+          readonly "hash": string
+          readonly "name": string
+          readonly "content"?: ReadonlyArray<{ readonly "type": string; readonly "text"?: string }>
+        }
+      }
+    >
+    | null
+}
+export const ChatStreamingMessageChunk = Schema.Struct({
+  "role": Schema.optionalKey(Schema.Literal("assistant").annotate({ "description": "The role of the message author" })),
+  "content": Schema.optionalKey(Schema.String.annotate({ "description": "Message content delta" })),
+  "reasoning": Schema.optionalKey(Schema.String.annotate({ "description": "Reasoning content delta" })),
+  "refusal": Schema.optionalKey(Schema.String.annotate({ "description": "Refusal message delta" })),
+  "tool_calls": Schema.optionalKey(
+    Schema.Array(ChatStreamingMessageToolCall).annotate({ "description": "Tool calls delta" })
+  ),
+  "reasoning_details": Schema.optionalKey(AssistantMessageReasoningDetails),
+  "audio": Schema.optionalKey(
+    Schema.Struct({
+      "id": Schema.optionalKey(Schema.String.annotate({ "description": "Audio output identifier" })),
+      "expires_at": Schema.optionalKey(
+        Schema.Number.annotate({ "description": "Audio expiration timestamp" }).check(Schema.isFinite())
+      ),
+      "data": Schema.optionalKey(Schema.String.annotate({ "description": "Base64 encoded audio data" })),
+      "transcript": Schema.optionalKey(Schema.String.annotate({ "description": "Audio transcript" }))
+    }).annotate({ "description": "Audio output data" })
+  ),
   "images": Schema.optionalKey(
     Schema.Union([
       Schema.Array(
@@ -4740,17 +7340,9 @@ export const AssistantMessage = Schema.Struct({
     ], { mode: "oneOf" })),
     Schema.Null
   ]))
-})
-export type ToolResponseMessage = {
-  readonly "role": "tool"
-  readonly "content": string | ReadonlyArray<ChatMessageContentItem>
-  readonly "tool_call_id": string
-}
-export const ToolResponseMessage = Schema.Struct({
-  "role": Schema.Literal("tool"),
-  "content": Schema.Union([Schema.String, Schema.Array(ChatMessageContentItem)]),
-  "tool_call_id": Schema.String
-})
+}).annotate({ "description": "Delta changes in streaming response" })
+export type ModelsListResponseData = ReadonlyArray<Model>
+export const ModelsListResponseData = Schema.Array(Model).annotate({ "description": "List of available models" })
 export type OpenAIResponsesInput =
   | string
   | ReadonlyArray<
@@ -4760,6 +7352,7 @@ export type OpenAIResponsesInput =
       readonly "content":
         | ReadonlyArray<ResponseInputText | ResponseInputImage | ResponseInputFile | ResponseInputAudio>
         | string
+      readonly "phase"?: "commentary" | "final_answer" | unknown
     }
     | {
       readonly "id": string
@@ -4771,7 +7364,7 @@ export type OpenAIResponsesInput =
       readonly "type": "function_call_output"
       readonly "id"?: string
       readonly "call_id": string
-      readonly "output": string
+      readonly "output": string | ReadonlyArray<ResponseInputText | ResponseInputImage | ResponseInputFile>
       readonly "status"?: ToolCallStatus
     }
     | {
@@ -4799,7 +7392,10 @@ export const OpenAIResponsesInput = Schema.Union([
           })
         ),
         Schema.String
-      ])
+      ]),
+      "phase": Schema.optionalKey(
+        Schema.Union([Schema.Literal("commentary"), Schema.Literal("final_answer"), Schema.Unknown])
+      )
     }),
     Schema.Struct({
       "id": Schema.String,
@@ -4813,7 +7409,10 @@ export const OpenAIResponsesInput = Schema.Union([
       "type": Schema.Literal("function_call_output"),
       "id": Schema.optionalKey(Schema.String),
       "call_id": Schema.String,
-      "output": Schema.String,
+      "output": Schema.Union([
+        Schema.String,
+        Schema.Array(Schema.Union([ResponseInputText, ResponseInputImage, ResponseInputFile], { mode: "oneOf" }))
+      ]),
       "status": Schema.optionalKey(ToolCallStatus)
     }),
     Schema.Struct({
@@ -4879,81 +7478,360 @@ export const OpenResponsesOutputItemDoneEvent = Schema.Struct({
   ], { mode: "oneOf" }),
   "sequence_number": Schema.Number.check(Schema.isFinite())
 }).annotate({ "description": "Event emitted when an output item is complete" })
-export type OpenResponsesInput =
-  | string
-  | ReadonlyArray<
-    | OpenResponsesReasoning
-    | OpenResponsesEasyInputMessage
-    | OpenResponsesInputMessageItem
-    | OpenResponsesFunctionToolCall
-    | OpenResponsesFunctionCallOutput
-    | ResponsesOutputMessage
-    | ResponsesOutputItemReasoning
-    | ResponsesOutputItemFunctionCall
-    | ResponsesWebSearchCallOutput
-    | ResponsesOutputItemFileSearchCall
-    | ResponsesImageGenerationCall
+export type OpenResponsesRequest = {
+  readonly "input"?: OpenResponsesInput
+  readonly "instructions"?: string
+  readonly "metadata"?: OpenResponsesRequestMetadata
+  readonly "tools"?: ReadonlyArray<
+    | {
+      readonly "type": "function"
+      readonly "name": string
+      readonly "description"?: string
+      readonly "strict"?: boolean
+      readonly "parameters": {}
+    }
+    | OpenResponsesWebSearchPreviewTool
+    | OpenResponsesWebSearchPreview20250311Tool
+    | OpenResponsesWebSearchTool
+    | OpenResponsesWebSearch20250826Tool
+    | OpenResponsesFileSearchTool
+    | OpenResponsesComputerTool
+    | OpenResponsesCodeInterpreterTool
+    | OpenResponsesMcpTool
+    | OpenResponsesImageGenerationTool
+    | OpenResponsesLocalShellTool
+    | OpenResponsesFunctionShellTool
+    | OpenResponsesApplyPatchTool
+    | OpenResponsesCustomTool
+    | DatetimeServerTool
+    | WebSearchServerTool
   >
-export const OpenResponsesInput = Schema.Union([
-  Schema.String,
-  Schema.Array(
-    Schema.Union([
-      OpenResponsesReasoning,
-      OpenResponsesEasyInputMessage,
-      OpenResponsesInputMessageItem,
-      OpenResponsesFunctionToolCall,
-      OpenResponsesFunctionCallOutput,
-      ResponsesOutputMessage,
-      ResponsesOutputItemReasoning,
-      ResponsesOutputItemFunctionCall,
-      ResponsesWebSearchCallOutput,
-      ResponsesOutputItemFileSearchCall,
-      ResponsesImageGenerationCall
-    ])
-  )
-]).annotate({ "description": "Input for a response request - can be a string or array of items" })
-export type ModelsListResponse = { readonly "data": ModelsListResponseData }
-export const ModelsListResponse = Schema.Struct({ "data": ModelsListResponseData }).annotate({
-  "description": "List of available models"
-})
-export type ChatStreamingResponseChunk = {
-  readonly "data": {
-    readonly "id": string
-    readonly "choices": ReadonlyArray<ChatStreamingChoice>
-    readonly "created": number
-    readonly "model": string
-    readonly "object": "chat.completion.chunk"
-    readonly "system_fingerprint"?: string | null
-    readonly "error"?: { readonly "message": string; readonly "code": number }
-    readonly "usage"?: ChatGenerationTokenUsage
+  readonly "tool_choice"?: OpenAIResponsesToolChoice
+  readonly "parallel_tool_calls"?: boolean
+  readonly "model"?: string
+  readonly "models"?: ReadonlyArray<string>
+  readonly "text"?: OpenResponsesResponseText
+  readonly "reasoning"?: OpenResponsesReasoningConfig
+  readonly "max_output_tokens"?: number
+  readonly "temperature"?: number
+  readonly "top_p"?: number
+  readonly "top_logprobs"?: number
+  readonly "max_tool_calls"?: number
+  readonly "presence_penalty"?: number
+  readonly "frequency_penalty"?: number
+  readonly "top_k"?: number
+  readonly "image_config"?: {}
+  readonly "modalities"?: ReadonlyArray<ResponsesOutputModality>
+  readonly "prompt_cache_key"?: string
+  readonly "previous_response_id"?: string
+  readonly "prompt"?: OpenAIResponsesPrompt
+  readonly "include"?: ReadonlyArray<OpenAIResponsesIncludable>
+  readonly "background"?: boolean
+  readonly "safety_identifier"?: string
+  readonly "store"?: false
+  readonly "service_tier"?: "auto"
+  readonly "truncation"?: "auto" | "disabled"
+  readonly "stream"?: boolean
+  readonly "provider"?: {
+    readonly "allow_fallbacks"?: boolean
+    readonly "require_parameters"?: boolean
+    readonly "data_collection"?: DataCollection
+    readonly "zdr"?: boolean
+    readonly "enforce_distillable_text"?: boolean
+    readonly "order"?: ReadonlyArray<ProviderName | string>
+    readonly "only"?: ReadonlyArray<ProviderName | string>
+    readonly "ignore"?: ReadonlyArray<ProviderName | string>
+    readonly "quantizations"?: ReadonlyArray<Quantization>
+    readonly "sort"?: ProviderSort | ProviderSortConfig | unknown
+    readonly "max_price"?: {
+      readonly "prompt"?: BigNumberUnion
+      readonly "completion"?: string
+      readonly "image"?: string
+      readonly "audio"?: string
+      readonly "request"?: string
+    }
+    readonly "preferred_min_throughput"?: PreferredMinThroughput
+    readonly "preferred_max_latency"?: PreferredMaxLatency
+  }
+  readonly "plugins"?: ReadonlyArray<
+    | { readonly "id": "auto-router"; readonly "enabled"?: boolean; readonly "allowed_models"?: ReadonlyArray<string> }
+    | { readonly "id": "moderation" }
+    | {
+      readonly "id": "web"
+      readonly "enabled"?: boolean
+      readonly "max_results"?: number
+      readonly "search_prompt"?: string
+      readonly "engine"?: WebSearchEngine
+      readonly "include_domains"?: ReadonlyArray<string>
+      readonly "exclude_domains"?: ReadonlyArray<string>
+    }
+    | { readonly "id": "file-parser"; readonly "enabled"?: boolean; readonly "pdf"?: PDFParserOptions }
+    | { readonly "id": "response-healing"; readonly "enabled"?: boolean }
+  >
+  readonly "route"?: "fallback" | "sort"
+  readonly "user"?: string
+  readonly "session_id"?: string
+  readonly "trace"?: {
+    readonly "trace_id"?: string
+    readonly "trace_name"?: string
+    readonly "span_name"?: string
+    readonly "generation_name"?: string
+    readonly "parent_span_id"?: string
   }
 }
-export const ChatStreamingResponseChunk = Schema.Struct({
-  "data": Schema.Struct({
-    "id": Schema.String,
-    "choices": Schema.Array(ChatStreamingChoice),
-    "created": Schema.Number.check(Schema.isFinite()),
-    "model": Schema.String,
-    "object": Schema.Literal("chat.completion.chunk"),
-    "system_fingerprint": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null])),
-    "error": Schema.optionalKey(
-      Schema.Struct({ "message": Schema.String, "code": Schema.Number.check(Schema.isFinite()) })
-    ),
-    "usage": Schema.optionalKey(ChatGenerationTokenUsage)
-  })
-})
+export const OpenResponsesRequest = Schema.Struct({
+  "input": Schema.optionalKey(OpenResponsesInput),
+  "instructions": Schema.optionalKey(Schema.String),
+  "metadata": Schema.optionalKey(OpenResponsesRequestMetadata),
+  "tools": Schema.optionalKey(
+    Schema.Array(
+      Schema.Union([
+        Schema.Struct({
+          "type": Schema.Literal("function"),
+          "name": Schema.String,
+          "description": Schema.optionalKey(Schema.String),
+          "strict": Schema.optionalKey(Schema.Boolean),
+          "parameters": Schema.Struct({})
+        }).annotate({ "description": "Function tool definition" }),
+        OpenResponsesWebSearchPreviewTool,
+        OpenResponsesWebSearchPreview20250311Tool,
+        OpenResponsesWebSearchTool,
+        OpenResponsesWebSearch20250826Tool,
+        OpenResponsesFileSearchTool,
+        OpenResponsesComputerTool,
+        OpenResponsesCodeInterpreterTool,
+        OpenResponsesMcpTool,
+        OpenResponsesImageGenerationTool,
+        OpenResponsesLocalShellTool,
+        OpenResponsesFunctionShellTool,
+        OpenResponsesApplyPatchTool,
+        OpenResponsesCustomTool,
+        DatetimeServerTool,
+        WebSearchServerTool
+      ])
+    )
+  ),
+  "tool_choice": Schema.optionalKey(OpenAIResponsesToolChoice),
+  "parallel_tool_calls": Schema.optionalKey(Schema.Boolean),
+  "model": Schema.optionalKey(Schema.String),
+  "models": Schema.optionalKey(Schema.Array(Schema.String)),
+  "text": Schema.optionalKey(OpenResponsesResponseText),
+  "reasoning": Schema.optionalKey(OpenResponsesReasoningConfig),
+  "max_output_tokens": Schema.optionalKey(Schema.Number.check(Schema.isFinite())),
+  "temperature": Schema.optionalKey(
+    Schema.Number.check(Schema.isFinite()).check(Schema.isGreaterThanOrEqualTo(0)).check(Schema.isLessThanOrEqualTo(2))
+  ),
+  "top_p": Schema.optionalKey(Schema.Number.check(Schema.isFinite()).check(Schema.isGreaterThanOrEqualTo(0))),
+  "top_logprobs": Schema.optionalKey(
+    Schema.Number.check(Schema.isInt()).check(Schema.isGreaterThanOrEqualTo(0)).check(Schema.isLessThanOrEqualTo(20))
+  ),
+  "max_tool_calls": Schema.optionalKey(Schema.Number.check(Schema.isInt())),
+  "presence_penalty": Schema.optionalKey(
+    Schema.Number.check(Schema.isFinite()).check(Schema.isGreaterThanOrEqualTo(-2)).check(Schema.isLessThanOrEqualTo(2))
+  ),
+  "frequency_penalty": Schema.optionalKey(
+    Schema.Number.check(Schema.isFinite()).check(Schema.isGreaterThanOrEqualTo(-2)).check(Schema.isLessThanOrEqualTo(2))
+  ),
+  "top_k": Schema.optionalKey(Schema.Number.check(Schema.isFinite())),
+  "image_config": Schema.optionalKey(
+    Schema.Struct({}).annotate({
+      "description":
+        "Provider-specific image configuration options. Keys and values vary by model/provider. See https://openrouter.ai/docs/features/multimodal/image-generation for more details."
+    })
+  ),
+  "modalities": Schema.optionalKey(
+    Schema.Array(ResponsesOutputModality).annotate({
+      "description": "Output modalities for the response. Supported values are \"text\" and \"image\"."
+    })
+  ),
+  "prompt_cache_key": Schema.optionalKey(Schema.String),
+  "previous_response_id": Schema.optionalKey(Schema.String),
+  "prompt": Schema.optionalKey(OpenAIResponsesPrompt),
+  "include": Schema.optionalKey(Schema.Array(OpenAIResponsesIncludable)),
+  "background": Schema.optionalKey(Schema.Boolean),
+  "safety_identifier": Schema.optionalKey(Schema.String),
+  "store": Schema.optionalKey(Schema.Literal(false)),
+  "service_tier": Schema.optionalKey(Schema.Literal("auto")),
+  "truncation": Schema.optionalKey(Schema.Literals(["auto", "disabled"])),
+  "stream": Schema.optionalKey(Schema.Boolean),
+  "provider": Schema.optionalKey(
+    Schema.Struct({
+      "allow_fallbacks": Schema.optionalKey(Schema.Boolean.annotate({
+        "description":
+          "Whether to allow backup providers to serve requests\n- true: (default) when the primary provider (or your custom providers in \"order\") is unavailable, use the next best provider.\n- false: use only the primary/custom provider, and return the upstream error if it's unavailable.\n"
+      })),
+      "require_parameters": Schema.optionalKey(
+        Schema.Boolean.annotate({
+          "description":
+            "Whether to filter providers to only those that support the parameters you've provided. If this setting is omitted or set to false, then providers will receive only the parameters they support, and ignore the rest."
+        })
+      ),
+      "data_collection": Schema.optionalKey(DataCollection),
+      "zdr": Schema.optionalKey(
+        Schema.Boolean.annotate({
+          "description":
+            "Whether to restrict routing to only ZDR (Zero Data Retention) endpoints. When true, only endpoints that do not retain prompts will be used."
+        })
+      ),
+      "enforce_distillable_text": Schema.optionalKey(
+        Schema.Boolean.annotate({
+          "description":
+            "Whether to restrict routing to only models that allow text distillation. When true, only models where the author has allowed distillation will be used."
+        })
+      ),
+      "order": Schema.optionalKey(
+        Schema.Array(Schema.Union([ProviderName, Schema.String])).annotate({
+          "description":
+            "An ordered list of provider slugs. The router will attempt to use the first provider in the subset of this list that supports your requested model, and fall back to the next if it is unavailable. If no providers are available, the request will fail with an error message."
+        })
+      ),
+      "only": Schema.optionalKey(
+        Schema.Array(Schema.Union([ProviderName, Schema.String])).annotate({
+          "description":
+            "List of provider slugs to allow. If provided, this list is merged with your account-wide allowed provider settings for this request."
+        })
+      ),
+      "ignore": Schema.optionalKey(
+        Schema.Array(Schema.Union([ProviderName, Schema.String])).annotate({
+          "description":
+            "List of provider slugs to ignore. If provided, this list is merged with your account-wide ignored provider settings for this request."
+        })
+      ),
+      "quantizations": Schema.optionalKey(
+        Schema.Array(Quantization).annotate({
+          "description": "A list of quantization levels to filter the provider by."
+        })
+      ),
+      "sort": Schema.optionalKey(
+        Schema.Union([ProviderSort, ProviderSortConfig, Schema.Unknown]).annotate({
+          "description":
+            "The sorting strategy to use for this request, if \"order\" is not specified. When set, no load balancing is performed."
+        })
+      ),
+      "max_price": Schema.optionalKey(
+        Schema.Struct({
+          "prompt": Schema.optionalKey(BigNumberUnion),
+          "completion": Schema.optionalKey(
+            Schema.String.annotate({ "description": "Price per million completion tokens" })
+          ),
+          "image": Schema.optionalKey(Schema.String.annotate({ "description": "Price per image" })),
+          "audio": Schema.optionalKey(Schema.String.annotate({ "description": "Price per audio unit" })),
+          "request": Schema.optionalKey(Schema.String.annotate({ "description": "Price per request" }))
+        }).annotate({
+          "description":
+            "The object specifying the maximum price you want to pay for this request. USD price per million tokens, for prompt and completion."
+        })
+      ),
+      "preferred_min_throughput": Schema.optionalKey(PreferredMinThroughput),
+      "preferred_max_latency": Schema.optionalKey(PreferredMaxLatency)
+    }).annotate({
+      "description": "When multiple model providers are available, optionally indicate your routing preference."
+    })
+  ),
+  "plugins": Schema.optionalKey(
+    Schema.Array(Schema.Union([
+      Schema.Struct({
+        "id": Schema.Literal("auto-router"),
+        "enabled": Schema.optionalKey(
+          Schema.Boolean.annotate({
+            "description": "Set to false to disable the auto-router plugin for this request. Defaults to true."
+          })
+        ),
+        "allowed_models": Schema.optionalKey(
+          Schema.Array(Schema.String).annotate({
+            "description":
+              "List of model patterns to filter which models the auto-router can route between. Supports wildcards (e.g., \"anthropic/*\" matches all Anthropic models). When not specified, uses the default supported models list."
+          })
+        )
+      }),
+      Schema.Struct({ "id": Schema.Literal("moderation") }),
+      Schema.Struct({
+        "id": Schema.Literal("web"),
+        "enabled": Schema.optionalKey(
+          Schema.Boolean.annotate({
+            "description": "Set to false to disable the web-search plugin for this request. Defaults to true."
+          })
+        ),
+        "max_results": Schema.optionalKey(Schema.Number.check(Schema.isFinite())),
+        "search_prompt": Schema.optionalKey(Schema.String),
+        "engine": Schema.optionalKey(WebSearchEngine),
+        "include_domains": Schema.optionalKey(
+          Schema.Array(Schema.String).annotate({
+            "description":
+              "A list of domains to restrict web search results to. Supports wildcards (e.g. \"*.substack.com\") and path filtering (e.g. \"openai.com/blog\")."
+          })
+        ),
+        "exclude_domains": Schema.optionalKey(
+          Schema.Array(Schema.String).annotate({
+            "description":
+              "A list of domains to exclude from web search results. Supports wildcards (e.g. \"*.substack.com\") and path filtering (e.g. \"openai.com/blog\")."
+          })
+        )
+      }),
+      Schema.Struct({
+        "id": Schema.Literal("file-parser"),
+        "enabled": Schema.optionalKey(
+          Schema.Boolean.annotate({
+            "description": "Set to false to disable the file-parser plugin for this request. Defaults to true."
+          })
+        ),
+        "pdf": Schema.optionalKey(PDFParserOptions)
+      }),
+      Schema.Struct({
+        "id": Schema.Literal("response-healing"),
+        "enabled": Schema.optionalKey(
+          Schema.Boolean.annotate({
+            "description": "Set to false to disable the response-healing plugin for this request. Defaults to true."
+          })
+        )
+      })
+    ], { mode: "oneOf" })).annotate({
+      "description": "Plugins you want to enable for this request, including their settings."
+    })
+  ),
+  "route": Schema.optionalKey(
+    Schema.Literals(["fallback", "sort"]).annotate({
+      "description":
+        "**DEPRECATED** Use providers.sort.partition instead. Backwards-compatible alias for providers.sort.partition. Accepts legacy values: \"fallback\" (maps to \"model\"), \"sort\" (maps to \"none\")."
+    })
+  ),
+  "user": Schema.optionalKey(
+    Schema.String.annotate({
+      "description":
+        "A unique identifier representing your end-user, which helps distinguish between different users of your app. This allows your app to identify specific users in case of abuse reports, preventing your entire app from being affected by the actions of individual users. Maximum of 128 characters."
+    }).check(Schema.isMaxLength(128))
+  ),
+  "session_id": Schema.optionalKey(
+    Schema.String.annotate({
+      "description":
+        "A unique identifier for grouping related requests (e.g., a conversation or agent workflow) for observability. If provided in both the request body and the x-session-id header, the body value takes precedence. Maximum of 128 characters."
+    }).check(Schema.isMaxLength(128))
+  ),
+  "trace": Schema.optionalKey(
+    Schema.Struct({
+      "trace_id": Schema.optionalKey(Schema.String),
+      "trace_name": Schema.optionalKey(Schema.String),
+      "span_name": Schema.optionalKey(Schema.String),
+      "generation_name": Schema.optionalKey(Schema.String),
+      "parent_span_id": Schema.optionalKey(Schema.String)
+    }).annotate({
+      "description":
+        "Metadata for observability and tracing. Known keys (trace_id, trace_name, span_name, generation_name, parent_span_id) have special handling. Additional keys are passed through as custom metadata to configured broadcast destinations."
+    })
+  )
+}).annotate({ "description": "Request schema for Responses endpoint" })
 export type ChatResponseChoice = {
-  readonly "finish_reason": __schema26
+  readonly "finish_reason": ChatCompletionFinishReason | unknown | unknown
   readonly "index": number
   readonly "message": AssistantMessage
-  readonly "logprobs"?: ChatMessageTokenLogprobs | null
+  readonly "logprobs"?: ChatMessageTokenLogprobs
 }
 export const ChatResponseChoice = Schema.Struct({
-  "finish_reason": __schema26,
-  "index": Schema.Number.check(Schema.isFinite()),
+  "finish_reason": Schema.Union([ChatCompletionFinishReason, Schema.Unknown, Schema.Unknown]),
+  "index": Schema.Number.annotate({ "description": "Choice index" }).check(Schema.isFinite()),
   "message": AssistantMessage,
-  "logprobs": Schema.optionalKey(Schema.Union([ChatMessageTokenLogprobs, Schema.Null]))
-})
+  "logprobs": Schema.optionalKey(ChatMessageTokenLogprobs)
+}).annotate({ "description": "Chat completion choice" })
 export type Message = SystemMessage | UserMessage | DeveloperMessage | AssistantMessage | ToolResponseMessage
 export const Message = Schema.Union([
   SystemMessage,
@@ -4961,7 +7839,23 @@ export const Message = Schema.Union([
   DeveloperMessage,
   AssistantMessage,
   ToolResponseMessage
-], { mode: "oneOf" })
+], { mode: "oneOf" }).annotate({ "description": "Chat completion message with role-based discrimination" })
+export type ChatStreamingChoice = {
+  readonly "delta": ChatStreamingMessageChunk
+  readonly "finish_reason"?: ChatCompletionFinishReason | unknown | unknown
+  readonly "index": number
+  readonly "logprobs"?: ChatMessageTokenLogprobs
+}
+export const ChatStreamingChoice = Schema.Struct({
+  "delta": ChatStreamingMessageChunk,
+  "finish_reason": Schema.optionalKey(Schema.Union([ChatCompletionFinishReason, Schema.Unknown, Schema.Unknown])),
+  "index": Schema.Number.annotate({ "description": "Choice index" }).check(Schema.isFinite()),
+  "logprobs": Schema.optionalKey(ChatMessageTokenLogprobs)
+}).annotate({ "description": "Streaming completion choice chunk" })
+export type ModelsListResponse = { readonly "data": ModelsListResponseData }
+export const ModelsListResponse = Schema.Struct({ "data": ModelsListResponseData }).annotate({
+  "description": "List of available models"
+})
 export type OpenAIResponsesNonStreamingResponse = {
   readonly "id": string
   readonly "object": "response"
@@ -5005,6 +7899,15 @@ export type OpenAIResponsesNonStreamingResponse = {
     | OpenResponsesWebSearchPreview20250311Tool
     | OpenResponsesWebSearchTool
     | OpenResponsesWebSearch20250826Tool
+    | OpenResponsesFileSearchTool
+    | OpenResponsesComputerTool
+    | OpenResponsesCodeInterpreterTool
+    | OpenResponsesMcpTool
+    | OpenResponsesImageGenerationTool
+    | OpenResponsesLocalShellTool
+    | OpenResponsesFunctionShellTool
+    | OpenResponsesApplyPatchTool
+    | OpenResponsesCustomTool
   >
   readonly "tool_choice": OpenAIResponsesToolChoice
   readonly "parallel_tool_calls": boolean
@@ -5062,7 +7965,16 @@ export const OpenAIResponsesNonStreamingResponse = Schema.Struct({
       OpenResponsesWebSearchPreviewTool,
       OpenResponsesWebSearchPreview20250311Tool,
       OpenResponsesWebSearchTool,
-      OpenResponsesWebSearch20250826Tool
+      OpenResponsesWebSearch20250826Tool,
+      OpenResponsesFileSearchTool,
+      OpenResponsesComputerTool,
+      OpenResponsesCodeInterpreterTool,
+      OpenResponsesMcpTool,
+      OpenResponsesImageGenerationTool,
+      OpenResponsesLocalShellTool,
+      OpenResponsesFunctionShellTool,
+      OpenResponsesApplyPatchTool,
+      OpenResponsesCustomTool
     ], { mode: "oneOf" })
   ),
   "tool_choice": OpenAIResponsesToolChoice,
@@ -5193,6 +8105,14 @@ export type OpenResponsesNonStreamingResponse = {
           readonly "refusal": string
         } | { readonly "type": "refusal"; readonly "refusal": string }
       >
+      readonly "phase"?:
+        | "commentary"
+        | "commentary"
+        | "final_answer"
+        | "final_answer"
+        | "commentary"
+        | "final_answer"
+        | unknown
     } | {
       readonly "type": never
       readonly "id": string
@@ -5225,6 +8145,7 @@ export type OpenResponsesNonStreamingResponse = {
         | "anthropic-claude-v1"
         | "google-gemini-v1"
       readonly "role": "assistant"
+      readonly "phase"?: "commentary" | "final_answer" | unknown
     } | {
       readonly "type": never
       readonly "id": string
@@ -5234,12 +8155,23 @@ export type OpenResponsesNonStreamingResponse = {
       readonly "status"?: "completed" | "incomplete" | "in_progress"
       readonly "role": "assistant"
       readonly "content": ReadonlyArray<ResponseOutputText | OpenAIResponsesRefusalContent>
+      readonly "phase"?: "commentary" | "final_answer" | unknown
     } | {
       readonly "type": never
       readonly "id": string
+      readonly "action":
+        | {
+          readonly "type": "search"
+          readonly "query": string
+          readonly "queries"?: ReadonlyArray<string>
+          readonly "sources"?: ReadonlyArray<{ readonly "type": "url"; readonly "url": string }>
+        }
+        | { readonly "type": "open_page"; readonly "url"?: string }
+        | { readonly "type": "find_in_page"; readonly "pattern": string; readonly "url": string }
       readonly "status": "completed" | "in_progress"
       readonly "role": "assistant"
       readonly "content": ReadonlyArray<ResponseOutputText | OpenAIResponsesRefusalContent>
+      readonly "phase"?: "commentary" | "final_answer" | unknown
     } | {
       readonly "type": never
       readonly "id": string
@@ -5247,6 +8179,7 @@ export type OpenResponsesNonStreamingResponse = {
       readonly "status": "completed" | "in_progress"
       readonly "role": "assistant"
       readonly "content": ReadonlyArray<ResponseOutputText | OpenAIResponsesRefusalContent>
+      readonly "phase"?: "commentary" | "final_answer" | unknown
     } | {
       readonly "type": never
       readonly "id": string
@@ -5254,6 +8187,16 @@ export type OpenResponsesNonStreamingResponse = {
       readonly "status": "in_progress" | "completed"
       readonly "role": "assistant"
       readonly "content": ReadonlyArray<ResponseOutputText | OpenAIResponsesRefusalContent>
+      readonly "phase"?: "commentary" | "final_answer" | unknown
+    } | {
+      readonly "type": never
+      readonly "id": string
+      readonly "status": "completed" | "in_progress" | "incomplete"
+      readonly "datetime": string
+      readonly "timezone": string
+      readonly "role": "assistant"
+      readonly "content": ReadonlyArray<ResponseOutputText | OpenAIResponsesRefusalContent>
+      readonly "phase"?: "commentary" | "final_answer" | unknown
     } | {
       readonly "id": string
       readonly "role": "assistant"
@@ -5276,6 +8219,7 @@ export type OpenResponsesNonStreamingResponse = {
           >
         } | { readonly "type": never; readonly "refusal": string; readonly "text": string }
       >
+      readonly "phase"?: "commentary" | "final_answer" | unknown
       readonly "summary": ReadonlyArray<ReasoningSummaryText>
       readonly "encrypted_content"?: string
     } | {
@@ -5306,6 +8250,15 @@ export type OpenResponsesNonStreamingResponse = {
     } | {
       readonly "type": never
       readonly "id": string
+      readonly "action":
+        | {
+          readonly "type": "search"
+          readonly "query": string
+          readonly "queries"?: ReadonlyArray<string>
+          readonly "sources"?: ReadonlyArray<{ readonly "type": "url"; readonly "url": string }>
+        }
+        | { readonly "type": "open_page"; readonly "url"?: string }
+        | { readonly "type": "find_in_page"; readonly "pattern": string; readonly "url": string }
       readonly "status": "completed" | "in_progress"
       readonly "content"?: ReadonlyArray<ReasoningTextContent>
       readonly "summary": ReadonlyArray<ReasoningSummaryText>
@@ -5327,18 +8280,28 @@ export type OpenResponsesNonStreamingResponse = {
       readonly "summary": ReadonlyArray<ReasoningSummaryText>
       readonly "encrypted_content"?: string
     } | {
+      readonly "type": never
+      readonly "id": string
+      readonly "status": "completed" | "in_progress" | "incomplete"
+      readonly "datetime": string
+      readonly "timezone": string
+      readonly "content"?: ReadonlyArray<ReasoningTextContent>
+      readonly "summary": ReadonlyArray<ReasoningSummaryText>
+      readonly "encrypted_content"?: string
+    } | {
       readonly "id": string
       readonly "role": "assistant"
       readonly "type": never
       readonly "status"?: "completed" | "incomplete" | "in_progress"
       readonly "content": ReadonlyArray<ResponseOutputText | OpenAIResponsesRefusalContent>
+      readonly "phase"?: "commentary" | "final_answer" | unknown
       readonly "name": string
       readonly "arguments": string
       readonly "call_id": string
     } | {
       readonly "type": never
       readonly "id": string
-      readonly "content"?: ReadonlyArray<ReasoningTextContent>
+      readonly "content"?: ReadonlyArray<{ readonly "type": "reasoning_text"; readonly "text": string }>
       readonly "summary": ReadonlyArray<ReasoningSummaryText>
       readonly "encrypted_content"?: string
       readonly "status"?: "completed" | "incomplete" | "in_progress"
@@ -5363,6 +8326,15 @@ export type OpenResponsesNonStreamingResponse = {
     } | {
       readonly "type": never
       readonly "id": string
+      readonly "action":
+        | {
+          readonly "type": "search"
+          readonly "query": string
+          readonly "queries"?: ReadonlyArray<string>
+          readonly "sources"?: ReadonlyArray<{ readonly "type": "url"; readonly "url": string }>
+        }
+        | { readonly "type": "open_page"; readonly "url"?: string }
+        | { readonly "type": "find_in_page"; readonly "pattern": string; readonly "url": string }
       readonly "status": "completed" | "in_progress"
       readonly "name": string
       readonly "arguments": string
@@ -5384,15 +8356,34 @@ export type OpenResponsesNonStreamingResponse = {
       readonly "arguments": string
       readonly "call_id": string
     } | {
+      readonly "type": never
+      readonly "id"?: string
+      readonly "status": "completed" | "in_progress" | "incomplete"
+      readonly "datetime": string
+      readonly "timezone": string
+      readonly "name": string
+      readonly "arguments": string
+      readonly "call_id": string
+    } | {
       readonly "id": string
       readonly "role": "assistant"
       readonly "type": never
       readonly "status": "completed" | "in_progress"
       readonly "content": ReadonlyArray<ResponseOutputText | OpenAIResponsesRefusalContent>
+      readonly "phase"?: "commentary" | "final_answer" | unknown
+      readonly "action":
+        | {
+          readonly "type": "search"
+          readonly "query": string
+          readonly "queries"?: ReadonlyArray<string>
+          readonly "sources"?: ReadonlyArray<{ readonly "type": "url"; readonly "url": string }>
+        }
+        | { readonly "type": "open_page"; readonly "url"?: string }
+        | { readonly "type": "find_in_page"; readonly "pattern": string; readonly "url": string }
     } | {
       readonly "type": never
       readonly "id": string
-      readonly "content"?: ReadonlyArray<ReasoningTextContent>
+      readonly "content"?: ReadonlyArray<{ readonly "type": "reasoning_text"; readonly "text": string }>
       readonly "summary": ReadonlyArray<ReasoningSummaryText>
       readonly "encrypted_content"?: string
       readonly "status": "completed" | "in_progress"
@@ -5404,6 +8395,15 @@ export type OpenResponsesNonStreamingResponse = {
         | "xai-responses-v1"
         | "anthropic-claude-v1"
         | "google-gemini-v1"
+      readonly "action":
+        | {
+          readonly "type": "search"
+          readonly "query": string
+          readonly "queries"?: ReadonlyArray<string>
+          readonly "sources"?: ReadonlyArray<{ readonly "type": "url"; readonly "url": string }>
+        }
+        | { readonly "type": "open_page"; readonly "url"?: string }
+        | { readonly "type": "find_in_page"; readonly "pattern": string; readonly "url": string }
     } | {
       readonly "type": never
       readonly "id": string
@@ -5411,31 +8411,115 @@ export type OpenResponsesNonStreamingResponse = {
       readonly "arguments": string
       readonly "call_id": string
       readonly "status": "completed" | "in_progress"
+      readonly "action":
+        | {
+          readonly "type": "search"
+          readonly "query": string
+          readonly "queries"?: ReadonlyArray<string>
+          readonly "sources"?: ReadonlyArray<{ readonly "type": "url"; readonly "url": string }>
+        }
+        | { readonly "type": "open_page"; readonly "url"?: string }
+        | { readonly "type": "find_in_page"; readonly "pattern": string; readonly "url": string }
     } | {
       readonly "type": "web_search_call"
       readonly "id": string
+      readonly "action":
+        | {
+          readonly "type": "search"
+          readonly "query": string
+          readonly "queries"?: ReadonlyArray<string>
+          readonly "sources"?: ReadonlyArray<{ readonly "type": "url"; readonly "url": string }>
+        }
+        | {
+          readonly "type": never
+          readonly "url"?: string
+          readonly "query": string
+          readonly "queries"?: ReadonlyArray<string>
+          readonly "sources"?: ReadonlyArray<{ readonly "type": "url"; readonly "url": string }>
+        }
+        | {
+          readonly "type": never
+          readonly "pattern": string
+          readonly "url": string
+          readonly "query": string
+          readonly "queries"?: ReadonlyArray<string>
+          readonly "sources"?: ReadonlyArray<{ readonly "type": "url"; readonly "url": string }>
+        }
+        | {
+          readonly "type": never
+          readonly "query": string
+          readonly "queries"?: ReadonlyArray<string>
+          readonly "sources"?: ReadonlyArray<{ readonly "type": "url"; readonly "url": string }>
+          readonly "url"?: string
+        }
+        | { readonly "type": "open_page"; readonly "url"?: string }
+        | { readonly "type": never; readonly "pattern": string; readonly "url": string }
+        | {
+          readonly "type": never
+          readonly "query": string
+          readonly "queries"?: ReadonlyArray<string>
+          readonly "sources"?: ReadonlyArray<{ readonly "type": "url"; readonly "url": string }>
+          readonly "pattern": string
+          readonly "url": string
+        }
+        | { readonly "type": never; readonly "url": string; readonly "pattern": string }
+        | { readonly "type": "find_in_page"; readonly "pattern": string; readonly "url": string }
       readonly "status": "completed" | "searching" | "in_progress" | "failed"
     } | {
       readonly "type": never
       readonly "id": string
       readonly "queries": ReadonlyArray<string>
       readonly "status": "completed" | "searching" | "in_progress" | "failed"
+      readonly "action":
+        | {
+          readonly "type": "search"
+          readonly "query": string
+          readonly "queries"?: ReadonlyArray<string>
+          readonly "sources"?: ReadonlyArray<{ readonly "type": "url"; readonly "url": string }>
+        }
+        | { readonly "type": "open_page"; readonly "url"?: string }
+        | { readonly "type": "find_in_page"; readonly "pattern": string; readonly "url": string }
     } | {
       readonly "type": never
       readonly "id": string
       readonly "result"?: string
       readonly "status": "in_progress" | "completed" | "failed"
+      readonly "action":
+        | {
+          readonly "type": "search"
+          readonly "query": string
+          readonly "queries"?: ReadonlyArray<string>
+          readonly "sources"?: ReadonlyArray<{ readonly "type": "url"; readonly "url": string }>
+        }
+        | { readonly "type": "open_page"; readonly "url"?: string }
+        | { readonly "type": "find_in_page"; readonly "pattern": string; readonly "url": string }
+    } | {
+      readonly "type": never
+      readonly "id": string
+      readonly "status": "completed" | "in_progress"
+      readonly "datetime": string
+      readonly "timezone": string
+      readonly "action":
+        | {
+          readonly "type": "search"
+          readonly "query": string
+          readonly "queries"?: ReadonlyArray<string>
+          readonly "sources"?: ReadonlyArray<{ readonly "type": "url"; readonly "url": string }>
+        }
+        | { readonly "type": "open_page"; readonly "url"?: string }
+        | { readonly "type": "find_in_page"; readonly "pattern": string; readonly "url": string }
     } | {
       readonly "id": string
       readonly "role": "assistant"
       readonly "type": never
       readonly "status": "completed" | "in_progress"
       readonly "content": ReadonlyArray<ResponseOutputText | OpenAIResponsesRefusalContent>
+      readonly "phase"?: "commentary" | "final_answer" | unknown
       readonly "queries": ReadonlyArray<string>
     } | {
       readonly "type": never
       readonly "id": string
-      readonly "content"?: ReadonlyArray<ReasoningTextContent>
+      readonly "content"?: ReadonlyArray<{ readonly "type": "reasoning_text"; readonly "text": string }>
       readonly "summary": ReadonlyArray<ReasoningSummaryText>
       readonly "encrypted_content"?: string
       readonly "status": "completed" | "in_progress"
@@ -5459,6 +8543,15 @@ export type OpenResponsesNonStreamingResponse = {
     } | {
       readonly "type": never
       readonly "id": string
+      readonly "action":
+        | {
+          readonly "type": "search"
+          readonly "query": string
+          readonly "queries"?: ReadonlyArray<string>
+          readonly "sources"?: ReadonlyArray<{ readonly "type": "url"; readonly "url": string }>
+        }
+        | { readonly "type": "open_page"; readonly "url"?: string }
+        | { readonly "type": "find_in_page"; readonly "pattern": string; readonly "url": string }
       readonly "status": "completed" | "searching" | "in_progress" | "failed"
       readonly "queries": ReadonlyArray<string>
     } | {
@@ -5473,16 +8566,24 @@ export type OpenResponsesNonStreamingResponse = {
       readonly "status": "in_progress" | "completed" | "failed"
       readonly "queries": ReadonlyArray<string>
     } | {
+      readonly "type": never
+      readonly "id": string
+      readonly "status": "completed" | "in_progress"
+      readonly "datetime": string
+      readonly "timezone": string
+      readonly "queries": ReadonlyArray<string>
+    } | {
       readonly "id": string
       readonly "role": "assistant"
       readonly "type": never
       readonly "status": "completed" | "in_progress"
       readonly "content": ReadonlyArray<ResponseOutputText | OpenAIResponsesRefusalContent>
+      readonly "phase"?: "commentary" | "final_answer" | unknown
       readonly "result"?: string
     } | {
       readonly "type": never
       readonly "id": string
-      readonly "content"?: ReadonlyArray<ReasoningTextContent>
+      readonly "content"?: ReadonlyArray<{ readonly "type": "reasoning_text"; readonly "text": string }>
       readonly "summary": ReadonlyArray<ReasoningSummaryText>
       readonly "encrypted_content"?: string
       readonly "status": "completed" | "in_progress"
@@ -5506,6 +8607,15 @@ export type OpenResponsesNonStreamingResponse = {
     } | {
       readonly "type": never
       readonly "id": string
+      readonly "action":
+        | {
+          readonly "type": "search"
+          readonly "query": string
+          readonly "queries"?: ReadonlyArray<string>
+          readonly "sources"?: ReadonlyArray<{ readonly "type": "url"; readonly "url": string }>
+        }
+        | { readonly "type": "open_page"; readonly "url"?: string }
+        | { readonly "type": "find_in_page"; readonly "pattern": string; readonly "url": string }
       readonly "status": "completed" | "in_progress" | "failed"
       readonly "result"?: string
     } | {
@@ -5519,6 +8629,13 @@ export type OpenResponsesNonStreamingResponse = {
       readonly "id": string
       readonly "result"?: string
       readonly "status": "in_progress" | "completed" | "generating" | "failed"
+    } | {
+      readonly "type": never
+      readonly "id": string
+      readonly "status": "completed" | "in_progress"
+      readonly "datetime": string
+      readonly "timezone": string
+      readonly "result"?: string
     }
   >
   readonly "user"?: string
@@ -5562,6 +8679,15 @@ export type OpenResponsesNonStreamingResponse = {
     | OpenResponsesWebSearchPreview20250311Tool
     | OpenResponsesWebSearchTool
     | OpenResponsesWebSearch20250826Tool
+    | OpenResponsesFileSearchTool
+    | OpenResponsesComputerTool
+    | OpenResponsesCodeInterpreterTool
+    | OpenResponsesMcpTool
+    | OpenResponsesImageGenerationTool
+    | OpenResponsesLocalShellTool
+    | OpenResponsesFunctionShellTool
+    | OpenResponsesApplyPatchTool
+    | OpenResponsesCustomTool
   >
   readonly "tool_choice": OpenAIResponsesToolChoice
   readonly "parallel_tool_calls": boolean
@@ -5728,7 +8854,26 @@ export const OpenResponsesNonStreamingResponse = Schema.Struct({
             }),
             Schema.Struct({ "type": Schema.Literal("refusal"), "refusal": Schema.String })
           ])
-        ]))
+        ])),
+        "phase": Schema.optionalKey(
+          Schema.Union([
+            Schema.Literals(["commentary", "commentary"]).annotate({
+              "description":
+                "The phase of an assistant message. Use `commentary` for an intermediate assistant message and `final_answer` for the final assistant message. For follow-up requests with models like `gpt-5.3-codex` and later, preserve and resend phase on all assistant messages. Omitting it can degrade performance. Not used for user messages."
+            }),
+            Schema.Literals(["final_answer", "final_answer"]).annotate({
+              "description":
+                "The phase of an assistant message. Use `commentary` for an intermediate assistant message and `final_answer` for the final assistant message. For follow-up requests with models like `gpt-5.3-codex` and later, preserve and resend phase on all assistant messages. Omitting it can degrade performance. Not used for user messages."
+            }),
+            Schema.Union([Schema.Literal("commentary"), Schema.Literal("final_answer"), Schema.Unknown]).annotate({
+              "description":
+                "The phase of an assistant message. Use `commentary` for an intermediate assistant message and `final_answer` for the final assistant message. For follow-up requests with models like `gpt-5.3-codex` and later, preserve and resend phase on all assistant messages. Omitting it can degrade performance. Not used for user messages."
+            })
+          ]).annotate({
+            "description":
+              "The phase of an assistant message. Use `commentary` for an intermediate assistant message and `final_answer` for the final assistant message. For follow-up requests with models like `gpt-5.3-codex` and later, preserve and resend phase on all assistant messages. Omitting it can degrade performance. Not used for user messages."
+          })
+        )
       }).annotate({ "description": "An output message item" }),
       Schema.Struct({
         "type": Schema.Never,
@@ -5771,7 +8916,13 @@ export const OpenResponsesNonStreamingResponse = Schema.Struct({
             "google-gemini-v1"
           ]).annotate({ "description": "The format of the reasoning content" })
         ),
-        "role": Schema.Literal("assistant")
+        "role": Schema.Literal("assistant"),
+        "phase": Schema.optionalKey(
+          Schema.Union([Schema.Literal("commentary"), Schema.Literal("final_answer"), Schema.Unknown]).annotate({
+            "description":
+              "The phase of an assistant message. Use `commentary` for an intermediate assistant message and `final_answer` for the final assistant message. For follow-up requests with models like `gpt-5.3-codex` and later, preserve and resend phase on all assistant messages. Omitting it can degrade performance. Not used for user messages."
+          })
+        )
       }).annotate({ "description": "An output item containing reasoning" }),
       Schema.Struct({
         "type": Schema.Never,
@@ -5783,14 +8934,38 @@ export const OpenResponsesNonStreamingResponse = Schema.Struct({
           Schema.Union([Schema.Literal("completed"), Schema.Literal("incomplete"), Schema.Literal("in_progress")])
         ),
         "role": Schema.Literal("assistant"),
-        "content": Schema.Array(Schema.Union([ResponseOutputText, OpenAIResponsesRefusalContent]))
+        "content": Schema.Array(Schema.Union([ResponseOutputText, OpenAIResponsesRefusalContent])),
+        "phase": Schema.optionalKey(
+          Schema.Union([Schema.Literal("commentary"), Schema.Literal("final_answer"), Schema.Unknown]).annotate({
+            "description":
+              "The phase of an assistant message. Use `commentary` for an intermediate assistant message and `final_answer` for the final assistant message. For follow-up requests with models like `gpt-5.3-codex` and later, preserve and resend phase on all assistant messages. Omitting it can degrade performance. Not used for user messages."
+          })
+        )
       }),
       Schema.Struct({
         "type": Schema.Never,
         "id": Schema.String,
+        "action": Schema.Union([
+          Schema.Struct({
+            "type": Schema.Literal("search"),
+            "query": Schema.String,
+            "queries": Schema.optionalKey(Schema.Array(Schema.String)),
+            "sources": Schema.optionalKey(
+              Schema.Array(Schema.Struct({ "type": Schema.Literal("url"), "url": Schema.String }))
+            )
+          }),
+          Schema.Struct({ "type": Schema.Literal("open_page"), "url": Schema.optionalKey(Schema.String) }),
+          Schema.Struct({ "type": Schema.Literal("find_in_page"), "pattern": Schema.String, "url": Schema.String })
+        ], { mode: "oneOf" }),
         "status": Schema.Union([Schema.Literal("completed"), Schema.Literal("in_progress")]),
         "role": Schema.Literal("assistant"),
-        "content": Schema.Array(Schema.Union([ResponseOutputText, OpenAIResponsesRefusalContent]))
+        "content": Schema.Array(Schema.Union([ResponseOutputText, OpenAIResponsesRefusalContent])),
+        "phase": Schema.optionalKey(
+          Schema.Union([Schema.Literal("commentary"), Schema.Literal("final_answer"), Schema.Unknown]).annotate({
+            "description":
+              "The phase of an assistant message. Use `commentary` for an intermediate assistant message and `final_answer` for the final assistant message. For follow-up requests with models like `gpt-5.3-codex` and later, preserve and resend phase on all assistant messages. Omitting it can degrade performance. Not used for user messages."
+          })
+        )
       }),
       Schema.Struct({
         "type": Schema.Never,
@@ -5798,7 +8973,13 @@ export const OpenResponsesNonStreamingResponse = Schema.Struct({
         "queries": Schema.Array(Schema.String),
         "status": Schema.Union([Schema.Literal("completed"), Schema.Literal("in_progress")]),
         "role": Schema.Literal("assistant"),
-        "content": Schema.Array(Schema.Union([ResponseOutputText, OpenAIResponsesRefusalContent]))
+        "content": Schema.Array(Schema.Union([ResponseOutputText, OpenAIResponsesRefusalContent])),
+        "phase": Schema.optionalKey(
+          Schema.Union([Schema.Literal("commentary"), Schema.Literal("final_answer"), Schema.Unknown]).annotate({
+            "description":
+              "The phase of an assistant message. Use `commentary` for an intermediate assistant message and `final_answer` for the final assistant message. For follow-up requests with models like `gpt-5.3-codex` and later, preserve and resend phase on all assistant messages. Omitting it can degrade performance. Not used for user messages."
+          })
+        )
       }),
       Schema.Struct({
         "type": Schema.Never,
@@ -5806,9 +8987,34 @@ export const OpenResponsesNonStreamingResponse = Schema.Struct({
         "result": Schema.optionalKey(Schema.String),
         "status": Schema.Union([Schema.Literal("in_progress"), Schema.Literal("completed")]),
         "role": Schema.Literal("assistant"),
-        "content": Schema.Array(Schema.Union([ResponseOutputText, OpenAIResponsesRefusalContent]))
-      })
-    ]).annotate({ "description": "An output item from the response" }),
+        "content": Schema.Array(Schema.Union([ResponseOutputText, OpenAIResponsesRefusalContent])),
+        "phase": Schema.optionalKey(
+          Schema.Union([Schema.Literal("commentary"), Schema.Literal("final_answer"), Schema.Unknown]).annotate({
+            "description":
+              "The phase of an assistant message. Use `commentary` for an intermediate assistant message and `final_answer` for the final assistant message. For follow-up requests with models like `gpt-5.3-codex` and later, preserve and resend phase on all assistant messages. Omitting it can degrade performance. Not used for user messages."
+          })
+        )
+      }),
+      Schema.Struct({
+        "type": Schema.Never,
+        "id": Schema.String,
+        "status": Schema.Union([
+          Schema.Literal("completed"),
+          Schema.Literal("in_progress"),
+          Schema.Literal("incomplete")
+        ]),
+        "datetime": Schema.String.annotate({ "description": "ISO 8601 datetime string" }),
+        "timezone": Schema.String.annotate({ "description": "IANA timezone name" }),
+        "role": Schema.Literal("assistant"),
+        "content": Schema.Array(Schema.Union([ResponseOutputText, OpenAIResponsesRefusalContent])),
+        "phase": Schema.optionalKey(
+          Schema.Union([Schema.Literal("commentary"), Schema.Literal("final_answer"), Schema.Unknown]).annotate({
+            "description":
+              "The phase of an assistant message. Use `commentary` for an intermediate assistant message and `final_answer` for the final assistant message. For follow-up requests with models like `gpt-5.3-codex` and later, preserve and resend phase on all assistant messages. Omitting it can degrade performance. Not used for user messages."
+          })
+        )
+      }).annotate({ "description": "An openrouter:datetime server tool output item" })
+    ]),
     Schema.Union([
       Schema.Struct({
         "id": Schema.String,
@@ -5837,6 +9043,12 @@ export const OpenResponsesNonStreamingResponse = Schema.Struct({
           }),
           Schema.Struct({ "type": Schema.Never, "refusal": Schema.String, "text": Schema.String })
         ])),
+        "phase": Schema.optionalKey(
+          Schema.Union([Schema.Literal("commentary"), Schema.Literal("final_answer"), Schema.Unknown]).annotate({
+            "description":
+              "The phase of an assistant message. Use `commentary` for an intermediate assistant message and `final_answer` for the final assistant message. For follow-up requests with models like `gpt-5.3-codex` and later, preserve and resend phase on all assistant messages. Omitting it can degrade performance. Not used for user messages."
+          })
+        ),
         "summary": Schema.Array(ReasoningSummaryText),
         "encrypted_content": Schema.optionalKey(Schema.String)
       }).annotate({ "description": "An output message item" }),
@@ -5881,6 +9093,18 @@ export const OpenResponsesNonStreamingResponse = Schema.Struct({
       Schema.Struct({
         "type": Schema.Never,
         "id": Schema.String,
+        "action": Schema.Union([
+          Schema.Struct({
+            "type": Schema.Literal("search"),
+            "query": Schema.String,
+            "queries": Schema.optionalKey(Schema.Array(Schema.String)),
+            "sources": Schema.optionalKey(
+              Schema.Array(Schema.Struct({ "type": Schema.Literal("url"), "url": Schema.String }))
+            )
+          }),
+          Schema.Struct({ "type": Schema.Literal("open_page"), "url": Schema.optionalKey(Schema.String) }),
+          Schema.Struct({ "type": Schema.Literal("find_in_page"), "pattern": Schema.String, "url": Schema.String })
+        ], { mode: "oneOf" }),
         "status": Schema.Union([Schema.Literal("completed"), Schema.Literal("in_progress")]),
         "content": Schema.optionalKey(Schema.Array(ReasoningTextContent)),
         "summary": Schema.Array(ReasoningSummaryText),
@@ -5903,8 +9127,22 @@ export const OpenResponsesNonStreamingResponse = Schema.Struct({
         "content": Schema.optionalKey(Schema.Array(ReasoningTextContent)),
         "summary": Schema.Array(ReasoningSummaryText),
         "encrypted_content": Schema.optionalKey(Schema.String)
-      })
-    ]).annotate({ "description": "An output item from the response" }),
+      }),
+      Schema.Struct({
+        "type": Schema.Never,
+        "id": Schema.String,
+        "status": Schema.Union([
+          Schema.Literal("completed"),
+          Schema.Literal("in_progress"),
+          Schema.Literal("incomplete")
+        ]),
+        "datetime": Schema.String.annotate({ "description": "ISO 8601 datetime string" }),
+        "timezone": Schema.String.annotate({ "description": "IANA timezone name" }),
+        "content": Schema.optionalKey(Schema.Array(ReasoningTextContent)),
+        "summary": Schema.Array(ReasoningSummaryText),
+        "encrypted_content": Schema.optionalKey(Schema.String)
+      }).annotate({ "description": "An openrouter:datetime server tool output item" })
+    ]),
     Schema.Union([
       Schema.Struct({
         "id": Schema.String,
@@ -5914,6 +9152,12 @@ export const OpenResponsesNonStreamingResponse = Schema.Struct({
           Schema.Union([Schema.Literal("completed"), Schema.Literal("incomplete"), Schema.Literal("in_progress")])
         ),
         "content": Schema.Array(Schema.Union([ResponseOutputText, OpenAIResponsesRefusalContent])),
+        "phase": Schema.optionalKey(
+          Schema.Union([Schema.Literal("commentary"), Schema.Literal("final_answer"), Schema.Unknown]).annotate({
+            "description":
+              "The phase of an assistant message. Use `commentary` for an intermediate assistant message and `final_answer` for the final assistant message. For follow-up requests with models like `gpt-5.3-codex` and later, preserve and resend phase on all assistant messages. Omitting it can degrade performance. Not used for user messages."
+          })
+        ),
         "name": Schema.String,
         "arguments": Schema.String,
         "call_id": Schema.String
@@ -5921,7 +9165,9 @@ export const OpenResponsesNonStreamingResponse = Schema.Struct({
       Schema.Struct({
         "type": Schema.Never,
         "id": Schema.String,
-        "content": Schema.optionalKey(Schema.Array(ReasoningTextContent)),
+        "content": Schema.optionalKey(
+          Schema.Array(Schema.Struct({ "type": Schema.Literal("reasoning_text"), "text": Schema.String }))
+        ),
         "summary": Schema.Array(ReasoningSummaryText),
         "encrypted_content": Schema.optionalKey(Schema.String),
         "status": Schema.optionalKey(
@@ -5957,6 +9203,18 @@ export const OpenResponsesNonStreamingResponse = Schema.Struct({
       Schema.Struct({
         "type": Schema.Never,
         "id": Schema.String,
+        "action": Schema.Union([
+          Schema.Struct({
+            "type": Schema.Literal("search"),
+            "query": Schema.String,
+            "queries": Schema.optionalKey(Schema.Array(Schema.String)),
+            "sources": Schema.optionalKey(
+              Schema.Array(Schema.Struct({ "type": Schema.Literal("url"), "url": Schema.String }))
+            )
+          }),
+          Schema.Struct({ "type": Schema.Literal("open_page"), "url": Schema.optionalKey(Schema.String) }),
+          Schema.Struct({ "type": Schema.Literal("find_in_page"), "pattern": Schema.String, "url": Schema.String })
+        ], { mode: "oneOf" }),
         "status": Schema.Union([Schema.Literal("completed"), Schema.Literal("in_progress")]),
         "name": Schema.String,
         "arguments": Schema.String,
@@ -5979,20 +9237,54 @@ export const OpenResponsesNonStreamingResponse = Schema.Struct({
         "name": Schema.String,
         "arguments": Schema.String,
         "call_id": Schema.String
-      })
-    ]).annotate({ "description": "An output item from the response" }),
+      }),
+      Schema.Struct({
+        "type": Schema.Never,
+        "id": Schema.optionalKey(Schema.String),
+        "status": Schema.Union([
+          Schema.Literal("completed"),
+          Schema.Literal("in_progress"),
+          Schema.Literal("incomplete")
+        ]),
+        "datetime": Schema.String.annotate({ "description": "ISO 8601 datetime string" }),
+        "timezone": Schema.String.annotate({ "description": "IANA timezone name" }),
+        "name": Schema.String,
+        "arguments": Schema.String,
+        "call_id": Schema.String
+      }).annotate({ "description": "An openrouter:datetime server tool output item" })
+    ]),
     Schema.Union([
       Schema.Struct({
         "id": Schema.String,
         "role": Schema.Literal("assistant"),
         "type": Schema.Never,
         "status": Schema.Union([Schema.Literal("completed"), Schema.Literal("in_progress")]),
-        "content": Schema.Array(Schema.Union([ResponseOutputText, OpenAIResponsesRefusalContent]))
+        "content": Schema.Array(Schema.Union([ResponseOutputText, OpenAIResponsesRefusalContent])),
+        "phase": Schema.optionalKey(
+          Schema.Union([Schema.Literal("commentary"), Schema.Literal("final_answer"), Schema.Unknown]).annotate({
+            "description":
+              "The phase of an assistant message. Use `commentary` for an intermediate assistant message and `final_answer` for the final assistant message. For follow-up requests with models like `gpt-5.3-codex` and later, preserve and resend phase on all assistant messages. Omitting it can degrade performance. Not used for user messages."
+          })
+        ),
+        "action": Schema.Union([
+          Schema.Struct({
+            "type": Schema.Literal("search"),
+            "query": Schema.String,
+            "queries": Schema.optionalKey(Schema.Array(Schema.String)),
+            "sources": Schema.optionalKey(
+              Schema.Array(Schema.Struct({ "type": Schema.Literal("url"), "url": Schema.String }))
+            )
+          }),
+          Schema.Struct({ "type": Schema.Literal("open_page"), "url": Schema.optionalKey(Schema.String) }),
+          Schema.Struct({ "type": Schema.Literal("find_in_page"), "pattern": Schema.String, "url": Schema.String })
+        ], { mode: "oneOf" })
       }).annotate({ "description": "An output message item" }),
       Schema.Struct({
         "type": Schema.Never,
         "id": Schema.String,
-        "content": Schema.optionalKey(Schema.Array(ReasoningTextContent)),
+        "content": Schema.optionalKey(
+          Schema.Array(Schema.Struct({ "type": Schema.Literal("reasoning_text"), "text": Schema.String }))
+        ),
         "summary": Schema.Array(ReasoningSummaryText),
         "encrypted_content": Schema.optionalKey(Schema.String),
         "status": Schema.Union([Schema.Literal("completed"), Schema.Literal("in_progress")]),
@@ -6008,7 +9300,19 @@ export const OpenResponsesNonStreamingResponse = Schema.Struct({
             "anthropic-claude-v1",
             "google-gemini-v1"
           ]).annotate({ "description": "The format of the reasoning content" })
-        )
+        ),
+        "action": Schema.Union([
+          Schema.Struct({
+            "type": Schema.Literal("search"),
+            "query": Schema.String,
+            "queries": Schema.optionalKey(Schema.Array(Schema.String)),
+            "sources": Schema.optionalKey(
+              Schema.Array(Schema.Struct({ "type": Schema.Literal("url"), "url": Schema.String }))
+            )
+          }),
+          Schema.Struct({ "type": Schema.Literal("open_page"), "url": Schema.optionalKey(Schema.String) }),
+          Schema.Struct({ "type": Schema.Literal("find_in_page"), "pattern": Schema.String, "url": Schema.String })
+        ], { mode: "oneOf" })
       }).annotate({ "description": "An output item containing reasoning" }),
       Schema.Struct({
         "type": Schema.Never,
@@ -6016,11 +9320,81 @@ export const OpenResponsesNonStreamingResponse = Schema.Struct({
         "name": Schema.String,
         "arguments": Schema.String,
         "call_id": Schema.String,
-        "status": Schema.Union([Schema.Literal("completed"), Schema.Literal("in_progress")])
+        "status": Schema.Union([Schema.Literal("completed"), Schema.Literal("in_progress")]),
+        "action": Schema.Union([
+          Schema.Struct({
+            "type": Schema.Literal("search"),
+            "query": Schema.String,
+            "queries": Schema.optionalKey(Schema.Array(Schema.String)),
+            "sources": Schema.optionalKey(
+              Schema.Array(Schema.Struct({ "type": Schema.Literal("url"), "url": Schema.String }))
+            )
+          }),
+          Schema.Struct({ "type": Schema.Literal("open_page"), "url": Schema.optionalKey(Schema.String) }),
+          Schema.Struct({ "type": Schema.Literal("find_in_page"), "pattern": Schema.String, "url": Schema.String })
+        ], { mode: "oneOf" })
       }),
       Schema.Struct({
         "type": Schema.Literal("web_search_call"),
         "id": Schema.String,
+        "action": Schema.Union([
+          Schema.Union([
+            Schema.Struct({
+              "type": Schema.Literal("search"),
+              "query": Schema.String,
+              "queries": Schema.optionalKey(Schema.Array(Schema.String)),
+              "sources": Schema.optionalKey(
+                Schema.Array(Schema.Struct({ "type": Schema.Literal("url"), "url": Schema.String }))
+              )
+            }),
+            Schema.Struct({
+              "type": Schema.Never,
+              "url": Schema.optionalKey(Schema.String),
+              "query": Schema.String,
+              "queries": Schema.optionalKey(Schema.Array(Schema.String)),
+              "sources": Schema.optionalKey(
+                Schema.Array(Schema.Struct({ "type": Schema.Literal("url"), "url": Schema.String }))
+              )
+            }),
+            Schema.Struct({
+              "type": Schema.Never,
+              "pattern": Schema.String,
+              "url": Schema.String,
+              "query": Schema.String,
+              "queries": Schema.optionalKey(Schema.Array(Schema.String)),
+              "sources": Schema.optionalKey(
+                Schema.Array(Schema.Struct({ "type": Schema.Literal("url"), "url": Schema.String }))
+              )
+            })
+          ]),
+          Schema.Union([
+            Schema.Struct({
+              "type": Schema.Never,
+              "query": Schema.String,
+              "queries": Schema.optionalKey(Schema.Array(Schema.String)),
+              "sources": Schema.optionalKey(
+                Schema.Array(Schema.Struct({ "type": Schema.Literal("url"), "url": Schema.String }))
+              ),
+              "url": Schema.optionalKey(Schema.String)
+            }),
+            Schema.Struct({ "type": Schema.Literal("open_page"), "url": Schema.optionalKey(Schema.String) }),
+            Schema.Struct({ "type": Schema.Never, "pattern": Schema.String, "url": Schema.String })
+          ]),
+          Schema.Union([
+            Schema.Struct({
+              "type": Schema.Never,
+              "query": Schema.String,
+              "queries": Schema.optionalKey(Schema.Array(Schema.String)),
+              "sources": Schema.optionalKey(
+                Schema.Array(Schema.Struct({ "type": Schema.Literal("url"), "url": Schema.String }))
+              ),
+              "pattern": Schema.String,
+              "url": Schema.String
+            }),
+            Schema.Struct({ "type": Schema.Never, "url": Schema.String, "pattern": Schema.String }),
+            Schema.Struct({ "type": Schema.Literal("find_in_page"), "pattern": Schema.String, "url": Schema.String })
+          ])
+        ]),
         "status": Schema.Union([
           Schema.Literal("completed"),
           Schema.Literal("searching"),
@@ -6037,15 +9411,58 @@ export const OpenResponsesNonStreamingResponse = Schema.Struct({
           Schema.Literal("searching"),
           Schema.Literal("in_progress"),
           Schema.Literal("failed")
-        ])
+        ]),
+        "action": Schema.Union([
+          Schema.Struct({
+            "type": Schema.Literal("search"),
+            "query": Schema.String,
+            "queries": Schema.optionalKey(Schema.Array(Schema.String)),
+            "sources": Schema.optionalKey(
+              Schema.Array(Schema.Struct({ "type": Schema.Literal("url"), "url": Schema.String }))
+            )
+          }),
+          Schema.Struct({ "type": Schema.Literal("open_page"), "url": Schema.optionalKey(Schema.String) }),
+          Schema.Struct({ "type": Schema.Literal("find_in_page"), "pattern": Schema.String, "url": Schema.String })
+        ], { mode: "oneOf" })
       }),
       Schema.Struct({
         "type": Schema.Never,
         "id": Schema.String,
         "result": Schema.optionalKey(Schema.String),
-        "status": Schema.Union([Schema.Literal("in_progress"), Schema.Literal("completed"), Schema.Literal("failed")])
-      })
-    ]).annotate({ "description": "An output item from the response" }),
+        "status": Schema.Union([Schema.Literal("in_progress"), Schema.Literal("completed"), Schema.Literal("failed")]),
+        "action": Schema.Union([
+          Schema.Struct({
+            "type": Schema.Literal("search"),
+            "query": Schema.String,
+            "queries": Schema.optionalKey(Schema.Array(Schema.String)),
+            "sources": Schema.optionalKey(
+              Schema.Array(Schema.Struct({ "type": Schema.Literal("url"), "url": Schema.String }))
+            )
+          }),
+          Schema.Struct({ "type": Schema.Literal("open_page"), "url": Schema.optionalKey(Schema.String) }),
+          Schema.Struct({ "type": Schema.Literal("find_in_page"), "pattern": Schema.String, "url": Schema.String })
+        ], { mode: "oneOf" })
+      }),
+      Schema.Struct({
+        "type": Schema.Never,
+        "id": Schema.String,
+        "status": Schema.Union([Schema.Literal("completed"), Schema.Literal("in_progress")]),
+        "datetime": Schema.String.annotate({ "description": "ISO 8601 datetime string" }),
+        "timezone": Schema.String.annotate({ "description": "IANA timezone name" }),
+        "action": Schema.Union([
+          Schema.Struct({
+            "type": Schema.Literal("search"),
+            "query": Schema.String,
+            "queries": Schema.optionalKey(Schema.Array(Schema.String)),
+            "sources": Schema.optionalKey(
+              Schema.Array(Schema.Struct({ "type": Schema.Literal("url"), "url": Schema.String }))
+            )
+          }),
+          Schema.Struct({ "type": Schema.Literal("open_page"), "url": Schema.optionalKey(Schema.String) }),
+          Schema.Struct({ "type": Schema.Literal("find_in_page"), "pattern": Schema.String, "url": Schema.String })
+        ], { mode: "oneOf" })
+      }).annotate({ "description": "An openrouter:datetime server tool output item" })
+    ]),
     Schema.Union([
       Schema.Struct({
         "id": Schema.String,
@@ -6053,12 +9470,20 @@ export const OpenResponsesNonStreamingResponse = Schema.Struct({
         "type": Schema.Never,
         "status": Schema.Union([Schema.Literal("completed"), Schema.Literal("in_progress")]),
         "content": Schema.Array(Schema.Union([ResponseOutputText, OpenAIResponsesRefusalContent])),
+        "phase": Schema.optionalKey(
+          Schema.Union([Schema.Literal("commentary"), Schema.Literal("final_answer"), Schema.Unknown]).annotate({
+            "description":
+              "The phase of an assistant message. Use `commentary` for an intermediate assistant message and `final_answer` for the final assistant message. For follow-up requests with models like `gpt-5.3-codex` and later, preserve and resend phase on all assistant messages. Omitting it can degrade performance. Not used for user messages."
+          })
+        ),
         "queries": Schema.Array(Schema.String)
       }).annotate({ "description": "An output message item" }),
       Schema.Struct({
         "type": Schema.Never,
         "id": Schema.String,
-        "content": Schema.optionalKey(Schema.Array(ReasoningTextContent)),
+        "content": Schema.optionalKey(
+          Schema.Array(Schema.Struct({ "type": Schema.Literal("reasoning_text"), "text": Schema.String }))
+        ),
         "summary": Schema.Array(ReasoningSummaryText),
         "encrypted_content": Schema.optionalKey(Schema.String),
         "status": Schema.Union([Schema.Literal("completed"), Schema.Literal("in_progress")]),
@@ -6089,6 +9514,18 @@ export const OpenResponsesNonStreamingResponse = Schema.Struct({
       Schema.Struct({
         "type": Schema.Never,
         "id": Schema.String,
+        "action": Schema.Union([
+          Schema.Struct({
+            "type": Schema.Literal("search"),
+            "query": Schema.String,
+            "queries": Schema.optionalKey(Schema.Array(Schema.String)),
+            "sources": Schema.optionalKey(
+              Schema.Array(Schema.Struct({ "type": Schema.Literal("url"), "url": Schema.String }))
+            )
+          }),
+          Schema.Struct({ "type": Schema.Literal("open_page"), "url": Schema.optionalKey(Schema.String) }),
+          Schema.Struct({ "type": Schema.Literal("find_in_page"), "pattern": Schema.String, "url": Schema.String })
+        ], { mode: "oneOf" }),
         "status": Schema.Union([
           Schema.Literal("completed"),
           Schema.Literal("searching"),
@@ -6114,8 +9551,16 @@ export const OpenResponsesNonStreamingResponse = Schema.Struct({
         "result": Schema.optionalKey(Schema.String),
         "status": Schema.Union([Schema.Literal("in_progress"), Schema.Literal("completed"), Schema.Literal("failed")]),
         "queries": Schema.Array(Schema.String)
-      })
-    ]).annotate({ "description": "An output item from the response" }),
+      }),
+      Schema.Struct({
+        "type": Schema.Never,
+        "id": Schema.String,
+        "status": Schema.Union([Schema.Literal("completed"), Schema.Literal("in_progress")]),
+        "datetime": Schema.String.annotate({ "description": "ISO 8601 datetime string" }),
+        "timezone": Schema.String.annotate({ "description": "IANA timezone name" }),
+        "queries": Schema.Array(Schema.String)
+      }).annotate({ "description": "An openrouter:datetime server tool output item" })
+    ]),
     Schema.Union([
       Schema.Struct({
         "id": Schema.String,
@@ -6123,12 +9568,20 @@ export const OpenResponsesNonStreamingResponse = Schema.Struct({
         "type": Schema.Never,
         "status": Schema.Union([Schema.Literal("completed"), Schema.Literal("in_progress")]),
         "content": Schema.Array(Schema.Union([ResponseOutputText, OpenAIResponsesRefusalContent])),
+        "phase": Schema.optionalKey(
+          Schema.Union([Schema.Literal("commentary"), Schema.Literal("final_answer"), Schema.Unknown]).annotate({
+            "description":
+              "The phase of an assistant message. Use `commentary` for an intermediate assistant message and `final_answer` for the final assistant message. For follow-up requests with models like `gpt-5.3-codex` and later, preserve and resend phase on all assistant messages. Omitting it can degrade performance. Not used for user messages."
+          })
+        ),
         "result": Schema.optionalKey(Schema.String)
       }).annotate({ "description": "An output message item" }),
       Schema.Struct({
         "type": Schema.Never,
         "id": Schema.String,
-        "content": Schema.optionalKey(Schema.Array(ReasoningTextContent)),
+        "content": Schema.optionalKey(
+          Schema.Array(Schema.Struct({ "type": Schema.Literal("reasoning_text"), "text": Schema.String }))
+        ),
         "summary": Schema.Array(ReasoningSummaryText),
         "encrypted_content": Schema.optionalKey(Schema.String),
         "status": Schema.Union([Schema.Literal("completed"), Schema.Literal("in_progress")]),
@@ -6159,6 +9612,18 @@ export const OpenResponsesNonStreamingResponse = Schema.Struct({
       Schema.Struct({
         "type": Schema.Never,
         "id": Schema.String,
+        "action": Schema.Union([
+          Schema.Struct({
+            "type": Schema.Literal("search"),
+            "query": Schema.String,
+            "queries": Schema.optionalKey(Schema.Array(Schema.String)),
+            "sources": Schema.optionalKey(
+              Schema.Array(Schema.Struct({ "type": Schema.Literal("url"), "url": Schema.String }))
+            )
+          }),
+          Schema.Struct({ "type": Schema.Literal("open_page"), "url": Schema.optionalKey(Schema.String) }),
+          Schema.Struct({ "type": Schema.Literal("find_in_page"), "pattern": Schema.String, "url": Schema.String })
+        ], { mode: "oneOf" }),
         "status": Schema.Union([Schema.Literal("completed"), Schema.Literal("in_progress"), Schema.Literal("failed")]),
         "result": Schema.optionalKey(Schema.String)
       }),
@@ -6179,8 +9644,16 @@ export const OpenResponsesNonStreamingResponse = Schema.Struct({
           Schema.Literal("generating"),
           Schema.Literal("failed")
         ])
-      })
-    ]).annotate({ "description": "An output item from the response" })
+      }),
+      Schema.Struct({
+        "type": Schema.Never,
+        "id": Schema.String,
+        "status": Schema.Union([Schema.Literal("completed"), Schema.Literal("in_progress")]),
+        "datetime": Schema.String.annotate({ "description": "ISO 8601 datetime string" }),
+        "timezone": Schema.String.annotate({ "description": "IANA timezone name" }),
+        "result": Schema.optionalKey(Schema.String)
+      }).annotate({ "description": "An openrouter:datetime server tool output item" })
+    ])
   ])),
   "user": Schema.optionalKey(Schema.String),
   "output_text": Schema.optionalKey(Schema.String),
@@ -6233,7 +9706,16 @@ export const OpenResponsesNonStreamingResponse = Schema.Struct({
       OpenResponsesWebSearchPreviewTool,
       OpenResponsesWebSearchPreview20250311Tool,
       OpenResponsesWebSearchTool,
-      OpenResponsesWebSearch20250826Tool
+      OpenResponsesWebSearch20250826Tool,
+      OpenResponsesFileSearchTool,
+      OpenResponsesComputerTool,
+      OpenResponsesCodeInterpreterTool,
+      OpenResponsesMcpTool,
+      OpenResponsesImageGenerationTool,
+      OpenResponsesLocalShellTool,
+      OpenResponsesFunctionShellTool,
+      OpenResponsesApplyPatchTool,
+      OpenResponsesCustomTool
     ], { mode: "oneOf" })
   ),
   "tool_choice": OpenAIResponsesToolChoice,
@@ -6247,49 +9729,25 @@ export const OpenResponsesNonStreamingResponse = Schema.Struct({
   "truncation": Schema.optionalKey(OpenAIResponsesTruncation),
   "text": Schema.optionalKey(ResponseTextConfig)
 }).annotate({ "description": "Complete non-streaming response from the Responses API" })
-export type OpenResponsesRequest = {
-  readonly "input"?: OpenResponsesInput
-  readonly "instructions"?: string
-  readonly "metadata"?: OpenResponsesRequestMetadata
-  readonly "tools"?: ReadonlyArray<
-    | {
-      readonly "type": "function"
-      readonly "name": string
-      readonly "description"?: string
-      readonly "strict"?: boolean
-      readonly "parameters": {}
-    }
-    | OpenResponsesWebSearchPreviewTool
-    | OpenResponsesWebSearchPreview20250311Tool
-    | OpenResponsesWebSearchTool
-    | OpenResponsesWebSearch20250826Tool
-  >
-  readonly "tool_choice"?: OpenAIResponsesToolChoice
-  readonly "parallel_tool_calls"?: boolean
-  readonly "model"?: string
-  readonly "models"?: ReadonlyArray<string>
-  readonly "text"?: OpenResponsesResponseText
-  readonly "reasoning"?: OpenResponsesReasoningConfig
-  readonly "max_output_tokens"?: number
-  readonly "temperature"?: number
-  readonly "top_p"?: number
-  readonly "top_logprobs"?: number
-  readonly "max_tool_calls"?: number
-  readonly "presence_penalty"?: number
-  readonly "frequency_penalty"?: number
-  readonly "top_k"?: number
-  readonly "image_config"?: {}
-  readonly "modalities"?: ReadonlyArray<ResponsesOutputModality>
-  readonly "prompt_cache_key"?: string
-  readonly "previous_response_id"?: string
-  readonly "prompt"?: OpenAIResponsesPrompt
-  readonly "include"?: ReadonlyArray<OpenAIResponsesIncludable>
-  readonly "background"?: boolean
-  readonly "safety_identifier"?: string
-  readonly "store"?: false
-  readonly "service_tier"?: "auto"
-  readonly "truncation"?: "auto" | "disabled"
-  readonly "stream"?: boolean
+export type ChatResponse = {
+  readonly "id": string
+  readonly "choices": ReadonlyArray<ChatResponseChoice>
+  readonly "created": number
+  readonly "model": string
+  readonly "object": "chat.completion"
+  readonly "system_fingerprint": string
+  readonly "usage"?: ChatGenerationTokenUsage
+}
+export const ChatResponse = Schema.Struct({
+  "id": Schema.String.annotate({ "description": "Unique completion identifier" }),
+  "choices": Schema.Array(ChatResponseChoice).annotate({ "description": "List of completion choices" }),
+  "created": Schema.Number.annotate({ "description": "Unix timestamp of creation" }).check(Schema.isFinite()),
+  "model": Schema.String.annotate({ "description": "Model used for completion" }),
+  "object": Schema.Literal("chat.completion"),
+  "system_fingerprint": Schema.String.annotate({ "description": "System fingerprint" }),
+  "usage": Schema.optionalKey(ChatGenerationTokenUsage)
+}).annotate({ "description": "Chat completion response" })
+export type ChatGenerationParams = {
   readonly "provider"?: {
     readonly "allow_fallbacks"?: boolean
     readonly "require_parameters"?: boolean
@@ -6300,7 +9758,7 @@ export type OpenResponsesRequest = {
     readonly "only"?: ReadonlyArray<ProviderName | string>
     readonly "ignore"?: ReadonlyArray<ProviderName | string>
     readonly "quantizations"?: ReadonlyArray<Quantization>
-    readonly "sort"?: ProviderSort | ProviderSortConfig | unknown
+    readonly "sort"?: "price" | "price" | "throughput" | "throughput" | "latency" | "latency" | "exacto" | "exacto"
     readonly "max_price"?: {
       readonly "prompt"?: BigNumberUnion
       readonly "completion"?: string
@@ -6320,6 +9778,8 @@ export type OpenResponsesRequest = {
       readonly "max_results"?: number
       readonly "search_prompt"?: string
       readonly "engine"?: WebSearchEngine
+      readonly "include_domains"?: ReadonlyArray<string>
+      readonly "exclude_domains"?: ReadonlyArray<string>
     }
     | { readonly "id": "file-parser"; readonly "enabled"?: boolean; readonly "pdf"?: PDFParserOptions }
     | { readonly "id": "response-healing"; readonly "enabled"?: boolean }
@@ -6334,71 +9794,42 @@ export type OpenResponsesRequest = {
     readonly "generation_name"?: string
     readonly "parent_span_id"?: string
   }
+  readonly "messages": ReadonlyArray<Message>
+  readonly "model"?: ModelName
+  readonly "models"?: ModelNames
+  readonly "frequency_penalty"?: number
+  readonly "logit_bias"?: {}
+  readonly "logprobs"?: boolean
+  readonly "top_logprobs"?: number
+  readonly "max_completion_tokens"?: number
+  readonly "max_tokens"?: number
+  readonly "metadata"?: {}
+  readonly "presence_penalty"?: number
+  readonly "reasoning"?: {
+    readonly "effort"?: "xhigh" | "high" | "medium" | "low" | "minimal" | "none"
+    readonly "summary"?: ReasoningSummaryVerbosity | unknown | unknown
+  }
+  readonly "response_format"?:
+    | ResponseFormatText
+    | ResponseFormatJSONObject
+    | ResponseFormatJSONSchema
+    | ResponseFormatTextGrammar
+    | ResponseFormatTextPython
+  readonly "seed"?: number
+  readonly "stop"?: string | ReadonlyArray<string> | unknown
+  readonly "stream"?: boolean
+  readonly "stream_options"?: ChatStreamOptions
+  readonly "temperature"?: number
+  readonly "parallel_tool_calls"?: boolean
+  readonly "tool_choice"?: ToolChoiceOption
+  readonly "tools"?: ReadonlyArray<ToolDefinitionJson>
+  readonly "top_p"?: number
+  readonly "debug"?: DebugOptions
+  readonly "image_config"?: {}
+  readonly "modalities"?: ReadonlyArray<"text" | "image" | "audio">
+  readonly "cache_control"?: { readonly "type": "ephemeral"; readonly "ttl"?: "5m" | "1h" }
 }
-export const OpenResponsesRequest = Schema.Struct({
-  "input": Schema.optionalKey(OpenResponsesInput),
-  "instructions": Schema.optionalKey(Schema.String),
-  "metadata": Schema.optionalKey(OpenResponsesRequestMetadata),
-  "tools": Schema.optionalKey(
-    Schema.Array(
-      Schema.Union([
-        Schema.Struct({
-          "type": Schema.Literal("function"),
-          "name": Schema.String,
-          "description": Schema.optionalKey(Schema.String),
-          "strict": Schema.optionalKey(Schema.Boolean),
-          "parameters": Schema.Struct({})
-        }).annotate({ "description": "Function tool definition" }),
-        OpenResponsesWebSearchPreviewTool,
-        OpenResponsesWebSearchPreview20250311Tool,
-        OpenResponsesWebSearchTool,
-        OpenResponsesWebSearch20250826Tool
-      ], { mode: "oneOf" })
-    )
-  ),
-  "tool_choice": Schema.optionalKey(OpenAIResponsesToolChoice),
-  "parallel_tool_calls": Schema.optionalKey(Schema.Boolean),
-  "model": Schema.optionalKey(Schema.String),
-  "models": Schema.optionalKey(Schema.Array(Schema.String)),
-  "text": Schema.optionalKey(OpenResponsesResponseText),
-  "reasoning": Schema.optionalKey(OpenResponsesReasoningConfig),
-  "max_output_tokens": Schema.optionalKey(Schema.Number.check(Schema.isFinite())),
-  "temperature": Schema.optionalKey(
-    Schema.Number.check(Schema.isFinite()).check(Schema.isGreaterThanOrEqualTo(0)).check(Schema.isLessThanOrEqualTo(2))
-  ),
-  "top_p": Schema.optionalKey(Schema.Number.check(Schema.isFinite()).check(Schema.isGreaterThanOrEqualTo(0))),
-  "top_logprobs": Schema.optionalKey(
-    Schema.Number.check(Schema.isInt()).check(Schema.isGreaterThanOrEqualTo(0)).check(Schema.isLessThanOrEqualTo(20))
-  ),
-  "max_tool_calls": Schema.optionalKey(Schema.Number.check(Schema.isInt())),
-  "presence_penalty": Schema.optionalKey(
-    Schema.Number.check(Schema.isFinite()).check(Schema.isGreaterThanOrEqualTo(-2)).check(Schema.isLessThanOrEqualTo(2))
-  ),
-  "frequency_penalty": Schema.optionalKey(
-    Schema.Number.check(Schema.isFinite()).check(Schema.isGreaterThanOrEqualTo(-2)).check(Schema.isLessThanOrEqualTo(2))
-  ),
-  "top_k": Schema.optionalKey(Schema.Number.check(Schema.isFinite())),
-  "image_config": Schema.optionalKey(
-    Schema.Struct({}).annotate({
-      "description":
-        "Provider-specific image configuration options. Keys and values vary by model/provider. See https://openrouter.ai/docs/features/multimodal/image-generation for more details."
-    })
-  ),
-  "modalities": Schema.optionalKey(
-    Schema.Array(ResponsesOutputModality).annotate({
-      "description": "Output modalities for the response. Supported values are \"text\" and \"image\"."
-    })
-  ),
-  "prompt_cache_key": Schema.optionalKey(Schema.String),
-  "previous_response_id": Schema.optionalKey(Schema.String),
-  "prompt": Schema.optionalKey(OpenAIResponsesPrompt),
-  "include": Schema.optionalKey(Schema.Array(OpenAIResponsesIncludable)),
-  "background": Schema.optionalKey(Schema.Boolean),
-  "safety_identifier": Schema.optionalKey(Schema.String),
-  "store": Schema.optionalKey(Schema.Literal(false)),
-  "service_tier": Schema.optionalKey(Schema.Literal("auto")),
-  "truncation": Schema.optionalKey(Schema.Literals(["auto", "disabled"])),
-  "stream": Schema.optionalKey(Schema.Boolean),
+export const ChatGenerationParams = Schema.Struct({
   "provider": Schema.optionalKey(
     Schema.Struct({
       "allow_fallbacks": Schema.optionalKey(Schema.Boolean.annotate({
@@ -6448,10 +9879,44 @@ export const OpenResponsesRequest = Schema.Struct({
         })
       ),
       "sort": Schema.optionalKey(
-        Schema.Union([ProviderSort, ProviderSortConfig, Schema.Unknown]).annotate({
-          "description":
-            "The sorting strategy to use for this request, if \"order\" is not specified. When set, no load balancing is performed."
-        })
+        Schema.Union([
+          Schema.Union([
+            Schema.Literal("price").annotate({
+              "description": "The provider sorting strategy (price, throughput, latency)"
+            }),
+            Schema.Literal("price")
+          ]).annotate({
+            "description":
+              "The sorting strategy to use for this request, if \"order\" is not specified. When set, no load balancing is performed."
+          }),
+          Schema.Union([
+            Schema.Literal("throughput").annotate({
+              "description": "The provider sorting strategy (price, throughput, latency)"
+            }),
+            Schema.Literal("throughput")
+          ]).annotate({
+            "description":
+              "The sorting strategy to use for this request, if \"order\" is not specified. When set, no load balancing is performed."
+          }),
+          Schema.Union([
+            Schema.Literal("latency").annotate({
+              "description": "The provider sorting strategy (price, throughput, latency)"
+            }),
+            Schema.Literal("latency")
+          ]).annotate({
+            "description":
+              "The sorting strategy to use for this request, if \"order\" is not specified. When set, no load balancing is performed."
+          }),
+          Schema.Union([
+            Schema.Literal("exacto").annotate({
+              "description": "The provider sorting strategy (price, throughput, latency)"
+            }),
+            Schema.Literal("exacto")
+          ]).annotate({
+            "description":
+              "The sorting strategy to use for this request, if \"order\" is not specified. When set, no load balancing is performed."
+          })
+        ]).annotate({ "description": "The provider sorting strategy (price, throughput, latency)" })
       ),
       "max_price": Schema.optionalKey(
         Schema.Struct({
@@ -6499,7 +9964,19 @@ export const OpenResponsesRequest = Schema.Struct({
         ),
         "max_results": Schema.optionalKey(Schema.Number.check(Schema.isFinite())),
         "search_prompt": Schema.optionalKey(Schema.String),
-        "engine": Schema.optionalKey(WebSearchEngine)
+        "engine": Schema.optionalKey(WebSearchEngine),
+        "include_domains": Schema.optionalKey(
+          Schema.Array(Schema.String).annotate({
+            "description":
+              "A list of domains to restrict web search results to. Supports wildcards (e.g. \"*.substack.com\") and path filtering (e.g. \"openai.com/blog\")."
+          })
+        ),
+        "exclude_domains": Schema.optionalKey(
+          Schema.Array(Schema.String).annotate({
+            "description":
+              "A list of domains to exclude from web search results. Supports wildcards (e.g. \"*.substack.com\") and path filtering (e.g. \"openai.com/blog\")."
+          })
+        )
       }),
       Schema.Struct({
         "id": Schema.Literal("file-parser"),
@@ -6528,261 +10005,7 @@ export const OpenResponsesRequest = Schema.Struct({
         "**DEPRECATED** Use providers.sort.partition instead. Backwards-compatible alias for providers.sort.partition. Accepts legacy values: \"fallback\" (maps to \"model\"), \"sort\" (maps to \"none\")."
     })
   ),
-  "user": Schema.optionalKey(
-    Schema.String.annotate({
-      "description":
-        "A unique identifier representing your end-user, which helps distinguish between different users of your app. This allows your app to identify specific users in case of abuse reports, preventing your entire app from being affected by the actions of individual users. Maximum of 128 characters."
-    }).check(Schema.isMaxLength(128))
-  ),
-  "session_id": Schema.optionalKey(
-    Schema.String.annotate({
-      "description":
-        "A unique identifier for grouping related requests (e.g., a conversation or agent workflow) for observability. If provided in both the request body and the x-session-id header, the body value takes precedence. Maximum of 128 characters."
-    }).check(Schema.isMaxLength(128))
-  ),
-  "trace": Schema.optionalKey(
-    Schema.Struct({
-      "trace_id": Schema.optionalKey(Schema.String),
-      "trace_name": Schema.optionalKey(Schema.String),
-      "span_name": Schema.optionalKey(Schema.String),
-      "generation_name": Schema.optionalKey(Schema.String),
-      "parent_span_id": Schema.optionalKey(Schema.String)
-    }).annotate({
-      "description":
-        "Metadata for observability and tracing. Known keys (trace_id, trace_name, span_name, generation_name, parent_span_id) have special handling. Additional keys are passed through as custom metadata to configured broadcast destinations."
-    })
-  )
-}).annotate({ "description": "Request schema for Responses endpoint" })
-export type ChatGenerationParams = {
-  readonly "provider"?: {
-    readonly "allow_fallbacks"?: boolean | null
-    readonly "require_parameters"?: boolean | null
-    readonly "data_collection"?: "deny" | "allow" | null
-    readonly "zdr"?: boolean | null
-    readonly "enforce_distillable_text"?: boolean | null
-    readonly "order"?: __schema5 | null
-    readonly "only"?: __schema5 | null
-    readonly "ignore"?: __schema5 | null
-    readonly "quantizations"?:
-      | ReadonlyArray<"int4" | "int8" | "fp4" | "fp6" | "fp8" | "fp16" | "bf16" | "fp32" | "unknown">
-      | null
-    readonly "sort"?: ProviderSortUnion | null
-    readonly "max_price"?: {
-      readonly "prompt"?: __schema11 | ModelName | __schema13
-      readonly "completion"?: __schema11 | ModelName | __schema13
-      readonly "image"?: __schema14
-      readonly "audio"?: __schema14
-      readonly "request"?: __schema14
-    }
-    readonly "preferred_min_throughput"?: number | {
-      readonly "p50"?: number | null
-      readonly "p75"?: number | null
-      readonly "p90"?: number | null
-      readonly "p99"?: number | null
-    } | null
-    readonly "preferred_max_latency"?: number | {
-      readonly "p50"?: number | null
-      readonly "p75"?: number | null
-      readonly "p90"?: number | null
-      readonly "p99"?: number | null
-    } | null
-  } | null
-  readonly "plugins"?: ReadonlyArray<
-    | { readonly "id": "auto-router"; readonly "enabled"?: boolean; readonly "allowed_models"?: ReadonlyArray<string> }
-    | { readonly "id": "moderation" }
-    | {
-      readonly "id": "web"
-      readonly "enabled"?: boolean
-      readonly "max_results"?: number
-      readonly "search_prompt"?: string
-      readonly "engine"?: "native" | "exa"
-    }
-    | {
-      readonly "id": "file-parser"
-      readonly "enabled"?: boolean
-      readonly "pdf"?: { readonly "engine"?: "mistral-ocr" | "pdf-text" | "native" }
-    }
-    | { readonly "id": "response-healing"; readonly "enabled"?: boolean }
-  >
-  readonly "route"?: "fallback" | "sort" | null
-  readonly "user"?: string
-  readonly "session_id"?: string
-  readonly "trace"?: {
-    readonly "trace_id"?: string
-    readonly "trace_name"?: string
-    readonly "span_name"?: string
-    readonly "generation_name"?: string
-    readonly "parent_span_id"?: string
-  }
-  readonly "messages": ReadonlyArray<Message>
-  readonly "model"?: ModelName
-  readonly "models"?: ReadonlyArray<ModelName>
-  readonly "frequency_penalty"?: number | null
-  readonly "logit_bias"?: {} | null
-  readonly "logprobs"?: boolean | null
-  readonly "top_logprobs"?: number | null
-  readonly "max_completion_tokens"?: number | null
-  readonly "max_tokens"?: number | null
-  readonly "metadata"?: {}
-  readonly "presence_penalty"?: number | null
-  readonly "reasoning"?: {
-    readonly "effort"?: "xhigh" | "high" | "medium" | "low" | "minimal" | "none" | null
-    readonly "summary"?: ReasoningSummaryVerbosity | null
-  }
-  readonly "response_format"?:
-    | { readonly "type": "text" }
-    | { readonly "type": "json_object" }
-    | ResponseFormatJSONSchema
-    | ResponseFormatTextGrammar
-    | { readonly "type": "python" }
-  readonly "seed"?: number | null
-  readonly "stop"?: string | ReadonlyArray<ModelName> | null
-  readonly "stream"?: boolean
-  readonly "stream_options"?: ChatStreamOptions | null
-  readonly "temperature"?: number | null
-  readonly "parallel_tool_calls"?: boolean | null
-  readonly "tool_choice"?: ToolChoiceOption
-  readonly "tools"?: ReadonlyArray<ToolDefinitionJson>
-  readonly "top_p"?: number | null
-  readonly "debug"?: { readonly "echo_upstream_body"?: boolean }
-  readonly "image_config"?: {}
-  readonly "modalities"?: ReadonlyArray<"text" | "image">
-}
-export const ChatGenerationParams = Schema.Struct({
-  "provider": Schema.optionalKey(
-    Schema.Union([
-      Schema.Struct({
-        "allow_fallbacks": Schema.optionalKey(
-          Schema.Union([Schema.Boolean, Schema.Null]).annotate({
-            "description":
-              "Whether to allow backup providers to serve requests\n- true: (default) when the primary provider (or your custom providers in \"order\") is unavailable, use the next best provider.\n- false: use only the primary/custom provider, and return the upstream error if it's unavailable.\n"
-          })
-        ),
-        "require_parameters": Schema.optionalKey(
-          Schema.Union([Schema.Boolean, Schema.Null]).annotate({
-            "description":
-              "Whether to filter providers to only those that support the parameters you've provided. If this setting is omitted or set to false, then providers will receive only the parameters they support, and ignore the rest."
-          })
-        ),
-        "data_collection": Schema.optionalKey(
-          Schema.Union([Schema.Literals(["deny", "allow"]), Schema.Null]).annotate({
-            "description":
-              "Data collection setting. If no available model provider meets the requirement, your request will return an error.\n- allow: (default) allow providers which store user data non-transiently and may train on it\n\n- deny: use only providers which do not collect user data."
-          })
-        ),
-        "zdr": Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Null])),
-        "enforce_distillable_text": Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Null])),
-        "order": Schema.optionalKey(
-          Schema.Union([__schema5, Schema.Null]).annotate({
-            "description":
-              "An ordered list of provider slugs. The router will attempt to use the first provider in the subset of this list that supports your requested model, and fall back to the next if it is unavailable. If no providers are available, the request will fail with an error message."
-          })
-        ),
-        "only": Schema.optionalKey(
-          Schema.Union([__schema5, Schema.Null]).annotate({
-            "description":
-              "List of provider slugs to allow. If provided, this list is merged with your account-wide allowed provider settings for this request."
-          })
-        ),
-        "ignore": Schema.optionalKey(
-          Schema.Union([__schema5, Schema.Null]).annotate({
-            "description":
-              "List of provider slugs to ignore. If provided, this list is merged with your account-wide ignored provider settings for this request."
-          })
-        ),
-        "quantizations": Schema.optionalKey(
-          Schema.Union([
-            Schema.Array(Schema.Literals(["int4", "int8", "fp4", "fp6", "fp8", "fp16", "bf16", "fp32", "unknown"])),
-            Schema.Null
-          ]).annotate({ "description": "A list of quantization levels to filter the provider by." })
-        ),
-        "sort": Schema.optionalKey(
-          Schema.Union([ProviderSortUnion, Schema.Null]).annotate({
-            "description":
-              "The sorting strategy to use for this request, if \"order\" is not specified. When set, no load balancing is performed."
-          })
-        ),
-        "max_price": Schema.optionalKey(
-          Schema.Struct({
-            "prompt": Schema.optionalKey(Schema.Union([__schema11, ModelName, __schema13])),
-            "completion": Schema.optionalKey(Schema.Union([__schema11, ModelName, __schema13])),
-            "image": Schema.optionalKey(__schema14),
-            "audio": Schema.optionalKey(__schema14),
-            "request": Schema.optionalKey(__schema14)
-          }).annotate({
-            "description":
-              "The object specifying the maximum price you want to pay for this request. USD price per million tokens, for prompt and completion."
-          })
-        ),
-        "preferred_min_throughput": Schema.optionalKey(
-          Schema.Union([
-            Schema.Union([
-              Schema.Number.check(Schema.isFinite()),
-              Schema.Struct({
-                "p50": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isFinite()), Schema.Null])),
-                "p75": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isFinite()), Schema.Null])),
-                "p90": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isFinite()), Schema.Null])),
-                "p99": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isFinite()), Schema.Null]))
-              })
-            ]),
-            Schema.Null
-          ]).annotate({
-            "description":
-              "Preferred minimum throughput (in tokens per second). Can be a number (applies to p50) or an object with percentile-specific cutoffs. Endpoints below the threshold(s) may still be used, but are deprioritized in routing. When using fallback models, this may cause a fallback model to be used instead of the primary model if it meets the threshold."
-          })
-        ),
-        "preferred_max_latency": Schema.optionalKey(
-          Schema.Union([
-            Schema.Union([
-              Schema.Number.check(Schema.isFinite()),
-              Schema.Struct({
-                "p50": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isFinite()), Schema.Null])),
-                "p75": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isFinite()), Schema.Null])),
-                "p90": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isFinite()), Schema.Null])),
-                "p99": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isFinite()), Schema.Null]))
-              })
-            ]),
-            Schema.Null
-          ]).annotate({
-            "description":
-              "Preferred maximum latency (in seconds). Can be a number (applies to p50) or an object with percentile-specific cutoffs. Endpoints above the threshold(s) may still be used, but are deprioritized in routing. When using fallback models, this may cause a fallback model to be used instead of the primary model if it meets the threshold."
-          })
-        )
-      }),
-      Schema.Null
-    ]).annotate({
-      "description": "When multiple model providers are available, optionally indicate your routing preference."
-    })
-  ),
-  "plugins": Schema.optionalKey(
-    Schema.Array(
-      Schema.Union([
-        Schema.Struct({
-          "id": Schema.Literal("auto-router"),
-          "enabled": Schema.optionalKey(Schema.Boolean),
-          "allowed_models": Schema.optionalKey(Schema.Array(Schema.String))
-        }),
-        Schema.Struct({ "id": Schema.Literal("moderation") }),
-        Schema.Struct({
-          "id": Schema.Literal("web"),
-          "enabled": Schema.optionalKey(Schema.Boolean),
-          "max_results": Schema.optionalKey(Schema.Number.check(Schema.isFinite())),
-          "search_prompt": Schema.optionalKey(Schema.String),
-          "engine": Schema.optionalKey(Schema.Literals(["native", "exa"]))
-        }),
-        Schema.Struct({
-          "id": Schema.Literal("file-parser"),
-          "enabled": Schema.optionalKey(Schema.Boolean),
-          "pdf": Schema.optionalKey(
-            Schema.Struct({ "engine": Schema.optionalKey(Schema.Literals(["mistral-ocr", "pdf-text", "native"])) })
-          )
-        }),
-        Schema.Struct({ "id": Schema.Literal("response-healing"), "enabled": Schema.optionalKey(Schema.Boolean) })
-      ], { mode: "oneOf" })
-    ).annotate({ "description": "Plugins you want to enable for this request, including their settings." })
-  ),
-  "route": Schema.optionalKey(Schema.Union([Schema.Literals(["fallback", "sort"]), Schema.Null])),
-  "user": Schema.optionalKey(Schema.String),
+  "user": Schema.optionalKey(Schema.String.annotate({ "description": "Unique user identifier" })),
   "session_id": Schema.optionalKey(
     Schema.String.annotate({
       "description":
@@ -6801,97 +10024,133 @@ export const ChatGenerationParams = Schema.Struct({
         "Metadata for observability and tracing. Known keys (trace_id, trace_name, span_name, generation_name, parent_span_id) have special handling. Additional keys are passed through as custom metadata to configured broadcast destinations."
     })
   ),
-  "messages": Schema.Array(Message).check(Schema.isMinLength(1)),
+  "messages": Schema.Array(Message).annotate({ "description": "List of messages for the conversation" }).check(
+    Schema.isMinLength(1)
+  ),
   "model": Schema.optionalKey(ModelName),
-  "models": Schema.optionalKey(Schema.Array(ModelName)),
+  "models": Schema.optionalKey(ModelNames),
   "frequency_penalty": Schema.optionalKey(
-    Schema.Union([
-      Schema.Number.check(Schema.isFinite()).check(Schema.isGreaterThanOrEqualTo(-2)).check(
-        Schema.isLessThanOrEqualTo(2)
-      ),
-      Schema.Null
-    ])
+    Schema.Number.annotate({ "description": "Frequency penalty (-2.0 to 2.0)" }).check(Schema.isFinite()).check(
+      Schema.isGreaterThanOrEqualTo(-2)
+    ).check(Schema.isLessThanOrEqualTo(2))
   ),
-  "logit_bias": Schema.optionalKey(
-    Schema.Union([Schema.Struct({}).check(Schema.isPropertyNames(Schema.String)), Schema.Null])
-  ),
-  "logprobs": Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Null])),
+  "logit_bias": Schema.optionalKey(Schema.Struct({}).annotate({ "description": "Token logit bias adjustments" })),
+  "logprobs": Schema.optionalKey(Schema.Boolean.annotate({ "description": "Return log probabilities" })),
   "top_logprobs": Schema.optionalKey(
-    Schema.Union([
-      Schema.Number.check(Schema.isFinite()).check(Schema.isGreaterThanOrEqualTo(0)).check(
-        Schema.isLessThanOrEqualTo(20)
-      ),
-      Schema.Null
-    ])
+    Schema.Number.annotate({ "description": "Number of top log probabilities to return (0-20)" }).check(
+      Schema.isFinite()
+    ).check(Schema.isGreaterThanOrEqualTo(0)).check(Schema.isLessThanOrEqualTo(20))
   ),
   "max_completion_tokens": Schema.optionalKey(
-    Schema.Union([Schema.Number.check(Schema.isFinite()).check(Schema.isGreaterThanOrEqualTo(1)), Schema.Null])
+    Schema.Number.annotate({ "description": "Maximum tokens in completion" }).check(Schema.isFinite()).check(
+      Schema.isGreaterThanOrEqualTo(1)
+    )
   ),
   "max_tokens": Schema.optionalKey(
-    Schema.Union([Schema.Number.check(Schema.isFinite()).check(Schema.isGreaterThanOrEqualTo(1)), Schema.Null])
+    Schema.Number.annotate({
+      "description":
+        "Maximum tokens (deprecated, use max_completion_tokens). Note: some providers enforce a minimum of 16."
+    }).check(Schema.isFinite()).check(Schema.isGreaterThanOrEqualTo(1))
   ),
-  "metadata": Schema.optionalKey(Schema.Struct({}).check(Schema.isPropertyNames(Schema.String))),
+  "metadata": Schema.optionalKey(
+    Schema.Struct({}).annotate({
+      "description": "Key-value pairs for additional object information (max 16 pairs, 64 char keys, 512 char values)"
+    })
+  ),
   "presence_penalty": Schema.optionalKey(
-    Schema.Union([
-      Schema.Number.check(Schema.isFinite()).check(Schema.isGreaterThanOrEqualTo(-2)).check(
-        Schema.isLessThanOrEqualTo(2)
-      ),
-      Schema.Null
-    ])
+    Schema.Number.annotate({ "description": "Presence penalty (-2.0 to 2.0)" }).check(Schema.isFinite()).check(
+      Schema.isGreaterThanOrEqualTo(-2)
+    ).check(Schema.isLessThanOrEqualTo(2))
   ),
   "reasoning": Schema.optionalKey(
     Schema.Struct({
       "effort": Schema.optionalKey(
-        Schema.Union([Schema.Literals(["xhigh", "high", "medium", "low", "minimal", "none"]), Schema.Null])
+        Schema.Literals(["xhigh", "high", "medium", "low", "minimal", "none"]).annotate({
+          "description": "Constrains effort on reasoning for reasoning models"
+        })
       ),
-      "summary": Schema.optionalKey(Schema.Union([ReasoningSummaryVerbosity, Schema.Null]))
-    })
+      "summary": Schema.optionalKey(Schema.Union([ReasoningSummaryVerbosity, Schema.Unknown, Schema.Unknown]))
+    }).annotate({ "description": "Configuration options for reasoning models" })
   ),
   "response_format": Schema.optionalKey(
     Schema.Union([
-      Schema.Struct({ "type": Schema.Literal("text") }),
-      Schema.Struct({ "type": Schema.Literal("json_object") }),
+      ResponseFormatText,
+      ResponseFormatJSONObject,
       ResponseFormatJSONSchema,
       ResponseFormatTextGrammar,
-      Schema.Struct({ "type": Schema.Literal("python") })
-    ], { mode: "oneOf" })
+      ResponseFormatTextPython
+    ], { mode: "oneOf" }).annotate({ "description": "Response format configuration" })
   ),
   "seed": Schema.optionalKey(
-    Schema.Union([
-      Schema.Number.check(Schema.isInt()).check(Schema.isGreaterThanOrEqualTo(-9007199254740991)).check(
-        Schema.isLessThanOrEqualTo(9007199254740991)
-      ),
-      Schema.Null
-    ])
+    Schema.Number.annotate({ "description": "Random seed for deterministic outputs" }).check(Schema.isInt())
   ),
   "stop": Schema.optionalKey(
-    Schema.Union([Schema.Union([Schema.String, Schema.Array(ModelName).check(Schema.isMaxLength(4))]), Schema.Null])
+    Schema.Union([Schema.String, Schema.Array(Schema.String).check(Schema.isMaxLength(4)), Schema.Unknown]).annotate({
+      "description": "Stop sequences (up to 4)"
+    })
   ),
-  "stream": Schema.optionalKey(Schema.Boolean),
-  "stream_options": Schema.optionalKey(Schema.Union([ChatStreamOptions, Schema.Null])),
+  "stream": Schema.optionalKey(Schema.Boolean.annotate({ "description": "Enable streaming response" })),
+  "stream_options": Schema.optionalKey(ChatStreamOptions),
   "temperature": Schema.optionalKey(
-    Schema.Union([
-      Schema.Number.check(Schema.isFinite()).check(Schema.isGreaterThanOrEqualTo(0)).check(
-        Schema.isLessThanOrEqualTo(2)
-      ),
-      Schema.Null
-    ])
+    Schema.Number.annotate({ "description": "Sampling temperature (0-2)" }).check(Schema.isFinite()).check(
+      Schema.isGreaterThanOrEqualTo(0)
+    ).check(Schema.isLessThanOrEqualTo(2))
   ),
-  "parallel_tool_calls": Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Null])),
+  "parallel_tool_calls": Schema.optionalKey(Schema.Boolean),
   "tool_choice": Schema.optionalKey(ToolChoiceOption),
-  "tools": Schema.optionalKey(Schema.Array(ToolDefinitionJson)),
-  "top_p": Schema.optionalKey(
-    Schema.Union([
-      Schema.Number.check(Schema.isFinite()).check(Schema.isGreaterThanOrEqualTo(0)).check(
-        Schema.isLessThanOrEqualTo(1)
-      ),
-      Schema.Null
-    ])
+  "tools": Schema.optionalKey(
+    Schema.Array(ToolDefinitionJson).annotate({ "description": "Available tools for function calling" })
   ),
-  "debug": Schema.optionalKey(Schema.Struct({ "echo_upstream_body": Schema.optionalKey(Schema.Boolean) })),
-  "image_config": Schema.optionalKey(Schema.Struct({}).check(Schema.isPropertyNames(Schema.String))),
-  "modalities": Schema.optionalKey(Schema.Array(Schema.Literals(["text", "image"])))
-})
+  "top_p": Schema.optionalKey(
+    Schema.Number.annotate({ "description": "Nucleus sampling parameter (0-1)" }).check(Schema.isFinite()).check(
+      Schema.isGreaterThanOrEqualTo(0)
+    ).check(Schema.isLessThanOrEqualTo(1))
+  ),
+  "debug": Schema.optionalKey(DebugOptions),
+  "image_config": Schema.optionalKey(
+    Schema.Struct({}).annotate({
+      "description":
+        "Provider-specific image configuration options. Keys and values vary by model/provider. See https://openrouter.ai/docs/guides/overview/multimodal/image-generation for more details."
+    })
+  ),
+  "modalities": Schema.optionalKey(
+    Schema.Array(Schema.Literals(["text", "image", "audio"])).annotate({
+      "description": "Output modalities for the response. Supported values are \"text\", \"image\", and \"audio\"."
+    })
+  ),
+  "cache_control": Schema.optionalKey(
+    Schema.Struct({ "type": Schema.Literal("ephemeral"), "ttl": Schema.optionalKey(Schema.Literals(["5m", "1h"])) })
+      .annotate({
+        "description":
+          "Enable automatic prompt caching. When set, the system automatically applies cache breakpoints to the last cacheable block in the request. Currently supported for Anthropic Claude models."
+      })
+  )
+}).annotate({ "description": "Chat completion request parameters" })
+export type ChatStreamingResponseChunk = {
+  readonly "id": string
+  readonly "choices": ReadonlyArray<ChatStreamingChoice>
+  readonly "created": number
+  readonly "model": string
+  readonly "object": "chat.completion.chunk"
+  readonly "system_fingerprint"?: string
+  readonly "error"?: { readonly "message": string; readonly "code": number }
+  readonly "usage"?: ChatGenerationTokenUsage
+}
+export const ChatStreamingResponseChunk = Schema.Struct({
+  "id": Schema.String.annotate({ "description": "Unique chunk identifier" }),
+  "choices": Schema.Array(ChatStreamingChoice).annotate({ "description": "List of streaming chunk choices" }),
+  "created": Schema.Number.annotate({ "description": "Unix timestamp of creation" }).check(Schema.isFinite()),
+  "model": Schema.String.annotate({ "description": "Model used for completion" }),
+  "object": Schema.Literal("chat.completion.chunk"),
+  "system_fingerprint": Schema.optionalKey(Schema.String.annotate({ "description": "System fingerprint" })),
+  "error": Schema.optionalKey(
+    Schema.Struct({
+      "message": Schema.String.annotate({ "description": "Error message" }),
+      "code": Schema.Number.annotate({ "description": "Error code" }).check(Schema.isFinite())
+    }).annotate({ "description": "Error information" })
+  ),
+  "usage": Schema.optionalKey(ChatGenerationTokenUsage)
+}).annotate({ "description": "Streaming chat completion chunk" })
 export type OpenResponsesCreatedEvent = {
   readonly "type": "response.created"
   readonly "response": OpenAIResponsesNonStreamingResponse
@@ -7120,6 +10379,38 @@ export type GetUserActivity403 = ForbiddenResponse
 export const GetUserActivity403 = ForbiddenResponse
 export type GetUserActivity500 = InternalServerResponse
 export const GetUserActivity500 = InternalServerResponse
+export type SendChatCompletionRequestRequestJson = ChatGenerationParams
+export const SendChatCompletionRequestRequestJson = ChatGenerationParams
+export type SendChatCompletionRequest200 = ChatResponse
+export const SendChatCompletionRequest200 = ChatResponse
+export type SendChatCompletionRequest200Sse = { readonly "data": ChatStreamingResponseChunk }
+export const SendChatCompletionRequest200Sse = Schema.Struct({ "data": ChatStreamingResponseChunk })
+export type SendChatCompletionRequest400 = BadRequestResponse
+export const SendChatCompletionRequest400 = BadRequestResponse
+export type SendChatCompletionRequest401 = UnauthorizedResponse
+export const SendChatCompletionRequest401 = UnauthorizedResponse
+export type SendChatCompletionRequest402 = PaymentRequiredResponse
+export const SendChatCompletionRequest402 = PaymentRequiredResponse
+export type SendChatCompletionRequest404 = NotFoundResponse
+export const SendChatCompletionRequest404 = NotFoundResponse
+export type SendChatCompletionRequest408 = RequestTimeoutResponse
+export const SendChatCompletionRequest408 = RequestTimeoutResponse
+export type SendChatCompletionRequest413 = PayloadTooLargeResponse
+export const SendChatCompletionRequest413 = PayloadTooLargeResponse
+export type SendChatCompletionRequest422 = UnprocessableEntityResponse
+export const SendChatCompletionRequest422 = UnprocessableEntityResponse
+export type SendChatCompletionRequest429 = TooManyRequestsResponse
+export const SendChatCompletionRequest429 = TooManyRequestsResponse
+export type SendChatCompletionRequest500 = InternalServerResponse
+export const SendChatCompletionRequest500 = InternalServerResponse
+export type SendChatCompletionRequest502 = BadGatewayResponse
+export const SendChatCompletionRequest502 = BadGatewayResponse
+export type SendChatCompletionRequest503 = ServiceUnavailableResponse
+export const SendChatCompletionRequest503 = ServiceUnavailableResponse
+export type SendChatCompletionRequest524 = EdgeNetworkTimeoutResponse
+export const SendChatCompletionRequest524 = EdgeNetworkTimeoutResponse
+export type SendChatCompletionRequest529 = ProviderOverloadedResponse
+export const SendChatCompletionRequest529 = ProviderOverloadedResponse
 export type GetCredits200 = { readonly "data": { readonly "total_credits": number; readonly "total_usage": number } }
 export const GetCredits200 = Schema.Struct({
   "data": Schema.Struct({
@@ -7375,6 +10666,7 @@ export type GetGeneration200 = {
           | "Together 2"
           | "Ubicloud"
           | "01.AI"
+          | "AkashML"
           | "AI21"
           | "AionLabs"
           | "Alibaba"
@@ -7409,6 +10701,7 @@ export type GetGeneration200 = {
           | "Inception"
           | "Inceptron"
           | "InferenceNet"
+          | "Ionstream"
           | "Infermatic"
           | "Io Net"
           | "Inflection"
@@ -7453,6 +10746,8 @@ export type GetGeneration200 = {
         readonly "is_byok"?: boolean
       }
     >
+    readonly "user_agent": string
+    readonly "http_referer": string
   }
 }
 export const GetGeneration200 = Schema.Struct({
@@ -7556,6 +10851,7 @@ export const GetGeneration200 = Schema.Struct({
           "Together 2",
           "Ubicloud",
           "01.AI",
+          "AkashML",
           "AI21",
           "AionLabs",
           "Alibaba",
@@ -7590,6 +10886,7 @@ export const GetGeneration200 = Schema.Struct({
           "Inception",
           "Inceptron",
           "InferenceNet",
+          "Ionstream",
           "Infermatic",
           "Io Net",
           "Inflection",
@@ -7634,7 +10931,9 @@ export const GetGeneration200 = Schema.Struct({
       "status": Schema.Number.check(Schema.isFinite()),
       "latency": Schema.optionalKey(Schema.Number.check(Schema.isFinite())),
       "is_byok": Schema.optionalKey(Schema.Boolean)
-    })).annotate({ "description": "List of provider responses for this generation, including fallback attempts" })
+    })).annotate({ "description": "List of provider responses for this generation, including fallback attempts" }),
+    "user_agent": Schema.String.annotate({ "description": "User-Agent header from the request" }),
+    "http_referer": Schema.String.annotate({ "description": "Referer header from the request" })
   }).annotate({ "description": "Generation data" })
 }).annotate({ "description": "Generation response" })
 export type GetGeneration401 = UnauthorizedResponse
@@ -7653,8 +10952,19 @@ export type GetGeneration524 = EdgeNetworkTimeoutResponse
 export const GetGeneration524 = EdgeNetworkTimeoutResponse
 export type GetGeneration529 = ProviderOverloadedResponse
 export const GetGeneration529 = ProviderOverloadedResponse
+export type ListModelsCountParams = { readonly "output_modalities"?: string }
+export const ListModelsCountParams = Schema.Struct({
+  "output_modalities": Schema.optionalKey(
+    Schema.String.annotate({
+      "description":
+        "Filter models by output modality. Accepts a comma-separated list of modalities (text, image, audio, embeddings) or \"all\" to include all models. Defaults to \"text\"."
+    })
+  )
+})
 export type ListModelsCount200 = ModelsCountResponse
 export const ListModelsCount200 = ModelsCountResponse
+export type ListModelsCount400 = BadRequestResponse
+export const ListModelsCount400 = BadRequestResponse
 export type ListModelsCount500 = InternalServerResponse
 export const ListModelsCount500 = InternalServerResponse
 export type GetModelsParams = {
@@ -7672,6 +10982,7 @@ export type GetModelsParams = {
     | "trivia"
     | "academia"
   readonly "supported_parameters"?: string
+  readonly "output_modalities"?: string
 }
 export const GetModelsParams = Schema.Struct({
   "category": Schema.optionalKey(
@@ -7690,7 +11001,13 @@ export const GetModelsParams = Schema.Struct({
       "academia"
     ]).annotate({ "description": "Filter models by use case category" })
   ),
-  "supported_parameters": Schema.optionalKey(Schema.String)
+  "supported_parameters": Schema.optionalKey(Schema.String),
+  "output_modalities": Schema.optionalKey(
+    Schema.String.annotate({
+      "description":
+        "Filter models by output modality. Accepts a comma-separated list of modalities (text, image, audio, embeddings) or \"all\" to include all models. Defaults to \"text\"."
+    })
+  )
 })
 export type GetModels200 = ModelsListResponse
 export const GetModels200 = ModelsListResponse
@@ -8153,6 +11470,7 @@ export type ListGuardrails200 = {
       readonly "limit_usd"?: number
       readonly "reset_interval"?: "daily" | "weekly" | "monthly"
       readonly "allowed_providers"?: ReadonlyArray<string>
+      readonly "ignored_providers"?: ReadonlyArray<string>
       readonly "allowed_models"?: ReadonlyArray<string>
       readonly "enforce_zdr"?: boolean
       readonly "created_at": string
@@ -8179,6 +11497,9 @@ export const ListGuardrails200 = Schema.Struct({
     "allowed_providers": Schema.optionalKey(
       Schema.Array(Schema.String).annotate({ "description": "List of allowed provider IDs" })
     ),
+    "ignored_providers": Schema.optionalKey(
+      Schema.Array(Schema.String).annotate({ "description": "List of provider IDs to exclude from routing" })
+    ),
     "allowed_models": Schema.optionalKey(
       Schema.Array(Schema.String).annotate({ "description": "Array of model canonical_slugs (immutable identifiers)" })
     ),
@@ -8202,6 +11523,7 @@ export type CreateGuardrailRequestJson = {
   readonly "limit_usd"?: number
   readonly "reset_interval"?: "daily" | "weekly" | "monthly"
   readonly "allowed_providers"?: ReadonlyArray<string>
+  readonly "ignored_providers"?: ReadonlyArray<string>
   readonly "allowed_models"?: ReadonlyArray<string>
   readonly "enforce_zdr"?: boolean
 }
@@ -8225,6 +11547,11 @@ export const CreateGuardrailRequestJson = Schema.Struct({
   "allowed_providers": Schema.optionalKey(
     Schema.Array(Schema.String).annotate({ "description": "List of allowed provider IDs" }).check(Schema.isMinLength(1))
   ),
+  "ignored_providers": Schema.optionalKey(
+    Schema.Array(Schema.String).annotate({ "description": "List of provider IDs to exclude from routing" }).check(
+      Schema.isMinLength(1)
+    )
+  ),
   "allowed_models": Schema.optionalKey(
     Schema.Array(Schema.String).annotate({
       "description": "Array of model identifiers (slug or canonical_slug accepted)"
@@ -8242,6 +11569,7 @@ export type CreateGuardrail201 = {
     readonly "limit_usd"?: number
     readonly "reset_interval"?: "daily" | "weekly" | "monthly"
     readonly "allowed_providers"?: ReadonlyArray<string>
+    readonly "ignored_providers"?: ReadonlyArray<string>
     readonly "allowed_models"?: ReadonlyArray<string>
     readonly "enforce_zdr"?: boolean
     readonly "created_at": string
@@ -8265,6 +11593,9 @@ export const CreateGuardrail201 = Schema.Struct({
     ),
     "allowed_providers": Schema.optionalKey(
       Schema.Array(Schema.String).annotate({ "description": "List of allowed provider IDs" })
+    ),
+    "ignored_providers": Schema.optionalKey(
+      Schema.Array(Schema.String).annotate({ "description": "List of provider IDs to exclude from routing" })
     ),
     "allowed_models": Schema.optionalKey(
       Schema.Array(Schema.String).annotate({ "description": "Array of model canonical_slugs (immutable identifiers)" })
@@ -8292,6 +11623,7 @@ export type GetGuardrail200 = {
     readonly "limit_usd"?: number
     readonly "reset_interval"?: "daily" | "weekly" | "monthly"
     readonly "allowed_providers"?: ReadonlyArray<string>
+    readonly "ignored_providers"?: ReadonlyArray<string>
     readonly "allowed_models"?: ReadonlyArray<string>
     readonly "enforce_zdr"?: boolean
     readonly "created_at": string
@@ -8315,6 +11647,9 @@ export const GetGuardrail200 = Schema.Struct({
     ),
     "allowed_providers": Schema.optionalKey(
       Schema.Array(Schema.String).annotate({ "description": "List of allowed provider IDs" })
+    ),
+    "ignored_providers": Schema.optionalKey(
+      Schema.Array(Schema.String).annotate({ "description": "List of provider IDs to exclude from routing" })
     ),
     "allowed_models": Schema.optionalKey(
       Schema.Array(Schema.String).annotate({ "description": "Array of model canonical_slugs (immutable identifiers)" })
@@ -8350,6 +11685,7 @@ export type UpdateGuardrailRequestJson = {
   readonly "limit_usd"?: number
   readonly "reset_interval"?: "daily" | "weekly" | "monthly"
   readonly "allowed_providers"?: ReadonlyArray<string>
+  readonly "ignored_providers"?: ReadonlyArray<string>
   readonly "allowed_models"?: ReadonlyArray<string>
   readonly "enforce_zdr"?: boolean
 }
@@ -8377,6 +11713,11 @@ export const UpdateGuardrailRequestJson = Schema.Struct({
       Schema.isMinLength(1)
     )
   ),
+  "ignored_providers": Schema.optionalKey(
+    Schema.Array(Schema.String).annotate({ "description": "List of provider IDs to exclude from routing" }).check(
+      Schema.isMinLength(1)
+    )
+  ),
   "allowed_models": Schema.optionalKey(
     Schema.Array(Schema.String).annotate({
       "description": "Array of model identifiers (slug or canonical_slug accepted)"
@@ -8394,6 +11735,7 @@ export type UpdateGuardrail200 = {
     readonly "limit_usd"?: number
     readonly "reset_interval"?: "daily" | "weekly" | "monthly"
     readonly "allowed_providers"?: ReadonlyArray<string>
+    readonly "ignored_providers"?: ReadonlyArray<string>
     readonly "allowed_models"?: ReadonlyArray<string>
     readonly "enforce_zdr"?: boolean
     readonly "created_at": string
@@ -8417,6 +11759,9 @@ export const UpdateGuardrail200 = Schema.Struct({
     ),
     "allowed_providers": Schema.optionalKey(
       Schema.Array(Schema.String).annotate({ "description": "List of allowed provider IDs" })
+    ),
+    "ignored_providers": Schema.optionalKey(
+      Schema.Array(Schema.String).annotate({ "description": "List of provider IDs to exclude from routing" })
     ),
     "allowed_models": Schema.optionalKey(
       Schema.Array(Schema.String).annotate({ "description": "Array of model canonical_slugs (immutable identifiers)" })
@@ -8787,6 +12132,10 @@ export type CreateAuthKeysCodeRequestJson = {
   readonly "code_challenge_method"?: "S256" | "plain"
   readonly "limit"?: number
   readonly "expires_at"?: string
+  readonly "key_label"?: string
+  readonly "usage_limit_type"?: "daily" | "weekly" | "monthly"
+  readonly "spawn_agent"?: string
+  readonly "spawn_cloud"?: string
 }
 export const CreateAuthKeysCodeRequestJson = Schema.Struct({
   "callback_url": Schema.String.annotate({
@@ -8808,7 +12157,19 @@ export const CreateAuthKeysCodeRequestJson = Schema.Struct({
       "description": "Optional expiration time for the API key to be created",
       "format": "date-time"
     })
-  )
+  ),
+  "key_label": Schema.optionalKey(
+    Schema.String.annotate({
+      "description": "Optional custom label for the API key. Defaults to the app name if not provided."
+    }).check(Schema.isMaxLength(100))
+  ),
+  "usage_limit_type": Schema.optionalKey(
+    Schema.Literals(["daily", "weekly", "monthly"]).annotate({
+      "description": "Optional credit limit reset interval. When set, the credit limit resets on this interval."
+    })
+  ),
+  "spawn_agent": Schema.optionalKey(Schema.String.annotate({ "description": "Agent identifier for spawn telemetry" })),
+  "spawn_cloud": Schema.optionalKey(Schema.String.annotate({ "description": "Cloud identifier for spawn telemetry" }))
 })
 export type CreateAuthKeysCode200 = {
   readonly "data": { readonly "id": string; readonly "app_id": number; readonly "created_at": string }
@@ -8828,36 +12189,6 @@ export type CreateAuthKeysCode401 = UnauthorizedResponse
 export const CreateAuthKeysCode401 = UnauthorizedResponse
 export type CreateAuthKeysCode500 = InternalServerResponse
 export const CreateAuthKeysCode500 = InternalServerResponse
-export type SendChatCompletionRequestRequestJson = ChatGenerationParams
-export const SendChatCompletionRequestRequestJson = ChatGenerationParams
-export type SendChatCompletionRequest200 = {
-  readonly "id": string
-  readonly "choices": ReadonlyArray<ChatResponseChoice>
-  readonly "created": number
-  readonly "model": string
-  readonly "object": "chat.completion"
-  readonly "system_fingerprint"?: string | null
-  readonly "usage"?: ChatGenerationTokenUsage
-}
-export const SendChatCompletionRequest200 = Schema.Struct({
-  "id": Schema.String,
-  "choices": Schema.Array(ChatResponseChoice),
-  "created": Schema.Number.check(Schema.isFinite()),
-  "model": Schema.String,
-  "object": Schema.Literal("chat.completion"),
-  "system_fingerprint": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null])),
-  "usage": Schema.optionalKey(ChatGenerationTokenUsage)
-}).annotate({ "description": "Chat completion response" })
-export type SendChatCompletionRequest200Sse = ChatStreamingResponseChunk
-export const SendChatCompletionRequest200Sse = ChatStreamingResponseChunk
-export type SendChatCompletionRequest400 = ChatError
-export const SendChatCompletionRequest400 = ChatError
-export type SendChatCompletionRequest401 = ChatError
-export const SendChatCompletionRequest401 = ChatError
-export type SendChatCompletionRequest429 = ChatError
-export const SendChatCompletionRequest429 = ChatError
-export type SendChatCompletionRequest500 = ChatError
-export const SendChatCompletionRequest500 = ChatError
 
 export interface OperationConfig {
   /**
@@ -9009,6 +12340,32 @@ export const make = (
           orElse: unexpectedStatus
         }))
       ),
+    "sendChatCompletionRequest": (options) =>
+      HttpClientRequest.post(`/chat/completions`).pipe(
+        HttpClientRequest.bodyJsonUnsafe(options.payload),
+        withResponse(options.config)(HttpClientResponse.matchStatus({
+          "2xx": decodeSuccess(SendChatCompletionRequest200),
+          "400": decodeError("SendChatCompletionRequest400", SendChatCompletionRequest400),
+          "401": decodeError("SendChatCompletionRequest401", SendChatCompletionRequest401),
+          "402": decodeError("SendChatCompletionRequest402", SendChatCompletionRequest402),
+          "404": decodeError("SendChatCompletionRequest404", SendChatCompletionRequest404),
+          "408": decodeError("SendChatCompletionRequest408", SendChatCompletionRequest408),
+          "413": decodeError("SendChatCompletionRequest413", SendChatCompletionRequest413),
+          "422": decodeError("SendChatCompletionRequest422", SendChatCompletionRequest422),
+          "429": decodeError("SendChatCompletionRequest429", SendChatCompletionRequest429),
+          "500": decodeError("SendChatCompletionRequest500", SendChatCompletionRequest500),
+          "502": decodeError("SendChatCompletionRequest502", SendChatCompletionRequest502),
+          "503": decodeError("SendChatCompletionRequest503", SendChatCompletionRequest503),
+          "524": decodeError("SendChatCompletionRequest524", SendChatCompletionRequest524),
+          "529": decodeError("SendChatCompletionRequest529", SendChatCompletionRequest529),
+          orElse: unexpectedStatus
+        }))
+      ),
+    "sendChatCompletionRequestSse": (options) =>
+      HttpClientRequest.post(`/chat/completions`).pipe(
+        HttpClientRequest.bodyJsonUnsafe(options.payload),
+        sseRequest(SendChatCompletionRequest200Sse)
+      ),
     "getCredits": (options) =>
       HttpClientRequest.get(`/credits`).pipe(
         withResponse(options?.config)(HttpClientResponse.matchStatus({
@@ -9081,8 +12438,10 @@ export const make = (
       ),
     "listModelsCount": (options) =>
       HttpClientRequest.get(`/models/count`).pipe(
+        HttpClientRequest.setUrlParams({ "output_modalities": options?.params?.["output_modalities"] as any }),
         withResponse(options?.config)(HttpClientResponse.matchStatus({
           "2xx": decodeSuccess(ListModelsCount200),
+          "400": decodeError("ListModelsCount400", ListModelsCount400),
           "500": decodeError("ListModelsCount500", ListModelsCount500),
           orElse: unexpectedStatus
         }))
@@ -9091,7 +12450,8 @@ export const make = (
       HttpClientRequest.get(`/models`).pipe(
         HttpClientRequest.setUrlParams({
           "category": options?.params?.["category"] as any,
-          "supported_parameters": options?.params?.["supported_parameters"] as any
+          "supported_parameters": options?.params?.["supported_parameters"] as any,
+          "output_modalities": options?.params?.["output_modalities"] as any
         }),
         withResponse(options?.config)(HttpClientResponse.matchStatus({
           "2xx": decodeSuccess(GetModels200),
@@ -9384,23 +12744,6 @@ export const make = (
           "500": decodeError("CreateAuthKeysCode500", CreateAuthKeysCode500),
           orElse: unexpectedStatus
         }))
-      ),
-    "sendChatCompletionRequest": (options) =>
-      HttpClientRequest.post(`/chat/completions`).pipe(
-        HttpClientRequest.bodyJsonUnsafe(options.payload),
-        withResponse(options.config)(HttpClientResponse.matchStatus({
-          "2xx": decodeSuccess(SendChatCompletionRequest200),
-          "400": decodeError("SendChatCompletionRequest400", SendChatCompletionRequest400),
-          "401": decodeError("SendChatCompletionRequest401", SendChatCompletionRequest401),
-          "429": decodeError("SendChatCompletionRequest429", SendChatCompletionRequest429),
-          "500": decodeError("SendChatCompletionRequest500", SendChatCompletionRequest500),
-          orElse: unexpectedStatus
-        }))
-      ),
-    "sendChatCompletionRequestSse": (options) =>
-      HttpClientRequest.post(`/chat/completions`).pipe(
-        HttpClientRequest.bodyJsonUnsafe(options.payload),
-        sseRequest(SendChatCompletionRequest200Sse)
       )
   }
 }
@@ -9484,6 +12827,46 @@ export interface OpenRouterClient {
     | OpenRouterClientError<"GetUserActivity401", typeof GetUserActivity401.Type>
     | OpenRouterClientError<"GetUserActivity403", typeof GetUserActivity403.Type>
     | OpenRouterClientError<"GetUserActivity500", typeof GetUserActivity500.Type>
+  >
+  /**
+   * Sends a request for a model response for the given chat conversation. Supports both streaming and non-streaming modes.
+   */
+  readonly "sendChatCompletionRequest": <Config extends OperationConfig>(
+    options: {
+      readonly payload: typeof SendChatCompletionRequestRequestJson.Encoded
+      readonly config?: Config | undefined
+    }
+  ) => Effect.Effect<
+    WithOptionalResponse<typeof SendChatCompletionRequest200.Type, Config>,
+    | HttpClientError.HttpClientError
+    | SchemaError
+    | OpenRouterClientError<"SendChatCompletionRequest400", typeof SendChatCompletionRequest400.Type>
+    | OpenRouterClientError<"SendChatCompletionRequest401", typeof SendChatCompletionRequest401.Type>
+    | OpenRouterClientError<"SendChatCompletionRequest402", typeof SendChatCompletionRequest402.Type>
+    | OpenRouterClientError<"SendChatCompletionRequest404", typeof SendChatCompletionRequest404.Type>
+    | OpenRouterClientError<"SendChatCompletionRequest408", typeof SendChatCompletionRequest408.Type>
+    | OpenRouterClientError<"SendChatCompletionRequest413", typeof SendChatCompletionRequest413.Type>
+    | OpenRouterClientError<"SendChatCompletionRequest422", typeof SendChatCompletionRequest422.Type>
+    | OpenRouterClientError<"SendChatCompletionRequest429", typeof SendChatCompletionRequest429.Type>
+    | OpenRouterClientError<"SendChatCompletionRequest500", typeof SendChatCompletionRequest500.Type>
+    | OpenRouterClientError<"SendChatCompletionRequest502", typeof SendChatCompletionRequest502.Type>
+    | OpenRouterClientError<"SendChatCompletionRequest503", typeof SendChatCompletionRequest503.Type>
+    | OpenRouterClientError<"SendChatCompletionRequest524", typeof SendChatCompletionRequest524.Type>
+    | OpenRouterClientError<"SendChatCompletionRequest529", typeof SendChatCompletionRequest529.Type>
+  >
+  /**
+   * Sends a request for a model response for the given chat conversation. Supports both streaming and non-streaming modes.
+   */
+  readonly "sendChatCompletionRequestSse": (
+    options: { readonly payload: typeof SendChatCompletionRequestRequestJson.Encoded }
+  ) => Stream.Stream<
+    {
+      readonly event: string
+      readonly id: string | undefined
+      readonly data: typeof SendChatCompletionRequest200Sse.Type
+    },
+    HttpClientError.HttpClientError | SchemaError | Sse.Retry,
+    typeof SendChatCompletionRequest200Sse.DecodingServices
   >
   /**
    * Get total credits purchased and used for the authenticated user. [Management key](/docs/guides/overview/auth/management-api-keys) required.
@@ -9576,11 +12959,15 @@ export interface OpenRouterClient {
    * Get total count of available models
    */
   readonly "listModelsCount": <Config extends OperationConfig>(
-    options: { readonly config?: Config | undefined } | undefined
+    options: {
+      readonly params?: typeof ListModelsCountParams.Encoded | undefined
+      readonly config?: Config | undefined
+    } | undefined
   ) => Effect.Effect<
     WithOptionalResponse<typeof ListModelsCount200.Type, Config>,
     | HttpClientError.HttpClientError
     | SchemaError
+    | OpenRouterClientError<"ListModelsCount400", typeof ListModelsCount400.Type>
     | OpenRouterClientError<"ListModelsCount500", typeof ListModelsCount500.Type>
   >
   /**
@@ -9967,37 +13354,6 @@ export interface OpenRouterClient {
     | OpenRouterClientError<"CreateAuthKeysCode400", typeof CreateAuthKeysCode400.Type>
     | OpenRouterClientError<"CreateAuthKeysCode401", typeof CreateAuthKeysCode401.Type>
     | OpenRouterClientError<"CreateAuthKeysCode500", typeof CreateAuthKeysCode500.Type>
-  >
-  /**
-   * Sends a request for a model response for the given chat conversation. Supports both streaming and non-streaming modes.
-   */
-  readonly "sendChatCompletionRequest": <Config extends OperationConfig>(
-    options: {
-      readonly payload: typeof SendChatCompletionRequestRequestJson.Encoded
-      readonly config?: Config | undefined
-    }
-  ) => Effect.Effect<
-    WithOptionalResponse<typeof SendChatCompletionRequest200.Type, Config>,
-    | HttpClientError.HttpClientError
-    | SchemaError
-    | OpenRouterClientError<"SendChatCompletionRequest400", typeof SendChatCompletionRequest400.Type>
-    | OpenRouterClientError<"SendChatCompletionRequest401", typeof SendChatCompletionRequest401.Type>
-    | OpenRouterClientError<"SendChatCompletionRequest429", typeof SendChatCompletionRequest429.Type>
-    | OpenRouterClientError<"SendChatCompletionRequest500", typeof SendChatCompletionRequest500.Type>
-  >
-  /**
-   * Sends a request for a model response for the given chat conversation. Supports both streaming and non-streaming modes.
-   */
-  readonly "sendChatCompletionRequestSse": (
-    options: { readonly payload: typeof SendChatCompletionRequestRequestJson.Encoded }
-  ) => Stream.Stream<
-    {
-      readonly event: string
-      readonly id: string | undefined
-      readonly data: typeof SendChatCompletionRequest200Sse.Type
-    },
-    HttpClientError.HttpClientError | SchemaError | Sse.Retry,
-    typeof SendChatCompletionRequest200Sse.DecodingServices
   >
 }
 
