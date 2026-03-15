@@ -540,6 +540,11 @@ export class FiberImpl<A = any, E = any> implements Fiber.Fiber<A, E> {
   maxOpsBeforeYield!: number
   currentPreventYield!: boolean
 
+  _dispatcher: Scheduler.SchedulerDispatcher | undefined = undefined
+  get currentDispatcher(): Scheduler.SchedulerDispatcher {
+    return this._dispatcher ??= this.currentScheduler.makeDispatcher()
+  }
+
   getRef<X>(ref: ServiceMap.Reference<X>): X {
     return ServiceMap.getReferenceUnsafe(this.services, ref)
   }
@@ -675,7 +680,11 @@ export class FiberImpl<A = any, E = any> implements Fiber.Fiber<A, E> {
   }
   setServices(services: ServiceMap.ServiceMap<never>): void {
     this.services = services
-    this.currentScheduler = this.getRef(Scheduler.Scheduler)
+    const scheduler = this.getRef(Scheduler.Scheduler)
+    if (scheduler !== this.currentScheduler) {
+      this.currentScheduler = scheduler
+      this._dispatcher = undefined
+    }
     this.currentSpan = services.mapUnsafe.get(Tracer.ParentSpanKey)
     this.currentLogLevel = this.getRef(CurrentLogLevel)
     this.minimumLogLevel = this.getRef(MinimumLogLevel)
@@ -903,7 +912,7 @@ export const yieldNowWith: (priority?: number) => Effect.Effect<void> = makePrim
   op: "Yield",
   [evaluate](fiber) {
     let resumed = false
-    fiber.currentScheduler.scheduleTask(() => {
+    fiber.currentDispatcher.scheduleTask(() => {
       if (resumed) return
       fiber.evaluate(exitVoid as any)
     }, this[args] ?? 0)
@@ -4849,7 +4858,7 @@ export const forkUnsafe = <FA, FE, A, E, R>(
   if (immediate) {
     child.evaluate(effect as any)
   } else {
-    parent.currentScheduler.scheduleTask(() => child.evaluate(effect as any), 0)
+    parent.currentDispatcher.scheduleTask(() => child.evaluate(effect as any), 0)
   }
   if (!daemon && !child._exit) {
     parent.children().add(child)
@@ -4990,10 +4999,8 @@ export const runForkWith = <R>(services: ServiceMap.ServiceMap<R>) =>
   effect: Effect.Effect<A, E, R>,
   options?: Effect.RunOptions | undefined
 ): Fiber.Fiber<A, E> => {
-  const scheduler = options?.scheduler ||
-    (!services.mapUnsafe.has(Scheduler.Scheduler.key) && new Scheduler.MixedScheduler())
   const fiber = new FiberImpl<A, E>(
-    scheduler ? ServiceMap.add(services, Scheduler.Scheduler, scheduler) : services,
+    options?.scheduler ? ServiceMap.add(services, Scheduler.Scheduler, options.scheduler) : services,
     options?.uninterruptible !== true
   )
   fiber.evaluate(effect as any)
@@ -5113,7 +5120,7 @@ export const runSyncExitWith = <R>(services: ServiceMap.ServiceMap<R>) => {
     if (effectIsExit(effect)) return effect
     const scheduler = new Scheduler.MixedScheduler("sync")
     const fiber = runFork(effect, { scheduler })
-    scheduler.flush()
+    fiber.currentDispatcher?.flush()
     return (fiber as FiberImpl<A, E>)._exit ?? exitDie(fiber)
   }
 }
@@ -5179,7 +5186,7 @@ class Semaphore {
   updateTakenUnsafe(fiber: Fiber.Fiber<any, any>, f: (n: number) => number): Effect.Effect<number> {
     this.taken = f(this.taken)
     if (this.waiters.size > 0) {
-      fiber.currentScheduler.scheduleTask(() => {
+      fiber.currentDispatcher.scheduleTask(() => {
         const iter = this.waiters.values()
         let item = iter.next()
         while (item.done === false && this.free > 0) {
@@ -5255,7 +5262,7 @@ class Latch implements _Latch.Latch {
       return succeedTrue
     }
     this.scheduled = true
-    fiber.currentScheduler.scheduleTask(this.flushWaiters, 0)
+    fiber.currentDispatcher.scheduleTask(this.flushWaiters, 0)
     return succeedTrue
   }
   private flushWaiters = () => {
