@@ -10,6 +10,7 @@ import * as Array from "effect/Array"
 import * as Cause from "effect/Cause"
 import type * as Config from "effect/Config"
 import * as Effect from "effect/Effect"
+import * as Exit from "effect/Exit"
 import { identity } from "effect/Function"
 import * as Function from "effect/Function"
 import * as Layer from "effect/Layer"
@@ -423,14 +424,30 @@ const makeSocket = Effect.gen(function*() {
       const cancel = Effect.suspend(() => write(JSON.stringify({ type: "response.cancel" }))).pipe(
         Effect.ignore
       )
+      const reset = () => {
+        currentQueue = null
+      }
 
       const decoder = new TextDecoder()
-      const decode = Schema.decodeUnknownSync(Schema.fromJsonString(Generated.ResponseStreamEvent))
       yield* socket.runRaw((msg) => {
         if (!currentQueue) return
         const text = typeof msg === "string" ? msg : decoder.decode(msg)
         try {
-          Queue.offerUnsafe(currentQueue, decode(text))
+          const event = decodeEvent(text)
+          if (event.type === "error" && "status" in event) {
+            return Queue.fail(
+              currentQueue,
+              AiError.make({
+                module: "OpenAiClient",
+                method: "createResponseStream",
+                reason: AiError.reasonFromHttpStatus({
+                  status: event.status,
+                  metadata: event.error
+                })
+              })
+            )
+          }
+          Queue.offerUnsafe(currentQueue, event)
         } catch {}
       }).pipe(
         Effect.catchCause((cause) => {
@@ -456,17 +473,16 @@ const makeSocket = Effect.gen(function*() {
             ) :
             Effect.void
         }),
-        Effect.retry(
+        Effect.repeat(
           Schedule.exponential(100, 1.5).pipe(
             Schedule.either(Schedule.spaced({ seconds: 5 })),
             Schedule.jittered
           )
         ),
-        Effect.orDie,
         Effect.forkScoped
       )
 
-      return { send, cancel } as const
+      return { send, cancel, reset } as const
     })
   })
 
@@ -478,15 +494,22 @@ const makeSocket = Effect.gen(function*() {
       const stream = Effect.gen(function*() {
         yield* Effect.acquireRelease(
           semaphore.take(1),
-          () => semaphore.release(1)
+          () => semaphore.release(1),
+          { interruptible: true }
         )
-        const { send, cancel } = yield* RcRef.get(queueRef)
+        const { send, cancel, reset } = yield* RcRef.get(queueRef)
         const incoming = yield* Queue.unbounded<ResponseStreamEvent, AiError.AiError | Cause.Done>()
         let done = false
 
         yield* Effect.acquireRelease(
           send(incoming, options),
-          () => done ? Effect.void : cancel
+          (_, exit) => {
+            reset()
+            if (Exit.isFailure(exit) && !Exit.hasInterrupts(exit)) return Effect.void
+            else if (done) return Effect.void
+            return cancel
+          },
+          { interruptible: true }
         ).pipe(
           Effect.forkScoped({ startImmediately: true })
         )
@@ -507,6 +530,18 @@ const makeSocket = Effect.gen(function*() {
     ServiceMap.add(ResponseIdTracker.ResponseIdTracker, tracker)
   )
 })
+
+const ErrorEvent = Schema.Struct({
+  type: Schema.Literal("error"),
+  status: Schema.Number,
+  error: Schema.Struct({
+    type: Schema.String,
+    message: Schema.String
+  })
+})
+
+const AllEvents = Schema.Union([Generated.ResponseStreamEvent, ErrorEvent])
+const decodeEvent = Schema.decodeUnknownSync(Schema.fromJsonString(AllEvents))
 
 /**
  * Uses OpenAI's websocket mode for all responses within the provided effect.
