@@ -51,7 +51,7 @@
 import type * as Cause from "../../Cause.ts"
 import * as Effect from "../../Effect.ts"
 import * as FiberSet from "../../FiberSet.ts"
-import { constFalse } from "../../Function.ts"
+import { constFalse, identity, pipe } from "../../Function.ts"
 import type * as JsonSchema from "../../JsonSchema.ts"
 import * as Option from "../../Option.ts"
 import * as Predicate from "../../Predicate.ts"
@@ -69,6 +69,7 @@ import { defaultIdGenerator, IdGenerator } from "./IdGenerator.ts"
 import * as InternalCodecTransformer from "./internal/codec-transformer.ts"
 import * as Prompt from "./Prompt.ts"
 import * as Response from "./Response.ts"
+import * as ResponseIdTracker from "./ResponseIdTracker.ts"
 import type { SpanTransformer } from "./Telemetry.ts"
 import { CurrentSpanTransformer } from "./Telemetry.ts"
 import type * as Tool from "./Tool.ts"
@@ -648,6 +649,16 @@ export interface ProviderOptions {
    * The span to use to trace interactions with the large language model.
    */
   readonly span: Span
+
+  /**
+   * The previous response identifier for incremental provider calls.
+   */
+  readonly previousResponseId: string | undefined
+
+  /**
+   * The prompt reduced to messages not yet seen by the provider.
+   */
+  readonly incrementalPrompt: Prompt.Prompt | undefined
 }
 
 /**
@@ -727,7 +738,9 @@ export const make: (params: {
             tools: [],
             toolChoice: "none",
             responseFormat: { type: "text" },
-            span
+            span,
+            previousResponseId: undefined,
+            incrementalPrompt: undefined
           }
           const content = yield* generateContent(options, providerOptions)
 
@@ -790,7 +803,9 @@ export const make: (params: {
               objectName,
               schema: options.schema
             },
-            span
+            span,
+            previousResponseId: undefined,
+            incrementalPrompt: undefined
           }
 
           const content = yield* generateContent(options, providerOptions)
@@ -857,7 +872,9 @@ export const make: (params: {
         tools: [],
         toolChoice: "none",
         responseFormat: { type: "text" },
-        span
+        span,
+        previousResponseId: undefined,
+        incrementalPrompt: undefined
       }
 
       // Resolve the content stream for the request
@@ -917,6 +934,7 @@ export const make: (params: {
     options: Options & GenerateTextOptions<Tools>,
     providerOptions: Mutable<ProviderOptions>
   ) {
+    const tracker = Option.getOrUndefined(yield* Effect.serviceOption(ResponseIdTracker.ResponseIdTracker))
     const toolChoice = options.toolChoice ?? "auto"
 
     // Check for pending approvals that need resolution
@@ -940,11 +958,24 @@ export const make: (params: {
           })
         })
       }
+      if (tracker) {
+        const prepared = tracker.prepareUnsafe(providerOptions.prompt)
+        if (Option.isSome(prepared)) {
+          providerOptions.previousResponseId = prepared.value.previousResponseId
+          providerOptions.incrementalPrompt = prepared.value.prompt
+        }
+      }
       const ResponseSchema = Schema.mutable(
         Schema.Array(Response.Part(Toolkit.empty))
       )
       const rawContent = yield* params.generateText(providerOptions)
       const content = yield* Schema.decodeEffect(ResponseSchema)(rawContent)
+      if (tracker) {
+        const responseMetadata = content.find((part) => part.type === "response-metadata")
+        if (Predicate.isNotUndefined(responseMetadata) && Predicate.isNotUndefined(responseMetadata.id)) {
+          tracker.markParts(providerOptions.prompt.content, responseMetadata.id)
+        }
+      }
       return content as Array<Response.Part<Tools>>
     }
 
@@ -965,11 +996,24 @@ export const make: (params: {
           })
         })
       }
+      if (tracker) {
+        const prepared = tracker.prepareUnsafe(providerOptions.prompt)
+        if (Option.isSome(prepared)) {
+          providerOptions.previousResponseId = prepared.value.previousResponseId
+          providerOptions.incrementalPrompt = prepared.value.prompt
+        }
+      }
       const ResponseSchema = Schema.mutable(
         Schema.Array(Response.Part(Toolkit.empty))
       )
       const rawContent = yield* params.generateText(providerOptions)
       const content = yield* Schema.decodeEffect(ResponseSchema)(rawContent)
+      if (tracker) {
+        const responseMetadata = content.find((part) => part.type === "response-metadata")
+        if (Predicate.isNotUndefined(responseMetadata) && Predicate.isNotUndefined(responseMetadata.id)) {
+          tracker.markParts(providerOptions.prompt.content, responseMetadata.id)
+        }
+      }
       return content as Array<Response.Part<Tools>>
     }
 
@@ -1025,6 +1069,14 @@ export const make: (params: {
     providerOptions.tools = tools
     providerOptions.toolChoice = toolChoice
 
+    if (tracker) {
+      const prepared = tracker.prepareUnsafe(providerOptions.prompt)
+      if (Option.isSome(prepared)) {
+        providerOptions.previousResponseId = prepared.value.previousResponseId
+        providerOptions.incrementalPrompt = prepared.value.prompt
+      }
+    }
+
     // Construct the response schema with the tools from the toolkit
     const ResponseSchema = Schema.mutable(
       Schema.Array(Response.Part(toolkit))
@@ -1035,6 +1087,12 @@ export const make: (params: {
     if (options.disableToolCallResolution === true) {
       const rawContent = yield* params.generateText(providerOptions)
       const content = yield* Schema.decodeEffect(ResponseSchema)(rawContent)
+      if (tracker) {
+        const responseMetadata = content.find((part) => part.type === "response-metadata")
+        if (Predicate.isNotUndefined(responseMetadata) && Predicate.isNotUndefined(responseMetadata.id)) {
+          tracker.markParts(providerOptions.prompt.content, responseMetadata.id)
+        }
+      }
       return content as Array<Response.Part<Tools>>
     }
 
@@ -1056,6 +1114,13 @@ export const make: (params: {
     )
 
     const content = yield* Schema.decodeEffect(ResponseSchema)(rawContent)
+
+    if (tracker) {
+      const responseMetadata = content.find((part) => part.type === "response-metadata")
+      if (Predicate.isNotUndefined(responseMetadata) && Predicate.isNotUndefined(responseMetadata.id)) {
+        tracker.markParts(providerOptions.prompt.content, responseMetadata.id)
+      }
+    }
 
     // Return the content merged with the tool call results
     return [...content, ...toolResults] as Array<Response.Part<Tools>>
@@ -1086,6 +1151,7 @@ export const make: (params: {
     options: Options & GenerateTextOptions<Tools>,
     providerOptions: Mutable<ProviderOptions>
   ) {
+    const tracker = Option.getOrUndefined(yield* Effect.serviceOption(ResponseIdTracker.ResponseIdTracker))
     const toolChoice = options.toolChoice ?? "auto"
 
     // Check for pending approvals that need resolution
@@ -1108,17 +1174,36 @@ export const make: (params: {
           })
         })
       }
+      if (tracker) {
+        const prepared = tracker.prepareUnsafe(providerOptions.prompt)
+        if (Option.isSome(prepared)) {
+          providerOptions.previousResponseId = prepared.value.previousResponseId
+          providerOptions.incrementalPrompt = prepared.value.prompt
+        }
+      }
       const schema = Schema.NonEmptyArray(Response.StreamPart(Toolkit.empty))
       const decodeParts = Schema.decodeEffect(schema)
-      return params
-        .streamText(providerOptions)
-        .pipe(
-          Stream.mapArrayEffect((parts) => decodeParts(parts))
-        ) as Stream.Stream<
-          Response.StreamPart<Tools>,
-          AiError.AiError | Schema.SchemaError,
-          IdGenerator
-        >
+      return pipe(
+        params.streamText(providerOptions),
+        Stream.mapArrayEffect((parts) =>
+          decodeParts(parts).pipe(
+            tracker ?
+              Effect.tap((decodedParts) => {
+                for (const part of decodedParts) {
+                  if (part.type === "response-metadata" && Predicate.isNotUndefined(part.id)) {
+                    tracker.markParts(providerOptions.prompt.content, part.id)
+                  }
+                }
+                return Effect.void
+              }) :
+              identity
+          )
+        )
+      ) as Stream.Stream<
+        Response.StreamPart<Tools>,
+        AiError.AiError | Schema.SchemaError,
+        IdGenerator
+      >
     }
 
     // If there is a toolkit resolve and apply it to the provider options
@@ -1138,17 +1223,36 @@ export const make: (params: {
           })
         })
       }
+      if (tracker) {
+        const prepared = tracker.prepareUnsafe(providerOptions.prompt)
+        if (Option.isSome(prepared)) {
+          providerOptions.previousResponseId = prepared.value.previousResponseId
+          providerOptions.incrementalPrompt = prepared.value.prompt
+        }
+      }
       const schema = Schema.NonEmptyArray(Response.StreamPart(Toolkit.empty))
       const decodeParts = Schema.decodeEffect(schema)
-      return params
-        .streamText(providerOptions)
-        .pipe(
-          Stream.mapArrayEffect((parts) => decodeParts(parts))
-        ) as Stream.Stream<
-          Response.StreamPart<Tools>,
-          AiError.AiError | Schema.SchemaError,
-          IdGenerator
-        >
+      return pipe(
+        params.streamText(providerOptions),
+        Stream.mapArrayEffect((parts) =>
+          decodeParts(parts).pipe(
+            tracker ?
+              Effect.tap((decodedParts) => {
+                for (const part of decodedParts) {
+                  if (part.type === "response-metadata" && part.id) {
+                    tracker.markParts(providerOptions.prompt.content, part.id)
+                  }
+                }
+                return Effect.void
+              }) :
+              identity
+          )
+        )
+      ) as Stream.Stream<
+        Response.StreamPart<Tools>,
+        AiError.AiError | Schema.SchemaError,
+        IdGenerator
+      >
     }
 
     // Pre-resolve pending tool approvals before calling the LLM
@@ -1222,20 +1326,39 @@ export const make: (params: {
     providerOptions.tools = tools
     providerOptions.toolChoice = toolChoice
 
+    if (tracker) {
+      const prepared = tracker.prepareUnsafe(providerOptions.prompt)
+      if (Option.isSome(prepared)) {
+        providerOptions.previousResponseId = prepared.value.previousResponseId
+        providerOptions.incrementalPrompt = prepared.value.prompt
+      }
+    }
+
     // If tool call resolution is disabled, return the response without
     // resolving the tool calls that were generated
     if (options.disableToolCallResolution === true) {
       const schema = Schema.NonEmptyArray(Response.StreamPart(toolkit))
       const decodeParts = Schema.decodeEffect(schema)
-      return params
-        .streamText(providerOptions)
-        .pipe(
-          Stream.mapArrayEffect((parts) => decodeParts(parts))
-        ) as Stream.Stream<
-          Response.StreamPart<Tools>,
-          AiError.AiError | Schema.SchemaError,
-          IdGenerator
-        >
+      return params.streamText(providerOptions).pipe(
+        Stream.mapArrayEffect((parts) =>
+          decodeParts(parts).pipe(
+            tracker ?
+              Effect.tap((decodedParts) => {
+                for (const part of decodedParts) {
+                  if (part.type === "response-metadata" && Predicate.isNotUndefined(part.id)) {
+                    tracker.markParts(providerOptions.prompt.content, part.id)
+                  }
+                }
+                return Effect.void
+              }) :
+              identity
+          )
+        )
+      ) as Stream.Stream<
+        Response.StreamPart<Tools>,
+        AiError.AiError | Schema.SchemaError,
+        IdGenerator
+      >
     }
 
     const ResponseSchema = Schema.NonEmptyArray(Response.StreamPart(toolkit))
@@ -1260,48 +1383,52 @@ export const make: (params: {
     const toolCallFibers = yield* FiberSet.make<void, AiError.AiError>()
 
     // Helper function to handle tool calls with approval logic
-    const handleToolCall = (part: Response.ToolCallPartEncoded) =>
-      Effect.gen(function*() {
-        const tool = toolkit.tools[part.name]
-        if (!tool) {
-          return
-        }
+    const handleToolCall = Effect.fnUntraced(function*(part: Response.ToolCallPartEncoded) {
+      const tool = toolkit.tools[part.name]
+      if (!tool) return
 
-        const needsApproval = yield* isApprovalNeeded(
-          tool,
-          part,
-          providerOptions.prompt.content
-        )
+      const needsApproval = yield* isApprovalNeeded(
+        tool,
+        part,
+        providerOptions.prompt.content
+      )
 
-        if (needsApproval) {
-          const idGen = yield* IdGenerator
-          const approvalId = yield* idGen.generateId()
-          const approvalPart = Response.makePart("tool-approval-request", {
-            approvalId,
-            toolCallId: part.id
+      if (needsApproval) {
+        const idGen = yield* IdGenerator
+        const approvalId = yield* idGen.generateId()
+        const approvalPart = Response.makePart("tool-approval-request", {
+          approvalId,
+          toolCallId: part.id
+        }) as Response.StreamPart<Tools>
+        yield* Queue.offer(queue, approvalPart)
+        return
+      }
+
+      yield* toolkit.handle(part.name, part.params as any).pipe(
+        Stream.unwrap,
+        Stream.runForEach((result) => {
+          const toolResultPart = Response.makePart("tool-result", {
+            id: part.id,
+            name: part.name,
+            providerExecuted: false,
+            ...result
           }) as Response.StreamPart<Tools>
-          yield* Queue.offer(queue, approvalPart)
-          return
-        }
-
-        yield* toolkit.handle(part.name, part.params as any).pipe(
-          Stream.unwrap,
-          Stream.runForEach((result) => {
-            const toolResultPart = Response.makePart("tool-result", {
-              id: part.id,
-              name: part.name,
-              providerExecuted: false,
-              ...result
-            }) as Response.StreamPart<Tools>
-            return Queue.offer(queue, toolResultPart)
-          })
-        )
-      })
+          return Queue.offer(queue, toolResultPart)
+        })
+      )
+    })
 
     yield* params.streamText(providerOptions).pipe(
       Stream.runForEachArray(
         Effect.fnUntraced(function*(chunk) {
           const parts = yield* decodeParts(chunk)
+          if (tracker) {
+            for (const part of parts) {
+              if (part.type === "response-metadata" && part.id) {
+                tracker.markParts(providerOptions.prompt.content, part.id)
+              }
+            }
+          }
           // Add decoded response parts to the output queue
           yield* Queue.offerAll(queue, parts)
           // Fork tool call handlers - use the raw chunk for encoded params
