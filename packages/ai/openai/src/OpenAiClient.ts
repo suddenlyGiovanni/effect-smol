@@ -10,7 +10,6 @@ import * as Array from "effect/Array"
 import * as Cause from "effect/Cause"
 import type * as Config from "effect/Config"
 import * as Effect from "effect/Effect"
-import * as Exit from "effect/Exit"
 import { identity } from "effect/Function"
 import * as Function from "effect/Function"
 import * as Layer from "effect/Layer"
@@ -483,10 +482,19 @@ const makeSocket = Effect.gen(function*() {
         )
         const { send, cancel } = yield* RcRef.get(queueRef)
         const incoming = yield* Queue.unbounded<ResponseStreamEvent, AiError.AiError | Cause.Done>()
-        yield* Effect.forkScoped(send(incoming, options), { startImmediately: true })
+        let done = false
+
+        yield* Effect.acquireRelease(
+          send(incoming, options),
+          () => done ? Effect.void : cancel
+        ).pipe(
+          Effect.forkScoped({ startImmediately: true })
+        )
         return Stream.fromQueue(incoming).pipe(
-          Stream.takeUntil((e) => e.type === "response.completed" || e.type === "response.incomplete"),
-          Stream.onExit((exit) => Exit.hasInterrupts(exit) ? cancel : Effect.void)
+          Stream.takeUntil((e) => {
+            done = e.type === "response.completed" || e.type === "response.incomplete"
+            return done
+          })
         )
       }).pipe(Stream.unwrap)
 
