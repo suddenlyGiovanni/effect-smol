@@ -21,8 +21,8 @@ export interface PrepareResult {
  */
 export interface Service {
   clearUnsafe(): void
-  readonly markParts: (parts: ReadonlyArray<object>, responseId: string) => void
-  readonly prepareUnsafe: (prompt: Prompt.Prompt) => Option.Option<PrepareResult>
+  markParts(parts: ReadonlyArray<object>, responseId: string): void
+  prepareUnsafe(prompt: Prompt.Prompt): Option.Option<PrepareResult>
 }
 
 /**
@@ -40,16 +40,21 @@ export class ResponseIdTracker
 export const make: Effect.Effect<Service> = Effect.sync(() => {
   let sentParts = new WeakMap<object, string>()
 
+  const none = () => {
+    sentParts = new WeakMap<object, string>()
+    return Option.none<PrepareResult>()
+  }
+
   return {
     clearUnsafe() {
       sentParts = new WeakMap<object, string>()
     },
-    markParts: (parts, responseId) => {
-      for (const part of parts) {
-        sentParts.set(part, responseId)
+    markParts(parts, responseId) {
+      for (let i = 0; i < parts.length; i++) {
+        sentParts.set(parts[i], responseId)
       }
     },
-    prepareUnsafe: (prompt) => {
+    prepareUnsafe(prompt) {
       const messages = prompt.content
 
       let anyTracked = false
@@ -59,7 +64,7 @@ export const make: Effect.Effect<Service> = Effect.sync(() => {
           break
         }
       }
-      if (!anyTracked) return Option.none()
+      if (!anyTracked) return none()
 
       let lastAssistantIndex = -1
       for (let i = messages.length - 1; i >= 0; i--) {
@@ -68,19 +73,19 @@ export const make: Effect.Effect<Service> = Effect.sync(() => {
           break
         }
       }
-      if (lastAssistantIndex === -1) return Option.none()
+      if (lastAssistantIndex === -1) return none()
 
       let responseId: string | undefined
       for (let i = 0; i < lastAssistantIndex; i++) {
         const id = sentParts.get(messages[i])
-        if (id === undefined) return Option.none()
+        if (id === undefined) return none()
         responseId = id
       }
-      if (responseId === undefined) return Option.none()
+      if (responseId === undefined) return none()
 
       const partsAfterLastAssistant = messages.slice(lastAssistantIndex + 1)
       if (partsAfterLastAssistant.length === 0) {
-        return Option.none()
+        return none()
       }
 
       return Option.some({
