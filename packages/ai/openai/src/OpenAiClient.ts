@@ -438,16 +438,25 @@ const makeSocket = Effect.gen(function*() {
             tracker.clearUnsafe()
           }
           if (event.type === "error" && "status" in event) {
+            const json = JSON.stringify(event.error)
             return Queue.fail(
               currentQueue,
               AiError.make({
                 module: "OpenAiClient",
                 method: "createResponseStream",
                 reason: AiError.reasonFromHttpStatus({
+                  description: json,
                   status: event.status,
-                  metadata: {
-                    ...event.error,
-                    description: event.error.message
+                  metadata: event.error,
+                  http: {
+                    body: json,
+                    request: {
+                      method: "POST",
+                      url: request.url,
+                      urlParams: [],
+                      hash: undefined,
+                      headers: request.headers
+                    }
                   }
                 })
               })
