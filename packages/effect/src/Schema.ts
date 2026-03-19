@@ -1209,6 +1209,18 @@ export const decodeOption = Parser.decodeOption
  * @category Decoding
  * @since 4.0.0
  */
+export const decodeUnknownResult = Parser.decodeUnknownResult
+
+/**
+ * @category Decoding
+ * @since 4.0.0
+ */
+export const decodeResult = Parser.decodeResult
+
+/**
+ * @category Decoding
+ * @since 4.0.0
+ */
 export const decodeUnknownPromise = Parser.decodeUnknownPromise
 
 /**
@@ -1364,6 +1376,18 @@ export const encodeOption = Parser.encodeOption
  * for integrating with Promise-based APIs. For typed input use
  * {@link encodePromise}.
  *
+ * @category Encoding
+ * @since 4.0.0
+ */
+export const encodeUnknownResult = Parser.encodeUnknownResult
+
+/**
+ * @category Encoding
+ * @since 4.0.0
+ */
+export const encodeResult = Parser.encodeResult
+
+/**
  * @category Encoding
  * @since 4.0.0
  */
