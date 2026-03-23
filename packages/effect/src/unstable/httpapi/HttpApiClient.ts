@@ -8,7 +8,7 @@ import { identity } from "../../Function.ts"
 import * as Option from "../../Option.ts"
 import * as Predicate from "../../Predicate.ts"
 import * as Schema from "../../Schema.ts"
-import type * as AST from "../../SchemaAST.ts"
+import * as AST from "../../SchemaAST.ts"
 import * as Issue from "../../SchemaIssue.ts"
 import * as Transformation from "../../SchemaTransformation.ts"
 import type * as ServiceMap from "../../ServiceMap.ts"
@@ -273,7 +273,7 @@ const makeClient = <ApiId extends string, Groups extends HttpApiGroup.Any, E, R>
         const payloadSchemas = HttpApiEndpoint.getPayloadSchemas(endpoint)
         const encodePayload = Arr.isArrayNonEmpty(payloadSchemas) ?
           HttpMethod.hasBody(endpoint.method)
-            ? Schema.encodeUnknownEffect(getEncodePayloadSchema(payloadSchemas))
+            ? Schema.encodeUnknownEffect(getEncodePayloadSchema(payloadSchemas, endpoint.method))
             : Schema.encodeUnknownEffect(Schema.Union(payloadSchemas)) :
           undefined
 
@@ -639,8 +639,19 @@ function toCodecArrayBuffer(schemas: readonly [Schema.Top, ...Array<Schema.Top>]
   function onSchema(schema: Schema.Top) {
     const encoding = HttpApiSchema.getResponseEncoding(schema.ast)
     switch (encoding._tag) {
-      case "Json":
-        return UnknownFromArrayBuffer.pipe(Schema.decodeTo(schema))
+      case "Json": {
+        // handle json codecs that transform void schemas to null
+        const encodedIsNull = AST.isNull(AST.toEncoded(schema.ast))
+        return UnknownFromArrayBuffer.pipe(Schema.decodeTo(
+          schema,
+          encodedIsNull ?
+            Transformation.transform({
+              decode: (a) => a === undefined ? null : a,
+              encode: (a) => a === null ? undefined : a
+            }) as any :
+            undefined
+        ))
+      }
       case "FormUrlEncoded":
         return StringFromArrayBuffer.pipe(
           Schema.decodeTo(UrlParams.schemaRecord),
@@ -666,21 +677,25 @@ const statusOrElse = (response: HttpClientResponse.HttpClientResponse) =>
 
 const $HttpBody = Schema.declare(HttpBody.isHttpBody)
 
-function getEncodePayloadSchema(schemas: readonly [Schema.Top, ...Array<Schema.Top>]): Schema.Top {
-  return Schema.Union(schemas.map(getEncodePayloadSchemaFromBody))
+function getEncodePayloadSchema(
+  schemas: readonly [Schema.Top, ...Array<Schema.Top>],
+  method: HttpMethod.HttpMethod
+): Schema.Top {
+  return Schema.Union(schemas.map((s) => getEncodePayloadSchemaFromBody(s, method)))
 }
 
 const bodyFromPayloadCache = new WeakMap<AST.AST, Schema.Top>()
 
 function getEncodePayloadSchemaFromBody(
-  schema: Schema.Top
+  schema: Schema.Top,
+  method: HttpMethod.HttpMethod
 ): Schema.Top {
   const ast = schema.ast
   const cached = bodyFromPayloadCache.get(ast)
   if (cached !== undefined) {
     return cached
   }
-  const encoding = HttpApiSchema.getPayloadEncoding(ast)
+  const encoding = HttpApiSchema.getPayloadEncoding(ast, method)
   const out = $HttpBody.pipe(Schema.decodeTo(
     schema,
     Transformation.transformOrFail({
