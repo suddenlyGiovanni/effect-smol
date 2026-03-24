@@ -4485,7 +4485,7 @@ export const timeoutOption: {
  * // Use cached data as fallback when timeout is reached
  * const program = Effect.timeoutOrElse(slowQuery, {
  *   duration: "2 seconds",
- *   onTimeout: () =>
+ *   orElse: () =>
  *     Effect.gen(function*() {
  *       yield* Console.log("Query timed out, using cached data")
  *       return "Cached result"
@@ -4505,13 +4505,13 @@ export const timeoutOption: {
 export const timeoutOrElse: {
   <A2, E2, R2>(options: {
     readonly duration: Duration.Input
-    readonly onTimeout: LazyArg<Effect<A2, E2, R2>>
+    readonly orElse: LazyArg<Effect<A2, E2, R2>>
   }): <A, E, R>(self: Effect<A, E, R>) => Effect<A | A2, E | E2, R | R2>
   <A, E, R, A2, E2, R2>(
     self: Effect<A, E, R>,
     options: {
       readonly duration: Duration.Input
-      readonly onTimeout: LazyArg<Effect<A2, E2, R2>>
+      readonly orElse: LazyArg<Effect<A2, E2, R2>>
     }
   ): Effect<A | A2, E | E2, R | R2>
 } = internal.timeoutOrElse
