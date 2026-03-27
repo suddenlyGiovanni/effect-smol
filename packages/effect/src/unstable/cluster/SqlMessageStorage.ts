@@ -596,10 +596,6 @@ export const make: (options?: {
 
     withTransaction: (effect) =>
       sql.withTransaction(effect).pipe(
-        Effect.retry({
-          while: (e) => isSqlError(e) && e.isRetryable,
-          times: 5
-        }),
         Effect.catchIf(isSqlError, Effect.die)
       )
   })
