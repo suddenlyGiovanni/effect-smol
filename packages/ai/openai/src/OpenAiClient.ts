@@ -385,7 +385,15 @@ const makeSocket = Effect.gen(function*() {
       } as any))
   )
 
-  const queueRef = yield* RcRef.make({
+  const queueRef: RcRef.RcRef<
+    {
+      readonly send: (
+        queue: Queue.Enqueue<ResponseStreamEvent, AiError.AiError | Cause.Done>,
+        message: typeof Generated.CreateResponse.Encoded
+      ) => Effect.Effect<void, AiError.AiError>
+      readonly reset: () => void
+    }
+  > = yield* RcRef.make({
     idleTimeToLive: 60_000,
     acquire: Effect.gen(function*() {
       const write = yield* socket.writer
@@ -420,10 +428,6 @@ const makeSocket = Effect.gen(function*() {
             })
           )
         )
-
-      const cancel = Effect.suspend(() => write(JSON.stringify({ type: "response.cancel" }))).pipe(
-        Effect.ignore
-      )
       const reset = () => {
         currentQueue = null
       }
@@ -439,8 +443,7 @@ const makeSocket = Effect.gen(function*() {
           }
           if (event.type === "error" && "status" in event) {
             const json = JSON.stringify(event.error)
-            return Queue.fail(
-              currentQueue,
+            return Effect.fail(
               AiError.make({
                 module: "OpenAiClient",
                 method: "createResponseStream",
@@ -497,7 +500,7 @@ const makeSocket = Effect.gen(function*() {
         Effect.forkScoped
       )
 
-      return { send, cancel, reset } as const
+      return { send, reset } as const
     })
   })
 
@@ -512,7 +515,7 @@ const makeSocket = Effect.gen(function*() {
           () => semaphore.release(1),
           { interruptible: true }
         )
-        const { send, cancel, reset } = yield* RcRef.get(queueRef)
+        const { send, reset } = yield* RcRef.get(queueRef)
         const incoming = yield* Queue.unbounded<ResponseStreamEvent, AiError.AiError | Cause.Done>()
         let done = false
 
@@ -522,7 +525,7 @@ const makeSocket = Effect.gen(function*() {
             reset()
             if (Exit.isFailure(exit) && !Exit.hasInterrupts(exit)) return Effect.void
             else if (done) return Effect.void
-            return cancel
+            return RcRef.invalidate(queueRef)
           },
           { interruptible: true }
         ).pipe(
@@ -548,14 +551,16 @@ const makeSocket = Effect.gen(function*() {
 
 const ErrorEvent = Schema.Struct({
   type: Schema.Literal("error"),
-  status: Schema.Number,
+  status: Schema.Number.pipe(
+    Schema.withDecodingDefault(() => 500)
+  ),
   error: Schema.Struct({
     type: Schema.String,
     message: Schema.String
   })
 })
 
-const AllEvents = Schema.Union([Generated.ResponseStreamEvent, ErrorEvent])
+const AllEvents = Schema.Union([ErrorEvent, Generated.ResponseStreamEvent])
 const decodeEvent = Schema.decodeUnknownSync(Schema.fromJsonString(AllEvents))
 
 /**
