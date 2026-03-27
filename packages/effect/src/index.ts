@@ -4039,7 +4039,7 @@ export * as Tuple from "./Tuple.ts"
  *
  * Accessed values are tracked by the transaction in order to detect conflicts and to track changes.
  * A transaction will retry whenever a conflict is detected or whenever the transaction explicitly
- * calls `Effect.retryTransaction` and any of the accessed TxChunk values change.
+ * calls `Effect.txRetry` and any of the accessed TxChunk values change.
  *
  * @since 4.0.0
  */
@@ -4089,7 +4089,7 @@ export * as TxPubSub from "./TxPubSub.ts"
  *
  * Accessed values are tracked by the transaction in order to detect conflicts and to track changes.
  * A transaction will retry whenever a conflict is detected or whenever the transaction explicitly
- * calls `Effect.retryTransaction` and any of the accessed TxQueue values change.
+ * calls `Effect.txRetry` and any of the accessed TxQueue values change.
  *
  * @since 4.0.0
  */
@@ -4110,7 +4110,7 @@ export * as TxReentrantLock from "./TxReentrantLock.ts"
  *
  * Accessed values are tracked by the transaction in order to detect conflicts and in order to
  * track changes, a transaction will retry whenever a conflict is detected or whenever the
- * transaction explicitely calls to `Effect.retryTransaction` and any of the accessed TxRef values
+ * transaction explicitely calls to `Effect.txRetry` and any of the accessed TxRef values
  * change.
  *
  * @since 4.0.0
