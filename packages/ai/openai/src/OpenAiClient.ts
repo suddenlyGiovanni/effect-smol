@@ -394,10 +394,6 @@ const makeSocket = Effect.gen(function*() {
           } as any))
       )
       const write = yield* socket.writer
-      yield* Effect.addFinalizer(() => {
-        tracker.clearUnsafe()
-        return Effect.void
-      })
 
       let incoming = yield* Queue.unbounded<ResponseStreamEvent, AiError.AiError>()
       const send = (message: typeof Generated.CreateResponse.Encoded) =>
@@ -507,6 +503,7 @@ const makeSocket = Effect.gen(function*() {
           send(options),
           () => {
             if (done) return Effect.void
+            tracker.clearUnsafe()
             return RcRef.invalidate(queueRef)
           },
           { interruptible: true }
