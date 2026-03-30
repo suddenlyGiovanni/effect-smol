@@ -112,6 +112,7 @@ import * as InternalArbitrary from "./internal/schema/arbitrary.ts"
 import * as InternalEquivalence from "./internal/schema/equivalence.ts"
 import * as InternalStandard from "./internal/schema/representation.ts"
 import * as InternalSchema from "./internal/schema/schema.ts"
+import { SchemaError } from "./internal/schema/schema.ts"
 import * as InternalToCodec from "./internal/schema/to-codec.ts"
 import * as JsonPatch from "./JsonPatch.ts"
 import * as JsonSchema from "./JsonSchema.ts"
@@ -169,12 +170,13 @@ export type Mutability = "readonly" | "mutable"
 export type ConstructorDefault = "no-default" | "with-default"
 
 /**
- * Options for `makeUnsafe` and Class constructors.
+ * Options for `makeEffect`, `makeUnsafe`, and Class constructors.
  *
  * When to use:
  * - Pass `disableChecks: true` to skip validation when you trust the data.
  * - Pass `parseOptions` to control error reporting behavior.
  *
+ * @see {@link Bottom.makeEffect}
  * @see {@link Bottom.makeUnsafe}
  *
  * @since 4.0.0
@@ -250,6 +252,7 @@ export interface Bottom<
   annotateKey(annotations: Annotations.Key<this["Type"]>): this["~rebuild.out"]
   check(...checks: readonly [AST.Check<this["Type"]>, ...Array<AST.Check<this["Type"]>>]): this["~rebuild.out"]
   rebuild(ast: this["ast"]): this["~rebuild.out"]
+  makeEffect(input: this["~type.make.in"], options?: MakeOptions): Effect.Effect<this["Type"], SchemaError>
   /**
    * @throws {Error} The issue is contained in the error cause.
    */
@@ -805,50 +808,36 @@ export function revealCodec<T, E, RD, RE>(codec: Codec<T, E, RD, RE>) {
   return codec
 }
 
-const SchemaErrorTypeId = "~effect/Schema/SchemaError"
-
-/**
- * Error thrown (or returned as the error channel value) when schema decoding
- * or encoding fails.
- *
- * The `issue` field contains a structured {@link Issue.Issue} tree describing
- * every validation failure, including the path to the problematic value,
- * expected types, and actual values received. `message` renders the issue tree
- * as a human-readable string.
- *
- * Use {@link isSchemaError} to narrow an unknown value to `SchemaError`.
- *
- * **Example** (Catching a SchemaError)
- *
- * ```ts
- * import { Schema } from "effect"
- *
- * try {
- *   Schema.decodeUnknownSync(Schema.Number)("not a number")
- * } catch (err) {
- *   if (Schema.isSchemaError(err)) {
- *     console.log(err.message)
- *     // Expected number, actual "not a number"
- *   }
- * }
- * ```
- *
- * @since 4.0.0
- */
-export class SchemaError {
-  readonly [SchemaErrorTypeId] = SchemaErrorTypeId
-  readonly _tag = "SchemaError"
-  readonly name: string = "SchemaError"
-  readonly issue: Issue.Issue
-  constructor(issue: Issue.Issue) {
-    this.issue = issue
-  }
-  get message() {
-    return this.issue.toString()
-  }
-  toString() {
-    return `SchemaError(${this.message})`
-  }
+export {
+  /**
+   * Error thrown (or returned as the error channel value) when schema decoding
+   * or encoding fails.
+   *
+   * The `issue` field contains a structured {@link Issue.Issue} tree describing
+   * every validation failure, including the path to the problematic value,
+   * expected types, and actual values received. `message` renders the issue tree
+   * as a human-readable string.
+   *
+   * Use {@link isSchemaError} to narrow an unknown value to `SchemaError`.
+   *
+   * **Example** (Catching a SchemaError)
+   *
+   * ```ts
+   * import { Schema } from "effect"
+   *
+   * try {
+   *   Schema.decodeUnknownSync(Schema.Number)("not a number")
+   * } catch (err) {
+   *   if (Schema.isSchemaError(err)) {
+   *     console.log(err.message)
+   *     // Expected number, actual "not a number"
+   *   }
+   * }
+   * ```
+   *
+   * @since 4.0.0
+   */
+  SchemaError
 }
 
 /**
@@ -871,7 +860,7 @@ export class SchemaError {
  * @since 4.0.0
  */
 export function isSchemaError(u: unknown): u is SchemaError {
-  return Predicate.hasProperty(u, SchemaErrorTypeId)
+  return Predicate.hasProperty(u, InternalSchema.SchemaErrorTypeId)
 }
 
 function makeStandardResult<A>(exit: Exit_.Exit<StandardSchemaV1.Result<A>>): StandardSchemaV1.Result<A> {
@@ -9879,6 +9868,12 @@ function makeClass<
     }
     static makeUnsafe(input: S["~type.make.in"], options?: MakeOptions): Self {
       return new this(input, options)
+    }
+    static makeEffect(input: S["~type.make.in"], options?: MakeOptions): Effect.Effect<Self, SchemaError> {
+      return Effect.mapErrorEager(
+        Parser.makeEffect(getClassSchema(this) as any)(input, options),
+        (issue) => new SchemaError(issue)
+      ) as any
     }
     static makeOption(input: S["~type.make.in"], options?: MakeOptions): Option_.Option<Self> {
       return Parser.makeOption(getClassSchema(this) as any)(input, options) as any

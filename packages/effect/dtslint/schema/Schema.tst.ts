@@ -16,6 +16,10 @@ import { immerable, produce } from "immer"
 import { describe, expect, it, when } from "tstyche"
 
 type MakeUnsafe<In, Out> = (input: In, options?: Schema.MakeOptions | undefined) => Out
+type MakeEffect<In, Out> = (
+  input: In,
+  options?: Schema.MakeOptions | undefined
+) => Effect.Effect<Out, Schema.SchemaError>
 
 const revealClass = <Self, S extends Schema.Struct<Schema.Struct.Fields>, Inherited>(
   klass: Schema.Class<Self, S, Inherited>
@@ -73,6 +77,33 @@ describe("Schema", () => {
         return { Encoded, DecodingServices, EncodingServices }
       }
       f(Schema.String)
+    })
+  })
+
+  describe("makeEffect", () => {
+    it("String", () => {
+      const schema = Schema.String
+      expect(schema.makeEffect).type.toBe<MakeEffect<string, string>>()
+    })
+
+    it("refine", () => {
+      const schema = Schema.Option(Schema.String).pipe(Schema.refine(Option.isSome))
+      expect(schema.makeEffect).type.toBe<MakeEffect<Option.Option<string>, Option.Some<string>>>()
+    })
+
+    it("Struct", () => {
+      const schema = Schema.Struct({
+        a: Schema.String.pipe(Schema.withConstructorDefault(Effect.succeed("default")))
+      })
+      expect(schema.makeEffect).type.toBe<MakeEffect<{ readonly a?: string }, { readonly a: string }>>()
+    })
+
+    it("Class", () => {
+      class A extends Schema.Class<A>("A")(Schema.Struct({
+        a: Schema.String
+      })) {}
+      expect(A.makeEffect).type.toBe<MakeEffect<{ readonly a: string }, A>>()
+      expect(revealClass(A).makeEffect).type.toBe<MakeEffect<{ readonly a: string }, A>>()
     })
   })
 

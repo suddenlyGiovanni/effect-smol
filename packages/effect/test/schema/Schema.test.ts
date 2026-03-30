@@ -1,3 +1,4 @@
+import { describe, it } from "@effect/vitest"
 import {
   BigDecimal,
   Brand,
@@ -31,7 +32,6 @@ import {
 import { TestSchema } from "effect/testing"
 import { produce } from "immer"
 import { deepStrictEqual, fail, ok, strictEqual } from "node:assert"
-import { describe, it } from "vitest"
 import { assertFalse, assertInclude, assertTrue, throws } from "../utils/assert.ts"
 
 const isDeno = "Deno" in globalThis
@@ -2974,6 +2974,30 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
       deepStrictEqual(A.makeOption({ a: 1 }), Option.some(new A({ a: 1 })))
       deepStrictEqual(A.makeOption({ a: -1 }), Option.none())
     })
+  })
+
+  describe("makeEffect", () => {
+    it.effect("Struct", () =>
+      Effect.gen(function*() {
+        const schema = Schema.Struct({ a: Schema.Number.check(Schema.isGreaterThan(0)) })
+
+        const success = yield* schema.makeEffect({ a: 1 }).pipe(Effect.result)
+        deepStrictEqual(success, Result.succeed({ a: 1 }))
+
+        const failure = yield* schema.makeEffect({ a: -1 }).pipe(Effect.flip)
+        assertTrue(Schema.isSchemaError(failure))
+      }))
+
+    it.effect("Class", () =>
+      Effect.gen(function*() {
+        class A extends Schema.Class<A>("A")(Schema.Struct({ a: Schema.Number.check(Schema.isGreaterThan(0)) })) {}
+
+        const success = yield* A.makeEffect({ a: 1 })
+        deepStrictEqual(success, new A({ a: 1 }))
+
+        const failure = yield* A.makeEffect({ a: -1 }).pipe(Effect.flip)
+        assertTrue(Schema.isSchemaError(failure))
+      }))
   })
 
   describe("withConstructorDefault", () => {
