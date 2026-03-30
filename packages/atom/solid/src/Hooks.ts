@@ -193,8 +193,9 @@ export const useAtomResource = <A, E>(
   options?: ResourceOptions<A> & {
     readonly suspendOnWaiting?: boolean | undefined
   }
-): ResourceReturn<A, void> =>
-  createResource(() => useAtomValue(atom)(), (result) => {
+): ResourceReturn<A, void> => {
+  const result = useAtomValue(atom)
+  return createResource(result, (result) => {
     if (AsyncResult.isInitial(result) || (options?.suspendOnWaiting && result.waiting)) {
       return constUnresolvedPromise
     } else if (AsyncResult.isSuccess(result)) {
@@ -202,6 +203,7 @@ export const useAtomResource = <A, E>(
     }
     return Promise.reject(Cause.squash(result.cause))
   })
+}
 
 const constUnresolvedPromise = new Promise<never>(() => {})
 
