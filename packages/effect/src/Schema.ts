@@ -4704,21 +4704,24 @@ export interface Opaque<Self, S extends Top, Brand> extends
 }
 
 /**
- * Wraps a schema so that its decoded `Type` becomes a nominally distinct type `Self`.
- * Useful for creating opaque types that are structurally identical to a base schema
+ * Wraps a struct schema so that its decoded `Type` becomes a nominally distinct type `Self`.
+ * Useful for creating opaque types that are structurally identical to a base struct
  * but type-incompatible with it.
  *
- * **Example** (Opaque user ID)
+ * **Example** (Opaque struct)
  *
  * ```ts
  * import { Schema } from "effect"
  *
- * type UserId = string & { readonly _tag: "UserId" }
- * const UserId = Schema.Opaque<UserId>()(Schema.String)
+ * class Person extends Schema.Opaque<Person>()(
+ *   Schema.Struct({
+ *     name: Schema.String
+ *   })
+ * ) {}
  *
- * // Decoded value is UserId, not plain string
- * const id = Schema.decodeUnknownSync(UserId)("abc")
- * // id: UserId
+ * // Decoded value is Person, not { name: string }
+ * const person = Schema.decodeUnknownSync(Person)({ name: "Alice" })
+ * // person: Person
  * ```
  *
  * @since 4.0.0
@@ -4727,8 +4730,7 @@ export function Opaque<Self, Brand = {}>() {
   return <S extends Top>(schema: S): Opaque<Self, S, Brand> & Omit<S, "Type"> => {
     // oxlint-disable-next-line @typescript-eslint/no-extraneous-class
     class Opaque {}
-    Object.setPrototypeOf(Opaque, schema)
-    return Opaque as any
+    return Object.setPrototypeOf(Opaque, schema)
   }
 }
 
