@@ -1011,8 +1011,7 @@ Unexpected key with value "c"
     const asserts = new TestSchema.Asserts(schema)
 
     if (verifyGeneration) {
-      const arbitrary = asserts.arbitrary()
-      arbitrary.verifyGeneration()
+      asserts.arbitrary().verifyGeneration()
     }
 
     const decoding = asserts.decoding()
@@ -1806,8 +1805,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
     const schema = Schema.Finite
     const asserts = new TestSchema.Asserts(schema)
     if (verifyGeneration) {
-      const arbitrary = asserts.arbitrary()
-      arbitrary.verifyGeneration()
+      asserts.arbitrary().verifyGeneration()
     }
   })
 
@@ -1817,8 +1815,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
       const asserts = new TestSchema.Asserts(schema)
 
       if (verifyGeneration) {
-        const arbitrary = asserts.arbitrary()
-        arbitrary.verifyGeneration()
+        asserts.arbitrary().verifyGeneration()
       }
 
       const decoding = asserts.decoding()
@@ -1839,13 +1836,26 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
       )
     })
 
+    it("DateFromString", async () => {
+      const schema = Schema.DateFromString
+      const asserts = new TestSchema.Asserts(schema)
+      if (verifyGeneration) {
+        asserts.arbitrary().verifyGeneration()
+      }
+
+      const decoding = asserts.decoding()
+      await decoding.succeed("2021-01-01T00:00:00.000Z", new Date("2021-01-01T00:00:00.000Z"))
+
+      const encoding = asserts.encoding()
+      await encoding.succeed(new Date("2021-01-01T00:00:00.000Z"), "2021-01-01T00:00:00.000Z")
+    })
+
     it("FiniteFromString", async () => {
       const schema = Schema.FiniteFromString
       const asserts = new TestSchema.Asserts(schema)
 
       if (verifyGeneration) {
-        const arbitrary = asserts.arbitrary()
-        arbitrary.verifyGeneration()
+        asserts.arbitrary().verifyGeneration()
       }
 
       const decoding = asserts.decoding()
@@ -1876,6 +1886,103 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
       await encoding.fail(
         "a",
         `Expected number, got "a"`
+      )
+    })
+
+    it("BigIntFromString", async () => {
+      const schema = Schema.BigIntFromString
+      const asserts = new TestSchema.Asserts(schema)
+      if (verifyGeneration) {
+        asserts.arbitrary().verifyGeneration()
+      }
+
+      const decoding = asserts.decoding()
+      await decoding.succeed("0", 0n)
+      await decoding.fail(
+        "a",
+        `Expected a string representing a bigint, got "a"`
+      )
+
+      const encoding = asserts.encoding()
+      await encoding.succeed(0n, "0")
+    })
+
+    it("BigDecimalFromString", async () => {
+      const schema = Schema.BigDecimalFromString
+      const asserts = new TestSchema.Asserts(schema)
+
+      if (verifyGeneration) {
+        asserts.arbitrary().verifyGeneration()
+      }
+
+      const decoding = asserts.decoding()
+      await decoding.succeed("0", Option.getOrThrow(BigDecimal.fromString("0")))
+      await decoding.succeed("123.456", Option.getOrThrow(BigDecimal.fromString("123.456")))
+
+      const encoding = asserts.encoding()
+      await encoding.succeed(BigDecimal.make(0n, 0), "0")
+      await encoding.succeed(BigDecimal.make(123456n, 3), "123.456")
+      await encoding.fail(
+        "a",
+        `Expected BigDecimal, got "a"`
+      )
+    })
+
+    it("TimeZoneNamedFromString", async () => {
+      const schema = Schema.TimeZoneNamedFromString
+      const asserts = new TestSchema.Asserts(schema)
+
+      if (verifyGeneration) {
+        asserts.arbitrary().verifyGeneration()
+      }
+
+      const decoding = asserts.decoding()
+      await decoding.succeed("Europe/London", DateTime.zoneMakeNamedUnsafe("Europe/London"))
+
+      const encoding = asserts.encoding()
+      await encoding.succeed(DateTime.zoneMakeNamedUnsafe("Europe/London"), "Europe/London")
+      await encoding.fail(
+        "a",
+        `Expected DateTime.TimeZone.Named, got "a"`
+      )
+    })
+
+    it("TimeZoneFromString", async () => {
+      const schema = Schema.TimeZoneFromString
+      const asserts = new TestSchema.Asserts(schema)
+
+      if (verifyGeneration) {
+        asserts.arbitrary().verifyGeneration()
+      }
+
+      const decoding = asserts.decoding()
+      await decoding.succeed("Europe/London", DateTime.zoneMakeNamedUnsafe("Europe/London"))
+      await decoding.succeed("+03:00", DateTime.zoneMakeOffset(3 * 60 * 60 * 1000))
+
+      const encoding = asserts.encoding()
+      await encoding.succeed(DateTime.zoneMakeNamedUnsafe("Europe/London"), "Europe/London")
+      await encoding.succeed(DateTime.zoneMakeOffset(3 * 60 * 60 * 1000), "+03:00")
+      await encoding.fail(
+        "a",
+        `Expected DateTime.TimeZone, got "a"`
+      )
+    })
+
+    it("DateTimeZonedFromString", async () => {
+      const schema = Schema.DateTimeZonedFromString
+      const asserts = new TestSchema.Asserts(schema)
+
+      if (verifyGeneration) {
+        asserts.arbitrary().verifyGeneration()
+      }
+
+      const zoned = DateTime.makeZonedUnsafe("2021-01-01T00:00:00.000Z", { timeZone: "Europe/London" })
+
+      const encoding = asserts.encoding()
+      await encoding.succeed(zoned, DateTime.formatIsoZoned(zoned))
+      await encoding.fail(
+        "a",
+        `Expected DateTime.Zoned, got "a"`
       )
     })
 
@@ -2312,8 +2419,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
       const asserts = new TestSchema.Asserts(schema)
 
       if (verifyGeneration) {
-        const arbitrary = asserts.arbitrary()
-        arbitrary.verifyGeneration()
+        asserts.arbitrary().verifyGeneration()
       }
 
       const decoding = asserts.decoding()
@@ -2350,8 +2456,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
       const asserts = new TestSchema.Asserts(schema)
 
       if (verifyGeneration) {
-        const arbitrary = asserts.arbitrary()
-        arbitrary.verifyGeneration()
+        asserts.arbitrary().verifyGeneration()
       }
 
       const decoding = asserts.decoding()
@@ -2462,8 +2567,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
       const asserts = new TestSchema.Asserts(schema)
 
       if (verifyGeneration) {
-        const arbitrary = asserts.arbitrary()
-        arbitrary.verifyGeneration()
+        asserts.arbitrary().verifyGeneration()
       }
 
       const decoding = asserts.decoding()
@@ -2493,8 +2597,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
     const asserts = new TestSchema.Asserts(schema)
 
     if (verifyGeneration) {
-      const arbitrary = asserts.arbitrary()
-      arbitrary.verifyGeneration()
+      asserts.arbitrary().verifyGeneration()
     }
 
     const decoding = asserts.decoding()
@@ -2512,8 +2615,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
     const asserts = new TestSchema.Asserts(schema)
 
     if (verifyGeneration) {
-      const arbitrary = asserts.arbitrary()
-      arbitrary.verifyGeneration()
+      asserts.arbitrary().verifyGeneration()
     }
 
     const decoding = asserts.decoding()
@@ -2532,8 +2634,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
       const asserts = new TestSchema.Asserts(schema)
 
       if (verifyGeneration) {
-        const arbitrary = asserts.arbitrary()
-        arbitrary.verifyGeneration()
+        asserts.arbitrary().verifyGeneration()
       }
 
       const decoding = asserts.decoding()
@@ -2552,8 +2653,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
       const asserts = new TestSchema.Asserts(schema)
 
       if (verifyGeneration) {
-        const arbitrary = asserts.arbitrary()
-        arbitrary.verifyGeneration()
+        asserts.arbitrary().verifyGeneration()
       }
 
       const decoding = asserts.decoding()
@@ -2575,8 +2675,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
     const asserts = new TestSchema.Asserts(schema)
 
     if (verifyGeneration) {
-      const arbitrary = asserts.arbitrary()
-      arbitrary.verifyGeneration()
+      asserts.arbitrary().verifyGeneration()
     }
 
     const decoding = asserts.decoding()
@@ -2605,8 +2704,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
     const asserts = new TestSchema.Asserts(schema)
 
     if (verifyGeneration) {
-      const arbitrary = asserts.arbitrary()
-      arbitrary.verifyGeneration()
+      asserts.arbitrary().verifyGeneration()
     }
 
     const decoding = asserts.decoding()
@@ -2632,8 +2730,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
       const asserts = new TestSchema.Asserts(schema)
 
       if (verifyGeneration) {
-        const arbitrary = asserts.arbitrary()
-        arbitrary.verifyGeneration()
+        asserts.arbitrary().verifyGeneration()
       }
 
       const decoding = asserts.decoding()
@@ -2706,8 +2803,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
       const asserts = new TestSchema.Asserts(schema)
 
       if (verifyGeneration) {
-        const arbitrary = asserts.arbitrary()
-        arbitrary.verifyGeneration()
+        asserts.arbitrary().verifyGeneration()
       }
 
       const decoding = asserts.decoding()
@@ -2739,8 +2835,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
     noPrototypeObject.message = "a"
 
     if (verifyGeneration) {
-      const arbitrary = asserts.arbitrary()
-      arbitrary.verifyGeneration()
+      asserts.arbitrary().verifyGeneration()
     }
 
     const decoding = asserts.decoding()
@@ -2793,8 +2888,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
       const asserts = new TestSchema.Asserts(schema)
 
       if (verifyGeneration) {
-        const arbitrary = asserts.arbitrary()
-        arbitrary.verifyGeneration()
+        asserts.arbitrary().verifyGeneration()
       }
     })
   })
@@ -2813,8 +2907,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
       const asserts = new TestSchema.Asserts(schema)
 
       if (verifyGeneration) {
-        const arbitrary = asserts.arbitrary()
-        arbitrary.verifyGeneration()
+        asserts.arbitrary().verifyGeneration()
       }
 
       const decoding = asserts.decoding()
@@ -2856,8 +2949,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
     const asserts = new TestSchema.Asserts(schema)
 
     if (verifyGeneration) {
-      const arbitrary = asserts.arbitrary()
-      arbitrary.verifyGeneration()
+      asserts.arbitrary().verifyGeneration()
     }
   })
 
@@ -2877,8 +2969,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
       const asserts = new TestSchema.Asserts(schema)
 
       if (verifyGeneration) {
-        const arbitrary = asserts.arbitrary()
-        arbitrary.verifyGeneration()
+        asserts.arbitrary().verifyGeneration()
       }
 
       const decoding = asserts.decoding()
@@ -3890,8 +3981,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
     const schema = Schema.PropertyKey
     const asserts = new TestSchema.Asserts(schema)
     if (verifyGeneration) {
-      const arbitrary = asserts.arbitrary()
-      arbitrary.verifyGeneration()
+      asserts.arbitrary().verifyGeneration()
     }
   })
 
@@ -3899,8 +3989,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
     const schema = Schema.BooleanFromBit
     const asserts = new TestSchema.Asserts(schema)
     if (verifyGeneration) {
-      const arbitrary = asserts.arbitrary()
-      arbitrary.verifyGeneration()
+      asserts.arbitrary().verifyGeneration()
     }
   })
 
@@ -3908,8 +3997,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
     const schema = Schema.Uint8Array
     const asserts = new TestSchema.Asserts(schema)
     if (verifyGeneration) {
-      const arbitrary = asserts.arbitrary()
-      arbitrary.verifyGeneration()
+      asserts.arbitrary().verifyGeneration()
     }
   })
 
@@ -3919,8 +4007,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
     const encoder = new TextEncoder()
 
     if (verifyGeneration) {
-      const arbitrary = asserts.arbitrary()
-      arbitrary.verifyGeneration()
+      asserts.arbitrary().verifyGeneration()
     }
 
     const decoding = asserts.decoding()
@@ -3939,8 +4026,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
     const encoder = new TextEncoder()
 
     if (verifyGeneration) {
-      const arbitrary = asserts.arbitrary()
-      arbitrary.verifyGeneration()
+      asserts.arbitrary().verifyGeneration()
     }
 
     const decoding = asserts.decoding()
@@ -3960,8 +4046,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
     const encoder = new TextEncoder()
 
     if (verifyGeneration) {
-      const arbitrary = asserts.arbitrary()
-      arbitrary.verifyGeneration()
+      asserts.arbitrary().verifyGeneration()
     }
 
     const decoding = asserts.decoding()
@@ -3987,8 +4072,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
     const asserts = new TestSchema.Asserts(schema)
 
     if (verifyGeneration) {
-      const arbitrary = asserts.arbitrary()
-      arbitrary.verifyGeneration()
+      asserts.arbitrary().verifyGeneration()
     }
 
     const decoding = asserts.decoding()
@@ -4002,8 +4086,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
     const asserts = new TestSchema.Asserts(schema)
 
     if (verifyGeneration) {
-      const arbitrary = asserts.arbitrary()
-      arbitrary.verifyGeneration()
+      asserts.arbitrary().verifyGeneration()
     }
   })
 
@@ -4012,8 +4095,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
     const asserts = new TestSchema.Asserts(schema)
 
     if (verifyGeneration) {
-      const arbitrary = asserts.arbitrary()
-      arbitrary.verifyGeneration()
+      asserts.arbitrary().verifyGeneration()
     }
 
     const decoding = asserts.decoding()
@@ -4028,8 +4110,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
     const asserts = new TestSchema.Asserts(schema)
 
     if (verifyGeneration) {
-      const arbitrary = asserts.arbitrary()
-      arbitrary.verifyGeneration()
+      asserts.arbitrary().verifyGeneration()
     }
 
     const decoding = asserts.decoding()
@@ -4045,8 +4126,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
     const asserts = new TestSchema.Asserts(schema)
 
     if (verifyGeneration) {
-      const arbitrary = asserts.arbitrary()
-      arbitrary.verifyGeneration()
+      asserts.arbitrary().verifyGeneration()
     }
 
     const decoding = asserts.decoding()
@@ -4062,8 +4142,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
     const asserts = new TestSchema.Asserts(schema)
 
     if (verifyGeneration) {
-      const arbitrary = asserts.arbitrary()
-      arbitrary.verifyGeneration()
+      asserts.arbitrary().verifyGeneration()
     }
 
     const decoding = asserts.decoding()
@@ -4079,8 +4158,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
     const asserts = new TestSchema.Asserts(schema)
 
     if (verifyGeneration) {
-      const arbitrary = asserts.arbitrary()
-      arbitrary.verifyGeneration()
+      asserts.arbitrary().verifyGeneration()
     }
 
     const decoding = asserts.decoding()
@@ -4095,8 +4173,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
     const asserts = new TestSchema.Asserts(schema)
 
     if (verifyGeneration) {
-      const arbitrary = asserts.arbitrary()
-      arbitrary.verifyGeneration()
+      asserts.arbitrary().verifyGeneration()
     }
 
     const decoding = asserts.decoding()
@@ -4111,8 +4188,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
     const asserts = new TestSchema.Asserts(schema)
 
     if (verifyGeneration) {
-      const arbitrary = asserts.arbitrary()
-      arbitrary.verifyGeneration()
+      asserts.arbitrary().verifyGeneration()
     }
 
     const decoding = asserts.decoding()
@@ -4129,8 +4205,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
     const asserts = new TestSchema.Asserts(schema)
 
     if (verifyGeneration) {
-      const arbitrary = asserts.arbitrary()
-      arbitrary.verifyGeneration()
+      asserts.arbitrary().verifyGeneration()
     }
 
     const decoding = asserts.decoding()
@@ -4148,8 +4223,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
     strictEqual(schema.annotate({}).value, Schema.FiniteFromString)
 
     if (verifyGeneration) {
-      const arbitrary = asserts.arbitrary()
-      arbitrary.verifyGeneration()
+      asserts.arbitrary().verifyGeneration()
     }
 
     const decoding = asserts.decoding()
@@ -4170,8 +4244,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
     strictEqual(schema.annotate({}).value, Schema.FiniteFromString)
 
     if (verifyGeneration) {
-      const arbitrary = asserts.arbitrary()
-      arbitrary.verifyGeneration()
+      asserts.arbitrary().verifyGeneration()
     }
 
     const decoding = asserts.decoding()
@@ -4195,8 +4268,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
     strictEqual(schema.annotate({}).value, Schema.FiniteFromString)
 
     if (verifyGeneration) {
-      const arbitrary = asserts.arbitrary()
-      arbitrary.verifyGeneration()
+      asserts.arbitrary().verifyGeneration()
     }
 
     const decoding = asserts.decoding()
@@ -4222,8 +4294,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
     strictEqual(schema.annotate({}).value, Schema.FiniteFromString)
 
     if (verifyGeneration) {
-      const arbitrary = asserts.arbitrary()
-      arbitrary.verifyGeneration()
+      asserts.arbitrary().verifyGeneration()
     }
 
     const decoding = asserts.decoding()
@@ -4249,8 +4320,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
     strictEqual(schema.annotate({}).value, Schema.FiniteFromString)
 
     if (verifyGeneration) {
-      const arbitrary = asserts.arbitrary()
-      arbitrary.verifyGeneration()
+      asserts.arbitrary().verifyGeneration()
     }
 
     const decoding = asserts.decoding()
@@ -4336,8 +4406,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
     const asserts = new TestSchema.Asserts(schema)
 
     if (verifyGeneration) {
-      const arbitrary = asserts.arbitrary()
-      arbitrary.verifyGeneration()
+      asserts.arbitrary().verifyGeneration()
     }
   })
 
@@ -4346,8 +4415,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
     const asserts = new TestSchema.Asserts(schema)
 
     if (verifyGeneration) {
-      const arbitrary = asserts.arbitrary()
-      arbitrary.verifyGeneration()
+      asserts.arbitrary().verifyGeneration()
     }
 
     const decoding = asserts.decoding()
@@ -4365,8 +4433,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
     const asserts = new TestSchema.Asserts(schema)
 
     if (verifyGeneration) {
-      const arbitrary = asserts.arbitrary()
-      arbitrary.verifyGeneration()
+      asserts.arbitrary().verifyGeneration()
     }
 
     const decoding = asserts.decoding()
@@ -4392,8 +4459,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
     const asserts = new TestSchema.Asserts(schema)
 
     if (verifyGeneration) {
-      const arbitrary = asserts.arbitrary()
-      arbitrary.verifyGeneration()
+      asserts.arbitrary().verifyGeneration()
     }
 
     const decoding = asserts.decoding()
@@ -4569,8 +4635,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
     const schema = Schema.URL
     const asserts = new TestSchema.Asserts(schema)
     if (verifyGeneration) {
-      const arbitrary = asserts.arbitrary()
-      arbitrary.verifyGeneration()
+      asserts.arbitrary().verifyGeneration()
     }
   })
 
@@ -4578,8 +4643,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
     const schema = Schema.RegExp
     const asserts = new TestSchema.Asserts(schema)
     if (verifyGeneration) {
-      const arbitrary = asserts.arbitrary()
-      arbitrary.verifyGeneration()
+      asserts.arbitrary().verifyGeneration()
     }
   })
 
@@ -4588,8 +4652,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
     const asserts = new TestSchema.Asserts(schema)
 
     if (verifyGeneration) {
-      const arbitrary = asserts.arbitrary()
-      arbitrary.verifyGeneration()
+      asserts.arbitrary().verifyGeneration()
     }
 
     const decoding = asserts.decoding()
@@ -4609,8 +4672,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
       const asserts = new TestSchema.Asserts(schema)
 
       if (verifyGeneration) {
-        const arbitrary = asserts.arbitrary()
-        arbitrary.verifyGeneration()
+        asserts.arbitrary().verifyGeneration()
       }
 
       const decoding = asserts.decoding()
@@ -4629,8 +4691,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
       const asserts = new TestSchema.Asserts(schema)
 
       if (verifyGeneration) {
-        const arbitrary = asserts.arbitrary()
-        arbitrary.verifyGeneration()
+        asserts.arbitrary().verifyGeneration()
       }
 
       const decoding = asserts.decoding()
@@ -4649,8 +4710,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
       const asserts = new TestSchema.Asserts(schema)
 
       if (verifyGeneration) {
-        const arbitrary = asserts.arbitrary()
-        arbitrary.verifyGeneration()
+        asserts.arbitrary().verifyGeneration()
       }
 
       const decoding = asserts.decoding()
@@ -4749,8 +4809,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
     const asserts = new TestSchema.Asserts(schema)
 
     if (verifyGeneration) {
-      const arbitrary = asserts.arbitrary()
-      arbitrary.verifyGeneration()
+      asserts.arbitrary().verifyGeneration()
     }
 
     const decoding = asserts.decoding()
@@ -5602,8 +5661,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
       await make.succeed({ a: "a" }, new A({ a: "a" }))
 
       if (verifyGeneration) {
-        const arbitrary = asserts.arbitrary()
-        arbitrary.verifyGeneration()
+        asserts.arbitrary().verifyGeneration()
       }
 
       const decoding = asserts.decoding()
@@ -5783,8 +5841,7 @@ Expected a value with a size of at most 2, got Map([["a",1],["b",NaN],["c",3]])`
       await make.succeed({ id: 1 }, new E({ id: 1 }))
 
       if (verifyGeneration) {
-        const arbitrary = asserts.arbitrary()
-        arbitrary.verifyGeneration()
+        asserts.arbitrary().verifyGeneration()
       }
     })
 
@@ -7462,8 +7519,7 @@ error message 2`
     const asserts = new TestSchema.Asserts(schema)
 
     if (verifyGeneration) {
-      const arbitrary = asserts.arbitrary()
-      arbitrary.verifyGeneration()
+      asserts.arbitrary().verifyGeneration()
     }
 
     const decoding = asserts.decoding()
@@ -7486,8 +7542,7 @@ error message 2`
     const asserts = new TestSchema.Asserts(schema)
 
     if (verifyGeneration) {
-      const arbitrary = asserts.arbitrary()
-      arbitrary.verifyGeneration()
+      asserts.arbitrary().verifyGeneration()
     }
 
     const decoding = asserts.decoding()
@@ -7527,8 +7582,7 @@ error message 2`
     const asserts = new TestSchema.Asserts(schema)
 
     if (verifyGeneration) {
-      const arbitrary = asserts.arbitrary()
-      arbitrary.verifyGeneration()
+      asserts.arbitrary().verifyGeneration()
     }
 
     const decoding = asserts.decoding()
@@ -7552,8 +7606,7 @@ error message 2`
     const asserts = new TestSchema.Asserts(schema)
 
     if (verifyGeneration) {
-      const arbitrary = asserts.arbitrary()
-      arbitrary.verifyGeneration()
+      asserts.arbitrary().verifyGeneration()
     }
 
     const decoding = asserts.decoding()
@@ -7577,8 +7630,7 @@ error message 2`
     const asserts = new TestSchema.Asserts(schema)
 
     if (verifyGeneration) {
-      const arbitrary = asserts.arbitrary()
-      arbitrary.verifyGeneration()
+      asserts.arbitrary().verifyGeneration()
     }
 
     const decoding = asserts.decoding()
@@ -7602,8 +7654,7 @@ error message 2`
     const asserts = new TestSchema.Asserts(schema)
 
     if (verifyGeneration) {
-      const arbitrary = asserts.arbitrary()
-      arbitrary.verifyGeneration()
+      asserts.arbitrary().verifyGeneration()
     }
 
     const decoding = asserts.decoding()
@@ -7669,8 +7720,7 @@ describe("Check", () => {
     const asserts = new TestSchema.Asserts(schema)
 
     if (verifyGeneration) {
-      const arbitrary = asserts.arbitrary()
-      arbitrary.verifyGeneration()
+      asserts.arbitrary().verifyGeneration()
     }
 
     deepStrictEqual(Schema.resolveInto(schema)?.["meta"], {
