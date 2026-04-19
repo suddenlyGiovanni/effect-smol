@@ -8868,6 +8868,8 @@ export interface DurationFromNanos extends decodeTo<Duration, BigInt> {
   readonly "Rebuild": DurationFromNanos
 }
 
+const bigint0 = globalThis.BigInt(0)
+
 /**
  * A transformation schema that decodes a non-negative `bigint` into a
  * `Duration`, treating the `bigint` value as the duration in nanoseconds.
@@ -8881,7 +8883,7 @@ export interface DurationFromNanos extends decodeTo<Duration, BigInt> {
  * @category Duration
  * @since 4.0.0
  */
-export const DurationFromNanos: DurationFromNanos = BigInt.check(isGreaterThanOrEqualToBigInt(0n)).pipe(
+export const DurationFromNanos: DurationFromNanos = BigInt.check(isGreaterThanOrEqualToBigInt(bigint0)).pipe(
   decodeTo(Duration, Transformation.durationFromNanos)
 )
 
