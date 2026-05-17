@@ -17,8 +17,10 @@
  *
  * @since 4.0.0
  */
-import type * as Layer from "effect/Layer"
+import * as Effect from "effect/Effect"
+import * as Layer from "effect/Layer"
 import * as KeyValueStore from "effect/unstable/persistence/KeyValueStore"
+import { IndexedDb } from "./IndexedDb.ts"
 
 /**
  * Creates a `KeyValueStore` layer that uses the browser's `localStorage` api.
@@ -43,3 +45,123 @@ export const layerLocalStorage: Layer.Layer<KeyValueStore.KeyValueStore> = KeyVa
 export const layerSessionStorage: Layer.Layer<KeyValueStore.KeyValueStore> = KeyValueStore.layerStorage(() =>
   globalThis.sessionStorage
 )
+
+/**
+ * Creates a `KeyValueStore` layer backed by IndexedDB.
+ *
+ * @since 4.0.0
+ * @category Layers
+ */
+export const layerIndexedDb = (options?: {
+  readonly database?: string | undefined
+}): Layer.Layer<KeyValueStore.KeyValueStore, never, IndexedDb> =>
+  Layer.effect(KeyValueStore.KeyValueStore)(
+    Effect.gen(function*() {
+      const db = yield* Effect.acquireRelease(
+        openDatabase(options?.database ?? "effect_key_value_store"),
+        (db) => Effect.sync(() => db.close())
+      ).pipe(Effect.orDie)
+
+      return KeyValueStore.make({
+        clear: Effect.suspend(() => {
+          const store = getKvsEntriesStore(db, "readwrite")
+          return idbRequest({ method: "clear", message: "Failed to clear backing store" }, () => store.clear())
+        }),
+        get: (key: string) =>
+          Effect.map(
+            Effect.suspend(() => {
+              const store = getKvsEntriesStore(db, "readonly")
+              return idbRequest<{ key: string; value: string } | undefined>({
+                method: "get",
+                message: "Failed to get value from backing store",
+                key
+              }, () => store.get(key))
+            }),
+            (found) => typeof found?.value === "string" ? found.value : undefined
+          ),
+        getUint8Array: (key: string) =>
+          Effect.map(
+            Effect.suspend(() => {
+              const store = getKvsEntriesStore(db, "readonly")
+              return idbRequest<{ key: string; value: Uint8Array } | undefined>({
+                method: "getUint8Array",
+                message: "Failed to get value from backing store",
+                key
+              }, () => store.get(key))
+            }),
+            (found) => found?.value && found.value instanceof Uint8Array ? found.value : undefined
+          ),
+        set: (key: string, value: string | Uint8Array) =>
+          Effect.asVoid(Effect.suspend(() => {
+            const store = getKvsEntriesStore(db, "readwrite")
+            return idbRequest(
+              { method: "set", message: "Failed to set value in backing store", key },
+              () => store.put({ key, value })
+            )
+          })),
+        size: Effect.suspend(() => {
+          const store = getKvsEntriesStore(db, "readonly")
+          return idbRequest<number>(
+            { method: "size", message: "Failed to get backing store size" },
+            () => store.count()
+          )
+        }),
+        remove: (key: string) =>
+          Effect.asVoid(Effect.suspend(() => {
+            const store = getKvsEntriesStore(db, "readwrite")
+            return idbRequest(
+              { method: "remove", message: "Failed to remove value from backing store", key },
+              () => store.delete(key)
+            )
+          }))
+      })
+    })
+  )
+
+const databaseVersion = 1
+const entriesStoreName = "entries"
+const openDatabase = Effect.fnUntraced(function*(database: string) {
+  const idb = (yield* IndexedDb).indexedDB
+  const openRequest = yield* Effect.try({
+    try: () => idb.open(database, databaseVersion),
+    catch: (cause) =>
+      new KeyValueStore.KeyValueStoreError({
+        method: "open",
+        message: "Failed to open backing store database",
+        cause
+      })
+  })
+  openRequest.onupgradeneeded = () => {
+    const db = openRequest.result
+    if (!db.objectStoreNames.contains(entriesStoreName)) {
+      db.createObjectStore(entriesStoreName, { keyPath: "key" })
+    }
+  }
+  return yield* idbRequest({ method: "open", message: "Failed to open backing store database" }, () => openRequest)
+})
+
+const idbRequest = <A>(
+  failArgs: { method: string; message: string; key?: string },
+  evaluate: () => IDBRequest<A>
+): Effect.Effect<A, KeyValueStore.KeyValueStoreError> =>
+  Effect.callback<A, KeyValueStore.KeyValueStoreError>((resume) => {
+    const request = evaluate()
+    if (request.readyState === "done") {
+      return resume(Effect.succeed(request.result))
+    }
+    request.onsuccess = () => {
+      resume(Effect.succeed(request.result))
+    }
+    request.onerror = () =>
+      resume(Effect.fail(
+        new KeyValueStore.KeyValueStoreError({
+          ...failArgs,
+          cause: request.error
+        })
+      ))
+  })
+
+const getKvsEntriesStore = (db: IDBDatabase, mode: IDBTransactionMode) => {
+  const transaction = db.transaction(entriesStoreName, mode)
+  return transaction.objectStore(entriesStoreName)
+}
