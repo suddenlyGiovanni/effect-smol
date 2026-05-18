@@ -6257,8 +6257,9 @@ export const splitLines = <Err, Done>(): Channel<
 /**
  * Decodes incoming `Uint8Array` chunks into strings using `TextDecoder`.
  *
- * Each `Uint8Array` inside an emitted array is decoded independently. The
- * optional `encoding` and `options` are passed to `TextDecoder`.
+ * Input chunks are decoded with streaming enabled so multi-byte characters may
+ * span `Uint8Array` boundaries. The optional `encoding` and `options` are
+ * passed to `TextDecoder`.
  *
  * @category String manipulation
  * @since 4.0.0
@@ -6274,7 +6275,8 @@ export const decodeText = <Err, Done>(encoding?: string, options?: TextDecoderOp
   fromTransform((upstream, _scope) =>
     Effect.sync(() => {
       const decoder = new TextDecoder(encoding, options)
-      return Effect.map(upstream, Arr.map((line) => decoder.decode(line)))
+      const streamOptions = { stream: true }
+      return Effect.map(upstream, Arr.map((line) => decoder.decode(line, streamOptions)))
     })
   )
 
