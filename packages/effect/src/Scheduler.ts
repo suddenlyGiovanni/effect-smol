@@ -67,7 +67,7 @@ export interface SchedulerDispatcher {
  * customize execution mode, task dispatching, or yield behavior.
  *
  * @category references
- * @since 4.0.0
+ * @since 2.0.0
  */
 export const Scheduler: Context.Reference<Scheduler> = Context.Reference<Scheduler>("effect/Scheduler", {
   defaultValue: () => new MixedScheduler()
@@ -151,7 +151,7 @@ export class MixedScheduler implements Scheduler {
   /**
    * Creates a dispatcher that schedules work through this scheduler.
    *
-   * @since 2.0.0
+   * @since 4.0.0
    */
   makeDispatcher() {
     return new MixedSchedulerDispatcher(this.setImmediate)
