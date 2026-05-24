@@ -587,7 +587,7 @@ export const parse = (cron: string, tz?: DateTime.TimeZone | string): Result.Res
  *
  * **When to use**
  *
- * Use this when the input is expected to be valid and you want to avoid
+ * Use when the input is expected to be valid and you want to avoid
  * handling the `Result` type.
  *
  * **Example** (Parsing cron expressions unsafely)
@@ -715,6 +715,22 @@ export const next = (cron: Cron, now?: DateTime.DateTime.Input): Date => {
 
 /**
  * Returns the previous scheduled date/time for the given Cron instance.
+ *
+ * **When to use**
+ *
+ * Use to find the most recent occurrence of a cron schedule before a specific
+ * date/time or before the current time.
+ *
+ * **Details**
+ *
+ * When no date/time is provided, the search starts from the current time.
+ *
+ * **Gotchas**
+ *
+ * The search is strict: if the supplied date/time already matches the schedule,
+ * the result is the earlier occurrence.
+ *
+ * @see {@link next} for finding the next scheduled occurrence
  *
  * @category utils
  * @since 3.20.0

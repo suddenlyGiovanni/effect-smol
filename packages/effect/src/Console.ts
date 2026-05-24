@@ -111,6 +111,15 @@ export interface Console {
 /**
  * A reference to the current console service in the Effect system, allowing access to the active console implementation from within the Effect context.
  *
+ * **When to use**
+ *
+ * Use when an Effect program needs the current console service as a context
+ * reference, such as when providing or overriding a console implementation.
+ *
+ * **Details**
+ *
+ * When no override is provided, the reference resolves to `globalThis.console`.
+ *
  * **Example** (Accessing the current console)
  *
  * ```ts
@@ -122,6 +131,8 @@ export interface Console {
  *   })
  * )
  * ```
+ *
+ * @see {@link consoleWith} for using the current console service inside an effect
  *
  * @category references
  * @since 2.0.0
@@ -175,7 +186,17 @@ export const assert = (condition: boolean, ...args: ReadonlyArray<any>): Effect.
   )
 
 /**
- * Clears all previously logged messages from the console.
+ * Invokes the current console service's clear operation.
+ *
+ * **When to use**
+ *
+ * Use to request that the active console implementation clear its visible
+ * output.
+ *
+ * **Gotchas**
+ *
+ * The clearing behavior depends on the active console implementation and host
+ * environment.
  *
  * **Example** (Clearing console output)
  *

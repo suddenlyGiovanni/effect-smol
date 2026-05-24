@@ -1457,6 +1457,11 @@ const isBigDecimalArgs = (args: IArguments) => isBigDecimal(args[0])
 /**
  * Rounding modes for `BigDecimal`.
  *
+ * **When to use**
+ *
+ * Use with `round` to choose how discarded digits affect a `BigDecimal`
+ * rounded to a target scale.
+ *
  * **Details**
  *
  * - `ceil`: round towards positive infinity
@@ -1469,6 +1474,11 @@ const isBigDecimalArgs = (args: IArguments) => isBigDecimal(args[0])
  * - `half-from-zero`: round to the nearest neighbor; if equidistant round away from zero
  * - `half-even`: round to the nearest neighbor; if equidistant round to the neighbor with an even digit
  * - `half-odd`: round to the nearest neighbor; if equidistant round to the neighbor with an odd digit
+ *
+ * @see {@link round} for configurable rounding with a `RoundingMode`
+ * @see {@link ceil} for fixed rounding toward positive infinity
+ * @see {@link floor} for fixed rounding toward negative infinity
+ * @see {@link truncate} for fixed rounding toward zero
  *
  * @category math
  * @since 3.16.0
@@ -1587,6 +1597,20 @@ export const truncate: {
 
 /**
  * Calculate the ceiling of a `BigDecimal` at the given scale.
+ *
+ * **When to use**
+ *
+ * Use to round a decimal toward positive infinity at a requested scale.
+ *
+ * **Details**
+ *
+ * The default scale is `0`. Positive scales keep digits to the right of the
+ * decimal point, and negative scales round positions to the left of the decimal
+ * point.
+ *
+ * @see {@link floor} for rounding toward negative infinity
+ * @see {@link truncate} for rounding toward zero
+ * @see {@link round} for configurable rounding modes
  *
  * **Example** (Rounding decimals up)
  *

@@ -140,11 +140,17 @@ export interface Cache<in out Key, in out A, in out E = never, out R = never> ex
  * Represents a low-level cache entry containing a deferred lookup result and
  * an optional expiration timestamp.
  *
+ * **When to use**
+ *
+ * Use when inspecting a `Cache`'s low-level map and you need the stored
+ * deferred lookup result or expiration timestamp for a key.
+ *
  * **Details**
  *
- * An `expiresAt` value of `undefined` means the entry does not expire. Most
- * users should interact with entries through the `Cache` combinators rather
- * than constructing them directly.
+ * An `expiresAt` value of `undefined` means the entry does not expire.
+ *
+ * @see {@link Cache} for the public cache API that manages entries through
+ * combinators
  *
  * @category models
  * @since 4.0.0
@@ -156,6 +162,11 @@ export interface Entry<A, E> {
 
 /**
  * Creates a cache with dynamic time-to-live based on the result and key.
+ *
+ * **When to use**
+ *
+ * Use when you need different cache entry lifetimes based on the lookup result
+ * or key characteristics.
  *
  * **Details**
  *
@@ -187,6 +198,7 @@ export interface Entry<A, E> {
  * })
  * ```
  *
+ * @see {@link make} for a simpler cache constructor with a fixed time-to-live for all entries
  * @category constructors
  * @since 2.0.0
  */
@@ -599,6 +611,15 @@ const getImpl = <Key, A, E, R>(
  * Retrieves the value associated with the specified key from the cache, only if
  * it contains a resolved successful value.
  *
+ * **Details**
+ *
+ * This checks only an existing non-expired entry. It returns `Option.some` when
+ * the entry has already resolved successfully, and `Option.none` for missing,
+ * expired, failed, or still-pending entries.
+ *
+ * @see {@link get} for triggering or awaiting the cache lookup
+ * @see {@link getOption} for reading an existing entry as an optional effect
+ *
  * @category combinators
  * @since 4.0.0
  */
@@ -742,6 +763,11 @@ export const set: {
 
 /**
  * Checks if the cache contains an entry for the specified key.
+ *
+ * **Details**
+ *
+ * This checks for an existing non-expired entry without invoking the cache
+ * lookup function. Expired entries are treated as absent.
  *
  * **Example** (Checking for cached keys)
  *
@@ -1270,6 +1296,13 @@ export const values = <Key, A, E, R>(self: Cache<Key, A, E, R>): Effect.Effect<I
  * Retrieves all key-value pairs from the cache as an iterable. This function
  * only returns entries with successfully resolved values, filtering out any
  * failed lookups or expired entries.
+ *
+ * **Gotchas**
+ *
+ * Expired entries are removed from the cache while `entries` filters them out.
+ *
+ * @see {@link keys} for retrieving only cached keys
+ * @see {@link values} for retrieving only cached values
  *
  * @category combinators
  * @since 4.0.0

@@ -7,7 +7,7 @@
  *
  * **When to use**
  *
- * - Coordinating shared state that may be updated by many fibers
+ * Use to coordinate shared state that may be updated by many fibers
  * - Running effectful state transitions that must not overlap
  * - Computing both a return value and a new stored value atomically
  * - Applying partial updates with `Option`, where `None` leaves the value
@@ -36,6 +36,14 @@ const TypeId = "~effect/SynchronizedRef"
  * A mutable reference whose update and modify operations are serialized with an
  * internal semaphore, including effectful transformations.
  *
+ * **When to use**
+ *
+ * Use when shared state may be updated by multiple fibers and each update,
+ * including effectful state transitions, must observe one current value and run
+ * one at a time.
+ *
+ * @see {@link Ref.Ref} for a plain `Ref` when updates do not need effectful synchronization
+ *
  * @category models
  * @since 2.0.0
  */
@@ -61,7 +69,7 @@ const Proto = {
  *
  * **When to use**
  *
- * This bypasses `Effect` construction; prefer `make` in effectful code.
+ * Use when this bypasses `Effect` construction; prefer `make` in effectful code.
  *
  * @category constructors
  * @since 4.0.0
@@ -76,6 +84,19 @@ export const makeUnsafe = <A>(value: A): SynchronizedRef<A> => {
 /**
  * Creates a `SynchronizedRef` from an initial value, wrapped in an `Effect`.
  *
+ * **When to use**
+ *
+ * Use to create a synchronized reference inside an Effect program when later
+ * updates may run effects and must be serialized.
+ *
+ * **Details**
+ *
+ * The returned effect constructs a fresh `SynchronizedRef` by delegating to
+ * `makeUnsafe` when the effect is evaluated.
+ *
+ * @see {@link makeUnsafe} for synchronous construction when the caller controls safe initialization
+ * @see {@link Ref.make} for a plain `Ref` when updates do not need effectful synchronization
+ *
  * @category constructors
  * @since 2.0.0
  */
@@ -85,6 +106,13 @@ export const make = <A>(value: A): Effect.Effect<SynchronizedRef<A>> => Effect.s
  * Reads the current value synchronously, bypassing the `Effect` API and the
  * ref's semaphore.
  *
+ * **When to use**
+ *
+ * Use when you need immediate synchronous access to a `SynchronizedRef` value
+ * in low-level code that can safely read outside an `Effect`.
+ *
+ * @see {@link get} for the Effect-wrapped read when composing inside Effect programs
+ *
  * @category getters
  * @since 4.0.0
  */
@@ -92,6 +120,13 @@ export const getUnsafe = <A>(self: SynchronizedRef<A>): A => self.backing.ref.cu
 
 /**
  * Returns an `Effect` that reads the current value of the `SynchronizedRef`.
+ *
+ * **When to use**
+ *
+ * Use to read the current value of a `SynchronizedRef` inside an `Effect`
+ * program without changing it.
+ *
+ * @see {@link getUnsafe} for synchronous reads when the caller controls safe access outside `Effect`
  *
  * @category getters
  * @since 2.0.0
@@ -101,6 +136,15 @@ export const get = <A>(self: SynchronizedRef<A>): Effect.Effect<A> => Effect.syn
 /**
  * Atomically sets a new value and returns the previous value, serialized by the
  * ref's semaphore.
+ *
+ * **When to use**
+ *
+ * Use to replace a `SynchronizedRef` with a known value when the previous value
+ * is also needed.
+ *
+ * @see {@link set} for setting a value without returning the previous value
+ * @see {@link setAndGet} for setting a value and returning the new value
+ * @see {@link getAndUpdate} for deriving the new value from the current value
  *
  * @category utils
  * @since 2.0.0
@@ -118,6 +162,14 @@ export const getAndSet: {
  * Atomically updates the current value with a function and returns the previous
  * value, serialized by the ref's semaphore.
  *
+ * **When to use**
+ *
+ * Use to run a pure state update when the previous stored value is also needed.
+ *
+ * @see {@link update} for updating without returning a value
+ * @see {@link updateAndGet} for updating and returning the new value
+ * @see {@link getAndUpdateEffect} for effectful updates that return the previous value
+ *
  * @category utils
  * @since 2.0.0
  */
@@ -133,6 +185,16 @@ export const getAndUpdate: {
 /**
  * Atomically runs an effectful update while holding the ref's semaphore, sets
  * the new value if the effect succeeds, and returns the previous value.
+ *
+ * **When to use**
+ *
+ * Use when an effectful state transition must return the previous stored value.
+ *
+ * @see {@link getAndUpdate} for pure updates that return the previous value
+ * @see {@link updateEffect} for effectful updates without returning a value
+ * @see {@link updateAndGetEffect} for effectful updates that return the new value
+ * @see {@link modifyEffect} for effectful updates with a custom return value
+ * @see {@link getAndUpdateSomeEffect} for conditional effectful updates that return the previous value
  *
  * @category utils
  * @since 2.0.0
@@ -198,6 +260,15 @@ export const getAndUpdateSomeEffect: {
 /**
  * Atomically computes a return value and a new ref value, stores the new value,
  * and returns the computed result.
+ *
+ * **When to use**
+ *
+ * Use to derive a separate result and the next stored value from the same
+ * current value in one serialized pure update.
+ *
+ * @see {@link modifyEffect} for effectfully deriving both the result and next stored value
+ * @see {@link modifySome} for deriving a result and optionally updating the stored value
+ * @see {@link updateAndGet} for returning the new stored value instead of a separate result
  *
  * @category utils
  * @since 2.0.0
@@ -294,6 +365,15 @@ export const modifySomeEffect: {
 /**
  * Sets the value of the `SynchronizedRef`, serialized by the ref's semaphore.
  *
+ * **When to use**
+ *
+ * Use to replace the current value of a `SynchronizedRef` with a known value
+ * while keeping the write serialized with other synchronized updates.
+ *
+ * @see {@link getAndSet} for replacing the value when the previous value is needed
+ * @see {@link setAndGet} for replacing the value when the new value should be returned
+ * @see {@link update} for deriving the next value from the current value
+ *
  * @category utils
  * @since 2.0.0
  */
@@ -325,6 +405,15 @@ export const setAndGet: {
  * Updates the value of the `SynchronizedRef` with a function, serialized by the
  * ref's semaphore.
  *
+ * **When to use**
+ *
+ * Use to apply a pure state transition to a `SynchronizedRef` as a serialized
+ * `Effect`.
+ *
+ * @see {@link updateEffect} for effectfully deriving the next value
+ * @see {@link updateAndGet} for returning the new stored value
+ * @see {@link getAndUpdate} for returning the previous stored value
+ *
  * @category utils
  * @since 2.0.0
  */
@@ -340,6 +429,17 @@ export const update: {
 /**
  * Runs an effectful update while holding the ref's semaphore and stores the new
  * value if the effect succeeds.
+ *
+ * **When to use**
+ *
+ * Use to run an effectful state transition on a `SynchronizedRef` when storing
+ * the new value is the only result you need.
+ *
+ * @see {@link update} for a pure state transition
+ * @see {@link getAndUpdateEffect} for returning the previous stored value
+ * @see {@link updateAndGetEffect} for returning the new stored value
+ * @see {@link modifyEffect} for returning a separate result while storing a new value
+ * @see {@link updateSomeEffect} for effectfully applying only some state transitions
  *
  * @category utils
  * @since 2.0.0

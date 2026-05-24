@@ -17,7 +17,11 @@ import * as Telemetry from "effect/unstable/ai/Telemetry"
  * The attributes used to describe telemetry in the context of Generative
  * Artificial Intelligence (GenAI) Models requests and responses.
  *
- * @see https://opentelemetry.io/docs/specs/semconv/attributes-registry/gen-ai/
+ * **Details**
+ *
+ * These attributes follow the OpenTelemetry generative AI semantic
+ * conventions:
+ * https://opentelemetry.io/docs/specs/semconv/attributes-registry/gen-ai/
  *
  * @category models
  * @since 4.0.0
@@ -127,9 +131,17 @@ const addOpenAiResponseAttributes = Telemetry.addSpanAttributes("gen_ai.openai.r
  * Applies the specified OpenAi GenAI telemetry attributes to the provided
  * `Span`.
  *
+ * **When to use**
+ *
+ * Use to annotate an existing OpenTelemetry span with standard GenAI attributes
+ * plus OpenAI-specific request and response metadata.
+ *
  * **Gotchas**
  *
  * This method will mutate the `Span` **in-place**.
+ *
+ * @see {@link OpenAiTelemetryAttributeOptions} for the accepted telemetry attributes
+ * @see {@link Telemetry.addGenAIAnnotations} for the provider-neutral annotation helper
  *
  * @category tracing
  * @since 4.0.0

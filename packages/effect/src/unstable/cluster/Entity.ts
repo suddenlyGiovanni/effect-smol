@@ -447,6 +447,23 @@ export const fromRpcGroup = <const Type extends string, Rpcs extends Rpc.Any>(
  * Creates a new `Entity` of the specified `type` which will accept messages
  * that adhere to the provided schemas.
  *
+ * **When to use**
+ *
+ * Use to define a cluster entity from individual `Rpc` definitions, giving the
+ * cluster runtime a typed protocol for handlers and per-entity clients.
+ *
+ * **Details**
+ *
+ * The `type` argument is stored as the entity `EntityType`, and the RPC array
+ * is grouped into the entity's `protocol`.
+ *
+ * **Gotchas**
+ *
+ * RPC tags should be unique within the array. If multiple definitions use the
+ * same tag, the resulting protocol keeps the later definition for that tag.
+ *
+ * @see {@link fromRpcGroup} for creating an entity from an existing `RpcGroup`
+ *
  * @category constructors
  * @since 4.0.0
  */
@@ -489,7 +506,7 @@ export class CurrentRunnerAddress extends Context.Service<
  *
  * **When to use**
  *
- * Use it to complete an entity request by succeeding, failing, failing with a
+ * Use when you use it to complete an entity request by succeeding, failing, failing with a
  * cause, or supplying an explicit `Exit`.
  *
  * @category Replier

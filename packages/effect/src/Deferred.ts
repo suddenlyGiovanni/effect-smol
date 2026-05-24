@@ -88,7 +88,7 @@ const TypeId = "~effect/Deferred"
  *
  * **When to use**
  *
- * Use `Deferred` for primitive actions whose completions require the
+ * Use when you use `Deferred` for primitive actions whose completions require the
  * coordinated action of multiple fibers, and for building higher-level
  * concurrent or asynchronous structures.
  *
@@ -137,6 +137,11 @@ export interface Deferred<in out A, in out E = never> extends Deferred.Variance<
 /**
  * Checks whether a value is a `Deferred`.
  *
+ * **When to use**
+ *
+ * Use to validate unknown values at runtime boundaries before treating them as
+ * `Deferred` values.
+ *
  * @category guards
  * @since 4.0.0
  */
@@ -182,7 +187,7 @@ const DeferredProto = {
  *
  * **When to use**
  *
- * Prefer `Deferred.make` in effectful code so allocation is represented in
+ * Use when prefer `Deferred.make` in effectful code so allocation is represented in
  * `Effect`; use this only when direct synchronous allocation is required.
  *
  * **Example** (Creating a Deferred unsafely)
@@ -241,6 +246,15 @@ export {
    * Retrieves the value of the `Deferred`, suspending the fiber running the
    * workflow until the result is available.
    *
+   * **When to use**
+   *
+   * Use to wait for a `Deferred` to be completed and resume with its success,
+   * failure, defect, or interruption.
+   *
+   * **Details**
+   *
+   * Awaiters observe the completion effect stored in the `Deferred`.
+   *
    * **Example** (Awaiting a Deferred value)
    *
    * ```ts
@@ -255,6 +269,9 @@ export {
    * })
    * ```
    *
+   * @see {@link complete} for completing from an effect and memoizing its result
+   * @see {@link completeWith} for completing with an effect directly
+   *
    * @category getters
    * @since 2.0.0
    */
@@ -267,9 +284,8 @@ export {
  *
  * **When to use**
  *
- * Use `Deferred.complete` when the effect should be evaluated once and the
- * resulting `Exit` memoized. Use `Deferred.completeWith` when you need to store
- * an effect directly without memoizing its result.
+ * Use when completion should run an effect once and share its result with all
+ * awaiters.
  *
  * **Details**
  *
@@ -291,6 +307,8 @@ export {
  * })
  * ```
  *
+ * @see {@link completeWith} for storing an effect directly without memoizing its result
+ *
  * @category utils
  * @since 2.0.0
  */
@@ -304,8 +322,22 @@ export const complete: {
 )
 
 /**
- * Completes the deferred with the result of the specified effect. If the
- * deferred has already been completed, the method will produce false.
+ * Attempts to complete the `Deferred` with the specified effect directly.
+ *
+ * **When to use**
+ *
+ * Use to store an already environment-free effect as the completion without
+ * running it during completion.
+ *
+ * **Details**
+ *
+ * The returned effect succeeds with `true` when this call completed the
+ * `Deferred`, or `false` if it was already completed.
+ *
+ * **Gotchas**
+ *
+ * The supplied effect is not memoized by `completeWith`; each awaiter may run
+ * the stored effect independently.
  *
  * **Example** (Completing a Deferred with an effect)
  *
@@ -321,6 +353,9 @@ export const complete: {
  *   console.log(value) // 42
  * })
  * ```
+ *
+ * @see {@link complete} for running an effect once and sharing its result
+ * @see {@link done} for completing from an already computed `Exit`
  *
  * @category utils
  * @since 2.0.0
@@ -338,6 +373,15 @@ export const completeWith: {
  * Exits the `Deferred` with the specified `Exit` value, which will be
  * propagated to all fibers waiting on the value of the `Deferred`.
  *
+ * **When to use**
+ *
+ * Use to complete a `Deferred` from an already computed `Exit`.
+ *
+ * **Details**
+ *
+ * The returned effect succeeds with `true` when this call completed the
+ * `Deferred`, or `false` if it was already completed.
+ *
  * **Example** (Completing a Deferred with an Exit)
  *
  * ```ts
@@ -351,6 +395,11 @@ export const completeWith: {
  *   console.log(value) // 42
  * })
  * ```
+ *
+ * @see {@link complete} for completing from an effect and memoizing its result
+ * @see {@link completeWith} for storing an effect directly
+ * @see {@link succeed} for completing with a success value
+ * @see {@link failCause} for completing with a failure cause
  *
  * @category utils
  * @since 2.0.0
@@ -652,8 +701,15 @@ export const interruptWith: {
 export const isDone = <A, E>(self: Deferred<A, E>): Effect<boolean> => internalEffect.sync(() => isDoneUnsafe(self))
 
 /**
- * Returns `true` if this `Deferred` has already been completed with a value or
- * an error, `false` otherwise.
+ * Synchronously returns whether this `Deferred` has already been completed.
+ *
+ * **When to use**
+ *
+ * Use to check `Deferred` completion synchronously in code that cannot return
+ * an `Effect`, such as low-level integration code.
+ *
+ * @see {@link isDone} for checking completion inside `Effect`
+ * @see {@link poll} for reading the completed effect when available
  *
  * @category getters
  * @since 4.0.0

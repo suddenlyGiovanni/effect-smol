@@ -424,6 +424,13 @@ export const fromPull = <OutElem, OutErr, OutDone, EX, EnvX, Env>(
  * pulls, but also provides a forked scope that closes when the resulting
  * Channel completes.
  *
+ * **When to use**
+ *
+ * Use when building channels that require scoped resource lifecycle management,
+ * providing both the channel scope and a forked scope that automatically closes
+ * when the channel completes.
+ *
+ * @see {@link fromTransform} for a simpler transformation without a forked scope
  * @category constructors
  * @since 4.0.0
  */
@@ -3214,11 +3221,20 @@ export const filter: {
 /**
  * Filters and maps output elements using a `Filter`.
  *
+ * **When to use**
+ *
+ * Use to keep only channel output elements accepted by a `Filter` and emit
+ * each filter success value.
+ *
  * **Details**
  *
  * Successful filter results are emitted as mapped values. Failed filter
  * results are discarded. The source channel's errors and done value are
  * preserved.
+ *
+ * @see {@link filter} for keeping original output elements with a predicate
+ * @see {@link filterMapEffect} for using an effectful `Filter`
+ * @see {@link filterMapArray} for filtering arrays of output elements
  *
  * @category filtering
  * @since 4.0.0
@@ -3295,11 +3311,21 @@ export const filterEffect: {
 /**
  * Filters and maps output elements using an effectful `Filter`.
  *
+ * **When to use**
+ *
+ * Use to apply effectful logic that can discard channel output elements and
+ * emit transformed values for the elements that pass.
+ *
  * **Details**
  *
  * Successful filter results are emitted as mapped values. Failed filter
  * results are discarded. Failures from the effectful filter fail the returned
  * channel.
+ *
+ * @see {@link filterMap} for using a synchronous `Filter`
+ * @see {@link filterEffect} for effectfully keeping original output elements
+ * @see {@link mapEffect} for effectfully transforming every output element
+ * @see {@link filterMapArrayEffect} for effectful filtering of array outputs
  *
  * @category filtering
  * @since 4.0.0
@@ -4036,6 +4062,21 @@ export const tapCause: {
  * Catches causes of failure that match a specific filter, allowing
  * conditional error recovery based on the type of failure.
  *
+ * **When to use**
+ *
+ * Use to recover a channel only when its full `Cause` satisfies a boolean
+ * predicate.
+ *
+ * **Details**
+ *
+ * When the predicate matches, the recovery function receives the original
+ * cause. When it does not match, the returned channel fails with the original
+ * cause.
+ *
+ * @see {@link catchCauseFilter} for selecting causes with a `Filter`
+ * @see {@link catchCause} for recovering from every cause
+ * @see {@link catchIf} for recovering from typed channel errors
+ *
  * @category error handling
  * @since 4.0.0
  */
@@ -4146,11 +4187,21 @@ export const catchCauseIf: {
 /**
  * Recovers from channel failures whose full `Cause` is selected by a `Filter`.
  *
+ * **When to use**
+ *
+ * Use when you need to recover a channel only from causes selected by a
+ * `Filter`, and the recovery needs both the selected value and the original
+ * `Cause`.
+ *
  * **Details**
  *
  * When the filter succeeds, the recovery function receives the selected value
  * and the original cause. When the filter fails, the returned channel fails
  * with the residual cause produced by the filter.
+ *
+ * @see {@link catchCauseIf} for selecting causes with a predicate
+ * @see {@link catchFilter} for selecting typed errors with a `Filter`
+ * @see {@link catchCause} for recovering from every cause
  *
  * @category error handling
  * @since 4.0.0
@@ -4448,11 +4499,21 @@ export const tapError: {
 /**
  * Recovers from typed channel errors that match a predicate or refinement.
  *
+ * **When to use**
+ *
+ * Use to recover from typed channel errors when a predicate or refinement
+ * selects the failures that should switch to a recovery channel.
+ *
  * **Details**
  *
  * Matching errors are handled by the recovery function. Non-matching errors
  * are handled by `orElse` when provided. Without `orElse`, non-matching errors
  * are re-failed.
+ *
+ * @see {@link catch} for recovering from every typed channel error
+ * @see {@link catchFilter} for selecting typed errors with a `Filter`
+ * @see {@link catchTag} for selecting tagged typed errors
+ * @see {@link catchCauseFilter} for selecting full causes with a `Filter`
  *
  * @category error handling
  * @since 4.0.0
@@ -4682,11 +4743,20 @@ export const catchIf: {
 /**
  * Recovers from typed channel errors selected by a `Filter`.
  *
+ * **When to use**
+ *
+ * Use to recover from channel errors with a reusable `Filter` when matching
+ * can also narrow or transform the error before choosing the recovery channel.
+ *
  * **Details**
  *
  * Successful filter results are handled by the recovery function. Failed
  * filter results are handled by `orElse` when provided. Without `orElse`,
  * failed filter results are re-failed.
+ *
+ * @see {@link catchIf} for selecting typed errors with a predicate
+ * @see {@link catchTag} for selecting tagged typed errors
+ * @see {@link catchCauseFilter} for selecting full causes with a `Filter`
  *
  * @category error handling
  * @since 4.0.0
@@ -6616,6 +6686,19 @@ export const embedInput: {
  * Allows a faster producer to progress independently of a slower consumer by
  * buffering up to `capacity` elements in a queue.
  *
+ * **Details**
+ *
+ * Finite queues use the `strategy` option. The default `"suspend"` strategy
+ * applies backpressure, while `"dropping"` and `"sliding"` can discard output
+ * elements when the queue is full. `"unbounded"` capacity does not use a finite
+ * capacity strategy.
+ *
+ * **Gotchas**
+ *
+ * Dropping and sliding strategies can lose output elements under backpressure.
+ *
+ * @see {@link bufferArray} for buffering elements from array outputs
+ *
  * @category Buffering
  * @since 2.0.0
  */
@@ -6661,6 +6744,21 @@ export const buffer: {
 /**
  * Allows a faster producer to progress independently of a slower consumer by
  * buffering up to `capacity` elements in a queue.
+ *
+ * **Details**
+ *
+ * Finite queues use the `strategy` option. The default `"suspend"` strategy
+ * applies backpressure, while `"dropping"` and `"sliding"` can discard output
+ * elements when the queue is full. `"unbounded"` capacity does not use a finite
+ * capacity strategy.
+ *
+ * **Gotchas**
+ *
+ * Input arrays are offered to the queue element-by-element and outputs are
+ * rebuilt from the currently available queued elements, so upstream array
+ * boundaries are not preserved.
+ *
+ * @see {@link buffer} for buffering output elements without flattening arrays
  *
  * @category Buffering
  * @since 4.0.0
@@ -7458,6 +7556,15 @@ export const bind: {
 
 /**
  * Wraps each output element in an object under the specified field name.
+ *
+ * **When to use**
+ *
+ * Use when starting a Channel Do-notation chain from an existing output value
+ * by assigning that value to a field name.
+ *
+ * @see {@link Do} for starting Do notation from an empty object
+ * @see {@link bind} for adding a field produced by another channel
+ * @see {@link let} for adding a computed field
  *
  * @category Do notation
  * @since 4.0.0

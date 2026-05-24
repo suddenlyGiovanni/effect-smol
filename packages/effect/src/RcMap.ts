@@ -84,6 +84,15 @@ export interface RcMap<in out K, in out A, in out E = never> extends Pipeable {
  * Represents the internal state of an RcMap, which can be either Open (active)
  * or Closed (shutdown and no longer accepting operations).
  *
+ * **When to use**
+ *
+ * Use when typing code that inspects an `RcMap`'s `state` field and narrows
+ * between open and closed lifecycle states.
+ *
+ * @see {@link RcMap} for the map value that exposes this state
+ * @see {@link State.Open} for the active state with entries
+ * @see {@link State.Closed} for the shutdown state
+ *
  * @category models
  * @since 4.0.0
  */
@@ -462,10 +471,22 @@ export const invalidate: {
  * Returns whether the `RcMap` currently contains an entry for the specified
  * key.
  *
+ * **When to use**
+ *
+ * Use to check whether a key is already present in an `RcMap` without running
+ * the lookup function or acquiring a missing resource.
+ *
  * **Details**
  *
- * This operation only checks the current map state; it does not run the lookup
- * function or acquire a missing resource. Closed maps return `false`.
+ * This operation only checks the current map state.
+ *
+ * **Gotchas**
+ *
+ * Closed maps return `false`, so `false` does not distinguish a missing key
+ * from a closed map.
+ *
+ * @see {@link get} for acquiring or retaining the resource for a key
+ * @see {@link keys} for enumerating all currently stored keys
  *
  * @category combinators
  * @since 3.17.7

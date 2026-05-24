@@ -547,6 +547,27 @@ export const run: (options: {
  * `RpcServer.Protocol` and provides the `McpServer` and `McpServerClient`
  * services.
  *
+ * **When to use**
+ *
+ * Use when you already have a custom or externally provided
+ * `RpcServer.Protocol` and want to start an MCP server as part of a layer
+ * graph.
+ *
+ * **Details**
+ *
+ * The returned layer forks `run(options)` in the layer scope and merges
+ * `McpServer.layer`, so registration layers can use the `McpServer` service
+ * while the server is running.
+ *
+ * **Gotchas**
+ *
+ * Unlike `layerStdio` and `layerHttp`, this layer does not install a concrete
+ * transport. The surrounding layer graph must provide `RpcServer.Protocol`.
+ *
+ * @see {@link run} for the effect form used by this layer
+ * @see {@link layerStdio} for a stdio-backed layer that installs the MCP protocol and NDJSON-RPC serialization
+ * @see {@link layerHttp} for an HTTP-backed layer that registers with `HttpRouter` and installs JSON-RPC serialization
+ *
  * @category layers
  * @since 4.0.0
  */
@@ -628,7 +649,20 @@ export const layerStdio = (options: {
   )
 
 /**
- * Run the `McpServer`, registering a router with a `HttpRouter`
+ * Registers an HTTP POST JSON-RPC route at `options.path` on the current
+ * `HttpRouter`.
+ *
+ * **When to use**
+ *
+ * Use to expose an MCP server through an existing `HttpRouter`.
+ *
+ * **Details**
+ *
+ * This layer composes `layer(options)`, `RpcServer.layerProtocolHttp(options)`,
+ * and `RpcSerialization.layerJsonRpc()`.
+ *
+ * @see {@link layerStdio} for exposing the server over stdio
+ * @see {@link layer} for the base MCP server layer without a transport protocol
  *
  * @category layers
  * @since 4.0.0
@@ -988,6 +1022,18 @@ export const resource: {
 /**
  * Register a prompt with the McpServer.
  *
+ * **When to use**
+ *
+ * Use to register an MCP prompt from an Effect program.
+ *
+ * **Details**
+ *
+ * Parameters are decoded with the supplied schema, completion handlers encode
+ * per-parameter suggestions, and string prompt content is converted into a user
+ * text message.
+ *
+ * @see {@link prompt} for the layer-based prompt registration wrapper
+ *
  * @category prompts
  * @since 4.0.0
  */
@@ -1082,6 +1128,18 @@ export const registerPrompt = <
 
 /**
  * Register a prompt with the McpServer.
+ *
+ * **When to use**
+ *
+ * Use to compose prompt registration into an MCP server layer.
+ *
+ * **Details**
+ *
+ * Parameters are decoded with the supplied schema, completion handlers encode
+ * per-parameter suggestions, and string prompt content is converted into a user
+ * text message.
+ *
+ * @see {@link registerPrompt} for the Effect-level prompt registration API
  *
  * @category prompts
  * @since 4.0.0

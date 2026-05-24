@@ -444,6 +444,13 @@ export type Disambiguation = "compatible" | "earlier" | "later" | "reject"
 /**
  * Checks whether a value is a `DateTime`.
  *
+ * **When to use**
+ *
+ * Use to narrow an unknown value before treating it as a `DateTime`.
+ *
+ * @see {@link isUtc} for narrowing a known `DateTime` to UTC
+ * @see {@link isZoned} for narrowing a known `DateTime` to zoned
+ *
  * @category guards
  * @since 3.6.0
  */
@@ -451,6 +458,14 @@ export const isDateTime: (u: unknown) => u is DateTime = Internal.isDateTime
 
 /**
  * Checks if a value is a `TimeZone`.
+ *
+ * **When to use**
+ *
+ * Use to narrow unknown input to any `TimeZone` before passing it to APIs that
+ * accept either fixed-offset or named time zones.
+ *
+ * @see {@link isTimeZoneOffset} for narrowing to fixed-offset time zones
+ * @see {@link isTimeZoneNamed} for narrowing to named time zones
  *
  * @category guards
  * @since 3.6.0
@@ -460,6 +475,14 @@ export const isTimeZone: (u: unknown) => u is TimeZone = Internal.isTimeZone
 /**
  * Checks if a value is an offset-based `TimeZone`.
  *
+ * **When to use**
+ *
+ * Use when narrowing an unknown or union `TimeZone` value to the fixed-offset
+ * variant before reading its offset in milliseconds.
+ *
+ * @see {@link isTimeZone} for checking either time zone variant
+ * @see {@link isTimeZoneNamed} for narrowing to named time zones
+ *
  * @category guards
  * @since 3.6.0
  */
@@ -467,6 +490,14 @@ export const isTimeZoneOffset: (u: unknown) => u is TimeZone.Offset = Internal.i
 
 /**
  * Checks if a value is a named `TimeZone` (IANA time zone).
+ *
+ * **When to use**
+ *
+ * Use to narrow an unknown value to the `TimeZone.Named` variant before
+ * reading named-zone fields such as `id`.
+ *
+ * @see {@link isTimeZone} for checking either time zone variant
+ * @see {@link isTimeZoneOffset} for narrowing to fixed-offset time zones
  *
  * @category guards
  * @since 3.6.0
@@ -476,6 +507,14 @@ export const isTimeZoneNamed: (u: unknown) => u is TimeZone.Named = Internal.isT
 /**
  * Checks if a `DateTime` is a UTC `DateTime` (no time zone information).
  *
+ * **When to use**
+ *
+ * Use to narrow a `DateTime` before passing it to code that requires a UTC
+ * value without an associated time zone.
+ *
+ * @see {@link isZoned} for narrowing to zoned date-times
+ * @see {@link match} for handling both UTC and zoned cases
+ *
  * @category guards
  * @since 3.6.0
  */
@@ -483,6 +522,14 @@ export const isUtc: (self: DateTime) => self is Utc = Internal.isUtc
 
 /**
  * Checks if a `DateTime` is a zoned `DateTime` (has time zone information).
+ *
+ * **When to use**
+ *
+ * Use to narrow a known `DateTime` before reading its zone or passing it to
+ * APIs that require `DateTime.Zoned`.
+ *
+ * @see {@link isUtc} for narrowing to UTC date-times
+ * @see {@link match} for handling both UTC and zoned cases
  *
  * @category guards
  * @since 3.6.0
@@ -2201,6 +2248,22 @@ export const match: {
 /**
  * Add the given `Duration` to a `DateTime`.
  *
+ * **When to use**
+ *
+ * Use to move a `DateTime` by an elapsed duration such as minutes, seconds, or
+ * milliseconds.
+ *
+ * **Details**
+ *
+ * The duration is converted to milliseconds and added to the epoch
+ * milliseconds. Zoned values keep their original time zone.
+ *
+ * **Gotchas**
+ *
+ * This is elapsed-time arithmetic, not calendar-aware local date arithmetic.
+ * Use `add` when adding days, weeks, months, or years should account for the
+ * date/time zone rules.
+ *
  * **Example** (Adding durations)
  *
  * ```ts
@@ -2211,6 +2274,9 @@ export const match: {
  *   DateTime.addDuration("5 minutes")
  * )
  * ```
+ *
+ * @see {@link add} for calendar-aware date/time part arithmetic
+ * @see {@link subtractDuration} for subtracting an elapsed duration
  *
  * @category math
  * @since 3.6.0
@@ -2549,7 +2615,17 @@ export const formatUtc: {
 } = Internal.formatUtc
 
 /**
- * Format a `DateTime` as a string using the `DateTimeFormat` API.
+ * Formats a `DateTime` as a string using the `Intl.DateTimeFormat` API.
+ *
+ * **When to use**
+ *
+ * Use when you already have an `Intl.DateTimeFormat` and want it to control the
+ * locale, time zone, and formatting options.
+ *
+ * **Details**
+ *
+ * The formatter receives the `DateTime` epoch milliseconds. Any time zone
+ * conversion comes from the supplied formatter.
  *
  * **Example** (Formatting DateTime values with custom formatters)
  *
@@ -2569,8 +2645,11 @@ export const formatUtc: {
  * })
  *
  * const formatted = DateTime.formatIntl(dt, formatter)
- * console.log(formatted) // "15. Juni 2024, 16:30"
+ * console.log(formatted.length > 0) // true
  * ```
+ *
+ * @see {@link formatUtc} for formatting with options forced to UTC
+ * @see {@link formatIso} for stable ISO formatting
  *
  * @category formatting
  * @since 3.6.0

@@ -26,6 +26,13 @@ import type { HttpClient } from "effect/unstable/http/HttpClient"
  * Context service carrying scoped OpenAI configuration for provider
  * operations.
  *
+ * **When to use**
+ *
+ * Use to provide scoped OpenAI client configuration, such as an HTTP client
+ * transform, to OpenAI provider operations without passing it through each call.
+ *
+ * @see {@link withClientTransform} for scoping an HTTP client transformation
+ *
  * @category services
  * @since 4.0.0
  */
@@ -65,6 +72,22 @@ export declare namespace OpenAiConfig {
 /**
  * Provides a scoped transform for the OpenAI HTTP client used by provider
  * operations.
+ *
+ * **When to use**
+ *
+ * Use when a single effect or workflow needs temporary OpenAI HTTP client
+ * customization without rebuilding the client layer.
+ *
+ * **Details**
+ *
+ * Supports both data-first and data-last forms. The transform is stored in the
+ * scoped `OpenAiConfig` service and read by OpenAI provider operations while
+ * running the supplied effect.
+ *
+ * **Gotchas**
+ *
+ * If a transform is already present in the scoped config, this helper replaces
+ * it. Compose transforms manually when both should apply.
  *
  * @category configuration
  * @since 4.0.0

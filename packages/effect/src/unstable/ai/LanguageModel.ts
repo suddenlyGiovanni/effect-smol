@@ -234,6 +234,20 @@ export type CodecTransformer = <T, E, RD, RE>(schema: Schema.Codec<T, E, RD, RE>
  * The default codec transformer that passes schemas through without
  * provider-specific rewrites.
  *
+ * **When to use**
+ *
+ * Use as the codec transformer for provider implementations when the provider
+ * accepts the JSON Schema generated from an `Effect` Schema codec without
+ * provider-specific rewrites.
+ *
+ * **Details**
+ *
+ * The transformer returns the original codec, resolves a top-level `$ref`, and
+ * copies schema definitions into `$defs`.
+ *
+ * @see {@link CodecTransformer} for the structured-output transformer contract
+ * @see {@link make} for where this transformer is used as the default
+ *
  * @category services
  * @since 4.0.0
  */
@@ -286,7 +300,7 @@ export interface GenerateTextOptions<Tools extends Record<string, Tool.Any>> {
    *
    * **When to use**
    *
-   * Use this when you want to include tool call definitions from an `AiToolkit`
+   * Use when you want to include tool call definitions from an `AiToolkit`
    * in requests to the large language model, while controlling tool call
    * resolver execution yourself.
    */
@@ -734,7 +748,32 @@ export interface ProviderOptions {
 }
 
 /**
- * Creates a LanguageModel service from provider-specific text generation and streaming implementations.
+ * Creates a LanguageModel service from provider-specific text generation and
+ * streaming implementations.
+ *
+ * **When to use**
+ *
+ * Use to build a `LanguageModel.Service` from provider-specific final and
+ * streaming text generation functions.
+ *
+ * **Details**
+ *
+ * The returned service implements `generateText`, `generateObject`, and
+ * `streamText`. It prepares `ProviderOptions` for each request, including the
+ * normalized prompt, tools, tool choice, response format, tracing span, and
+ * incremental response fields, before calling the supplied provider hook.
+ * Structured object generation uses the `generateText` hook and the configured
+ * `codecTransformer`, or `defaultCodecTransformer` when none is supplied.
+ *
+ * **Gotchas**
+ *
+ * Provider hooks must return encoded response parts that match the toolkit and
+ * response format prepared in `ProviderOptions`; invalid parts fail decoding as
+ * `AiError.InvalidOutputError`.
+ *
+ * @see {@link Service} for the returned service contract
+ * @see {@link ProviderOptions} for the normalized options passed to provider hooks
+ * @see {@link defaultCodecTransformer} for the default structured-output schema transformer
  *
  * @category constructors
  * @since 4.0.0

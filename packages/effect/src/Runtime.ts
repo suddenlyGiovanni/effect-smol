@@ -279,8 +279,8 @@ export type errorExitCode = "~effect/Runtime/errorExitCode"
  *
  * **When to use**
  *
- * Use on error classes whose failures should map to a specific process exit
- * code when handled by {@link defaultTeardown}.
+ * Use when error classes should map failures to a specific process exit code
+ * when handled by {@link defaultTeardown}.
  *
  * **Details**
  *
@@ -308,6 +308,8 @@ export type errorExitCode = "~effect/Runtime/errorExitCode"
  * ```
  *
  * @see {@link errorReported} for controlling automatic error logging
+ * @see {@link defaultTeardown} for the default failure exit-code rules that read this marker
+ * @see {@link getErrorExitCode} for reading the marker from unknown error values
  *
  * @category symbols
  * @since 4.0.0
@@ -356,8 +358,8 @@ export type errorReported = "~effect/Runtime/errorReported"
  *
  * **When to use**
  *
- * Use on error classes that are already reported by application code and
- * should not be logged again by the default main runner.
+ * Use when error classes are already reported by application code and should
+ * not be logged again by the default main runner.
  *
  * **Details**
  *
@@ -369,6 +371,9 @@ export type errorReported = "~effect/Runtime/errorReported"
  *
  * This marker controls only automatic error logging. It does not change the
  * failure Cause or the process exit code.
+ * `makeRunMain` reads the marker from `Cause.squash(cause)`, so for causes
+ * with multiple failures, the squashed error determines whether default logging
+ * is suppressed.
  *
  * **Example** (Suppressing error reporting)
  *
@@ -386,6 +391,7 @@ export type errorReported = "~effect/Runtime/errorReported"
  * ```
  *
  * @see {@link errorExitCode} for controlling failure exit codes
+ * @see {@link getErrorReported} for reading the marker from unknown error values
  *
  * @category symbols
  * @since 4.0.0

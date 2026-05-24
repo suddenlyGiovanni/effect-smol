@@ -5,7 +5,7 @@
  *
  * **When to use**
  *
- * - Persisting or exchanging the machine id assigned to a cluster runner
+ * Use to persist or exchanging the machine id assigned to a cluster runner
  * - Passing a runner-specific identity to the cluster snowflake generator
  * - Decoding machine ids from storage while keeping them distinct from plain numbers
  *
@@ -41,6 +41,22 @@ export type MachineId = typeof MachineId.Type
 
 /**
  * Brands a number as a `MachineId`.
+ *
+ * **When to use**
+ *
+ * Use to turn a trusted numeric machine id into the branded type when
+ * implementing runner storage adapters or configuring snowflake generation.
+ *
+ * **Details**
+ *
+ * The branded value is the original number at runtime.
+ *
+ * **Gotchas**
+ *
+ * `make` does not validate integer input or enforce the snowflake machine-id
+ * range. Snowflake ids encode the machine component modulo 1024.
+ *
+ * @see {@link MachineId} for the schema that validates branded integer machine identifiers
  *
  * @category constructors
  * @since 4.0.0

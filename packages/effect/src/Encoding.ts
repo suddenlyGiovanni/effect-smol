@@ -32,12 +32,18 @@ export type EncodingErrorTypeId = typeof EncodingErrorTypeId
  * Error returned when an encoding or decoding operation cannot process its
  * input.
  *
+ * **When to use**
+ *
+ * Use when you need to handle or inspect failures from encoding or decoding
+ * operations.
+ *
  * **Details**
  *
  * The error records whether the failure happened during encoding or decoding,
  * which encoding module reported it, the original input, and a human-readable
  * message.
  *
+ * @see {@link isEncodingError} for checking whether a value is an EncodingError
  * @category constructors
  * @since 4.0.0
  */
@@ -58,10 +64,18 @@ export class EncodingError extends Data.TaggedError("EncodingError")<{
 /**
  * Checks whether a value is an `EncodingError`.
  *
+ * **When to use**
+ *
+ * Use to narrow an unknown value before handling it as an `EncodingError` from
+ * encoding or decoding code.
+ *
  * **Details**
  *
  * Returns `true` when the value carries the `EncodingErrorTypeId` marker and
  * narrows the value to `EncodingError`.
+ *
+ * @see {@link EncodingError} for the structured error produced by failed
+ * encoding and decoding operations
  *
  * @category guards
  * @since 4.0.0
@@ -75,6 +89,17 @@ export const isEncodingError = (u: unknown): u is EncodingError => hasProperty(u
 /**
  * Encodes the given value into a base64 (RFC4648) `string`.
  *
+ * **When to use**
+ *
+ * Use to encode text or bytes as a standard padded Base64 string for storage or
+ * transport.
+ *
+ * **Details**
+ *
+ * String inputs are encoded as UTF-8 bytes before Base64 encoding.
+ * `Uint8Array` inputs are encoded directly. The output uses the standard
+ * RFC4648 alphabet with `=` padding.
+ *
  * **Example** (Encoding Base64 strings and bytes)
  *
  * ```ts
@@ -87,6 +112,10 @@ export const isEncodingError = (u: unknown): u is EncodingError => hasProperty(u
  * const bytes = new Uint8Array([72, 101, 108, 108, 111])
  * console.log(Encoding.encodeBase64(bytes)) // "SGVsbG8="
  * ```
+ *
+ * @see {@link decodeBase64} for decoding standard Base64 to bytes
+ * @see {@link decodeBase64String} for decoding standard Base64 to UTF-8 text
+ * @see {@link encodeBase64Url} for URL-safe unpadded Base64 output
  *
  * @category encoding
  * @since 2.0.0
@@ -200,6 +229,17 @@ export const decodeBase64String = (str: string) => Result.map(decodeBase64(str),
 /**
  * Encodes the given value into a base64 (URL) `string`.
  *
+ * **When to use**
+ *
+ * Use to encode text or bytes as an unpadded Base64Url string for contexts that
+ * require the URL-safe alphabet.
+ *
+ * **Details**
+ *
+ * String inputs are encoded as UTF-8 bytes before Base64Url encoding.
+ * `Uint8Array` inputs are encoded directly. The output removes `=` padding and
+ * replaces `+` with `-` and `/` with `_`.
+ *
  * **Example** (Encoding URL-safe Base64)
  *
  * ```ts
@@ -211,6 +251,10 @@ export const decodeBase64String = (str: string) => Result.map(decodeBase64(str),
  * const bytes = new Uint8Array([72, 101, 108, 108, 111, 63])
  * console.log(Encoding.encodeBase64Url(bytes)) // "SGVsbG8_"
  * ```
+ *
+ * @see {@link decodeBase64Url} for decoding URL-safe Base64 to bytes
+ * @see {@link decodeBase64UrlString} for decoding URL-safe Base64 to UTF-8 text
+ * @see {@link encodeBase64} for standard padded Base64 output
  *
  * @category encoding
  * @since 2.0.0

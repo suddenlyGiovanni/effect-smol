@@ -425,6 +425,19 @@ export interface SpanLink {
 /**
  * Creates a `Tracer` value from a tracer implementation object.
  *
+ * **When to use**
+ *
+ * Use to create a custom tracing backend value that Effect can use when
+ * creating spans.
+ *
+ * **Details**
+ *
+ * `make` returns the supplied implementation object unchanged. The object must
+ * satisfy the `Tracer` contract, including a `span` method that returns a
+ * `Span`.
+ *
+ * @see {@link Span} for the span values returned by tracer implementations
+ *
  * @category constructors
  * @since 2.0.0
  */
@@ -500,6 +513,18 @@ export const DisablePropagation = Context.Reference<boolean>(
 /**
  * Reference for controlling the current trace level for dynamic filtering.
  *
+ * **When to use**
+ *
+ * Use to set the default trace level for spans in a scope when span options do
+ * not provide `level`.
+ *
+ * **Details**
+ *
+ * The default value is `"Info"`. Span creation uses `options.level ??
+ * CurrentTraceLevel` before applying `MinimumTraceLevel`.
+ *
+ * @see {@link MinimumTraceLevel} for the threshold that decides whether spans at that level are sampled
+ *
  * @category references
  * @since 4.0.0
  */
@@ -512,6 +537,22 @@ export const CurrentTraceLevel: Context.Reference<LogLevel> = Context.Reference<
  * Reference for setting the minimum trace level threshold. Spans and their
  * descendants below this level will have their sampling decision forced to
  * false, preventing them from being exported.
+ *
+ * **When to use**
+ *
+ * Use to set the trace-level threshold that controls whether spans are sampled
+ * by default.
+ *
+ * **Details**
+ *
+ * The default value is `"All"`. Span creation compares the span level from
+ * `options.level ?? CurrentTraceLevel` against this threshold.
+ *
+ * **Gotchas**
+ *
+ * Explicit `options.sampled` bypasses threshold computation.
+ *
+ * @see {@link CurrentTraceLevel} for the default span level used when options do not specify one
  *
  * @category references
  * @since 4.0.0
@@ -564,6 +605,14 @@ export const Tracer: Context.Reference<Tracer> = Context.Reference<Tracer>(Trace
  * Default in-memory `Span` implementation used by the native tracer. It
  * generates span and trace identifiers, stores attributes, events, and links,
  * and records `Started` or `Ended` status.
+ *
+ * **Details**
+ *
+ * The constructor initializes the span with `Started` status, inherits the
+ * parent trace id or generates a new one, and always generates a new span id.
+ * Attributes, events, links, and status are then mutated through `Span` methods.
+ *
+ * @see {@link Span} for the interface implemented by native spans
  *
  * @category native tracer
  * @since 4.0.0

@@ -176,7 +176,7 @@ export type ConstructorDefault = "no-default" | "with-default"
  *
  * **When to use**
  *
- * - Pass `disableChecks: true` to skip validation when you trust the data.
+ * Use when passing `disableChecks: true` to skip validation when you trust the data.
  * - Pass `parseOptions` to control error reporting behavior.
  *
  * @see {@link Bottom.makeEffect}
@@ -203,7 +203,7 @@ export interface MakeOptions {
  *
  * **When to use**
  *
- * - You are writing advanced generic schema utilities or performing schema
+ * Use when you are writing advanced generic schema utilities or performing schema
  *   introspection.
  * - In user code, prefer {@link Schema}, {@link Codec}, {@link Decoder}, or
  *   {@link Encoder} instead.
@@ -258,10 +258,57 @@ export interface Bottom<
   check(...checks: readonly [AST.Check<this["Type"]>, ...Array<AST.Check<this["Type"]>>]): this["Rebuild"]
   rebuild(ast: this["ast"]): this["Rebuild"]
   /**
-   * Constructs a value from the make input representation.
+   * Constructs a value from the make input representation synchronously.
+   *
+   * **When to use**
+   *
+   * Use when constructor input is trusted or when validation failure
+   * should abort with a thrown `Error`.
+   *
+   * **Details**
+   *
+   * Applies constructor defaults and type-side validation according to
+   * `MakeOptions`.
+   *
+   * **Gotchas**
+   *
+   * Throws an `Error` with the schema issue in its `cause` when validation
+   * fails.
+   *
+   * @see {@link Bottom.makeOption} — construct synchronously and discard validation details
+   * @see {@link Bottom.makeEffect} — construct through `Effect` when validation failure should stay in the error channel
    */
   make(input: this["~type.make.in"], options?: MakeOptions): this["Type"]
+  /**
+   * Constructs a value from the make input representation, returning `Option.none`
+   * when validation fails.
+   *
+   * **When to use**
+   *
+   * Use when you only need to know whether construction succeeds
+   * and do not need validation details.
+   *
+   * **Details**
+   *
+   * Applies constructor defaults and type-side validation according to
+   * `MakeOptions`.
+   *
+   * @see {@link Bottom.make} — construct synchronously when validation failure should throw
+   * @see {@link Bottom.makeEffect} — construct through `Effect` when validation details should stay in the error channel
+   */
   makeOption(input: this["~type.make.in"], options?: MakeOptions): Option_.Option<this["Type"]>
+  /**
+   * Constructs a value from the make input representation, returning validation
+   * failures in the `Effect` error channel.
+   *
+   * **When to use**
+   *
+   * Use when constructor input may fail validation and you want to
+   * compose that failure with other `Effect` operations instead of throwing.
+   *
+   * @see {@link Bottom.make} — construct synchronously when validation failure should throw
+   * @see {@link Bottom.makeOption} — construct synchronously and discard validation details
+   */
   makeEffect(input: this["~type.make.in"], options?: MakeOptions): Effect.Effect<this["Type"], SchemaError>
 }
 
@@ -2361,6 +2408,12 @@ export interface Boolean extends Bottom<boolean, boolean, never, never, AST.Bool
 /**
  * Schema for `boolean` values. Validates that the input is `typeof` `"boolean"`.
  *
+ * **When to use**
+ *
+ * Use to validate values that are already JavaScript booleans.
+ *
+ * @see {@link BooleanFromBit} for a schema that decodes bit literals `0` or `1` into a boolean
+ *
  * @category Boolean
  * @since 4.0.0
  */
@@ -2395,6 +2448,13 @@ export interface BigInt extends Bottom<bigint, bigint, never, never, AST.BigInt,
 
 /**
  * Schema for `bigint` values. Validates that the input is `typeof` `"bigint"`.
+ *
+ * **When to use**
+ *
+ * Use when the input is already a bigint and the schema should validate and
+ * preserve bigint values without parsing from another representation.
+ *
+ * @see {@link BigIntFromString} for parsing string input into a bigint
  *
  * @category schemas
  * @since 4.0.0
@@ -3053,6 +3113,14 @@ export declare namespace Record {
  * Companion type for a key-value record (map) with a typed key and value schema.
  * Produced by {@link Record}.
  *
+ * **When to use**
+ *
+ * Use as the concrete schema type returned by `Record` when an API needs to
+ * accept or return a record schema with typed property keys and values.
+ *
+ * @see {@link Record} for constructing record schemas
+ * @see {@link StructWithRest} for combining fixed struct fields with record index signatures
+ *
  * @category models
  * @since 4.0.0
  */
@@ -3213,6 +3281,14 @@ export declare namespace StructWithRest {
 /**
  * Companion type for a struct combined with one or more record schemas. Produced
  * by {@link StructWithRest}.
+ *
+ * **When to use**
+ *
+ * Use as the schema type returned by `StructWithRest` when generic code needs to
+ * retain the base struct schema and all rest record schemas.
+ *
+ * @see {@link StructWithRest} for constructing this schema type
+ * @see {@link Record} for constructing record schemas used as rest index signatures
  *
  * @category models
  * @since 4.0.0
@@ -3667,6 +3743,11 @@ export function TupleWithRest<S extends Tuple<Tuple.Elements>, const Rest extend
 /**
  * Schema interface produced by `Schema.Array` for readonly arrays.
  *
+ * **When to use**
+ *
+ * Use as the public companion type returned by `Schema.Array` when you need to
+ * refer to a readonly array schema built from an element schema.
+ *
  * **Details**
  *
  * The decoded type is `ReadonlyArray<S["Type"]>`, the encoded type is
@@ -3776,12 +3857,19 @@ export const NonEmptyArray = Struct_.lambda<NonEmptyArrayLambda>((schema) =>
  * Schema interface returned by `ArrayEnsure`, which normalizes a single item or
  * an array of items into a readonly array.
  *
+ * **When to use**
+ *
+ * Use as the schema type returned by `ArrayEnsure` when generic code needs to
+ * retain the original item schema.
+ *
  * **Details**
  *
  * The schema decodes from `S` or `Schema.Array(S)` and produces
  * `ReadonlyArray<S["Type"]>`.
  *
- * @category Arrays
+ * @see {@link ArrayEnsure} for constructing this schema type
+ *
+ * @category constructors
  * @since 3.10.0
  */
 export interface ArrayEnsure<S extends Top> extends decodeTo<$Array<toType<S>>, Union<readonly [S, $Array<S>]>> {
@@ -3792,16 +3880,26 @@ export interface ArrayEnsure<S extends Top> extends decodeTo<$Array<toType<S>>, 
  * Creates a schema that accepts either a value decoded by `schema` or an array
  * decoded by `Schema.Array(schema)`, then returns an array.
  *
+ * **When to use**
+ *
+ * Use to accept input that may be provided either as one item or as an array,
+ * while normalizing decoded values to a readonly array.
+ *
  * **Details**
+ *
+ * During encoding, one-element arrays are encoded as the single element. Empty
+ * arrays and arrays with two or more elements are encoded as arrays.
+ *
+ * **Gotchas**
  *
  * The single-value branch is tried before the array branch. If `schema` itself
  * accepts arrays, an array input can be treated as one value and wrapped in a
  * one-element array.
  *
- * During encoding, one-element arrays are encoded as the single element. Empty
- * arrays and arrays with two or more elements are encoded as arrays.
+ * @see {@link Array} for accepting only array input
+ * @see {@link NonEmptyArray} for requiring at least one decoded element
  *
- * @category Arrays
+ * @category constructors
  * @since 3.10.0
  */
 export function ArrayEnsure<S extends Top>(schema: S): ArrayEnsure<S> {
@@ -4256,6 +4354,13 @@ type DistributeBrands<B> = UnionToIntersection<B extends infer U extends string 
  * The output type of {@link brand}, intersecting the schema's `Type` with one or
  * more {@link Brand.Brand} tags.
  *
+ * **When to use**
+ *
+ * Use as the schema type returned by `brand` when generic code needs to retain
+ * the wrapped schema and nominal brand type.
+ *
+ * @see {@link brand} for adding the brand tag to an existing schema
+ *
  * @category branding
  * @since 3.10.0
  */
@@ -4285,6 +4390,18 @@ export interface brand<S extends Top, B> extends
 /**
  * Adds a nominal brand to a schema, intersecting the output type with
  * `Brand.Brand<B>` to prevent accidental mixing of structurally identical types.
+ *
+ * **When to use**
+ *
+ * Use to make values decoded by an existing schema nominally distinct when the
+ * schema already carries the runtime validation you need.
+ *
+ * **Gotchas**
+ *
+ * `brand` adds brand metadata and narrows the TypeScript output type, but it
+ * does not add runtime checks.
+ *
+ * @see {@link fromBrand} for applying a Brand constructor's checks along with the brand tag
  *
  * @category branding
  * @since 3.10.0
@@ -4484,6 +4601,19 @@ export function catchDecoding<S extends Top>(
 /**
  * Like {@link catchDecoding}, but the handler may require Effect services (`R`).
  *
+ * **When to use**
+ *
+ * Use when decoding fallback logic needs services from the Effect context.
+ *
+ * **Details**
+ *
+ * The handler receives the `Issue` and returns an `Effect` that either succeeds
+ * with a fallback value or re-fails with a (possibly different) issue. The
+ * handler's services are added to the schema's decoding services.
+ *
+ * @see {@link catchDecoding} for recovery handlers that do not require services
+ * @see {@link middlewareDecoding} for intercepting or replacing the full decoding pipeline
+ *
  * @category error handling
  * @since 4.0.0
  */
@@ -4514,6 +4644,19 @@ export function catchEncoding<S extends Top>(
 
 /**
  * Like {@link catchEncoding}, but the handler may require Effect services (`R`).
+ *
+ * **When to use**
+ *
+ * Use when encoding fallback logic needs services from the Effect context.
+ *
+ * **Details**
+ *
+ * The handler receives the `Issue` and returns an `Effect` that either succeeds
+ * with a fallback encoded value or re-fails with a (possibly different) issue.
+ * The handler's services are added to the schema's encoding services.
+ *
+ * @see {@link catchEncoding} for recovery handlers that do not require services
+ * @see {@link middlewareEncoding} for intercepting or replacing the full encoding pipeline
  *
  * @category error handling
  * @since 4.0.0
@@ -7649,7 +7792,20 @@ export interface Char extends String {
 }
 
 /**
- * A schema representing a single character.
+ * A schema for strings whose JavaScript `length` is exactly `1`.
+ *
+ * **When to use**
+ *
+ * Use to validate string values that must have `length === 1`.
+ *
+ * **Gotchas**
+ *
+ * This schema uses JavaScript `String.length`, so visible characters made from
+ * multiple UTF-16 code units do not satisfy `length === 1`.
+ *
+ * @see {@link String} for unconstrained string values
+ * @see {@link NonEmptyString} for strings with length greater than zero
+ * @see {@link isLengthBetween} for the underlying length check
  *
  * @category String
  * @since 3.10.0
@@ -8279,10 +8435,18 @@ export function RedactedFromValue<S extends Top>(value: S, options?: {
  * a typed error (`Fail`), an unexpected defect (`Die`), or an interrupt
  * (`Interrupt`).
  *
+ * **When to use**
+ *
+ * Use as the schema type returned by `CauseReason` when generic code needs to
+ * retain the typed failure and defect schemas.
+ *
  * **Details**
  *
  * The `error` schema validates typed failures and the `defect` schema validates
  * unexpected defects.
+ *
+ * @see {@link CauseReason} for constructing this schema type
+ * @see {@link CauseReasonIso} for the ISO shape of each cause reason
  *
  * @category CauseReason
  * @since 4.0.0
@@ -8325,6 +8489,19 @@ export type CauseReasonIso<E extends Top, D extends Top> = {
 /**
  * Creates a schema for `Cause.Reason` values using separate schemas for typed
  * failures and unexpected defects.
+ *
+ * **When to use**
+ *
+ * Use to validate, transform, or serialize individual `Cause.Reason` values
+ * when typed failures and unexpected defects need separate schemas.
+ *
+ * **Details**
+ *
+ * `Fail` reasons use the `error` schema, `Die` reasons use the `defect` schema,
+ * and `Interrupt` reasons carry only an optional fiber id.
+ *
+ * @see {@link Cause} for constructing schemas for full Cause values
+ * @see {@link CauseReasonIso} for the ISO shape of each cause reason
  *
  * @category CauseReason
  * @since 4.0.0
@@ -8440,10 +8617,18 @@ function causeReasonToFormatter<E>(error: Formatter<E>, defect: Formatter<unknow
  * Schema for `Cause` values, represented as an ordered collection of failure
  * reasons combining typed errors, defects, and interrupts.
  *
+ * **When to use**
+ *
+ * Use as the schema type returned by `Cause` when generic code needs to retain
+ * the typed failure and defect schemas.
+ *
  * **Details**
  *
  * The `error` schema validates typed failures and the `defect` schema validates
  * unexpected defects.
+ *
+ * @see {@link Cause} for constructing this schema type
+ * @see {@link CauseIso} for the ordered array representation used by the schema ISO
  *
  * @category Cause
  * @since 3.10.0
@@ -8465,6 +8650,14 @@ export interface Cause<E extends Top, D extends Top> extends
  * Iso representation used for `Cause` schemas: an ordered array of
  * `CauseReasonIso` values.
  *
+ * **When to use**
+ *
+ * Use when working with the ISO shape of a `Cause` schema, such as `toIso`
+ * optics or codecs that expose a cause as its ordered array of encoded reasons.
+ *
+ * @see {@link Cause} for constructing schemas for full Cause values
+ * @see {@link CauseReasonIso} for the ISO shape of each array element
+ *
  * @category Cause
  * @since 4.0.0
  */
@@ -8473,6 +8666,20 @@ export type CauseIso<E extends Top, D extends Top> = ReadonlyArray<CauseReasonIs
 /**
  * Creates a schema for `Cause` values using separate schemas for typed failures
  * and unexpected defects.
+ *
+ * **When to use**
+ *
+ * Use to validate, transform, or serialize Effect failure causes when typed
+ * failures and unexpected defects need separate schemas.
+ *
+ * **Details**
+ *
+ * The `error` schema is applied to `Fail` reasons and the `defect` schema is
+ * applied to `Die` reasons. Interrupt reasons do not use either schema and
+ * carry only an optional fiber id.
+ *
+ * @see {@link CauseReason} for the schema used by each individual cause reason
+ * @see {@link CauseIso} for the ordered array representation used by the schema ISO
  *
  * @category Cause
  * @since 3.10.0
@@ -8836,6 +9043,15 @@ export function Exit<A extends Top, E extends Top, D extends Top>(value: A, erro
  * Type-level representation of a `ReadonlyMap` schema whose keys and values are
  * validated by the provided schemas.
  *
+ * **When to use**
+ *
+ * Use as a type annotation for a `ReadonlyMap` schema when exposing or returning
+ * the schema while preserving its key schema, value schema, and ISO
+ * representation.
+ *
+ * @see {@link ReadonlyMap} for constructing this schema type from key and value schemas
+ * @see {@link ReadonlyMapIso} for the readonly tuple-array ISO representation used by this schema
+ *
  * @category ReadonlyMap
  * @since 4.0.0
  */
@@ -9030,6 +9246,14 @@ export function HashMap<Key extends Top, Value extends Top>(key: Key, value: Val
 /**
  * Type-level representation of a `ReadonlySet` schema whose values are validated
  * by the provided element schema.
+ *
+ * **When to use**
+ *
+ * Use to name or constrain the schema type produced by `ReadonlySet` when
+ * generic code needs to retain the element schema type.
+ *
+ * @see {@link ReadonlySet} for constructing this schema type
+ * @see {@link ReadonlySetIso} for the array representation used by this schema's ISO
  *
  * @category ReadonlySet
  * @since 4.0.0
@@ -9241,6 +9465,13 @@ export interface Chunk<Value extends Top> extends
 /**
  * Iso representation used for `Chunk` schemas: an array of element values using
  * the element schema's `Iso` type.
+ *
+ * **When to use**
+ *
+ * Use when annotating type-level helpers that work with the readonly-array ISO
+ * shape of a `Chunk` schema.
+ *
+ * @see {@link Chunk} for the schema interface and constructor that use this ISO representation
  *
  * @category Chunk
  * @since 4.0.0
@@ -9479,12 +9710,16 @@ const DateString = String.annotate({ expected: "a string in ISO 8601 format that
 /**
  * A schema for JavaScript `Date` objects.
  *
+ * **When to use**
+ *
+ * Use to validate in-memory values that must already be JavaScript `Date`
+ * instances.
+ *
  * **Details**
  *
- * This schema accepts any `Date` instance, including invalid dates. For
- * validating only valid dates, use `DateValid` instead. The default JSON
- * serializer encodes valid dates as ISO 8601 strings; invalid dates encode as
- * `"Invalid Date"`.
+ * This schema accepts any `Date` instance, including invalid dates. The default
+ * JSON serializer encodes valid dates as ISO 8601 strings; invalid dates encode
+ * as `"Invalid Date"`.
  *
  * **Example** (Date schema)
  *
@@ -9494,6 +9729,8 @@ const DateString = String.annotate({ expected: "a string in ISO 8601 format that
  * Schema.decodeUnknownSync(Schema.Date)(new Date("2024-01-01"))
  * // => Date { 2024-01-01T00:00:00.000Z }
  * ```
+ *
+ * @see {@link DateValid} for accepting only valid Date instances
  *
  * @category Date
  * @since 4.0.0
@@ -9532,15 +9769,26 @@ export interface DateFromString extends decodeTo<Date, String> {
 /**
  * A transformation schema that decodes a string into a JavaScript `Date`.
  *
+ * **When to use**
+ *
+ * Use to model string-encoded dates that decode to JavaScript `Date` objects
+ * and encode back to strings.
+ *
  * **Details**
  *
  * Decoding:
- * The string is passed to JavaScript `Date` construction and may decode to an
- * invalid `Date`. Compose with `DateValid` when invalid dates should be rejected.
+ * The string is passed to JavaScript `Date` construction.
  *
  * Encoding:
  * A valid `Date` is encoded as an ISO string; an invalid `Date` is encoded as
  * `"Invalid Date"`.
+ *
+ * **Gotchas**
+ *
+ * Invalid date strings can decode to invalid `Date` instances.
+ *
+ * @see {@link Date} for accepting Date instances directly
+ * @see {@link DateValid} for rejecting invalid Date instances
  *
  * @category Date
  * @since 3.10.0
@@ -9775,11 +10023,18 @@ const BigDecimalString = String.annotate({ expected: "a string that will be deco
 /**
  * A schema for `BigDecimal` values.
  *
+ * **When to use**
+ *
+ * Use when values are already `BigDecimal` instances and need schema validation,
+ * formatting, equivalence, and JSON string serialization.
+ *
  * **Details**
  *
  * Default JSON serializer:
  *
  * - encodes `BigDecimal` as a `string`
+ *
+ * @see {@link BigDecimalFromString} for parsing string input into a BigDecimal
  *
  * @category BigDecimal
  * @since 3.10.0
@@ -9823,13 +10078,26 @@ export interface BigDecimalFromString extends decodeTo<BigDecimal, String> {
 /**
  * A transformation schema that parses a string into a `BigDecimal`.
  *
+ * **When to use**
+ *
+ * Use to parse decimal or exponent-notation strings into arbitrary-precision
+ * BigDecimal values while encoding them back to strings.
+ *
  * **Details**
  *
  * Decoding:
- * - A `string` is decoded as a `BigDecimal`.
+ * - A `string` is decoded with `BigDecimal.fromString`.
  *
  * Encoding:
- * - A `BigDecimal` is encoded as a `string`.
+ * - A `BigDecimal` is encoded with `BigDecimal.format`.
+ *
+ * **Gotchas**
+ *
+ * An empty string decodes as zero.
+ *
+ * @see {@link BigDecimal} for validating values that are already BigDecimal values
+ * @see {@link BigIntFromString} for parsing base-10 integer strings into bigint values
+ * @see {@link NumberFromString} for parsing JavaScript number strings
  *
  * @category BigDecimal
  * @since 4.0.0
@@ -10447,6 +10715,11 @@ export interface BigIntFromString extends decodeTo<BigInt, String> {
 /**
  * A transformation schema that parses a string into a `bigint`.
  *
+ * **When to use**
+ *
+ * Use to parse signed base-10 integer strings into bigint values while encoding
+ * bigint values back to decimal strings.
+ *
  * **Details**
  *
  * Decoding:
@@ -10454,6 +10727,15 @@ export interface BigIntFromString extends decodeTo<BigInt, String> {
  *
  * Encoding:
  * - A `bigint` is encoded as a `string`.
+ *
+ * **Gotchas**
+ *
+ * Decoding accepts only strings matching `^-?\d+$`.
+ *
+ * @see {@link isStringBigInt} for the string predicate used by this schema
+ * @see {@link BigInt} for validating values that are already bigint values
+ * @see {@link NumberFromString} for parsing JavaScript number strings, including non-finite values
+ * @see {@link BigDecimalFromString} for parsing decimal number strings
  *
  * @category BigInt
  * @since 4.0.0
@@ -10694,6 +10976,19 @@ export interface BooleanFromBit extends decodeTo<Boolean, Literals<readonly [0, 
 /**
  * A boolean parsed from 0 or 1.
  *
+ * **When to use**
+ *
+ * Use when decoding data sources that represent booleans as `0 | 1` while
+ * keeping boolean values in the decoded model.
+ *
+ * **Details**
+ *
+ * Decoding accepts only `0 | 1`, maps `1` to `true`, and maps `0` to `false`.
+ * Encoding maps `true` to `1` and `false` to `0`.
+ *
+ * @see {@link Boolean} for validating values that are already booleans
+ * @see {@link Literals} for keeping bit literals instead of decoding them
+ *
  * @category Boolean
  * @since 4.0.0
  */
@@ -10867,11 +11162,20 @@ export interface DateTimeUtc extends declare<DateTime.Utc> {
 /**
  * A schema for `DateTime.Utc` values.
  *
+ * **When to use**
+ *
+ * Use to validate existing `DateTime.Utc` schema values and use the default JSON
+ * codec that represents them as UTC ISO strings.
+ *
  * **Details**
  *
- * Default JSON serializer:
+ * The default JSON codec decodes UTC ISO strings into `DateTime.Utc` values and
+ * encodes `DateTime.Utc` values as UTC ISO strings.
  *
- * - encodes `DateTime.Utc` as a UTC ISO string
+ * @see {@link DateTimeUtcFromString} for decoding date-time strings into UTC values
+ * @see {@link DateTimeUtcFromDate} for decoding JavaScript Date values into UTC values
+ * @see {@link DateTimeUtcFromMillis} for decoding epoch milliseconds into UTC values
+ * @see {@link DateTimeZoned} for preserving zoned DateTime values
  *
  * @category DateTime
  * @since 3.10.0
@@ -10914,6 +11218,11 @@ export interface DateTimeUtcFromDate extends decodeTo<DateTimeUtc, Date> {
 /**
  * A transformation schema that decodes a `Date` into a `DateTime.Utc`.
  *
+ * **When to use**
+ *
+ * Use when a boundary provides valid JavaScript `Date` objects but the decoded
+ * model should use `DateTime.Utc`.
+ *
  * **Details**
  *
  * Decoding:
@@ -10921,6 +11230,11 @@ export interface DateTimeUtcFromDate extends decodeTo<DateTimeUtc, Date> {
  *
  * Encoding:
  * - A `DateTime.Utc` is encoded as a `Date`
+ *
+ * @see {@link DateTimeUtc} for validating values that are already `DateTime.Utc`
+ * @see {@link DateTimeUtcFromString} for decoding date-time strings into UTC values
+ * @see {@link DateTimeUtcFromMillis} for decoding epoch milliseconds into UTC values
+ * @see {@link DateValid} for validating Date instances without converting them
  *
  * @category DateTime
  * @since 3.12.0
@@ -11545,12 +11859,22 @@ type MissingSelfGeneric<Usage extends string> =
 /**
  * Creates a schema-backed class whose constructor validates input against a
  * {@link Struct} schema. Construction throws a {@link SchemaError} on invalid
- * input (unless `disableChecks` is set in the options).
+ * input.
+ *
+ * **When to use**
+ *
+ * Use to define a schema-backed data class when you want validated
+ * construction, schema-derived decoding/encoding, and class-style methods or
+ * inheritance.
  *
  * **Details**
  *
  * Pass the desired class type as the first type parameter. The second optional
  * type parameter can be used to add nominal brands.
+ *
+ * **Gotchas**
+ *
+ * Passing `disableChecks` in the options skips constructor validation.
  *
  * **Example** (Basic class)
  *
@@ -11584,6 +11908,10 @@ type MissingSelfGeneric<Usage extends string> =
  * console.log(dog.name) // "Rex"
  * console.log(dog.breed) // "Labrador"
  * ```
+ *
+ * @see {@link TaggedClass} for adding a `_tag` literal field to the class schema
+ * @see {@link ErrorClass} for defining schema-backed error classes
+ * @see {@link TaggedErrorClass} for defining tagged schema-backed error classes
  *
  * @category constructors
  * @since 3.10.0
@@ -12082,7 +12410,7 @@ export function toRepresentation(schema: Top): SchemaRepresentation.Document {
 /**
  * Options for {@link toJsonSchemaDocument}.
  *
- * @category models
+ * @category JsonSchema
  * @since 4.0.0
  */
 export interface ToJsonSchemaOptions {

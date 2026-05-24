@@ -500,6 +500,28 @@ export const unbounded = <A>(options?: {
 /**
  * Creates a bounded atomic PubSub implementation with optional replay buffer.
  *
+ * **When to use**
+ *
+ * Use to provide bounded message storage when building a custom `PubSub` with
+ * `make` and an explicit delivery strategy.
+ *
+ * **Details**
+ *
+ * Pass either a capacity number or an options object with `capacity` and
+ * optional `replay`. A positive `replay` value enables a replay buffer for late
+ * subscribers, and fractional replay sizes are rounded up.
+ *
+ * **Gotchas**
+ *
+ * The capacity must be greater than zero; invalid capacities throw
+ * synchronously before an atomic implementation is created.
+ *
+ * @see {@link make} for constructing a `PubSub` from an atomic implementation and delivery strategy
+ * @see {@link makeAtomicUnbounded} for an atomic implementation without a bounded capacity
+ * @see {@link bounded} for the higher-level backpressure constructor
+ * @see {@link dropping} for the higher-level dropping constructor
+ * @see {@link sliding} for the higher-level sliding constructor
+ *
  * @category constructors
  * @since 4.0.0
  */
@@ -523,6 +545,20 @@ export const makeAtomicBounded = <A>(
 
 /**
  * Creates an unbounded atomic PubSub implementation with optional replay buffer.
+ *
+ * **When to use**
+ *
+ * Use to create the low-level storage layer for a custom `PubSub` whose active
+ * subscribers may retain an unbounded number of pending messages.
+ *
+ * **Gotchas**
+ *
+ * Messages published while subscribers are active can be retained without a
+ * capacity limit until those subscribers take them or unsubscribe.
+ *
+ * @see {@link makeAtomicBounded} for a bounded atomic implementation that enforces capacity
+ * @see {@link make} for wrapping an atomic implementation with a delivery strategy
+ * @see {@link unbounded} for the high-level effectful constructor for unbounded `PubSub` values
  *
  * @category constructors
  * @since 4.0.0
@@ -2288,6 +2324,16 @@ const ensureCapacity = (capacity: number): void => {
  * published to the `PubSub` while they are subscribed. However, it creates the
  * risk that a slow subscriber will slow down the rate at which messages
  * are published and received by other subscribers.
+ *
+ * **When to use**
+ *
+ * Use to preserve every message for current subscribers when a bounded custom
+ * `PubSub` should make publishers wait for capacity instead of dropping or
+ * evicting messages.
+ *
+ * @see {@link bounded} for creating bounded PubSubs with back pressure by default
+ * @see {@link DroppingStrategy} for dropping new messages when capacity is full
+ * @see {@link SlidingStrategy} for evicting old messages when capacity is full
  *
  * @category models
  * @since 4.0.0

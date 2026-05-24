@@ -66,6 +66,14 @@ export interface Stdio {
 /**
  * Context service tag for the `Stdio` service.
  *
+ * **When to use**
+ *
+ * Use when an effect needs command-line arguments or standard I/O streams
+ * supplied by its environment.
+ *
+ * @see {@link make} for constructing a `Stdio` service directly
+ * @see {@link layerTest} for a test layer with defaults and overrides
+ *
  * @category services
  * @since 4.0.0
  */
@@ -74,6 +82,19 @@ export const Stdio: Context.Service<Stdio, Stdio> = Context.Service<Stdio>(TypeI
 /**
  * Creates a `Stdio` service implementation from the provided fields and
  * attaches the `Stdio` type identifier.
+ *
+ * **When to use**
+ *
+ * Use to assemble a concrete `Stdio` service when you already have
+ * implementations for command-line arguments, standard output, standard error,
+ * and standard input.
+ *
+ * **Details**
+ *
+ * The returned service reuses the supplied fields unchanged and only adds the
+ * `Stdio` type identifier; it does not create a `Layer` or provide defaults.
+ *
+ * @see {@link layerTest} for a test layer with default fields that can be overridden
  *
  * @category constructors
  * @since 4.0.0
@@ -86,11 +107,18 @@ export const make = (options: Omit<Stdio, TypeId>): Stdio => ({
 /**
  * Creates a test layer for `Stdio`.
  *
+ * **When to use**
+ *
+ * Use to provide deterministic standard I/O in tests while overriding only the
+ * command-line arguments, input stream, or output sinks relevant to the case.
+ *
  * **Details**
  *
  * Any provided fields override defaults. By default, arguments are empty,
  * standard output and error are draining sinks, and standard input is an empty
  * stream.
+ *
+ * @see {@link make} for constructing a `Stdio` service directly without a `Layer` or defaults
  *
  * @category layers
  * @since 4.0.0

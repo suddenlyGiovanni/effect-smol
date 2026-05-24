@@ -45,7 +45,12 @@ import type * as Response from "./Response.ts"
  * The attributes used to describe telemetry in the context of Generative
  * Artificial Intelligence (GenAI) models requests and responses.
  *
- * @see https://opentelemetry.io/docs/specs/semconv/attributes-registry/gen-ai/
+ * **Details**
+ *
+ * These attributes follow the OpenTelemetry generative AI semantic
+ * conventions:
+ * https://opentelemetry.io/docs/specs/semconv/attributes-registry/gen-ai/
+ *
  * @category models
  * @since 4.0.0
  */
@@ -512,6 +517,13 @@ export interface SpanTransformer {
 /**
  * Service tag for providing a `SpanTransformer` to large language model
  * operations.
+ *
+ * **When to use**
+ *
+ * Use to retrieve or provide the current `SpanTransformer` through context for
+ * language model span annotation.
+ *
+ * @see {@link SpanTransformer} for the transformer contract provided by this service
  *
  * @category services
  * @since 4.0.0

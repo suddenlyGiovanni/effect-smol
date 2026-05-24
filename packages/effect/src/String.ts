@@ -20,6 +20,18 @@ import * as Reducer from "./Reducer.ts"
 /**
  * Reference to the global `String` constructor.
  *
+ * **When to use**
+ *
+ * Use when code in the Effect `String` namespace needs native JavaScript string
+ * coercion or constructor behavior.
+ *
+ * **Gotchas**
+ *
+ * Calling `String(value)` returns a primitive string. Calling
+ * `new String(value)` creates a boxed `String` object.
+ *
+ * @see {@link isString} for checking whether a value is a primitive string
+ *
  * @category constructors
  * @since 4.0.0
  */
@@ -1212,6 +1224,18 @@ const linesSeparated = (self: string, stripped: boolean): LinesIterator => new L
  * Normalizes a string by splitting it into word parts, transforming each part,
  * and joining the parts with a configurable delimiter.
  *
+ * **When to use**
+ *
+ * Use to normalize mixed-case, snake_case, kebab-case, or spaced input into
+ * custom word-case output when you need a delimiter or part transform that the
+ * fixed case helpers do not provide.
+ *
+ * @see {@link pascalCase} for fixed PascalCase output
+ * @see {@link camelCase} for fixed lower-initial camelCase output
+ * @see {@link constantCase} for fixed uppercase underscore-separated output
+ * @see {@link kebabCase} for fixed lowercase hyphen-separated output
+ * @see {@link snakeCase} for fixed lowercase underscore-separated output
+ *
  * @category transforming
  * @since 4.0.0
  */
@@ -1272,6 +1296,15 @@ const pascalCaseTransform = (input: string, index: number): string => {
 /**
  * Converts a string to PascalCase.
  *
+ * **When to use**
+ *
+ * Use to normalize strings from spaces, separators, or camel/Pascal word
+ * boundaries into PascalCase.
+ *
+ * @see {@link camelCase} for lower-initial camelCase output
+ * @see {@link noCase} for configurable delimiters and part transforms
+ * @see {@link snakeToPascal} for converting known snake_case input only
+ *
  * @category transforming
  * @since 4.0.0
  */
@@ -1288,6 +1321,17 @@ const camelCaseTransform = (input: string, index: number): string =>
 /**
  * Converts a string to camelCase.
  *
+ * **When to use**
+ *
+ * Use to normalize mixed word separators or existing PascalCase/camelCase text
+ * into lower-initial camelCase identifiers.
+ *
+ * @see {@link noCase} for configurable delimiters and part transforms
+ * @see {@link pascalCase} for upper-initial PascalCase output
+ * @see {@link snakeCase} for lowercase underscore-separated output
+ * @see {@link kebabCase} for lowercase hyphen-separated output
+ * @see {@link constantCase} for uppercase underscore-separated output
+ *
  * @category transforming
  * @since 4.0.0
  */
@@ -1298,6 +1342,17 @@ export const camelCase: (self: string) => string = noCase({
 
 /**
  * Converts a string to CONSTANT_CASE (uppercase with underscores).
+ *
+ * **When to use**
+ *
+ * Use to normalize words from mixed input formats into uppercase,
+ * underscore-separated identifiers.
+ *
+ * @see {@link snakeCase} for lowercase underscore-separated output
+ * @see {@link kebabCase} for lowercase hyphen-separated output
+ * @see {@link camelCase} for lower-initial camelCase output
+ * @see {@link pascalCase} for upper-initial PascalCase output
+ * @see {@link noCase} for configurable delimiters and part transforms
  *
  * @category transforming
  * @since 4.0.0
@@ -1310,6 +1365,17 @@ export const constantCase: (self: string) => string = noCase({
 /**
  * Converts a string to kebab-case (lowercase with hyphens).
  *
+ * **When to use**
+ *
+ * Use to normalize free-form labels, identifiers, or keys into lowercase
+ * hyphen-separated text.
+ *
+ * @see {@link noCase} for configurable delimiters and part transforms
+ * @see {@link snakeCase} for lowercase underscore-separated output
+ * @see {@link constantCase} for uppercase underscore-separated output
+ * @see {@link camelCase} for lower-initial camelCase output
+ * @see {@link pascalCase} for upper-initial PascalCase output
+ *
  * @category transforming
  * @since 4.0.0
  */
@@ -1320,6 +1386,15 @@ export const kebabCase: (self: string) => string = noCase({
 /**
  * Converts a string to snake_case (lowercase with underscores).
  *
+ * **When to use**
+ *
+ * Use to normalize mixed-case or separator-delimited text into lowercase words
+ * joined with underscores.
+ *
+ * @see {@link noCase} for configurable lower-level normalization
+ * @see {@link kebabCase} for lowercase hyphen-separated output
+ * @see {@link constantCase} for uppercase underscore-separated output
+ *
  * @category transforming
  * @since 4.0.0
  */
@@ -1329,6 +1404,16 @@ export const snakeCase: (self: string) => string = noCase({
 
 /**
  * A `Reducer` for concatenating `string`s.
+ *
+ * **When to use**
+ *
+ * Use to concatenate many strings through APIs that consume a `Reducer`.
+ *
+ * **Details**
+ *
+ * The reducer starts from `""`, so combining an empty collection returns `""`.
+ *
+ * @see {@link concat} for concatenating two strings directly
  *
  * @category concatenating
  * @since 4.0.0

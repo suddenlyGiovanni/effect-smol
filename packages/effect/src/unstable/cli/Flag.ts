@@ -161,7 +161,19 @@ export const choiceWithValue = <const Choice extends ReadonlyArray<readonly [str
 ): Flag<Choice[number][1]> => Param.choiceWithValue(Param.flagKind, name, choices)
 
 /**
- * Simpler variant of `choiceWithValue` which maps each string to itself.
+ * Creates a flag that accepts one of the provided string choices and returns
+ * the selected string.
+ *
+ * **When to use**
+ *
+ * Use when a named option must be restricted to a fixed set of string values
+ * and no custom value mapping is needed.
+ *
+ * **Gotchas**
+ *
+ * An empty choices array compiles, but no input value can parse successfully.
+ *
+ * @see {@link choiceWithValue} for mapping accepted strings to different typed values
  *
  * @category constructors
  * @since 4.0.0
@@ -362,7 +374,7 @@ export const fileSchema = <A>(
  *
  * **When to use**
  *
- * Use this for options that accept configuration values.
+ * Use when you use this for options that accept configuration values.
  *
  * **Details**
  *
@@ -504,7 +516,7 @@ export const withMetavar: {
  *
  * **When to use**
  *
- * Use this for experimental or internal flags that should be accepted but not
+ * Use when you use this for experimental or internal flags that should be accepted but not
  * advertised, such as `--experimental-foo`, debug toggles, or escape hatches
  * that are not yet committed to the public CLI surface.
  *

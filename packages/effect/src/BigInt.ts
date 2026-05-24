@@ -15,7 +15,20 @@ import * as predicate from "./Predicate.ts"
 import * as Reducer from "./Reducer.ts"
 
 /**
- * Reference to the global BigInt constructor.
+ * Reference to the global `BigInt` constructor for JavaScript bigint coercion.
+ *
+ * **When to use**
+ *
+ * Use when you want the native `BigInt` constructor behavior from the Effect
+ * module namespace.
+ *
+ * **Gotchas**
+ *
+ * This follows native `BigInt` coercion rules. It throws for invalid strings or
+ * non-integral numbers, and whitespace-only strings coerce to `0n`.
+ *
+ * @see {@link fromString} for parsing strings into an `Option`
+ * @see {@link fromNumber} for converting safe integers into an `Option`
  *
  * **Example** (Constructing bigints)
  *
@@ -773,6 +786,17 @@ export const remainder: {
 /**
  * A `Reducer` for combining `bigint`s using addition.
  *
+ * **When to use**
+ *
+ * Use to sum many `bigint` values through APIs that consume a `Reducer`.
+ *
+ * **Details**
+ *
+ * The initial value is `0n`, so `combineAll([])` returns `0n`.
+ *
+ * @see {@link sumAll} for summing an iterable directly
+ * @see {@link ReducerMultiply} for multiplying `bigint` values
+ *
  * @category math
  * @since 4.0.0
  */
@@ -796,6 +820,13 @@ export const ReducerMultiply: Reducer.Reducer<bigint> = Reducer.make((a, b) => a
 /**
  * A `Combiner` that returns the maximum `bigint`.
  *
+ * **When to use**
+ *
+ * Use to keep the largest `bigint` when an API consumes a `Combiner`.
+ *
+ * @see {@link CombinerMin} for keeping the smallest `bigint`
+ * @see {@link max} for comparing two `bigint` values directly
+ *
  * @category math
  * @since 4.0.0
  */
@@ -803,6 +834,13 @@ export const CombinerMax: Combiner.Combiner<bigint> = Combiner.max(Order)
 
 /**
  * A `Combiner` that returns the minimum `bigint`.
+ *
+ * **When to use**
+ *
+ * Use to keep the smallest `bigint` through APIs that consume a `Combiner`.
+ *
+ * @see {@link CombinerMax} for keeping the largest `bigint`
+ * @see {@link min} for comparing two `bigint` values directly
  *
  * @category math
  * @since 4.0.0

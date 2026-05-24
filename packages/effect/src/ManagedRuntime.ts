@@ -53,6 +53,22 @@ const TypeId = "~effect/ManagedRuntime"
 /**
  * Checks if the provided argument is a `ManagedRuntime`.
  *
+ * **When to use**
+ *
+ * Use to narrow an unknown value before treating it as a `ManagedRuntime`.
+ *
+ * **Details**
+ *
+ * The guard checks the internal `ManagedRuntime` marker property. It does not
+ * build the layer or inspect the runtime's services.
+ *
+ * **Gotchas**
+ *
+ * Disposed runtimes still carry the marker, so this guard does not prove the
+ * runtime is still usable.
+ *
+ * @see {@link make} for creating managed runtimes this guard recognizes
+ *
  * @category guards
  * @since 3.9.0
  */
@@ -86,11 +102,24 @@ export declare namespace ManagedRuntime {
  * A runtime built from a layer that can execute effects requiring that layer's
  * services.
  *
+ * **When to use**
+ *
+ * Use as the reusable runtime value returned by `make` when application entry
+ * points or integration code need to run many effects against the same
+ * layer-built services.
+ *
  * **Details**
  *
- * The runtime builds and caches its service context, owns the scope for
- * resources acquired by the layer, and should be disposed with `dispose` or
- * `disposeEffect` when it is no longer needed.
+ * The runtime builds and caches its service context and owns the scope for
+ * resources acquired by the layer.
+ *
+ * **Gotchas**
+ *
+ * Dispose the runtime with `dispose` or `disposeEffect` when it is no longer
+ * needed.
+ *
+ * @see {@link make} for constructing a managed runtime from a layer
+ * @see {@link Layer.build} for lower-level scoped layer construction
  *
  * @category models
  * @since 2.0.0
@@ -120,7 +149,7 @@ export interface ManagedRuntime<in R, out ER> {
    *
    * **When to use**
    *
-   * This method is effectful and should only be invoked at the edges of your
+   * Use when invoking this effectful method at the edges of your
    * program.
    */
   readonly runSyncExit: <A, E>(effect: Effect.Effect<A, E, R>) => Exit.Exit<A, ER | E>
@@ -130,7 +159,7 @@ export interface ManagedRuntime<in R, out ER> {
    *
    * **When to use**
    *
-   * This method is effectful and should only be invoked at the edges of your
+   * Use when invoking this effectful method at the edges of your
    * program.
    */
   readonly runSync: <A, E>(effect: Effect.Effect<A, E, R>) => A
@@ -141,7 +170,7 @@ export interface ManagedRuntime<in R, out ER> {
    *
    * **When to use**
    *
-   * This method is effectful and should only be invoked at the edges of your
+   * Use when invoking this effectful method at the edges of your
    * program.
    */
   readonly runCallback: <A, E>(
@@ -160,7 +189,7 @@ export interface ManagedRuntime<in R, out ER> {
    *
    * **When to use**
    *
-   * This method is effectful and should only be used at the edges of your
+   * Use when invoking this effectful method at the edges of your
    * program.
    */
   readonly runPromise: <A, E>(effect: Effect.Effect<A, E, R>, options?: Effect.RunOptions) => Promise<A>
@@ -171,7 +200,7 @@ export interface ManagedRuntime<in R, out ER> {
    *
    * **When to use**
    *
-   * This method is effectful and should only be used at the edges of your
+   * Use when invoking this effectful method at the edges of your
    * program.
    */
   readonly runPromiseExit: <A, E>(
@@ -193,11 +222,22 @@ export interface ManagedRuntime<in R, out ER> {
 /**
  * Creates a `ManagedRuntime` from a layer.
  *
+ * **When to use**
+ *
+ * Use to create a reusable runtime from a `Layer` for application entry points
+ * or integration code that runs many effects without rebuilding services.
+ *
  * **Details**
  *
  * The layer is built lazily on first use and its context is cached for
  * subsequent runs. Resources acquired by the layer are owned by the runtime and
- * are released when `dispose` or `disposeEffect` is run.
+ * are released when `dispose` or `disposeEffect` is run. `options.memoMap` can
+ * be used to share layer memoization with other layer builds.
+ *
+ * **Gotchas**
+ *
+ * Dispose the runtime when it is no longer needed. A runtime cannot be reused
+ * after disposal.
  *
  * **Example** (Creating a managed runtime)
  *
@@ -224,6 +264,10 @@ export interface ManagedRuntime<in R, out ER> {
  * runtime.runPromise(program)
  * // Hello, world!
  * ```
+ *
+ * @see {@link ManagedRuntime} for the returned runtime interface
+ * @see {@link Layer.MemoMap} for shared layer memoization
+ * @see {@link Layer.build} for lower-level scoped layer construction
  *
  * @category runtime class
  * @since 2.0.0

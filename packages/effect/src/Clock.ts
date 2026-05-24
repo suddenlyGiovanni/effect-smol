@@ -110,6 +110,11 @@ export interface Clock {
 /**
  * A reference to the current Clock service in the environment.
  *
+ * **When to use**
+ *
+ * Use when you need to access or provide the full Clock service rather than a
+ * single timestamp accessor.
+ *
  * **Example** (Accessing the Clock service)
  *
  * ```ts
@@ -121,6 +126,10 @@ export interface Clock {
  * })
  * ```
  *
+ * @see {@link clockWith} for using the current Clock service inside an effect
+ * @see {@link currentTimeMillis} for reading the current time in milliseconds
+ * @see {@link currentTimeNanos} for reading the current time in nanoseconds
+ *
  * @category references
  * @since 2.0.0
  */
@@ -128,6 +137,11 @@ export const Clock: Context.Reference<Clock> = effect.ClockRef
 
 /**
  * Accesses the current Clock service and uses it to run the provided function.
+ *
+ * **When to use**
+ *
+ * Use when you need the full Clock service interface to perform multiple time
+ * operations or call unsafe variants within a single effect.
  *
  * **Example** (Using the current Clock service)
  *
@@ -143,6 +157,9 @@ export const Clock: Context.Reference<Clock> = effect.ClockRef
  * )
  * ```
  *
+ * @see {@link Clock} for the service reference
+ * @see {@link currentTimeMillis} for convenience accessor that returns milliseconds
+ * @see {@link currentTimeNanos} for convenience accessor that returns nanoseconds
  * @category constructors
  * @since 2.0.0
  */
@@ -150,6 +167,11 @@ export const clockWith: <A, E, R>(f: (clock: Clock) => Effect<A, E, R>) => Effec
 
 /**
  * Returns an Effect that succeeds with the current time in milliseconds.
+ *
+ * **When to use**
+ *
+ * Use to read wall-clock time from the active Clock service with millisecond
+ * precision.
  *
  * **Example** (Reading milliseconds)
  *
@@ -162,6 +184,9 @@ export const clockWith: <A, E, R>(f: (clock: Clock) => Effect<A, E, R>) => Effec
  *   return currentTime
  * })
  * ```
+ *
+ * @see {@link currentTimeNanos} for nanosecond precision
+ * @see {@link clockWith} for accessing the full Clock service
  *
  * @category constructors
  * @since 2.0.0

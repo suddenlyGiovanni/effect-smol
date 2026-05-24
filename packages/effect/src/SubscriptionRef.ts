@@ -34,7 +34,7 @@ const TypeId = "~effect/SubscriptionRef"
  *
  * **When to use**
  *
- * Use `changes` to observe the current value and subsequent updates as a
+ * Use to observe the current value and subsequent updates as a
  * stream.
  *
  * @category models
@@ -48,6 +48,11 @@ export interface SubscriptionRef<in out A> extends SubscriptionRef.Variance<A>, 
 
 /**
  * Returns `true` if the provided value is a `SubscriptionRef`.
+ *
+ * **When to use**
+ *
+ * Use to narrow an unknown value before calling `SubscriptionRef` operations
+ * that require a subscription reference.
  *
  * @category guards
  * @since 4.0.0
@@ -92,6 +97,19 @@ const Proto = {
 
 /**
  * Constructs a new `SubscriptionRef` from an initial value.
+ *
+ * **When to use**
+ *
+ * Use to create shared mutable state when consumers need to read the latest
+ * value and subscribe to every update.
+ *
+ * **Details**
+ *
+ * The initial value is published during construction, so `changes` starts new
+ * subscribers with that value before future updates.
+ *
+ * @see {@link changes} for streaming the current value and subsequent updates
+ * @see {@link set} for replacing the value and notifying subscribers
  *
  * @category constructors
  * @since 2.0.0
