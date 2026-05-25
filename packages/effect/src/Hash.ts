@@ -1,9 +1,53 @@
 /**
- * This module provides utilities for hashing values in TypeScript.
+ * The `Hash` module computes Effect hash values and defines the interface for
+ * objects that want to provide their own hash implementation. Hashes are small
+ * numeric fingerprints used by Effect data structures to bucket values quickly;
+ * they are not cryptographic digests and they are not proof that two values are
+ * equal.
  *
- * Hashing is the process of converting data into a fixed-size numeric value,
- * typically used for data structures like hash tables, equality comparisons,
- * and efficient data storage.
+ * **Mental model**
+ *
+ * - {@link hash} dispatches by JavaScript type and handles primitives,
+ *   arrays, typed arrays, maps, sets, plain objects, dates, regular
+ *   expressions, and custom hashable objects
+ * - Objects can implement {@link Hash} by defining a method at {@link symbol}
+ * - Structural object hashes are cached, so repeated hashing of the same object
+ *   is cheap after the first computation
+ * - {@link random} gives reference-stable hash values for values that should
+ *   be hashed by identity
+ * - Lower-level helpers such as {@link combine}, {@link string},
+ *   {@link number}, {@link structure}, {@link structureKeys}, and
+ *   {@link array} are useful when implementing custom hashes
+ *
+ * **Quickstart**
+ *
+ * **Example** (Implementing a custom hash)
+ *
+ * ```ts
+ * import { Hash } from "effect"
+ *
+ * class UserKey implements Hash.Hash {
+ *   constructor(
+ *     readonly id: string,
+ *     readonly region: string
+ *   ) {}
+ *
+ *   [Hash.symbol](): number {
+ *     return Hash.combine(Hash.string(this.region))(Hash.string(this.id))
+ *   }
+ * }
+ *
+ * const value = Hash.hash(new UserKey("user-1", "eu"))
+ * ```
+ *
+ * **Gotchas**
+ *
+ * - Hash collisions are possible; hash-based collections also need equality
+ *   semantics to decide whether two values are actually the same
+ * - Do not mutate an object after hashing it structurally, because the cached
+ *   hash can become stale
+ * - Use {@link random} or a custom {@link Hash} implementation for mutable
+ *   objects that should be compared by reference identity
  *
  * @since 2.0.0
  */
@@ -30,6 +74,10 @@ export const symbol = "~effect/interfaces/Hash"
 
 /**
  * A type that represents an object that can be hashed.
+ *
+ * **When to use**
+ *
+ * Use to let a custom type provide its own stable hash value.
  *
  * **Details**
  *
@@ -62,6 +110,11 @@ export interface Hash {
 
 /**
  * Computes a hash value for any given value.
+ *
+ * **When to use**
+ *
+ * Use to compute an Effect hash for primitives, collections, and hashable
+ * objects.
  *
  * **Details**
  *
@@ -153,6 +206,10 @@ export const hash: <A>(self: A) => number = <A>(self: A) => {
 /**
  * Generates a random hash value for an object and caches it.
  *
+ * **When to use**
+ *
+ * Use to hash an object by reference identity instead of structural content.
+ *
  * **Details**
  *
  * This function creates a random hash value for objects that don't have their own
@@ -227,6 +284,10 @@ export const combine: {
 /**
  * Optimizes a hash value by applying bit manipulation techniques.
  *
+ * **When to use**
+ *
+ * Use to improve the bit distribution of a raw numeric hash value.
+ *
  * **Details**
  *
  * This function takes a hash value and applies bitwise operations to improve
@@ -252,6 +313,10 @@ export const optimize = (n: number): number => (n & 0xbfffffff) | ((n >>> 1) & 0
 
 /**
  * Checks if a value implements the Hash interface.
+ *
+ * **When to use**
+ *
+ * Use to detect whether an unknown value provides a custom hash implementation.
  *
  * **Details**
  *
@@ -282,6 +347,10 @@ export const isHash = (u: unknown): u is Hash => hasProperty(u, symbol)
 
 /**
  * Computes a hash value for a number.
+ *
+ * **When to use**
+ *
+ * Use to hash a JavaScript number with Effect's numeric hash semantics.
  *
  * **Details**
  *
@@ -329,6 +398,10 @@ export const number = (n: number) => {
 /**
  * Computes a hash value for a string using the djb2 algorithm.
  *
+ * **When to use**
+ *
+ * Use to hash a string directly.
+ *
  * **Details**
  *
  * This function implements a variation of the djb2 hash algorithm, which is
@@ -361,6 +434,10 @@ export const string = (str: string) => {
 
 /**
  * Computes a hash value for an object using only the specified keys.
+ *
+ * **When to use**
+ *
+ * Use to hash an object by a selected set of property keys.
  *
  * **Details**
  *
@@ -401,6 +478,10 @@ export const structureKeys = (o: object, keys: Iterable<PropertyKey>) => {
 
 /**
  * Computes a structural hash for an object using Effect's object key collection.
+ *
+ * **When to use**
+ *
+ * Use to hash an object from all structural keys collected by Effect.
  *
  * **Details**
  *

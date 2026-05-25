@@ -1,67 +1,60 @@
 /**
- * This module provides utilities for working with `Deferred`, a powerful concurrency
- * primitive that represents an asynchronous variable that can be set exactly once.
- * Multiple fibers can await the same `Deferred` and will all be notified when it
- * completes.
+ * The `Deferred` module provides a one-shot coordination cell for Effect
+ * programs. A `Deferred<A, E>` starts empty, can be completed exactly once, and
+ * allows any number of fibers to wait until that completion is available.
  *
- * A `Deferred<A, E>` can be:
- * - **Completed successfully** with a value of type `A`
- * - **Failed** with an error of type `E`
- * - **Interrupted** if the fiber setting it is interrupted
+ * `Deferred` is useful when one fiber must hand a single result, failure, or
+ * interruption signal to other fibers. Awaiters suspend without blocking an OS
+ * thread and resume with the same completion once a producer wins the race to
+ * complete the cell.
  *
- * Key characteristics:
- * - **Single assignment**: Can only be completed once
- * - **Multiple waiters**: Many fibers can await the same `Deferred`
- * - **Fiber-safe**: Thread-safe operations across concurrent fibers
- * - **Composable**: Works seamlessly with other Effect operations
+ * **Mental model**
  *
- * **Example** (Coordinating fibers with a Deferred)
+ * - `Deferred.make` creates an empty cell
+ * - `Deferred.await` waits for the cell and then observes its stored
+ *   success, failure, defect, or interruption
+ * - Completion functions such as {@link succeed}, {@link fail},
+ *   {@link failCause}, {@link interrupt}, and {@link complete} return
+ *   `true` when they complete the cell, or `false` when another fiber already
+ *   completed it
+ * - Once completed, the result is stable for both current and future awaiters
+ *
+ * **Common tasks**
+ *
+ * - Create a cell with {@link make}
+ * - Wait for a result with {@link await}
+ * - Complete with a value or failure using {@link succeed}, {@link fail},
+ *   {@link failCause}, {@link die}, or {@link interrupt}
+ * - Complete from another effect using {@link complete} or {@link completeWith}
+ * - Check completion state with {@link isDone} or inspect it with {@link poll}
+ *
+ * **Gotchas**
+ *
+ * - A `Deferred` is for a single handoff; use `Queue` when producers emit many
+ *   values over time
+ * - `complete` runs an effect once and shares its memoized result, while
+ *   `completeWith` stores an effect directly and each awaiter may run it
+ * - Interrupting a fiber that is waiting on a `Deferred` removes that waiter;
+ *   it does not complete the `Deferred`
+ *
+ * **Example** (Opening a start gate)
  *
  * ```ts
  * import { Deferred, Effect, Fiber } from "effect"
  *
- * // Basic usage: coordinate between fibers
  * const program = Effect.gen(function*() {
- *   const deferred = yield* Deferred.make<string, never>()
+ *   const ready = yield* Deferred.make<void>()
  *
- *   // Fiber 1: waits for the value
- *   const waiter = yield* Effect.forkChild(
+ *   const worker = yield* Effect.forkChild(
  *     Effect.gen(function*() {
- *       const value = yield* Deferred.await(deferred)
- *       console.log("Received:", value)
- *       return value
+ *       yield* Deferred.await(ready)
+ *       return "started"
  *     })
  *   )
  *
- *   // Fiber 2: sets the value after a delay
- *   const setter = yield* Effect.forkChild(
- *     Effect.gen(function*() {
- *       yield* Effect.sleep("1 second")
- *       yield* Deferred.succeed(deferred, "Hello from setter!")
- *     })
- *   )
+ *   yield* Deferred.succeed(ready, undefined)
  *
- *   // Wait for both fibers
- *   yield* Fiber.join(waiter)
- *   yield* Fiber.join(setter)
- * })
- *
- * // Producer-consumer pattern
- * const producerConsumer = Effect.gen(function*() {
- *   const buffer = yield* Deferred.make<Array<number>, never>()
- *
- *   const producer = Effect.gen(function*() {
- *     const data = [1, 2, 3, 4, 5]
- *     yield* Deferred.succeed(buffer, data)
- *   })
- *
- *   const consumer = Effect.gen(function*() {
- *     const data = yield* Deferred.await(buffer)
- *     return data.reduce((sum, n) => sum + n, 0)
- *   })
- *
- *   const [, result] = yield* Effect.all([producer, consumer])
- *   return result // 15
+ *   return yield* Fiber.join(worker)
  * })
  * ```
  *
@@ -88,9 +81,8 @@ const TypeId = "~effect/Deferred"
  *
  * **When to use**
  *
- * Use when you use `Deferred` for primitive actions whose completions require the
- * coordinated action of multiple fibers, and for building higher-level
- * concurrent or asynchronous structures.
+ * Use to coordinate multiple fibers around a value or failure that will be
+ * supplied exactly once.
  *
  * **Example** (Creating a Deferred for inter-fiber communication)
  *
@@ -150,11 +142,20 @@ export const isDeferred = <A, E>(u: unknown): u is Deferred<A, E> => hasProperty
 /**
  * Companion namespace containing type-level metadata for `Deferred`.
  *
+ * **When to use**
+ *
+ * Use to reference type-level metadata associated with `Deferred`.
+ *
  * @since 2.0.0
  */
 export declare namespace Deferred {
   /**
    * Type-level variance marker for the value and error channels of `Deferred`.
+   *
+   * **When to use**
+   *
+   * Use to carry the value and error type parameters for `Deferred` in Effect's
+   * type machinery.
    *
    * **Details**
    *
@@ -187,8 +188,8 @@ const DeferredProto = {
  *
  * **When to use**
  *
- * Use when prefer `Deferred.make` in effectful code so allocation is represented in
- * `Effect`; use this only when direct synchronous allocation is required.
+ * Use to allocate a `Deferred` synchronously when direct allocation outside
+ * `Effect` is required.
  *
  * **Example** (Creating a Deferred unsafely)
  *
@@ -211,6 +212,10 @@ export const makeUnsafe = <A, E = never>(): Deferred<A, E> => {
 
 /**
  * Creates a new `Deferred`.
+ *
+ * **When to use**
+ *
+ * Use to allocate an empty `Deferred` inside an `Effect` workflow.
  *
  * **Example** (Creating a Deferred)
  *
@@ -412,6 +417,10 @@ export const done: {
 /**
  * Attempts to complete the `Deferred` with the specified error.
  *
+ * **When to use**
+ *
+ * Use to complete a `Deferred` with a typed failure value.
+ *
  * **Details**
  *
  * Fibers waiting on the `Deferred` fail with that error only if this call
@@ -441,6 +450,10 @@ export const fail: {
 /**
  * Computes an error when the returned effect is run, then attempts to complete
  * the `Deferred` with that error.
+ *
+ * **When to use**
+ *
+ * Use to lazily compute a typed failure value when the completion effect runs.
  *
  * **Details**
  *
@@ -474,6 +487,10 @@ export const failSync: {
 
 /**
  * Attempts to complete the `Deferred` with the specified `Cause`.
+ *
+ * **When to use**
+ *
+ * Use to complete a `Deferred` with a full failure cause.
  *
  * **Details**
  *
@@ -511,6 +528,10 @@ export const failCause: {
  * Computes a `Cause` when the returned effect is run, then attempts to
  * complete the `Deferred` with that cause.
  *
+ * **When to use**
+ *
+ * Use to lazily compute a full failure cause when the completion effect runs.
+ *
  * **Details**
  *
  * Fibers waiting on the `Deferred` observe the computed cause only if this
@@ -547,6 +568,10 @@ export const failCauseSync: {
 /**
  * Attempts to complete the `Deferred` with a defect.
  *
+ * **When to use**
+ *
+ * Use to complete a `Deferred` with an unexpected defect.
+ *
  * **Details**
  *
  * Fibers waiting on the `Deferred` die with that defect only if this call
@@ -579,6 +604,10 @@ export const die: {
 /**
  * Computes a defect when the returned effect is run, then attempts to complete
  * the `Deferred` with that defect.
+ *
+ * **When to use**
+ *
+ * Use to lazily compute an unexpected defect when the completion effect runs.
  *
  * **Details**
  *
@@ -616,6 +645,10 @@ export const dieSync: {
 /**
  * Attempts to complete the `Deferred` with interruption by the current fiber.
  *
+ * **When to use**
+ *
+ * Use to complete a `Deferred` as interrupted by the current fiber.
+ *
  * **Details**
  *
  * Fibers waiting on the `Deferred` are interrupted with the current fiber id
@@ -644,6 +677,10 @@ export const interrupt = <A, E>(self: Deferred<A, E>): Effect<boolean> =>
 /**
  * Attempts to complete the `Deferred` with interruption by the specified
  * `FiberId`.
+ *
+ * **When to use**
+ *
+ * Use to complete a `Deferred` as interrupted by a specific fiber id.
  *
  * **Details**
  *
@@ -678,6 +715,10 @@ export const interruptWith: {
 /**
  * Returns `true` if this `Deferred` has already been completed with a value or
  * an error, `false` otherwise.
+ *
+ * **When to use**
+ *
+ * Use to check completion status inside an `Effect` workflow.
  *
  * **Example** (Checking Deferred completion)
  *
@@ -721,6 +762,11 @@ export const isDoneUnsafe = <A, E>(self: Deferred<A, E>): boolean => self.effect
  * `Option.some(effect)` when the `Deferred` is completed, `Option.none()`
  * otherwise.
  *
+ * **When to use**
+ *
+ * Use to inspect whether a `Deferred` is already completed and retrieve its
+ * stored completion effect when available.
+ *
  * **Example** (Polling Deferred completion)
  *
  * ```ts
@@ -746,6 +792,10 @@ export function poll<A, E>(self: Deferred<A, E>): Effect<Option.Option<Effect<A,
 
 /**
  * Attempts to complete the `Deferred` with the specified value.
+ *
+ * **When to use**
+ *
+ * Use to complete a `Deferred` with a successful value.
  *
  * **Details**
  *
@@ -778,6 +828,10 @@ export const succeed: {
 /**
  * Computes a value when the returned effect is run, then attempts to complete
  * the `Deferred` with that value.
+ *
+ * **When to use**
+ *
+ * Use to lazily compute a successful value when the completion effect runs.
  *
  * **Details**
  *
@@ -815,6 +869,11 @@ export const sync: {
  * Synchronously attempts to complete the `Deferred` with the specified
  * completion effect.
  *
+ * **When to use**
+ *
+ * Use to complete a `Deferred` synchronously in low-level code that already has
+ * the completion effect.
+ *
  * **Details**
  *
  * This mutates the `Deferred` directly and should be reserved for low-level
@@ -849,6 +908,11 @@ export const doneUnsafe = <A, E>(self: Deferred<A, E>, effect: Effect<A, E>): bo
 /**
  * Runs an `Effect` and attempts to complete a `Deferred` with the effect's
  * result.
+ *
+ * **When to use**
+ *
+ * Use to pipe an effect result into a `Deferred` while preserving success,
+ * failure, defects, and interruption.
  *
  * **Details**
  *

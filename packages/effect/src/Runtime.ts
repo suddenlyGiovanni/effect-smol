@@ -1,28 +1,58 @@
 /**
- * This module provides utilities for running Effect programs and managing their execution lifecycle.
+ * Runtime helpers for turning an `Effect` program into a host application's
+ * main entry point.
  *
- * The Runtime module contains functions for creating main program runners that handle process
- * teardown, error reporting, and exit code management. These utilities are particularly useful
- * for creating CLI applications and server processes that need to manage their lifecycle properly.
+ * This module is the low-level layer used by platform adapters to run a main
+ * effect, observe its fiber, report unhandled failures, and translate the
+ * resulting `Exit` into an application or process exit code. Application code
+ * usually calls the platform-provided runner; runtime integrations use
+ * {@link makeRunMain} directly.
  *
- * **Example** (Creating a main runner)
+ * **Mental model**
+ *
+ * - {@link makeRunMain} forks the supplied `Effect` and gives the host adapter
+ *   the running fiber plus a teardown callback
+ * - The host adapter installs platform-specific hooks such as signal handlers,
+ *   fiber observers, process exits, worker termination, or test harness
+ *   callbacks
+ * - {@link defaultTeardown} maps successful exits to `0`, interruption-only
+ *   failures to `130`, failures with {@link errorExitCode} to that code, and
+ *   other failures to `1`
+ * - {@link errorReported} controls automatic failure logging; set it to
+ *   `false` on errors that have already been reported
+ *
+ * **Common tasks**
+ *
+ * - Build a platform runner: {@link makeRunMain}
+ * - Reuse the standard exit-code rules: {@link defaultTeardown}
+ * - Customize failure exit codes: {@link errorExitCode},
+ *   {@link getErrorExitCode}
+ * - Control automatic failure logging: {@link errorReported},
+ *   {@link getErrorReported}
+ *
+ * **Gotchas**
+ *
+ * - `makeRunMain` starts the main fiber, but the adapter callback is
+ *   responsible for observing that fiber and eventually invoking teardown.
+ * - `disableErrorReporting` only disables automatic failure logging. It does
+ *   not change the `Exit`, interruption behavior, or teardown exit-code rules.
+ * - Error markers are read from `Cause.squash(cause)`, so causes with multiple
+ *   failures use the squashed failure value to determine logging and exit code.
+ *
+ * **Example** (Creating a minimal runner)
  *
  * ```ts
- * import { Effect, Fiber, Runtime } from "effect"
+ * import { Effect, Runtime } from "effect"
  *
- * // Create a main runner for Node.js
- * const runMain = Runtime.makeRunMain((options) => {
- *   process.on("SIGINT", () => Effect.runFork(Fiber.interrupt(options.fiber)))
- *   process.on("SIGTERM", () => Effect.runFork(Fiber.interrupt(options.fiber)))
- *
- *   options.fiber.addObserver((exit) => {
- *     options.teardown(exit, (code) => process.exit(code))
+ * const runMain = Runtime.makeRunMain(({ fiber, teardown }) => {
+ *   fiber.addObserver((exit) => {
+ *     teardown(exit, (code) => {
+ *       console.log(`finished with exit code ${code}`)
+ *     })
  *   })
  * })
  *
- * // Use the runner
- * const program = Effect.log("Hello, World!")
- * runMain(program)
+ * runMain(Effect.log("booted"))
  * ```
  *
  * @since 4.0.0
@@ -268,6 +298,11 @@ declare global {
 /**
  * Type-level key for the `Runtime.errorExitCode` marker.
  *
+ * **When to use**
+ *
+ * Use to type properties keyed by `Runtime.errorExitCode` on custom error
+ * values.
+ *
  * @category symbols
  * @since 4.0.0
  */
@@ -319,6 +354,11 @@ export const errorExitCode: errorExitCode = "~effect/Runtime/errorExitCode"
 /**
  * Reads the runtime exit-code marker from an unknown error value.
  *
+ * **When to use**
+ *
+ * Use to read a custom failure exit code from an unknown error value, falling
+ * back to the default failure code.
+ *
  * **Details**
  *
  * Returns the numeric `[Runtime.errorExitCode]` property when it is present on
@@ -347,6 +387,11 @@ export const getErrorExitCode = (u: unknown): number => {
 
 /**
  * Type-level key for the `Runtime.errorReported` marker.
+ *
+ * **When to use**
+ *
+ * Use to type properties keyed by `Runtime.errorReported` on custom error
+ * values.
  *
  * @category symbols
  * @since 4.0.0
@@ -400,6 +445,11 @@ export const errorReported: errorReported = "~effect/Runtime/errorReported"
 
 /**
  * Reads the runtime error-reporting marker from an unknown error value.
+ *
+ * **When to use**
+ *
+ * Use to read whether an unknown error value should be treated as already
+ * reported by the default main runner.
  *
  * **Details**
  *

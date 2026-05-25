@@ -1,22 +1,34 @@
 /**
- * The `Semaphore` module provides a counting semaphore for coordinating
- * concurrent access to shared or limited resources. A semaphore tracks a fixed
- * number of permits: effects acquire permits before entering a critical section
- * and release them when they leave.
+ * The `Semaphore` module provides counting semaphores for limiting concurrent
+ * access to shared resources. A semaphore owns a pool of permits; effects take
+ * permits before running protected work and return them when the work exits.
  *
- * Use semaphores to bound parallel work, protect rate-limited services, or
- * serialize access to resources that cannot safely handle unlimited
- * concurrency. Prefer {@link withPermit} and {@link withPermits} when possible,
- * because they release permits automatically when the protected effect exits.
- * Use {@link take} and {@link release} for lower-level protocols that need
- * manual control.
+ * **Mental model**
+ *
+ * - The permit count is the maximum amount of guarded work that can run at once
+ * - {@link withPermit} and {@link withPermits} acquire permits around one
+ *   effect and release them on success, failure, or interruption
+ * - {@link take} and {@link release} expose the lower-level protocol when
+ *   acquisition and release cannot be scoped to one effect
+ * - {@link resize} changes future availability while preserving permits that
+ *   are already taken
+ *
+ * **Common tasks**
+ *
+ * - Create a semaphore: {@link make}, {@link makeUnsafe}
+ * - Guard one effect: {@link withPermit}, {@link withPermits}
+ * - Run only when permits are immediately available:
+ *   {@link withPermitsIfAvailable}
+ * - Manage permits manually: {@link take}, {@link release}, {@link releaseAll}
+ * - Change capacity: {@link resize}
  *
  * **Gotchas**
  *
- * - Pending acquisitions wait until enough permits are available.
- * - {@link withPermitsIfAvailable} does not wait; it returns `Option.none` when
- *   the requested permits cannot be acquired immediately.
- * - Manual `take` / `release` usage must keep permit counts balanced.
+ * - Pending acquisitions wait until enough permits are available
+ * - {@link withPermitsIfAvailable} never waits; it returns `Option.none` when
+ *   the requested permits are not available immediately
+ * - Manual {@link take} / {@link release} usage must keep permit counts
+ *   balanced; prefer scoped helpers when possible
  *
  * @since 4.0.0
  */
@@ -29,6 +41,11 @@ import type * as Option from "./Option.ts"
 
 /**
  * A counting semaphore that coordinates concurrent access with permits.
+ *
+ * **When to use**
+ *
+ * Use to coordinate concurrent effects that need bounded access to a shared
+ * resource.
  *
  * **Details**
  *
@@ -51,18 +68,29 @@ import type * as Option from "./Option.ts"
  * })
  * ```
  *
+ * @see {@link make} for creating a semaphore inside Effect code
+ * @see {@link makeUnsafe} for creating a semaphore synchronously
+ *
  * @category models
  * @since 4.0.0
  */
 export interface Semaphore {
   /**
    * Adjusts the number of permits available in the semaphore.
+   *
+   * **When to use**
+   *
+   * Use to change the total permit count of an existing semaphore.
    */
   resize(this: Semaphore, permits: number): Effect.Effect<void>
 
   /**
    * Runs an effect with the given number of permits and releases the permits
    * when the effect completes.
+   *
+   * **When to use**
+   *
+   * Use to run an effect while holding a specified number of semaphore permits.
    *
    * **Details**
    *
@@ -77,6 +105,10 @@ export interface Semaphore {
    * Runs an effect with the given number of permits and releases the permits
    * when the effect completes.
    *
+   * **When to use**
+   *
+   * Use to run an effect while holding exactly one semaphore permit.
+   *
    * **Details**
    *
    * This function acquires the specified number of permits before executing
@@ -89,6 +121,11 @@ export interface Semaphore {
   /**
    * Runs an effect only if the specified number of permits are immediately
    * available.
+   *
+   * **When to use**
+   *
+   * Use when guarded work should run only if the requested permits are
+   * immediately available.
    *
    * **Details**
    *
@@ -106,17 +143,30 @@ export interface Semaphore {
    * Acquires the specified number of permits and returns the resulting
    * available permits, suspending the task if they are not yet available.
    * Concurrent pending `take` calls are processed in a first-in, first-out manner.
+   *
+   * **When to use**
+   *
+   * Use to manually acquire permits for lower-level coordination protocols.
    */
   take(this: Semaphore, permits: number): Effect.Effect<number>
 
   /**
    * Releases the specified number of permits and returns the resulting
    * available permits.
+   *
+   * **When to use**
+   *
+   * Use to manually return permits acquired by a lower-level coordination
+   * protocol.
    */
   release(this: Semaphore, permits: number): Effect.Effect<number>
 
   /**
    * Releases all permits held by this semaphore and returns the resulting available permits.
+   *
+   * **When to use**
+   *
+   * Use to return every currently taken permit to the semaphore at once.
    */
   readonly releaseAll: Effect.Effect<number>
 }
@@ -127,8 +177,8 @@ export interface Semaphore {
  *
  * **When to use**
  *
- * Use when you use this low-level constructor when an immediate semaphore value is required;
- * otherwise prefer the effectful `make` constructor.
+ * Use to construct a semaphore synchronously when an immediate value is
+ * required outside an Effect workflow.
  *
  * **Example** (Creating an unsafe semaphore)
  *
@@ -270,8 +320,8 @@ class SemaphoreImpl implements Semaphore {
  *
  * **When to use**
  *
- * Use when you use the returned semaphore to limit concurrency with `withPermit` or
- * `withPermits`, or to manually `take` and `release` permits.
+ * Use to create a semaphore inside Effect code for bounding concurrency with
+ * automatic or manual permit management.
  *
  * **Example** (Creating a semaphore)
  *
