@@ -660,8 +660,8 @@ export const capacity = <A>(self: PubSub<A>): number => self.pubsub.capacity
  */
 export const size = <A>(self: PubSub<A>): Effect.Effect<number> => Effect.sync(() => sizeUnsafe(self))
 /**
- * Synchronously returns the current number of messages retained by the `PubSub`
- * for active subscribers.
+ * Returns the current number of messages retained by the `PubSub` for active
+ * subscribers synchronously.
  *
  * **Details**
  *
@@ -808,7 +808,8 @@ export const shutdown = <A>(self: PubSub<A>): Effect.Effect<void> =>
   }))
 
 /**
- * Returns `true` if `shutdown` has been called, otherwise returns `false`.
+ * Checks effectfully whether `shutdown` has been called, returning `true`
+ * after shutdown and `false` otherwise.
  *
  * **Example** (Checking whether a PubSub is shutdown)
  *
@@ -836,7 +837,8 @@ export const shutdown = <A>(self: PubSub<A>): Effect.Effect<void> =>
 export const isShutdown = <A>(self: PubSub<A>): Effect.Effect<boolean> => Effect.sync(() => isShutdownUnsafe(self))
 
 /**
- * Returns `true` if `shutdown` has been called, otherwise returns `false`.
+ * Checks synchronously whether `shutdown` has been called, returning `true`
+ * after shutdown and `false` otherwise.
  *
  * **Example** (Checking shutdown synchronously)
  *
@@ -1396,7 +1398,7 @@ const takeRemainderLoop = <A>(
 }
 
 /**
- * Synchronously checks how many messages can be taken from a subscription.
+ * Checks how many messages can be taken from a subscription synchronously.
  *
  * **Details**
  *
@@ -2347,17 +2349,22 @@ const ensureCapacity = (capacity: number): void => {
 // -----------------------------------------------------------------------------
 
 /**
- * A strategy that applies back pressure to publishers when the `PubSub` is at
- * capacity. This guarantees that all subscribers will receive all messages
- * published to the `PubSub` while they are subscribed. However, it creates the
- * risk that a slow subscriber will slow down the rate at which messages
- * are published and received by other subscribers.
+ * Represents the back-pressure strategy for bounded `PubSub` values.
  *
  * **When to use**
  *
  * Use to preserve every message for current subscribers when a bounded custom
  * `PubSub` should make publishers wait for capacity instead of dropping or
  * evicting messages.
+ *
+ * **Details**
+ *
+ * Publishers wait when the `PubSub` is at capacity, so all current subscribers
+ * can receive every published message.
+ *
+ * **Gotchas**
+ *
+ * A slow subscriber can slow down publishers and other subscribers.
  *
  * @see {@link bounded} for creating bounded PubSubs with back pressure by default
  * @see {@link DroppingStrategy} for dropping new messages when capacity is full
@@ -2459,12 +2466,21 @@ export class BackPressureStrategy<in out A> implements PubSub.Strategy<A> {
 }
 
 /**
- * A strategy that drops new messages when the `PubSub` is at capacity. This
- * guarantees that a slow subscriber will not slow down the rate at which
- * messages are published. However, it creates the risk that a slow
- * subscriber will slow down the rate at which messages are received by
- * other subscribers and that subscribers may not receive all messages
- * published to the `PubSub` while they are subscribed.
+ * Represents the dropping strategy for bounded `PubSub` values.
+ *
+ * **When to use**
+ *
+ * Use to keep publishers fast by dropping new messages when the `PubSub` is at
+ * capacity.
+ *
+ * **Details**
+ *
+ * A publish that arrives while the `PubSub` is full is dropped instead of
+ * waiting for capacity.
+ *
+ * **Gotchas**
+ *
+ * Subscribers may miss messages published while they are subscribed.
  *
  * **Example** (Using a dropping strategy)
  *
@@ -2537,11 +2553,21 @@ export class DroppingStrategy<in out A> implements PubSub.Strategy<A> {
 }
 
 /**
- * A strategy that adds new messages and drops old messages when the `PubSub` is
- * at capacity. This guarantees that a slow subscriber will not slow down
- * the rate at which messages are published and received by other
- * subscribers. However, it creates the risk that a slow subscriber will
- * not receive some messages published to the `PubSub` while it is subscribed.
+ * Represents the sliding strategy for bounded `PubSub` values.
+ *
+ * **When to use**
+ *
+ * Use to keep the most recent messages when the `PubSub` is at capacity.
+ *
+ * **Details**
+ *
+ * New messages are accepted by evicting older messages from the bounded
+ * `PubSub`.
+ *
+ * **Gotchas**
+ *
+ * Slow subscribers may miss older messages that are evicted before they are
+ * consumed.
  *
  * **Example** (Using a sliding strategy)
  *

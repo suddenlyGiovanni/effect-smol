@@ -38,7 +38,7 @@ import type { Sharding } from "./Sharding.ts"
 /**
  * Type identifier used to brand `EntityResource` values.
  *
- * @category Type ids
+ * @category type IDs
  * @since 4.0.0
  */
 export const TypeId: TypeId = "~effect/cluster/EntityResource"
@@ -46,7 +46,7 @@ export const TypeId: TypeId = "~effect/cluster/EntityResource"
 /**
  * Literal type of the `EntityResource` type identifier.
  *
- * @category Type ids
+ * @category type IDs
  * @since 4.0.0
  */
 export type TypeId = "~effect/cluster/EntityResource"
@@ -69,13 +69,13 @@ export interface EntityResource<out A, out E = never> {
 }
 
 /**
- * A `Scope` that is only closed when the resource is explicitly closed.
+ * Context service for a Scope that is only closed when the resource is explicitly closed.
  *
  * **Gotchas**
  *
  * It is not closed during restarts, due to shard movement or node shutdowns.
  *
- * @category Scope
+ * @category resource management
  * @since 4.0.0
  */
 export class CloseScope extends Context.Service<
@@ -84,8 +84,7 @@ export class CloseScope extends Context.Service<
 >()("effect/cluster/EntityResource/CloseScope") {}
 
 /**
- * A `EntityResource` is a resource that can be acquired inside a cluster
- * entity, which will keep the entity alive even across restarts.
+ * Creates an `EntityResource` that can be acquired inside a cluster entity.
  *
  * **Details**
  *
