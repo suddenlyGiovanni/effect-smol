@@ -182,7 +182,7 @@ export type ConstructorDefault = "no-default" | "with-default"
  * @see {@link Bottom.makeEffect}
  * @see {@link Bottom.make}
  *
- * @category models
+ * @category options
  * @since 3.13.4
  */
 export interface MakeOptions {
@@ -482,7 +482,7 @@ export function declare<T, Iso = T>(
  * type E = typeof bottom["Encoded"]  // string
  * ```
  *
- * @category utils
+ * @category utility types
  * @since 4.0.0
  */
 export function revealBottom<S extends Top>(
@@ -907,7 +907,7 @@ export interface Encoder<out E, out RE = never> extends Codec<unknown, E, unknow
  * type Enc = typeof codec["Encoded"] // string
  * ```
  *
- * @category utils
+ * @category utility types
  * @since 4.0.0
  */
 export function revealCodec<T, E, RD, RE>(codec: Codec<T, E, RD, RE>) {
@@ -2599,7 +2599,7 @@ export interface Boolean extends Bottom<boolean, boolean, never, never, AST.Bool
  *
  * @see {@link BooleanFromBit} for a schema that decodes bit literals `0` or `1` into a boolean
  *
- * @category Boolean
+ * @category boolean
  * @since 4.0.0
  */
 export const Boolean: Boolean = make(AST.boolean)
@@ -5130,7 +5130,7 @@ export interface withDecodingDefaultKey<S extends Top, R = never> extends decode
  *   - `"passthrough"` (default): pass the value through during encoding
  *   - `"omit"`: omit the key from the encoded output
  *
- * @category models
+ * @category options
  * @since 4.0.0
  */
 export type DecodingDefaultOptions = {
@@ -5832,7 +5832,7 @@ export function link<T>() {
  * //   at ["c"])]))
  * ```
  *
- * @category Checks Constructors
+ * @category constructors
  * @since 4.0.0
  */
 export const makeFilter: <T>(
@@ -5897,7 +5897,7 @@ export type FilterOutput =
  * Groups multiple checks into a single {@link AST.FilterGroup}, applying
  * optional shared annotations to the group as a whole.
  *
- * @category Checks Constructors
+ * @category constructors
  * @since 4.0.0
  */
 export function makeFilterGroup<T>(
@@ -7853,7 +7853,7 @@ export function isUnique<T>(annotations?: Annotations.Filter) {
 /**
  * Type-level representation of {@link NonEmptyString}.
  *
- * @category String
+ * @category string
  * @since 3.10.0
  */
 export interface NonEmptyString extends String {
@@ -7864,7 +7864,7 @@ export interface NonEmptyString extends String {
  * Schema for non-empty strings. Validates that a string has at least one
  * character.
  *
- * @category String
+ * @category string
  * @since 3.10.0
  */
 export const NonEmptyString: NonEmptyString = String.check(isNonEmpty())
@@ -7872,7 +7872,7 @@ export const NonEmptyString: NonEmptyString = String.check(isNonEmpty())
 /**
  * Type-level representation of {@link Char}.
  *
- * @category String
+ * @category string
  * @since 3.10.0
  */
 export interface Char extends String {
@@ -7895,7 +7895,7 @@ export interface Char extends String {
  * @see {@link NonEmptyString} for strings with length greater than zero
  * @see {@link isLengthBetween} for the underlying length check
  *
- * @category String
+ * @category string
  * @since 3.10.0
  */
 export const Char: Char = String.check(isLengthBetween(1, 1))
@@ -10108,7 +10108,7 @@ export const BigDecimalFromString: BigDecimalFromString = BigDecimalString.pipe(
 /**
  * Type-level representation of {@link UnknownFromJsonString}.
  *
- * @category JSON
+ * @category models
  * @since 4.0.0
  */
 export interface UnknownFromJsonString extends fromJsonString<Unknown> {
@@ -10137,7 +10137,7 @@ export interface UnknownFromJsonString extends fromJsonString<Unknown> {
  * // => { a: 1, b: 2 }
  * ```
  *
- * @category JSON
+ * @category schemas
  * @since 4.0.0
  */
 export const UnknownFromJsonString: UnknownFromJsonString = fromJsonString(Unknown)
@@ -10145,7 +10145,7 @@ export const UnknownFromJsonString: UnknownFromJsonString = fromJsonString(Unkno
 /**
  * Type-level representation returned by {@link fromJsonString}.
  *
- * @category JSON
+ * @category models
  * @since 4.0.0
  */
 export interface fromJsonString<S extends Top> extends decodeTo<S, String> {
@@ -10215,7 +10215,7 @@ export interface fromJsonString<S extends Top> extends decodeTo<S, String> {
  * // }
  * ```
  *
- * @category JSON
+ * @category constructors
  * @since 4.0.0
  */
 export function fromJsonString<S extends Top>(schema: S): fromJsonString<S> {
@@ -10229,7 +10229,7 @@ export function fromJsonString<S extends Top>(schema: S): fromJsonString<S> {
 /**
  * Type-level representation of {@link File}.
  *
- * @category File
+ * @category file
  * @since 4.0.0
  */
 export interface File extends instanceOf<globalThis.File> {
@@ -10244,7 +10244,7 @@ export interface File extends instanceOf<globalThis.File> {
  * The default JSON serializer encodes a `File` as `{ data, type, name, lastModified }`
  * where `data` is base64-encoded.
  *
- * @category File
+ * @category file
  * @since 4.0.0
  */
 export const File: File = instanceOf(globalThis.File, {
@@ -10469,7 +10469,7 @@ export function fromFormData<S extends Top>(schema: S): fromFormData<S> {
 /**
  * Type-level representation of {@link URLSearchParams}.
  *
- * @category URLSearchParams
+ * @category search params
  * @since 4.0.0
  */
 export interface URLSearchParams extends instanceOf<globalThis.URLSearchParams> {
@@ -10483,7 +10483,7 @@ export interface URLSearchParams extends instanceOf<globalThis.URLSearchParams> 
  *
  * The default JSON serializer encodes a `URLSearchParams` as a query string.
  *
- * @category URLSearchParams
+ * @category search params
  * @since 4.0.0
  */
 export const URLSearchParams: URLSearchParams = instanceOf(globalThis.URLSearchParams, {
@@ -10508,7 +10508,7 @@ export const URLSearchParams: URLSearchParams = instanceOf(globalThis.URLSearchP
 /**
  * Type-level representation returned by {@link fromURLSearchParams}.
  *
- * @category URLSearchParams
+ * @category search params
  * @since 4.0.0
  */
 export interface fromURLSearchParams<S extends Top> extends decodeTo<S, URLSearchParams> {
@@ -10740,7 +10740,7 @@ export const BigIntFromString: BigIntFromString = make<String>(AST.bigIntString)
 /**
  * Type-level representation of {@link Trimmed}.
  *
- * @category String
+ * @category string
  * @since 3.10.0
  */
 export interface Trimmed extends String {
@@ -10750,7 +10750,7 @@ export interface Trimmed extends String {
 /**
  * Schema for strings that contains no leading or trailing whitespaces.
  *
- * @category String
+ * @category string
  * @since 3.10.0
  */
 export const Trimmed: Trimmed = String.check(isTrimmed())
@@ -10758,7 +10758,7 @@ export const Trimmed: Trimmed = String.check(isTrimmed())
 /**
  * Type-level representation of {@link Trim}.
  *
- * @category String
+ * @category string
  * @since 3.10.0
  */
 export interface Trim extends decodeTo<Trimmed, String> {
@@ -10776,7 +10776,7 @@ export interface Trim extends decodeTo<Trimmed, String> {
  * Encoding:
  * - The trimmed string is encoded as is.
  *
- * @category String
+ * @category string
  * @since 3.10.0
  */
 export const Trim: Trim = String.annotate({
@@ -10786,7 +10786,7 @@ export const Trim: Trim = String.annotate({
 /**
  * Type-level representation of {@link StringFromBase64}.
  *
- * @category String
+ * @category string
  * @since 3.10.0
  */
 export interface StringFromBase64 extends decodeTo<String, String> {
@@ -10804,7 +10804,7 @@ export interface StringFromBase64 extends decodeTo<String, String> {
  * Encoding:
  * - A `string` is encoded as a base64-encoded string.
  *
- * @category String
+ * @category string
  * @since 3.10.0
  */
 export const StringFromBase64: StringFromBase64 = String.annotate({
@@ -10816,7 +10816,7 @@ export const StringFromBase64: StringFromBase64 = String.annotate({
 /**
  * Type-level representation of {@link StringFromBase64Url}.
  *
- * @category String
+ * @category string
  * @since 3.10.0
  */
 export interface StringFromBase64Url extends decodeTo<String, String> {
@@ -10834,7 +10834,7 @@ export interface StringFromBase64Url extends decodeTo<String, String> {
  * Encoding:
  * - A `string` is encoded as a base64 (URL) encoded string.
  *
- * @category String
+ * @category string
  * @since 3.10.0
  */
 export const StringFromBase64Url: StringFromBase64Url = String.annotate({
@@ -10846,7 +10846,7 @@ export const StringFromBase64Url: StringFromBase64Url = String.annotate({
 /**
  * Type-level representation of {@link StringFromHex}.
  *
- * @category String
+ * @category string
  * @since 3.10.0
  */
 export interface StringFromHex extends decodeTo<String, String> {
@@ -10864,7 +10864,7 @@ export interface StringFromHex extends decodeTo<String, String> {
  * Encoding:
  * - A `string` is encoded as a hex string.
  *
- * @category String
+ * @category string
  * @since 3.10.0
  */
 export const StringFromHex: StringFromHex = String.annotate({
@@ -10876,7 +10876,7 @@ export const StringFromHex: StringFromHex = String.annotate({
 /**
  * Type-level representation of {@link StringFromUriComponent}.
  *
- * @category String
+ * @category string
  * @since 3.12.0
  */
 export interface StringFromUriComponent extends decodeTo<String, String> {
@@ -10913,7 +10913,7 @@ export interface StringFromUriComponent extends decodeTo<String, String> {
  * // %7B%22maxItemPerPage%22%3A10%2C%22page%22%3A1%7D
  * ```
  *
- * @category String
+ * @category string
  * @since 3.12.0
  */
 export const StringFromUriComponent: StringFromUriComponent = String.annotate({
@@ -10939,7 +10939,7 @@ export const PropertyKey = Union([Finite, Symbol, String])
  * The result contains an `issues` array where each issue has a message and an
  * optional path made of property keys or keyed path segments.
  *
- * @category StandardSchema
+ * @category Standard Schema
  * @since 4.0.0
  */
 export const StandardSchemaV1FailureResult = Struct({
@@ -10952,7 +10952,7 @@ export const StandardSchemaV1FailureResult = Struct({
 /**
  * Type-level representation of {@link BooleanFromBit}.
  *
- * @category Boolean
+ * @category boolean
  * @since 4.0.0
  */
 export interface BooleanFromBit extends decodeTo<Boolean, Literals<readonly [0, 1]>> {
@@ -10975,7 +10975,7 @@ export interface BooleanFromBit extends decodeTo<Boolean, Literals<readonly [0, 
  * @see {@link Boolean} for validating values that are already booleans
  * @see {@link Literals} for keeping bit literals instead of decoding them
  *
- * @category Boolean
+ * @category boolean
  * @since 4.0.0
  */
 export const BooleanFromBit: BooleanFromBit = Literals([0, 1]).pipe(
@@ -12331,7 +12331,7 @@ export function toFormatter<T>(schema: Schema<T>, options?: {
  * Use when the default structural equivalence derived by {@link toEquivalence}
  * is not appropriate for a type.
  *
- * @category Equivalence
+ * @category instances
  * @since 4.0.0
  */
 export function overrideToEquivalence<S extends Top>(toEquivalence: () => Equivalence.Equivalence<S["Type"]>) {
@@ -12354,7 +12354,7 @@ export function overrideToEquivalence<S extends Top>(toEquivalence: () => Equiva
  * console.log(eq({ id: 1, name: "Alice" }, { id: 2, name: "Alice" })) // false
  * ```
  *
- * @category Equivalence
+ * @category instances
  * @since 4.0.0
  */
 export function toEquivalence<T>(schema: Schema<T>): Equivalence.Equivalence<T> {
@@ -12384,7 +12384,7 @@ export function toRepresentation(schema: Top): SchemaRepresentation.Document {
 /**
  * Options for {@link toJsonSchemaDocument}.
  *
- * @category JsonSchema
+ * @category options
  * @since 4.0.0
  */
 export interface ToJsonSchemaOptions {
@@ -12464,7 +12464,7 @@ export interface ToJsonSchemaOptions {
  * properties and synthesized check descriptions; it does not change the draft
  * target.
  *
- * @category JsonSchema
+ * @category converting
  * @since 4.0.0
  */
 export function toJsonSchemaDocument(schema: Top, options?: ToJsonSchemaOptions): JsonSchema.Document<"draft-2020-12"> {
@@ -13018,7 +13018,7 @@ export function overrideToCodecIso<S extends Top, Iso>(
  * {@link toCodecJson}), computes RFC 6902 JSON Patch operations between old
  * and new values, and can apply patches back to the typed value.
  *
- * @category JsonPatch
+ * @category converting
  * @since 4.0.0
  */
 export function toDifferJsonPatch<T, E>(schema: Codec<T, E>): Differ<T, JsonPatch.JsonPatch> {
@@ -13086,7 +13086,7 @@ export function Tree<S extends Top>(node: S) {
  * readonly record of `string → Json`. For the corresponding schema, see the
  * {@link Json} const.
  *
- * @category JSON
+ * @category models
  * @since 4.0.0
  */
 export type Json = null | number | boolean | string | JsonArray | JsonObject
@@ -13094,7 +13094,7 @@ export type Json = null | number | boolean | string | JsonArray | JsonObject
 /**
  * A readonly array of {@link Json} values.
  *
- * @category JSON
+ * @category models
  * @since 4.0.0
  */
 export interface JsonArray extends ReadonlyArray<Json> {}
@@ -13102,7 +13102,7 @@ export interface JsonArray extends ReadonlyArray<Json> {}
 /**
  * A readonly record whose values are {@link Json} values.
  *
- * @category JSON
+ * @category models
  * @since 4.0.0
  */
 export interface JsonObject {
@@ -13121,7 +13121,7 @@ export interface JsonObject {
  * console.log(result._tag) // "Some"
  * ```
  *
- * @category JSON
+ * @category schemas
  * @since 4.0.0
  */
 export const Json: Codec<Json> = make(AST.Json)
@@ -13130,7 +13130,7 @@ export const Json: Codec<Json> = make(AST.Json)
  * Recursive TypeScript type for mutable JSON values: `null`, `number`,
  * `boolean`, `string`, mutable arrays, or mutable string-keyed records.
  *
- * @category JSON
+ * @category models
  * @since 4.0.0
  */
 export type MutableJson = null | number | boolean | string | MutableJsonArray | MutableJsonObject
@@ -13138,7 +13138,7 @@ export type MutableJson = null | number | boolean | string | MutableJsonArray | 
 /**
  * A mutable array of {@link MutableJson} values.
  *
- * @category JSON
+ * @category models
  * @since 4.0.0
  */
 export interface MutableJsonArray extends Array<MutableJson> {}
@@ -13146,7 +13146,7 @@ export interface MutableJsonArray extends Array<MutableJson> {}
 /**
  * A mutable record whose values are {@link MutableJson} values.
  *
- * @category JSON
+ * @category models
  * @since 4.0.0
  */
 export interface MutableJsonObject {
@@ -13157,7 +13157,7 @@ export interface MutableJsonObject {
  * Schema that accepts any mutable JSON-compatible value. See {@link Json} for
  * the immutable variant.
  *
- * @category JSON
+ * @category schemas
  * @since 4.0.0
  */
 export const MutableJson: Codec<MutableJson> = make(AST.MutableJson)

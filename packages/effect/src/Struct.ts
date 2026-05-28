@@ -106,7 +106,7 @@ import * as Reducer from "./Reducer.ts"
  *
  * @see {@link Mutable} – also flattens but removes `readonly`
  * @see {@link Assign} – merges two types with right-side precedence
- * @category Type-Level Programming
+ * @category utility types
  * @since 4.0.0
  */
 export type Simplify<T> = { [K in keyof T]: T[K] } & {}
@@ -134,7 +134,7 @@ export type Simplify<T> = { [K in keyof T]: T[K] } & {}
  * ```
  *
  * @see {@link Simplify} – flattens intersections without removing `readonly`
- * @category Type-Level Programming
+ * @category utility types
  * @since 4.0.0
  */
 export type Mutable<T> = { -readonly [K in keyof T]: T[K] } & {}
@@ -165,7 +165,7 @@ export type Mutable<T> = { -readonly [K in keyof T]: T[K] } & {}
  *
  * @see {@link assign} – the runtime equivalent
  * @see {@link Simplify} – flatten the resulting intersection
- * @category Type-Level Programming
+ * @category utility types
  * @since 4.0.0
  */
 export type Assign<T, U> = Simplify<keyof T & keyof U extends never ? T & U : Omit<T, keyof T & keyof U> & U>
@@ -485,7 +485,7 @@ type EntryEvolved<S, E> = {
  *
  * @see {@link evolve} – transform values only
  * @see {@link evolveKeys} – transform keys only
- * @category utils
+ * @category transforming
  * @since 4.0.0
  */
 export const evolveEntries: {
@@ -571,7 +571,7 @@ export const renameKeys: {
  * ```
  *
  * @see {@link makeOrder} – create an `Order` for structs
- * @category Equivalence
+ * @category instances
  * @since 4.0.0
  */
 export const makeEquivalence = Equivalence.Struct
@@ -606,7 +606,7 @@ export const makeEquivalence = Equivalence.Struct
  * ```
  *
  * @see {@link makeEquivalence} – create an `Equivalence` for structs
- * @category Ordering
+ * @category ordering
  * @since 4.0.0
  */
 export const makeOrder = order.Struct

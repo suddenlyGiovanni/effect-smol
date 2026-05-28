@@ -114,7 +114,7 @@ export interface PersistedQueue<in out A, out R = never> {
 /**
  * Service for constructing named `PersistedQueue` instances from schemas.
  *
- * @category Factory
+ * @category services
  * @since 4.0.0
  */
 export class PersistedQueueFactory extends Context.Service<
@@ -152,7 +152,7 @@ export const make = <S extends Schema.Top>(options: {
  * assigned an id when needed, and acknowledged or retried according to the
  * `take` handler's exit.
  *
- * @category Factory
+ * @category constructors
  * @since 4.0.0
  */
 export const makeFactory = Effect.gen(function*() {
@@ -208,7 +208,7 @@ export const makeFactory = Effect.gen(function*() {
 /**
  * Provides `PersistedQueueFactory` using the current `PersistedQueueStore`.
  *
- * @category Factory
+ * @category layers
  * @since 4.0.0
  */
 export const layer: Layer.Layer<
@@ -305,7 +305,7 @@ export class PersistedQueueStore extends Context.Service<
  * The store is process-local and volatile; failed takes are requeued until the
  * configured maximum attempts is reached.
  *
- * @category Store
+ * @category store
  * @since 4.0.0
  */
 export const layerStoreMemory: Layer.Layer<
@@ -379,7 +379,7 @@ export const layerStoreMemory: Layer.Layer<
  * refreshes locks while items are being processed, and moves exhausted items
  * to a failed queue.
  *
- * @category Store
+ * @category store
  * @since 4.0.0
  */
 export const makeStoreRedis = Effect.fnUntraced(function*(
@@ -740,7 +740,7 @@ end
 /**
  * Provides a Redis-backed `PersistedQueueStore` using `makeStoreRedis`.
  *
- * @category Store
+ * @category store
  * @since 4.0.0
  */
 export const layerStoreRedis: (
@@ -765,7 +765,7 @@ export const layerStoreRedis: (
  * per-worker locks, refreshes active locks while scoped takes are running, and
  * retries or completes rows according to the processing exit.
  *
- * @category Store
+ * @category store
  * @since 4.0.0
  */
 export const makeStoreSql: (
@@ -1195,7 +1195,7 @@ class QueueKey extends Data.Class<{
 /**
  * Provides a SQL-backed `PersistedQueueStore` using `makeStoreSql`.
  *
- * @category Store
+ * @category store
  * @since 4.0.0
  */
 export const layerStoreSql: (

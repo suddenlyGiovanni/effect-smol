@@ -302,7 +302,7 @@ export const RouterConfig = Context.Reference<Partial<FindMyWay.RouterConfig>>(
  * It provides the route definition and the path parameters captured by the route
  * matcher.
  *
- * @category route context
+ * @category services
  * @since 4.0.0
  */
 export class RouteContext extends Context.Service<RouteContext, {
@@ -313,7 +313,7 @@ export class RouteContext extends Context.Service<RouteContext, {
 /**
  * Effect that returns the path parameters captured for the current matched route.
  *
- * @category RouteContext
+ * @category getters
  * @since 4.0.0
  */
 export const params: Effect.Effect<
@@ -1247,7 +1247,7 @@ export const provideRequest =
 /**
  * Runs the provided application layer as an HTTP server.
  *
- * @category Server
+ * @category server
  * @since 4.0.0
  */
 export const serve = <A, E, R, HE, HR = Request.Only<"Requires", R> | Request.Only<"GlobalRequires", R>>(
@@ -1311,7 +1311,7 @@ export const serve = <A, E, R, HE, HR = Request.Only<"Requires", R> | Request.On
  * Web `Response` values and a `dispose` function for releasing the layer
  * resources.
  *
- * @category Server
+ * @category server
  * @since 4.0.0
  */
 export const toWebHandler = <
