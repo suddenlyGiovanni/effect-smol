@@ -152,8 +152,8 @@ export const decode = <S extends Schema.Top>(
  *
  * **When to use**
  *
- * Use when the encoded input type is intentionally unknown or untyped, so
- * that only the decoded output is statically typed according to the schema.
+ * Use when you need an intentionally unknown or untyped encoded input while
+ * keeping only the decoded output statically typed according to the schema.
  *
  * **Details**
  *
@@ -280,9 +280,9 @@ export const duplex: {
  *
  * **When to use**
  *
- * Use when a bidirectional channel crosses an encoded boundary whose chunk types
- * are intentionally erased, while callers should send and receive schema-typed
- * chunks.
+ * Use when you need a bidirectional channel to cross an encoded boundary whose
+ * chunk types are intentionally erased, while callers send and receive
+ * schema-typed chunks.
  *
  * **Details**
  *

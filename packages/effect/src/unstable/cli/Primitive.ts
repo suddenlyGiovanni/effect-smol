@@ -728,7 +728,7 @@ export const keyValuePair: Primitive<Record<string, string>> = makePrimitive(
  *
  * **When to use**
  *
- * Use when you need flags that don't accept values.
+ * Use when you need a CLI primitive for flags that do not accept values.
  *
  * **Example** (Rejecting option values)
  *
@@ -754,7 +754,8 @@ export const none: Primitive<never> = makePrimitive("None", () => Effect.fail("T
  *
  * **When to use**
  *
- * Use when you need generating help documentation.
+ * Use when you need the display type name for a `Primitive`, such as when
+ * generating CLI help documentation.
  *
  * **Example** (Getting primitive type names)
  *

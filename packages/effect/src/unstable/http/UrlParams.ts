@@ -51,8 +51,8 @@ import { hasProperty } from "../../Predicate.ts"
 import type { ReadonlyRecord } from "../../Record.ts"
 import * as Result from "../../Result.ts"
 import * as Schema from "../../Schema.ts"
-import * as Issue from "../../SchemaIssue.ts"
-import * as Transformation from "../../SchemaTransformation.ts"
+import * as SchemaIssue from "../../SchemaIssue.ts"
+import * as SchemaTransformation from "../../SchemaTransformation.ts"
 import * as Tuple from "../../Tuple.ts"
 
 const TypeId = "~effect/http/UrlParams"
@@ -276,7 +276,7 @@ export const UrlParamsSchema: UrlParamsSchema = Schema.declare(
     toCodec: () =>
       Schema.link<UrlParams>()(
         Schema.Array(Schema.Tuple([Schema.String, Schema.String])),
-        Transformation.transform({
+        SchemaTransformation.transform({
           decode: make,
           encode: (self) => self.params
         })
@@ -319,6 +319,11 @@ export const getAll: {
 /**
  * Returns the first value for a query parameter key safely.
  *
+ * **When to use**
+ *
+ * Use when duplicate query parameters are ordered and the first occurrence has
+ * precedence.
+ *
  * **Details**
  *
  * Returns `Option.none` when the key is absent.
@@ -339,6 +344,11 @@ export const getFirst: {
 
 /**
  * Returns the last value for a query parameter key safely.
+ *
+ * **When to use**
+ *
+ * Use when duplicate query parameters are ordered and the last occurrence has
+ * precedence.
  *
  * **Details**
  *
@@ -624,10 +634,10 @@ export const schemaJsonField = (field: string): schemaJsonField =>
   UrlParamsSchema.pipe(
     Schema.decodeTo(
       Schema.UnknownFromJsonString,
-      Transformation.transformOrFail({
+      SchemaTransformation.transformOrFail({
         decode: (params) =>
           Option.match(getFirst(params, field), {
-            onNone: () => Effect.fail(new Issue.Pointer([field], new Issue.MissingKey(undefined))),
+            onNone: () => Effect.fail(new SchemaIssue.Pointer([field], new SchemaIssue.MissingKey(undefined))),
             onSome: Effect.succeed
           }),
         encode: (value) => Effect.succeed(make([[field, value]]))
@@ -688,7 +698,7 @@ export const schemaRecord: schemaRecord = UrlParamsSchema.pipe(
       Schema.String,
       Schema.Union([Schema.String, Schema.NonEmptyArray(Schema.String)])
     ),
-    Transformation.transform({
+    SchemaTransformation.transform({
       decode: toReadonlyRecord,
       encode: fromInput
     })

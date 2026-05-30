@@ -505,8 +505,8 @@ const makeUnsafe = (history: Ref.Ref<Prompt.Prompt>) => {
  *
  * **When to use**
  *
- * Use when this is the most common way to start a fresh chat session without
- * any initial context or system prompts.
+ * Use when you need to start a fresh chat session without initial context or
+ * system prompts.
  *
  * **Example** (Creating an empty chat)
  *
@@ -797,9 +797,8 @@ export interface Persisted extends Service {
  *
  * **When to use**
  *
- * Use to construct the `Chat.Persistence` service from the current
- * `BackingPersistence` when you want to create and retrieve persisted chats
- * programmatically by chat id.
+ * Use when you need programmatic persisted chat creation and retrieval backed
+ * by the current `BackingPersistence`.
  *
  * **Details**
  *

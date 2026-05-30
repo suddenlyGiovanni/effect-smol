@@ -702,9 +702,8 @@ export const layerStorageMemory: Layer.Layer<Storage> = Layer.effect(Storage)(ma
  *
  * **When to use**
  *
- * Use to construct the unencrypted event-log server service directly when you
- * already provide `Storage` and an event-log `Registry` and want to supply the
- * service yourself.
+ * Use when you need the unencrypted event-log server service from provided
+ * `Storage` and an event-log `Registry`.
  *
  * **Details**
  *
@@ -806,10 +805,9 @@ export const layerServer: Layer.Layer<
  *
  * **When to use**
  *
- * Use when you need a complete unencrypted event-log RPC endpoint for a trusted
- * deployment, local development, tests, or a server-side event source, and you
- * can provide storage, store mapping, authorization, an RPC protocol, and the
- * event-group handler layer.
+ * Use when you need the full unencrypted event-log RPC server layer with
+ * storage, authorization, RPC protocol, and event-group handler dependencies
+ * supplied externally.
  *
  * **Details**
  *

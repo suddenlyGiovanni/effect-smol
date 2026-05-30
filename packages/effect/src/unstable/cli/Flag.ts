@@ -166,8 +166,8 @@ export const choiceWithValue = <const Choice extends ReadonlyArray<readonly [str
  *
  * **When to use**
  *
- * Use when a named option must be restricted to a fixed set of string values
- * and no custom value mapping is needed.
+ * Use when you need to define a named CLI flag with fixed string choices and no
+ * custom value mapping.
  *
  * **Gotchas**
  *
@@ -374,7 +374,8 @@ export const fileSchema = <A>(
  *
  * **When to use**
  *
- * Use when you use this for options that accept configuration values.
+ * Use when you need a CLI flag that accepts one or more `key=value`
+ * configuration entries.
  *
  * **Details**
  *
@@ -516,9 +517,9 @@ export const withMetavar: {
  *
  * **When to use**
  *
- * Use when you use this for experimental or internal flags that should be accepted but not
- * advertised, such as `--experimental-foo`, debug toggles, or escape hatches
- * that are not yet committed to the public CLI surface.
+ * Use when experimental or internal flags should be accepted but not advertised, such as
+ * `--experimental-foo`, debug toggles, or escape hatches that are not yet committed to the
+ * public CLI surface.
  *
  * **Example** (Hiding a flag from help)
  *

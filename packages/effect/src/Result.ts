@@ -89,6 +89,11 @@ const TypeId = "~effect/data/Result"
 /**
  * A value that is either `Success<A, E>` or `Failure<A, E>`.
  *
+ * **When to use**
+ *
+ * Use when both success and failure should remain available as data and
+ * `Option` would lose failure information.
+ *
  * **Details**
  *
  * - Use {@link succeed} / {@link fail} to construct
@@ -341,7 +346,7 @@ export const succeed: <A>(right: A) => Result<A> = result.succeed
  *
  * **When to use**
  *
- * Use to represent a failed computation with a typed failure value.
+ * Use to represent a failed `Result` with a typed failure value.
  *
  * **Details**
  *
@@ -373,8 +378,8 @@ export {
    *
    * **When to use**
    *
-   * Use when a success should signal completion without carrying a meaningful
-   * value.
+   * Use when you need a successful `Result` value that signals completion
+   * without carrying meaningful data.
    *
    * **Details**
    *
@@ -405,8 +410,8 @@ export {
  *
  * **When to use**
  *
- * Use when a failure should act only as a control signal and no failure value
- * is needed.
+ * Use when you need a failed `Result` value that acts only as a control signal
+ * without failure data.
  *
  * **Details**
  *
@@ -437,9 +442,8 @@ export const failVoid: Result<never, void> = fail(void 0)
  *
  * **When to use**
  *
- * Use when an input may be `null` or `undefined` and absence should be
- * represented as a `Failure` while present values should remain available as
- * `Success`.
+ * Use when you need `null` or `undefined` input to become a `Failure` while
+ * present values remain available as `Success`.
  *
  * **Details**
  *
@@ -683,7 +687,8 @@ export const isSuccess: <A, E>(self: Result<A, E>) => self is Success<A, E> = re
  *
  * **When to use**
  *
- * Use to extract only the success value and discard failure information.
+ * Use when you need to extract the success value from a `Result` as an
+ * `Option` and discard failure information.
  *
  * **Details**
  *
@@ -715,7 +720,8 @@ export const getSuccess: <A, E>(self: Result<A, E>) => Option<A> = result.getSuc
  *
  * **When to use**
  *
- * Use to extract only the failure value and discard successful values.
+ * Use when you need to extract the failure value from a `Result` as an
+ * `Option` and discard successful values.
  *
  * **Details**
  *
@@ -920,12 +926,16 @@ export const map: {
 /**
  * Folds a `Result` into a single value by applying one of two functions.
  *
+ * **When to use**
+ *
+ * Use when a `Result`'s success and failure branches should be collapsed into
+ * one plain output type.
+ *
  * **Details**
  *
  * - Applies `onSuccess` if the result is a `Success`
  * - Applies `onFailure` if the result is a `Failure`
  * - Both branches must return the same type (or a common supertype)
- * - Use when you need to "exit" the `Result` type and produce a plain value
  *
  * **Example** (Folding to a string)
  *
@@ -1164,7 +1174,8 @@ export const getOrElse: {
  *
  * **When to use**
  *
- * Use with APIs that represent absence as `null`.
+ * Use when you need to pass failed `Result` values to APIs that represent
+ * absence as `null`.
  *
  * **Details**
  *
@@ -1196,7 +1207,8 @@ export const getOrNull: <A, E>(self: Result<A, E>) => A | null = getOrElse(const
  *
  * **When to use**
  *
- * Use with APIs that represent absence as `undefined`.
+ * Use when you need to pass failed `Result` values to APIs that represent
+ * absence as `undefined`.
  *
  * **Details**
  *
@@ -1306,11 +1318,15 @@ export const getOrThrow: <A, E>(self: Result<A, E>) => A = getOrThrowWith(identi
  * Returns the original `Result` if it is a `Success`, otherwise applies
  * `that` to the error and returns the resulting `Result`.
  *
+ * **When to use**
+ *
+ * Use when a failure should recover into another `Result` while keeping
+ * successes unchanged.
+ *
  * **Details**
  *
  * - `Success<A>` is returned unchanged
  * - `Failure<E>` calls `that(e)` to produce a new `Result`
- * - Use to provide a recovery path or fallback computation on failure
  *
  * **Example** (Recovering from a failure)
  *
@@ -1568,8 +1584,8 @@ export const flip = <A, E>(self: Result<A, E>): Result<E, A> =>
  *
  * **When to use**
  *
- * Use when sequential `Result` composition is clearer with generator syntax
- * than nested `flatMap` calls.
+ * Use when you need generator syntax to compose sequential `Result`
+ * computations instead of nested `flatMap` calls.
  *
  * **Details**
  *
@@ -1663,8 +1679,9 @@ export const Do: Result<{}> = succeed({})
  *
  * **When to use**
  *
- * Use when adding a `Result`-producing step to a do-notation pipeline and
- * storing its successful value under a named field in the accumulated object.
+ * Use when you need to add a `Result`-producing step to a `Result`
+ * do-notation pipeline and store its successful value under a named field in
+ * the accumulated object.
  *
  * **Details**
  *
@@ -1762,7 +1779,8 @@ export {
    *
    * **When to use**
    *
-   * Use to add a pure computed field to a do-notation accumulator.
+   * Use when you need to add a derived field that cannot fail inside a
+   * do-notation pipeline.
    *
    * **Details**
    *
@@ -1795,6 +1813,11 @@ export {
 
 /**
  * Transforms `Option<Result<A, E>>` into `Result<Option<A>, E>`.
+ *
+ * **When to use**
+ *
+ * Use when optional absence should be treated as a successful `None`, while an
+ * inner `Result` failure should still fail the whole result.
  *
  * **Details**
  *
@@ -1830,6 +1853,11 @@ export const transposeOption = <A = never, E = never>(
 /**
  * Maps an `Option` value with a `Result`-producing function, then transposes
  * the structure from `Option<Result<B, E>>` to `Result<Option<B>, E>`.
+ *
+ * **When to use**
+ *
+ * Use when an optional value should be validated only when present, preserving
+ * absence as a successful `None`.
  *
  * **Details**
  *

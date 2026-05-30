@@ -555,7 +555,16 @@ export const head = <A>(self: Iterable<A>): Option<A> => {
 }
 
 /**
- * Gets the first element of a `Iterable`, or throw an error if the `Iterable` is empty.
+ * Gets the first element of an `Iterable` without returning an `Option`.
+ *
+ * **When to use**
+ *
+ * Use when the `Iterable` is known to be non-empty and direct access to the
+ * first element is preferred over handling `Option.none`.
+ *
+ * **Gotchas**
+ *
+ * Throws if the `Iterable` is empty.
  *
  * **Example** (Getting the first element unsafely)
  *
@@ -1424,8 +1433,8 @@ const constEmptyIterator: Iterator<never> = {
  *
  * **When to use**
  *
- * Use as a base case for operations or when you
- * need to represent "no data" in a type-safe way.
+ * Use when you need an empty iterable as a typed "no data" value or a base
+ * case for iterable operations.
  *
  * **Example** (Creating an empty iterable)
  *
@@ -1492,7 +1501,7 @@ export const of = <A>(a: A): Iterable<A> => [a]
  *
  * This is one of the most fundamental operations for working with iterables.
  * It applies a transformation function to each element, creating a new iterable
- * with the transformed values. The operation is lazy - elements are only
+ * with the transformed values. The operation is lazy, so elements are only
  * transformed when the iterable is consumed.
  *
  * **Example** (Mapping elements)
@@ -1650,8 +1659,9 @@ export const flatten = <A>(self: Iterable<Iterable<A>>): Iterable<A> => ({
  *
  * **Details**
  *
- * This combines mapping and filtering in a single operation - the function is applied to each element,
- * and only elements that result in `Result.succeed` are included in the result.
+ * This combines mapping and filtering in a single operation. The function is
+ * applied to each element, and only elements that result in `Result.succeed`
+ * are included in the result.
  *
  * **Example** (Filtering and transforming Result values)
  *

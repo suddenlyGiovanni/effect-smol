@@ -86,7 +86,7 @@ import * as Option from "./Option.ts"
 import { hasProperty } from "./Predicate.ts"
 import * as Redacted from "./Redacted.ts"
 import type * as Schema from "./Schema.ts"
-import type * as AST from "./SchemaAST.ts"
+import type * as SchemaAST from "./SchemaAST.ts"
 
 const TypeId = "~effect/SchemaIssue/Issue"
 
@@ -95,8 +95,9 @@ const TypeId = "~effect/SchemaIssue/Issue"
  *
  * **When to use**
  *
- * Use when narrowing an `unknown` value to `Issue` in error-handling code.
- * - Distinguishing an `Issue` from other error types in a catch-all handler.
+ * Use when you need to narrow an `unknown` value to `Issue` in error-handling
+ * code, such as distinguishing an `Issue` from other error types in a catch-all
+ * handler.
  *
  * **Details**
  *
@@ -128,8 +129,8 @@ export function isIssue(u: unknown): u is Issue {
  *
  * **When to use**
  *
- * Use when constraining formatter hooks to only handle terminal nodes.
- * - Pattern-matching on the `_tag` of an issue when you only care about leaves.
+ * Use when constraining formatter hooks to only handle terminal nodes or when
+ * pattern matching on the `_tag` of an issue and only leaf nodes matter.
  *
  * **Details**
  *
@@ -155,9 +156,8 @@ export type Leaf =
  *
  * **When to use**
  *
- * Use when typing the error channel in `Effect<A, Issue, R>` results from schema
- *   parsing.
- * - Writing custom formatters or issue-tree walkers.
+ * Use when typing the error channel in `Effect<A, Issue, R>` results from
+ * schema parsing, or when writing custom formatters or issue-tree walkers.
  *
  * **Details**
  *
@@ -195,7 +195,8 @@ class Base {
  *
  * **When to use**
  *
- * Use when you need to inspect which filter rejected the value.
+ * Use when you need to inspect a schema issue that records which refinement
+ * check rejected the value.
  *
  * **Details**
  *
@@ -232,7 +233,7 @@ export class Filter extends Base {
   /**
    * The filter that failed.
    */
-  readonly filter: AST.Filter<unknown>
+  readonly filter: SchemaAST.Filter<unknown>
   /**
    * The issue that occurred.
    */
@@ -246,7 +247,7 @@ export class Filter extends Base {
     /**
      * The filter that failed.
      */
-    filter: AST.Filter<any>,
+    filter: SchemaAST.Filter<any>,
     /**
      * The issue that occurred.
      */
@@ -285,7 +286,7 @@ export class Encoding extends Base {
   /**
    * The schema that caused the issue.
    */
-  readonly ast: AST.AST
+  readonly ast: SchemaAST.AST
   /**
    * The input value that caused the issue.
    */
@@ -299,7 +300,7 @@ export class Encoding extends Base {
     /**
      * The schema that caused the issue.
      */
-    ast: AST.AST,
+    ast: SchemaAST.AST,
     /**
      * The input value that caused the issue.
      */
@@ -427,7 +428,7 @@ export class UnexpectedKey extends Base {
   /**
    * The schema that caused the issue.
    */
-  readonly ast: AST.AST
+  readonly ast: SchemaAST.AST
   /**
    * The input value that caused the issue.
    */
@@ -437,7 +438,7 @@ export class UnexpectedKey extends Base {
     /**
      * The schema that caused the issue.
      */
-    ast: AST.AST,
+    ast: SchemaAST.AST,
     /**
      * The input value that caused the issue.
      */
@@ -475,7 +476,7 @@ export class Composite extends Base {
   /**
    * The schema that caused the issue.
    */
-  readonly ast: AST.AST
+  readonly ast: SchemaAST.AST
   /**
    * The input value that caused the issue.
    */
@@ -489,7 +490,7 @@ export class Composite extends Base {
     /**
      * The schema that caused the issue.
      */
-    ast: AST.AST,
+    ast: SchemaAST.AST,
     /**
      * The input value that caused the issue.
      */
@@ -547,7 +548,7 @@ export class InvalidType extends Base {
   /**
    * The schema that caused the issue.
    */
-  readonly ast: AST.AST
+  readonly ast: SchemaAST.AST
   /**
    * The input value that caused the issue.
    */
@@ -557,7 +558,7 @@ export class InvalidType extends Base {
     /**
      * The schema that caused the issue.
      */
-    ast: AST.AST,
+    ast: SchemaAST.AST,
     /**
      * The input value that caused the issue.
      */
@@ -719,7 +720,7 @@ export class AnyOf extends Base {
   /**
    * The schema that caused the issue.
    */
-  readonly ast: AST.Union
+  readonly ast: SchemaAST.Union
   /**
    * The input value that caused the issue.
    */
@@ -733,7 +734,7 @@ export class AnyOf extends Base {
     /**
      * The schema that caused the issue.
      */
-    ast: AST.Union,
+    ast: SchemaAST.Union,
     /**
      * The input value that caused the issue.
      */
@@ -777,7 +778,7 @@ export class OneOf extends Base {
   /**
    * The schema that caused the issue.
    */
-  readonly ast: AST.Union
+  readonly ast: SchemaAST.Union
   /**
    * The input value that caused the issue.
    */
@@ -785,13 +786,13 @@ export class OneOf extends Base {
   /**
    * The schemas that were successful.
    */
-  readonly successes: ReadonlyArray<AST.AST>
+  readonly successes: ReadonlyArray<SchemaAST.AST>
 
   constructor(
     /**
      * The schema that caused the issue.
      */
-    ast: AST.Union,
+    ast: SchemaAST.Union,
     /**
      * The input value that caused the issue.
      */
@@ -799,7 +800,7 @@ export class OneOf extends Base {
     /**
      * The schemas that were successful.
      */
-    successes: ReadonlyArray<AST.AST>
+    successes: ReadonlyArray<SchemaAST.AST>
   ) {
     super()
     this.ast = ast
@@ -813,8 +814,8 @@ export class OneOf extends Base {
  *
  * **When to use**
  *
- * Use when retrieve the offending value for logging or custom error rendering.
- * - Uniformly access `actual` regardless of which issue variant you have.
+ * Use when you need to retrieve an `Issue`'s offending input value for logging
+ * or custom error rendering.
  *
  * **Details**
  *
@@ -886,7 +887,7 @@ export function makeSingle(input: unknown, out: undefined | boolean | Schema.Fil
 }
 
 /** @internal */
-export function make(input: unknown, ast: AST.AST, out: Schema.FilterOutput): Issue | undefined {
+export function make(input: unknown, ast: SchemaAST.AST, out: Schema.FilterOutput): Issue | undefined {
   if (Array.isArray(out)) {
     if (Arr.isReadonlyArrayNonEmpty(out)) {
       if (out.length === 1) {
@@ -933,9 +934,7 @@ export type LeafHook = (issue: Leaf) => string
  *
  * **When to use**
  *
- * Use as the default leaf renderer when you only need to customise the
- * {@link CheckHook}.
- * - Reference as a starting point for custom `LeafHook` implementations.
+ * Use as the default leaf renderer when customizing only the {@link CheckHook}.
  *
  * **Details**
  *
@@ -1009,8 +1008,7 @@ export type CheckHook = (issue: Filter) => string | undefined
  *
  * **When to use**
  *
- * Use as the default filter renderer when you only need to customise the
- * {@link LeafHook}.
+ * Use as the default filter renderer when customizing only the {@link LeafHook}.
  *
  * **Details**
  *
@@ -1034,10 +1032,9 @@ export const defaultCheckHook: CheckHook = (issue): string | undefined => {
  *
  * **When to use**
  *
- * Use when integrate with libraries that consume the
- *   [Standard Schema V1](https://github.com/standard-schema/standard-schema)
- *   error format.
- * - Customise error rendering by providing `leafHook` and/or `checkHook`.
+ * Use when you need schema parse errors in
+ * [Standard Schema V1](https://github.com/standard-schema/standard-schema)
+ * format, optionally customizing leaf or check issue rendering.
  *
  * **Details**
  *
@@ -1124,7 +1121,7 @@ function toDefaultIssues(
   }
 }
 
-function formatCheck<T>(check: AST.Check<T>): string {
+function formatCheck<T>(check: SchemaAST.Check<T>): string {
   const expected = check.annotations?.expected
   if (typeof expected === "string") return expected
 
@@ -1142,11 +1139,12 @@ function formatCheck<T>(check: AST.Check<T>): string {
  *
  * **When to use**
  *
- * Use when produce error messages for logging, CLI output, or developer-facing
- *   diagnostics.
- * - This is the default formatter used by `Issue.toString()`.
+ * Use when you need to format a `SchemaIssue.Issue` as error messages for
+ * logging, CLI output, or developer-facing diagnostics.
  *
  * **Details**
+ *
+ * This is the default formatter used by `SchemaIssue.toString()`.
  *
  * - Flattens the issue tree into `{ message, path }` entries using
  *   {@link defaultLeafHook} and {@link defaultCheckHook}.

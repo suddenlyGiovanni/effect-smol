@@ -291,8 +291,8 @@ export const awaitAll: <A extends Fiber<any, any>>(
  *
  * **When to use**
  *
- * Use when the forked fiber is part of the current workflow and
- * its failure should fail the current Effect.
+ * Use when you need a forked fiber's failure to fail the current Effect because
+ * that fiber is part of the current workflow.
  *
  * **Gotchas**
  *
@@ -323,8 +323,8 @@ export const join: <A, E>(self: Fiber<A, E>) => Effect<A, E> = effect.fiberJoin
  *
  * **When to use**
  *
- * Use when every fiber must succeed and you want the successful values rather
- * than the `Exit` values.
+ * Use when you need every fiber to succeed and want the successful values
+ * rather than the `Exit` values.
  *
  * **Details**
  *
@@ -358,7 +358,8 @@ export const joinAll: <A extends Iterable<Fiber<any, any>>>(
  *
  * **When to use**
  *
- * Use when a forked fiber is no longer needed and should be cancelled.
+ * Use when you need to cancel a forked fiber and wait for its cleanup to
+ * complete.
  *
  * **Details**
  *
@@ -448,7 +449,8 @@ export const interruptAs: {
  *
  * **When to use**
  *
- * Use when a group of forked fibers is no longer needed.
+ * Use when you need to cancel several forked fibers and wait for their cleanup
+ * to complete.
  *
  * **Details**
  *

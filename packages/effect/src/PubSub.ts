@@ -663,6 +663,11 @@ export const size = <A>(self: PubSub<A>): Effect.Effect<number> => Effect.sync((
  * Returns the current number of messages retained by the `PubSub` for active
  * subscribers synchronously.
  *
+ * **When to use**
+ *
+ * Use when an immediate `PubSub` size snapshot is needed outside effectful code
+ * and concurrent changes between the check and later use are acceptable.
+ *
  * **Details**
  *
  * Returns `0` after shutdown. Because this is an unsafe synchronous snapshot,
@@ -840,6 +845,11 @@ export const isShutdown = <A>(self: PubSub<A>): Effect.Effect<boolean> => Effect
  * Checks synchronously whether `shutdown` has been called, returning `true`
  * after shutdown and `false` otherwise.
  *
+ * **When to use**
+ *
+ * Use when an immediate `PubSub` shutdown-state snapshot is needed outside
+ * effectful code and racing shutdown changes are acceptable.
+ *
  * **Example** (Checking shutdown synchronously)
  *
  * ```ts
@@ -904,8 +914,8 @@ export const awaitShutdown = <A>(self: PubSub<A>): Effect.Effect<void> => self.s
  *
  * **When to use**
  *
- * Use when publishing from effectful code and the configured PubSub strategy
- * should handle surplus messages.
+ * Use when you need to publish from effectful code and let the configured
+ * PubSub strategy handle surplus messages.
  *
  * **Details**
  *
@@ -968,8 +978,8 @@ export const publish: {
  *
  * **When to use**
  *
- * Use when you need a non-blocking synchronous publish attempt and can handle
- * `false` when the message cannot be accepted immediately.
+ * Use when you need a non-blocking synchronous publish attempt where `false`
+ * is an acceptable result when the message cannot be accepted immediately.
  *
  * **Details**
  *
@@ -1476,8 +1486,8 @@ export const remaining = <A>(self: Subscription<A>): Effect.Effect<number> =>
  *
  * **When to use**
  *
- * Use when polling from synchronous code and you can handle the `Option.none()`
- * shutdown case directly.
+ * Use when you need synchronous polling outside a managed workflow and want
+ * shutdown observed as data instead of interruption.
  *
  * **Example** (Checking remaining messages synchronously)
  *

@@ -1497,7 +1497,8 @@ const TypeId = "~effect/unstable/ai/AiError/AiError" as const
  *
  * **When to use**
  *
- * Use with `Effect.catchReason` for ergonomic error handling.
+ * Use when you need AI errors that can be handled by semantic reason with
+ * `Effect.catchReason`.
  *
  * **Details**
  *
@@ -1647,7 +1648,8 @@ export const make = (params: {
  *
  * **When to use**
  *
- * Use when provider packages can use this as a base for provider-specific mapping.
+ * Use as the base mapping when provider packages translate HTTP status codes into
+ * provider-specific error reasons.
  *
  * **Example** (Mapping an HTTP status to a reason)
  *

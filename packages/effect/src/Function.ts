@@ -54,7 +54,8 @@ import { pipeArguments } from "./Pipeable.ts"
  *
  * **When to use**
  *
- * Use to represent unary function types in higher-kinded type operations.
+ * Use when defining higher-kinded abstractions that must accept function types
+ * as one of their type-lambda inputs.
  *
  * **Example** (Creating a function type with a type lambda)
  *
@@ -340,8 +341,8 @@ export const cast: <A, B>(a: A) => B = identity as any
  *
  * **When to use**
  *
- * Use when an API expects a thunk or callback and every invocation
- * should return the same value.
+ * Use when you need a thunk or callback that returns the same value on every
+ * invocation.
  *
  * **Example** (Creating a constant thunk)
  *
@@ -365,7 +366,7 @@ export const constant = <A>(value: A): LazyArg<A> => () => value
  *
  * **When to use**
  *
- * Use when an API expects a thunk and every invocation should return `true`.
+ * Use when you need a thunk that returns `true` on every invocation.
  *
  * **Example** (Returning true from a thunk)
  *
@@ -386,7 +387,7 @@ export const constTrue: LazyArg<boolean> = constant(true)
  *
  * **When to use**
  *
- * Use when an API expects a thunk and every invocation should return `false`.
+ * Use when you need a thunk that returns `false` on every invocation.
  *
  * **Example** (Returning false from a thunk)
  *
@@ -407,7 +408,7 @@ export const constFalse: LazyArg<boolean> = constant(false)
  *
  * **When to use**
  *
- * Use when an API expects a thunk and every invocation should return `null`.
+ * Use when you need a thunk that returns `null` on every invocation.
  *
  * **Example** (Returning null from a thunk)
  *
@@ -428,8 +429,7 @@ export const constNull: LazyArg<null> = constant(null)
  *
  * **When to use**
  *
- * Use when an API expects a thunk and every invocation should return
- * `undefined`.
+ * Use when you need a thunk that returns `undefined` on every invocation.
  *
  * **Example** (Returning undefined from a thunk)
  *
@@ -450,7 +450,7 @@ export const constUndefined: LazyArg<undefined> = constant(undefined)
  *
  * **When to use**
  *
- * Use when an API expects a thunk used only for its call effect and not for a
+ * Use when you need a thunk that is called only for its effect and has no
  * meaningful return value.
  *
  * **Example** (Returning void from a thunk)
@@ -532,8 +532,8 @@ export const compose: {
  *
  * **When to use**
  *
- * Use when exhaustive checks prove a branch cannot be reached, but
- * TypeScript still needs a return value.
+ * Use when you need a return value in a branch that exhaustive checks prove
+ * cannot be reached.
  *
  * **Gotchas**
  *
@@ -613,14 +613,13 @@ export const untupled = <A extends ReadonlyArray<unknown>, B>(f: (a: A) => B): (
  *
  * **When to use**
  *
- * Use when you use `pipe` with data-last functions to build readable transformation
- * pipelines and to write method-style chains as ordinary function calls.
+ * Use when you need to compose data-last functions into readable
+ * transformation pipelines instead of method-style chains.
  *
  * **Details**
  *
- * `pipe` takes an initial value, passes it to the first function, then passes
- * each result to the next function in order. The final function result is
- * returned.
+ * Takes an initial value, passes it to the first function, then passes each
+ * result to the next function in order. The final function result is returned.
  *
  * **Gotchas**
  *

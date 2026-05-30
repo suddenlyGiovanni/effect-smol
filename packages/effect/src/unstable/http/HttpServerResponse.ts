@@ -370,6 +370,11 @@ export const schemaJson = <A, I, RD, RE>(
 /**
  * Creates a JSON HTTP response synchronously.
  *
+ * **When to use**
+ *
+ * Use when the response body is known to be JSON-serializable and you need a
+ * synchronous `HttpServerResponse`.
+ *
  * **Gotchas**
  *
  * Unlike `json`, serialization errors from `JSON.stringify` are not captured in
@@ -421,8 +426,8 @@ export const urlParams = (
  *
  * **When to use**
  *
- * Use when the underlying runtime already understands the body value, such
- * as a Web `Response`, `Blob`, or `ReadableStream`; the body is passed through
+ * Use when you want to pass through a body value already understood by the
+ * underlying runtime, such as a Web `Response`, `Blob`, or `ReadableStream`,
  * for later platform conversion.
  *
  * @category constructors
@@ -703,8 +708,8 @@ export const expireCookie: {
  *
  * **When to use**
  *
- * Use when setting one trusted cookie and encoding failures should throw
- * instead of being represented as `CookiesError` failures.
+ * Use when you need to set one trusted cookie and want encoding failures to
+ * throw instead of being represented as `CookiesError` failures.
  *
  * @category combinators
  * @since 4.0.0
@@ -741,8 +746,8 @@ export const setCookieUnsafe: {
  *
  * **When to use**
  *
- * Use when expiring one trusted cookie and encoding failures should throw
- * instead of being represented as `CookiesError` failures.
+ * Use when you need to expire one trusted cookie and want encoding failures to
+ * throw instead of being represented as `CookiesError` failures.
  *
  * @category combinators
  * @since 4.0.0
@@ -881,8 +886,8 @@ export const setCookies: {
  *
  * **When to use**
  *
- * Use when setting multiple trusted cookies and encoding failures should throw
- * instead of being represented as `CookiesError` failures.
+ * Use when you need to set multiple trusted cookies and want encoding failures
+ * to throw instead of being represented as `CookiesError` failures.
  *
  * @category combinators
  * @since 4.0.0

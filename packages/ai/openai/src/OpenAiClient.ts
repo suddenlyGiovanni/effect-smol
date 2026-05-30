@@ -189,8 +189,7 @@ const RedactedOpenAiHeaders = {
  *
  * **When to use**
  *
- * Use to construct the OpenAI client service inside an effect when you need the
- * service value directly.
+ * Use when you need the OpenAI client service value inside an effect.
  *
  * **Details**
  *
@@ -378,8 +377,8 @@ export const layer = (options: Options): Layer.Layer<OpenAiClient, never, HttpCl
  *
  * **When to use**
  *
- * Use when client settings should be read from Effect `Config` values while
- * providing `OpenAiClient` as a `Layer`.
+ * Use when you need client settings for OpenAI-compatible APIs to be read from
+ * Effect `Config` values while providing `OpenAiClient` as a `Layer`.
  *
  * **Details**
  *
@@ -461,7 +460,7 @@ export type ResponseStreamEvent = typeof OpenAiSchema.ResponseStreamEvent.Type
  *
  * **When to use**
  *
- * Use when code needs direct access to the WebSocket-backed response streaming
+ * Use when you need direct access to the WebSocket-backed response streaming
  * service rather than wrapping an effect with WebSocket mode.
  *
  * **Details**
@@ -704,7 +703,8 @@ const decodeEvent = Schema.decodeUnknownSync(Schema.fromJsonString(AllEvents))
  * - `NodeSocket.layerWebSocketConstructorWS`
  * - `BunSocket.layerWebSocketConstructor`
  *
- * This is because it needs to use non-standard options for setting the Authorization header.
+ * These constructor layers support the non-standard options needed to set the
+ * Authorization header.
  *
  * @see {@link layerWebSocketMode} for providing WebSocket mode through a layer
  * @see {@link OpenAiSocket} for direct access to the WebSocket-backed streaming service
@@ -741,7 +741,8 @@ export const withWebSocketMode = <A, E, R>(
  * - `NodeSocket.layerWebSocketConstructorWS`
  * - `BunSocket.layerWebSocketConstructor`
  *
- * This is because it needs to use non-standard options for setting the Authorization header.
+ * These constructor layers support the non-standard options needed to set the
+ * Authorization header.
  *
  * @see {@link withWebSocketMode} for enabling WebSocket mode around a single effect
  *

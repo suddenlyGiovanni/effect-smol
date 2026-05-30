@@ -71,7 +71,7 @@ export const Persisted = Context.Reference<boolean>("effect/cluster/ClusterSchem
  *
  * **When to use**
  *
- * Use when a request needs server-side handling or storage work wrapped in the
+ * Use when you need server-side request handling or storage work wrapped in the
  * storage transaction.
  *
  * **Details**
@@ -135,8 +135,8 @@ export const isUninterruptibleForServer = (context: Context.Context<never>): boo
  *
  * **When to use**
  *
- * Use when client-side cluster request handling needs to decide whether an
- * interrupt should be ignored.
+ * Use when you need client-side cluster request handling to decide whether to
+ * ignore an interrupt.
  *
  * **Details**
  *

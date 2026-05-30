@@ -175,7 +175,7 @@ export type Assign<T, U> = Simplify<keyof T & keyof U extends never ? T & U : Om
  *
  * **When to use**
  *
- * Use to extract a single property in a pipeline.
+ * Use to extract a single property from a struct in a pipeline.
  *
  * **Details**
  *
@@ -205,8 +205,8 @@ export const get: {
  *
  * **When to use**
  *
- * Use when you use instead of `Object.keys` when you want the return type narrowed to the
- * known keys of the struct.
+ * Use when you want a typed replacement for `Object.keys` that narrows the result
+ * to the known string keys of the struct.
  *
  * **Gotchas**
  *
@@ -546,7 +546,8 @@ export const renameKeys: {
  *
  * **When to use**
  *
- * Use when you need to compare structs property-by-property.
+ * Use when you need equality for a record-like object to be decided field by
+ * field, with a custom equality rule for each property.
  *
  * **Details**
  *
@@ -583,8 +584,8 @@ export const makeEquivalence = Equivalence.Struct
  *
  * **When to use**
  *
- * Use to sort or compare structs by multiple fields with lexicographic
- * priority.
+ * Use when you need to sort record-like objects lexicographically by several
+ * fields, with each field using its own ordering rule.
  *
  * **Details**
  *
@@ -617,8 +618,8 @@ export const makeOrder = order.Struct
  *
  * **When to use**
  *
- * Use when you use this interface when defining a typed function for {@link map},
- * {@link mapPick}, or {@link mapOmit}.
+ * Use when defining a typed function for {@link map}, {@link mapPick}, or
+ * {@link mapOmit}.
  *
  * **Details**
  *
@@ -910,8 +911,8 @@ function buildStruct<
  *
  * **When to use**
  *
- * Use when you need to merge two structs of the same shape, such as summing
- * counters or concatenating strings.
+ * Use when you need to merge two same-shape records by combining each property
+ * independently, such as summing counters or concatenating strings.
  *
  * **Details**
  *
@@ -963,7 +964,8 @@ export function makeCombiner<A>(
  *
  * **When to use**
  *
- * Use to fold a collection of structs into a single summary struct.
+ * Use when you need to fold same-shape records by accumulating each property
+ * independently into one summary record.
  *
  * **Details**
  *

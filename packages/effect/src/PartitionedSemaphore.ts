@@ -126,8 +126,8 @@ export interface Partitioned<in K> extends PartitionedSemaphore<K> {}
  *
  * **When to use**
  *
- * Use when a partitioned semaphore must be constructed synchronously outside an
- * `Effect` workflow.
+ * Use when you need to construct a partitioned semaphore synchronously outside
+ * an `Effect` workflow.
  *
  * **Details**
  *
@@ -405,8 +405,8 @@ export const capacity = <K>(self: PartitionedSemaphore<K>): number => self.capac
  *
  * **When to use**
  *
- * Use to manually acquire permits for a partition when acquisition and release
- * must be controlled as separate effects.
+ * Use when you need manual permit acquisition for a partition and want to
+ * control acquisition and release as separate effects.
  *
  * **Details**
  *
@@ -437,8 +437,8 @@ export const take: {
  *
  * **When to use**
  *
- * Use to manually return permits acquired with `take` when a lower-level
- * partitioned permit protocol needs explicit release control.
+ * Use when you need to return permits acquired with `take` in a lower-level
+ * partitioned permit protocol with explicit release control.
  *
  * **Details**
  *

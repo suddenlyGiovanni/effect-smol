@@ -60,8 +60,8 @@ import * as AiError from "./AiError.ts"
  *
  * **When to use**
  *
- * Use to retrieve or provide an `EmbeddingModel.Service` when an `Effect`
- * program needs to embed text into vectors.
+ * Use to retrieve or provide the embedding model service for an `Effect`
+ * program that embeds text into vectors.
  *
  * @see {@link Service} for the service contract provided by this tag
  * @see {@link make} for constructing an embedding model service from a provider
@@ -171,8 +171,8 @@ export interface ProviderResponse {
  *
  * **When to use**
  *
- * Use when building or calling a low-level embedding request resolver and you
- * need a typed request for one input that resolves to `EmbedResponse`.
+ * Use when you need a typed request for one embedding input while building or
+ * calling a low-level embedding request resolver.
  *
  * @see {@link Service} for the resolver-bearing service contract
  * @see {@link make} for constructing the request resolver from a provider implementation

@@ -87,7 +87,7 @@ import type { Unify } from "./Unify.ts"
  *
  * **When to use**
  *
- * Use when you need a lightweight immutable value type with `.pipe()` support. If you also need a `_tag` discriminator, use {@link TaggedClass}; if you need a yieldable error, use {@link Error} or {@link TaggedError}.
+ * Use when you need a lightweight immutable value type with `.pipe()` support.
  *
  * **Details**
  *
@@ -131,7 +131,7 @@ export const Class: new<A extends Record<string, any> = {}>(
  *
  * **When to use**
  *
- * Use when you need a single-variant tagged type or an ad-hoc discriminator. For multi-variant unions, prefer {@link TaggedEnum} with {@link taggedEnum}; for yieldable errors, use {@link TaggedError}.
+ * Use when you need a single-variant tagged type or an ad-hoc discriminator.
  *
  * **Details**
  *
@@ -174,7 +174,7 @@ export const TaggedClass = <Tag extends string>(
  *
  * **When to use**
  *
- * Use when you have two or more variants that share a common `_tag` discriminator. For generic tagged enums, see {@link TaggedEnum.WithGenerics}.
+ * Use when you have two or more variants that share a common `_tag` discriminator.
  *
  * **Details**
  *
@@ -254,7 +254,7 @@ export declare namespace TaggedEnum {
    *
    * **When to use**
    *
-   * Use when variant payloads need to be parameterized, such as `Result<E, A>`. Pass the interface, not the type alias, to {@link taggedEnum} to get generic-aware constructors and matchers.
+   * Use when variant payloads need to be parameterized, such as `Result<E, A>`.
    *
    * **Details**
    *
@@ -420,7 +420,8 @@ export declare namespace TaggedEnum {
    *
    * **When to use**
    *
-   * Use to type the constructors-and-matchers object returned by `taggedEnum`.
+   * Use when you want to annotate an exported constructor bundle so downstream
+   * code keeps exact variant constructors and exhaustive matching.
    *
    * **Details**
    *
@@ -586,7 +587,8 @@ export declare namespace TaggedEnum {
  *
  * **When to use**
  *
- * Use when you have a `TaggedEnum` type and need constructors and matchers for its values. For generic enums, pass a {@link TaggedEnum.WithGenerics} interface.
+ * Use when you model a closed union with plain data objects and want
+ * construction, tag checks, and exhaustive matching from the same definition.
  *
  * **Details**
  *
@@ -751,8 +753,8 @@ function taggedMatch<
  *
  * **When to use**
  *
- * Use when defining yieldable errors that do **not** need tag-based
- * discrimination. If you need tag-based recovery, use {@link TaggedError}.
+ * Use when you need yieldable errors that do **not** need tag-based
+ * discrimination.
  *
  * **Details**
  *
@@ -794,8 +796,7 @@ export const Error: new<A extends Record<string, any> = {}>(
  *
  * **When to use**
  *
- * Use when modeling domain errors in Effect applications where you want
- * discriminated-union error handling.
+ * Use when you need domain errors with discriminated-union handling.
  *
  * **Details**
  *

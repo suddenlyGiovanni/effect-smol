@@ -34,8 +34,8 @@ import { createComponent, createContext, onCleanup } from "solid-js"
  *
  * **When to use**
  *
- * Use when integrating lower-level Solid atom APIs that need direct access to,
- * or direct provisioning of, the `AtomRegistry` for the current owner tree.
+ * Use when you need to integrate lower-level Solid context APIs, such as custom
+ * providers or hooks, instead of using the default atom hook setup.
  *
  * **Details**
  *

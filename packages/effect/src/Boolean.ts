@@ -163,8 +163,8 @@ export const match: {
  *
  * **When to use**
  *
- * Use when sorting or comparing boolean values through APIs that accept an
- * ordering instance where `false` comes before `true`.
+ * Use when you need to sort or compare boolean values through APIs that accept
+ * an ordering instance where `false` comes before `true`.
  *
  * **Example** (Comparing booleans)
  *
@@ -257,7 +257,7 @@ export const and: {
 } = dual(2, (self: boolean, that: boolean): boolean => self && that)
 
 /**
- * Combines two boolean using NAND: `!(self && that)`.
+ * Combines two booleans using NAND: `!(self && that)`.
  *
  * **When to use**
  *
@@ -284,7 +284,7 @@ export const nand: {
 } = dual(2, (self: boolean, that: boolean): boolean => !(self && that))
 
 /**
- * Combines two boolean using OR: `self || that`.
+ * Combines two booleans using OR: `self || that`.
  *
  * **When to use**
  *

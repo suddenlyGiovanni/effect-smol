@@ -325,7 +325,8 @@ export const scale: {
  *
  * **When to use**
  *
- * Use to add two `BigDecimal` values.
+ * Use when you need a decimal addition function for piping or higher-order APIs
+ * while preserving decimal precision.
  *
  * **Example** (Adding decimals)
  *
@@ -372,7 +373,8 @@ export const sum: {
  *
  * **When to use**
  *
- * Use to sum all `BigDecimal` values in an iterable.
+ * Use when you need to aggregate decimal quantities with decimal precision
+ * instead of converting through JavaScript numbers.
  *
  * **Example** (Adding multiple decimals)
  *
@@ -658,8 +660,8 @@ export const divide: {
  *
  * **When to use**
  *
- * Use when you need the decimal quotient and the divisor is known to be
- * non-zero, so division by zero should be a thrown exception.
+ * Use when you need to divide `BigDecimal` values where the divisor is known
+ * to be non-zero, so division by zero should be a thrown exception.
  *
  * **Details**
  *
@@ -708,8 +710,8 @@ export const divideUnsafe: {
  *
  * **When to use**
  *
- * Use when sorting or comparing decimal values through APIs that accept an
- * ordering instance.
+ * Use when you need to sort or compare decimal values through APIs that accept
+ * an ordering instance.
  *
  * **Example** (Comparing decimals)
  *
@@ -1166,12 +1168,12 @@ export const remainder: {
 
 /**
  * Returns the decimal remainder left over when one operand is divided by a
- * non-zero second operand, throwing for division by zero.
+ * non-zero second operand.
  *
  * **When to use**
  *
- * Use when you need the decimal remainder and the divisor is known to be
- * non-zero, so division by zero should be a thrown exception.
+ * Use when you need to compute a `BigDecimal` remainder with a divisor known to
+ * be non-zero and want a plain `BigDecimal` result instead of an `Option`.
  *
  * **Gotchas**
  *
@@ -1307,12 +1309,12 @@ export const equals: {
 export const fromBigInt = (n: bigint): BigDecimal => make(n, 0)
 
 /**
- * Creates a `BigDecimal` from a finite `number`, throwing for non-finite input.
+ * Creates a `BigDecimal` from a finite `number`.
  *
  * **When to use**
  *
- * Use when a finite JavaScript number must become a `BigDecimal` and invalid
- * input should throw.
+ * Use when you need to convert a trusted finite JavaScript number to a
+ * `BigDecimal` and want a plain result instead of an `Option`.
  *
  * **Gotchas**
  *
@@ -1474,7 +1476,7 @@ export const fromString = (s: string): Option.Option<BigDecimal> => {
  *
  * **When to use**
  *
- * Use when decimal text is expected to be valid and parse errors should throw.
+ * Use when you expect decimal text to be valid and want parse errors to throw.
  *
  * **Details**
  *
@@ -1606,8 +1608,8 @@ export const toExponential = (n: BigDecimal): string => {
  *
  * **When to use**
  *
- * Use when an interop boundary requires a JavaScript number and can tolerate
- * precision loss.
+ * Use when you need a JavaScript number at an interop boundary where precision
+ * loss is acceptable.
  *
  * **Gotchas**
  *
@@ -1851,7 +1853,8 @@ export const round: {
  *
  * **When to use**
  *
- * Use to remove digits beyond a requested scale by rounding toward zero.
+ * Use when you need to discard fractional digits beyond a scale rather than
+ * round half up, half down, or toward an infinity.
  *
  * **Example** (Truncating decimals)
  *

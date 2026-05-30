@@ -80,8 +80,8 @@ import type { Apply, Lambda } from "./Struct.ts"
  *
  * **When to use**
  *
- * Use when you use this instead of `[a, b, c] as const` when you want a properly typed tuple
- * without a manual cast.
+ * Use when you need a properly typed tuple without writing `[a, b, c] as const`
+ * or another manual cast.
  *
  * **Details**
  *
@@ -111,7 +111,7 @@ type Indices<T extends ReadonlyArray<unknown>> = Exclude<Partial<T>["length"], T
  *
  * **When to use**
  *
- * Use when you use this in a pipeline when you need to extract a single element.
+ * Use when a single tuple element should be extracted in a pipeline.
  *
  * **Details**
  *
@@ -245,7 +245,8 @@ export const omit: {
  *
  * **When to use**
  *
- * Use to add one element to the end of a tuple while preserving tuple types.
+ * Use when you need the appended value to remain part of the tuple's type-level
+ * shape and preserve literal element positions.
  *
  * **Details**
  *
@@ -411,7 +412,7 @@ export const renameIndices: {
  *
  * **When to use**
  *
- * Use when you want to apply the same transformation to every element.
+ * Use when you want to apply the same transformation to every tuple element.
  *
  * **Details**
  *
@@ -579,7 +580,7 @@ export const mapOmit: {
  *
  * **When to use**
  *
- * Use when you need to compare tuples element-by-element.
+ * Use when you need an `Equivalence` to compare tuples element-by-element.
  *
  * **Details**
  *
@@ -612,7 +613,8 @@ export const makeEquivalence = Equivalence.Tuple
  *
  * **When to use**
  *
- * Use to sort or compare tuples lexicographically by element position.
+ * Use when you need to sort fixed-position arrays lexicographically, with each
+ * position using its own ordering rule.
  *
  * **Details**
  *
@@ -642,7 +644,8 @@ export {
    *
    * **When to use**
    *
-   * Use to guard against unexpected array lengths at runtime.
+   * Use to guard that an array has exactly the tuple length expected at
+   * runtime.
    *
    * **Details**
    *
@@ -676,8 +679,8 @@ export {
    *
    * **When to use**
    *
-   * Use to guard that an array has at least the expected number of
-   * elements.
+   * Use to guard that an array has at least the tuple length expected at
+   * runtime.
    *
    * **Details**
    *
@@ -714,8 +717,8 @@ export {
  *
  * **When to use**
  *
- * Use when you need to merge two tuples of the same shape, such as summing
- * counters or concatenating strings.
+ * Use when you need to merge two same-shape tuples by combining each position
+ * independently, such as summing counters or concatenating strings.
  *
  * **Example** (Combining tuple elements)
  *
@@ -755,7 +758,8 @@ export function makeCombiner<A extends ReadonlyArray<unknown>>(
  *
  * **When to use**
  *
- * Use to fold a collection of tuples into a single summary tuple.
+ * Use when you need to fold same-shape tuples by accumulating each position
+ * independently into one summary tuple.
  *
  * **Example** (Reducing a collection of tuples)
  *

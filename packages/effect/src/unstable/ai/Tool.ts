@@ -63,7 +63,7 @@ import type * as JsonSchema from "../../JsonSchema.ts"
 import { pipeArguments } from "../../Pipeable.ts"
 import * as Predicate from "../../Predicate.ts"
 import * as Schema from "../../Schema.ts"
-import * as AST from "../../SchemaAST.ts"
+import * as SchemaAST from "../../SchemaAST.ts"
 import type * as Struct from "../../Struct.ts"
 import type * as Types from "../../Types.ts"
 import type * as AiError from "./AiError.ts"
@@ -1318,8 +1318,8 @@ export const make = <
  *
  * **When to use**
  *
- * Use when this is useful for tools where the schema isn't known at compile time,
- * such as MCP tools discovered at runtime or tools from external configurations.
+ * Use when you do not know a tool schema at compile time, such as MCP tools
+ * discovered at runtime or tools from external configurations.
  *
  * **Details**
  *
@@ -1640,7 +1640,7 @@ export const getDescription = <Tool extends Any>(tool: Tool): string | undefined
     return tool.description
   }
   if (Schema.isSchema(tool.parametersSchema)) {
-    return AST.resolveDescription(tool.parametersSchema.ast)
+    return SchemaAST.resolveDescription(tool.parametersSchema.ast)
   }
   return undefined
 }
@@ -1987,7 +1987,8 @@ function filter(obj: any) {
  *
  * **When to use**
  *
- * Use when thrown parse and security failures are acceptable.
+ * Use when you need a JSON parser that throws for invalid JSON or unsafe
+ * object shapes.
  *
  * **Gotchas**
  *
@@ -2027,7 +2028,7 @@ export interface EmptyParams extends Schema.$Record<Schema.String, Schema.Never>
  *
  * **When to use**
  *
- * Use when a tool needs an explicit no-parameter `parameters` schema.
+ * Use when you need an explicit no-parameter `parameters` schema for a tool.
  *
  * **Details**
  *
@@ -2042,6 +2043,6 @@ export interface EmptyParams extends Schema.$Record<Schema.String, Schema.Never>
 export const EmptyParams: EmptyParams = Schema.Record(Schema.String, Schema.Never)
 
 /** @internal */
-export function isEmptyParamsRecord(indexSignature: AST.IndexSignature): boolean {
-  return indexSignature.parameter === AST.string && AST.isNever(indexSignature.type)
+export function isEmptyParamsRecord(indexSignature: SchemaAST.IndexSignature): boolean {
+  return indexSignature.parameter === SchemaAST.string && SchemaAST.isNever(indexSignature.type)
 }

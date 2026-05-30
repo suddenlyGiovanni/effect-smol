@@ -235,7 +235,7 @@ function addNodesToRing<A extends PrimaryKey.PrimaryKey>(self: HashRing<A>, keys
  * **When to use**
  *
  * Use to register one node in a `HashRing` so lookups and shard assignments can
- * return it, or to update that node's weight.
+ * return it, or update that node's weight.
  *
  * **Details**
  *
@@ -306,8 +306,8 @@ export const remove: {
  *
  * **When to use**
  *
- * Use to check whether a node value is already registered in a ring by its
- * `PrimaryKey` value.
+ * Use when you need to know whether registering a node would update an existing
+ * ring member because another node already has the same primary-key identity.
  *
  * **Details**
  *

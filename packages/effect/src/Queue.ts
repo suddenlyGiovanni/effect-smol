@@ -553,8 +553,8 @@ export const bounded = <A, E = never>(capacity: number): Effect<Queue<A, E>> => 
  *
  * **When to use**
  *
- * Use when producers should not block and message loss is acceptable.
- * Useful when you want to maintain a rolling window of the most recent messages.
+ * Use when you need producer offers not to block and can accept dropping the
+ * oldest messages, such as when maintaining a rolling window of recent values.
  *
  * **Example** (Creating sliding queues)
  *
@@ -588,8 +588,8 @@ export const sliding = <A, E = never>(capacity: number): Effect<Queue<A, E>> => 
  *
  * **When to use**
  *
- * Use when producers should not block and existing messages should be preserved,
- * but new messages may be lost when the queue is full.
+ * Use when you need producer offers not to block while preserving existing
+ * queued messages, even if new messages may be dropped when the queue is full.
  *
  * **Example** (Creating dropping queues)
  *
@@ -624,9 +624,8 @@ export const dropping = <A, E = never>(capacity: number): Effect<Queue<A, E>> =>
  *
  * **When to use**
  *
- * Use when producers should never be blocked; unbounded queues never apply backpressure, so producers
- * can always add messages successfully. This is useful when you want to prioritize
- * producer throughput over memory usage control.
+ * Use when you need producers to add messages without backpressure and accept
+ * unbounded memory growth.
  *
  * **Example** (Creating unbounded queues)
  *
@@ -716,6 +715,11 @@ export const offer = <A, E>(self: Enqueue<A, E>, message: Types.NoInfer<A>): Eff
 /**
  * Adds a message to the queue synchronously. Returns `false` if the queue is done.
  *
+ * **When to use**
+ *
+ * Use when you are already in synchronous queue internals or a performance
+ * boundary where wrapping the mutation in `Effect` is intentionally avoided.
+ *
  * **Gotchas**
  *
  * This is an unsafe operation that directly modifies the queue without Effect wrapping.
@@ -768,6 +772,11 @@ export const offerUnsafe = <A, E>(self: Enqueue<A, E>, message: Types.NoInfer<A>
  * Adds multiple messages to the queue. Returns the remaining messages that
  * were not added.
  *
+ * **When to use**
+ *
+ * Use when producers can submit a batch at once and need to know which messages
+ * did not fit under the queue's capacity strategy.
+ *
  * **Details**
  *
  * For bounded queues, this operation may suspend if the queue doesn't have
@@ -808,6 +817,11 @@ export const offerAll = <A, E>(self: Enqueue<A, E>, messages: Iterable<A>): Effe
 /**
  * Adds multiple messages to the queue synchronously. Returns the remaining messages that
  * were not added.
+ *
+ * **When to use**
+ *
+ * Use when queue internals or a performance boundary need a synchronous batch
+ * offer and can handle any messages that do not fit.
  *
  * **Gotchas**
  *
@@ -933,6 +947,11 @@ export const failCause: {
 /**
  * Fails the queue with a cause synchronously. If the queue is already done, `false` is
  * returned.
+ *
+ * **When to use**
+ *
+ * Use when queue completion must be driven from synchronous internals while
+ * preserving the full failure `Cause`.
  *
  * **Gotchas**
  *
@@ -1222,6 +1241,11 @@ export const clear = <A, E>(self: Dequeue<A, E>): Effect<Array<A>, Pull.ExcludeD
 /**
  * Takes all currently available messages, waiting until at least one message
  * is available when the queue is empty.
+ *
+ * **When to use**
+ *
+ * Use when consumers should process the next non-empty batch of buffered
+ * messages instead of repeatedly taking one message at a time.
  *
  * **Details**
  *
@@ -1515,6 +1539,11 @@ export const peek = <A, E>(self: Dequeue<A, E>): Effect<A, E> =>
 /**
  * Attempts to take one message from the queue synchronously.
  *
+ * **When to use**
+ *
+ * Use when polling queue internals must not suspend or register a waiting taker,
+ * and `undefined` is an acceptable result for an empty queue.
+ *
  * **Details**
  *
  * Returns an `Exit` for an immediately available message or for the queue's
@@ -1685,6 +1714,11 @@ export const isFull = <A, E>(self: Dequeue<A, E>): Effect<boolean> => internalEf
 /**
  * Returns the current number of buffered messages in the queue synchronously.
  *
+ * **When to use**
+ *
+ * Use when you need an immediate `Queue` size snapshot for diagnostics or
+ * internals and do not need the read wrapped in `Effect`.
+ *
  * **Details**
  *
  * Completed queues report a size of `0`. This unsafe operation reads the queue
@@ -1727,6 +1761,11 @@ export const sizeUnsafe = <A, E>(self: Dequeue<A, E>): number => self.state._tag
 
 /**
  * Checks whether the queue is full synchronously.
+ *
+ * **When to use**
+ *
+ * Use when an immediate `Queue` capacity snapshot is needed outside effectful
+ * code and racing queue changes are acceptable.
  *
  * **Example** (Checking fullness synchronously)
  *

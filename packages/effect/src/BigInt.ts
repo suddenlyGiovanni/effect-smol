@@ -141,7 +141,8 @@ export const isBigInt: (u: unknown) => u is bigint = predicate.isBigInt
  *
  * **When to use**
  *
- * Use to add two `bigint` values.
+ * Use when you need a binary addition function for piping or higher-order APIs
+ * instead of the infix addition operator.
  *
  * **Example** (Adding bigints)
  *
@@ -254,8 +255,8 @@ export const divide: {
  *
  * **When to use**
  *
- * Use when the divisor is known to be non-zero and division by zero should be a
- * thrown exception.
+ * Use to divide `bigint` values where the divisor is known to be non-zero and
+ * division by zero should be a thrown exception.
  *
  * **Details**
  *
@@ -333,8 +334,8 @@ export const decrement = (n: bigint): bigint => n - bigint1
  *
  * **When to use**
  *
- * Use when sorting or comparing bigint values through APIs that accept an
- * ordering instance.
+ * Use when you need to sort or compare bigint values through APIs that accept
+ * an ordering instance.
  *
  * **Example** (Comparing bigints with Order)
  *
@@ -526,9 +527,9 @@ export const between: {
  *
  * **Details**
  *
- * - If the `bigint` is less than the `minimum` value, the function returns the `minimum` value.
- * - If the `bigint` is greater than the `maximum` value, the function returns the `maximum` value.
- * - Otherwise, it returns the original `bigint`.
+ * If the `bigint` is less than the minimum, the function returns the minimum.
+ * If the `bigint` is greater than the maximum, the function returns the
+ * maximum. Otherwise, it returns the original `bigint`.
  *
  * **Example** (Clamping a bigint to bounds)
  *
@@ -725,7 +726,9 @@ export const lcm: {
  *
  * **When to use**
  *
- * Use when the input is known to be non-negative and invalid input should throw.
+ * Use when you need to compute an integer square root for a `bigint` that has
+ * already been validated as non-negative, and you want negative input to throw
+ * instead of returning `Option.none`.
  *
  * **Details**
  *
@@ -804,7 +807,8 @@ export const sqrt = (n: bigint): Option.Option<bigint> =>
  *
  * **When to use**
  *
- * Use to sum all `bigint` values in an iterable.
+ * Use when you want an immediate aggregate from an iterable instead of a
+ * folding reducer owned by another API.
  *
  * **Example** (Summing iterable bigints)
  *
@@ -981,12 +985,8 @@ export function fromNumber(n: number): Option.Option<bigint> {
  *
  * **When to use**
  *
- * Use to compute the JavaScript `%` remainder for two `bigint` values.
- *
- * **Details**
- *
- * The result follows JavaScript `%` semantics, including the sign of the
- * dividend.
+ * Use when you want native remainder semantics, including signed remainders and
+ * a thrown division-by-zero error.
  *
  * **Gotchas**
  *

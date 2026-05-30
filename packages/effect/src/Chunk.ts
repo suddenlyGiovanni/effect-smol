@@ -601,8 +601,16 @@ export const get: {
 )
 
 /**
- * Wraps an array into a chunk without copying, so mutating the source array can
- * mutate the chunk.
+ * Wraps an array into a chunk without copying.
+ *
+ * **When to use**
+ *
+ * Use when the input array can be shared with the resulting `Chunk` and avoiding
+ * a copy matters.
+ *
+ * **Gotchas**
+ *
+ * Mutating the source array after wrapping can mutate the resulting `Chunk`.
  *
  * **Example** (Creating chunks without copying arrays)
  *
@@ -625,8 +633,16 @@ export const fromArrayUnsafe = <A>(self: ReadonlyArray<A>): Chunk<A> =>
   self.length === 0 ? empty() : self.length === 1 ? of(self[0]) : makeChunk({ _tag: "IArray", array: self })
 
 /**
- * Wraps a non-empty array into a non-empty chunk without copying, so mutating
- * the source array can mutate the chunk.
+ * Wraps a non-empty array into a non-empty chunk without copying.
+ *
+ * **When to use**
+ *
+ * Use when the input array is already known to be non-empty, can be shared with
+ * the resulting `Chunk`, and avoiding a copy matters.
+ *
+ * **Gotchas**
+ *
+ * Mutating the source array after wrapping can mutate the resulting `Chunk`.
  *
  * **Example** (Creating non-empty chunks without copying arrays)
  *
@@ -648,7 +664,16 @@ export const fromNonEmptyArrayUnsafe = <A>(self: NonEmptyReadonlyArray<A>): NonE
   fromArrayUnsafe(self) as any
 
 /**
- * Gets an element unsafely, will throw on out of bounds
+ * Gets an element at the specified index without returning an `Option`.
+ *
+ * **When to use**
+ *
+ * Use when reading from a `Chunk` at an index known to be in bounds and direct
+ * element access is preferred over handling `Option.none`.
+ *
+ * **Gotchas**
+ *
+ * Throws if the index is out of bounds.
  *
  * **Example** (Accessing elements unsafely)
  *
@@ -704,8 +729,8 @@ export const getUnsafe: {
  *
  * **When to use**
  *
- * Use to add one element after the existing elements and get a non-empty
- * result.
+ * Use to add one element after the existing chunk elements and return a
+ * `NonEmptyChunk`.
  *
  * **Example** (Appending an element)
  *
@@ -1296,7 +1321,7 @@ export const flatten: <S extends Chunk<Chunk<any>>>(self: S) => Chunk.Flatten<S>
  *
  * **When to use**
  *
- * Use to divide a chunk into ordered, non-overlapping batches with at most `n`
+ * Use to divide a chunk into ordered, non-overlapping chunks with at most `n`
  * elements each.
  *
  * **Details**
@@ -1444,6 +1469,11 @@ export const head: <A>(self: Chunk<A>) => Option<A> = get(0)
 /**
  * Returns the first element of this chunk.
  *
+ * **When to use**
+ *
+ * Use when you know the chunk is non-empty and need the first element directly
+ * without handling `Option.none`.
+ *
  * **Gotchas**
  *
  * Throws an error if the chunk is empty.
@@ -1510,6 +1540,11 @@ export const last = <A>(self: Chunk<A>): Option<A> => get(self, self.length - 1)
 
 /**
  * Returns the last element of this chunk.
+ *
+ * **When to use**
+ *
+ * Use when you know the chunk is non-empty and need the last element directly
+ * without handling `Option.none`.
  *
  * **Gotchas**
  *

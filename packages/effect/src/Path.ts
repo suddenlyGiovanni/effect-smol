@@ -216,7 +216,7 @@ export declare namespace Path {
  *
  * **When to use**
  *
- * Use when an effect needs path operations supplied by its environment.
+ * Use when you need path operations supplied by an effect's environment.
  *
  * **Example** (Providing a custom Path service)
  *
@@ -876,7 +876,7 @@ const posixImpl = Path.of({
  *
  * **When to use**
  *
- * Use when an effect requires the `Path` service and should run with the
+ * Use when you need an effect that requires the `Path` service to run with the
  * built-in POSIX path implementation.
  *
  * **Details**

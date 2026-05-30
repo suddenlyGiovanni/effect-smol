@@ -1528,7 +1528,7 @@ export {
    *
    * **When to use**
    *
-   * Use when a match branch should handle only the literal `null` value.
+   * Use to handle only the `null` literal in a match branch.
    *
    * **Details**
    *
@@ -1776,7 +1776,7 @@ export const instanceOf: <A extends abstract new(...args: any) => any>(
  *
  * **When to use**
  *
- * Use when constructor matching needs the unsafe refinement type.
+ * Use when you need constructor matching to use the unsafe refinement type.
  *
  * **Details**
  *

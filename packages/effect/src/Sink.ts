@@ -448,8 +448,8 @@ export declare namespace make {
  *
  * **When to use**
  *
- * Use when the effect needs to provide both the result value and optional
- * leftovers.
+ * Use when you need to create a sink from an effect that returns both the sink
+ * result value and optional leftovers.
  *
  * @category constructors
  * @since 4.0.0
@@ -1073,8 +1073,8 @@ export const mapEffectEnd: {
  *
  * **When to use**
  *
- * Use when transforming a sink result itself is effectful, can fail, or needs
- * services.
+ * Use when you need a sink result transformation that is effectful, can fail,
+ * or requires services.
  *
  * **Details**
  *
@@ -1444,7 +1444,8 @@ const last_ = reduceArray(Option.none<unknown>, (_, arr) => Arr.last(arr))
  *
  * **When to use**
  *
- * Use when consuming all upstream input and only the final element is needed.
+ * Use when you need to consume all upstream input and keep only the final
+ * element.
  *
  * **Details**
  *
@@ -1498,8 +1499,8 @@ export const find: {
  *
  * **When to use**
  *
- * Use when deciding whether an input matches requires an effect, can fail, or
- * needs services.
+ * Use when you need to run effects, fail, or use services while searching for
+ * the first matching input.
  *
  * **Details**
  *
@@ -1551,8 +1552,7 @@ export const count: Sink<number, unknown> = reduceArray(() => 0, (s, arr) => s +
  *
  * **When to use**
  *
- * Use to collect all upstream input elements into a single array when you need
- * a sink result containing the complete input.
+ * Use when you need a sink result containing all upstream input elements.
  *
  * @see {@link take} for collecting only a fixed number of input elements
  *

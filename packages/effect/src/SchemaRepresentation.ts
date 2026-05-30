@@ -96,8 +96,8 @@ import * as Option from "./Option.ts"
 import * as Predicate from "./Predicate.ts"
 import * as Rec from "./Record.ts"
 import * as Schema from "./Schema.ts"
-import type * as AST from "./SchemaAST.ts"
-import * as Getter from "./SchemaGetter.ts"
+import type * as SchemaAST from "./SchemaAST.ts"
+import * as SchemaGetter from "./SchemaGetter.ts"
 
 // -----------------------------------------------------------------------------
 // specification
@@ -153,6 +153,11 @@ export interface Suspend {
 
 /**
  * A named reference to a definition in the {@link References} map.
+ *
+ * **When to use**
+ *
+ * Use when a representation should point to a named definition instead of
+ * embedding the definition inline.
  *
  * **Details**
  *
@@ -863,8 +868,8 @@ const isPrimitiveTree = Schema.is($PrimitiveTree)
  */
 export const $Annotations = Schema.Record(Schema.String, Schema.Unknown).pipe(
   Schema.encodeTo(Schema.Record(Schema.String, $PrimitiveTree), {
-    decode: Getter.passthrough(),
-    encode: Getter.transformOptional(Option.flatMap((r) => {
+    decode: SchemaGetter.passthrough(),
+    encode: SchemaGetter.transformOptional(Option.flatMap((r) => {
       const out: Record<string, typeof $PrimitiveTree["Type"]> = {}
       for (const [k, v] of Object.entries(r)) {
         if (!toJsonAnnotationsBlacklist.has(k) && isPrimitiveTree(v)) {
@@ -1667,7 +1672,8 @@ export const $MultiDocument = Schema.Struct({
  *
  * **When to use**
  *
- * Use when you have a single schema and need its representation.
+ * Use when you have a single Schema AST and need a schema representation
+ * document.
  *
  * **Details**
  *
@@ -1694,14 +1700,15 @@ export const $MultiDocument = Schema.Struct({
  * @category constructors
  * @since 4.0.0
  */
-export const fromAST: (ast: AST.AST) => Document = InternalRepresentation.fromAST
+export const fromAST: (ast: SchemaAST.AST) => Document = InternalRepresentation.fromAST
 
 /**
  * Converts one or more Schema ASTs into a {@link MultiDocument}.
  *
  * **When to use**
  *
- * Use when you have multiple schemas that may share references.
+ * Use when you have multiple Schema ASTs and need one schema representation
+ * `MultiDocument` with shared references.
  *
  * **Details**
  *
@@ -1713,15 +1720,16 @@ export const fromAST: (ast: AST.AST) => Document = InternalRepresentation.fromAS
  * @category constructors
  * @since 4.0.0
  */
-export const fromASTs: (asts: readonly [AST.AST, ...Array<AST.AST>]) => MultiDocument = InternalRepresentation.fromASTs
+export const fromASTs: (asts: readonly [SchemaAST.AST, ...Array<SchemaAST.AST>]) => MultiDocument =
+  InternalRepresentation.fromASTs
 
 /**
  * Schema that decodes a {@link Document} from JSON and encodes it back.
  *
  * **When to use**
  *
- * Use with `Schema.decodeUnknownSync` or `Schema.encodeSync` to serialize
- * and deserialize documents.
+ * Use when you need a JSON codec for schema representation documents with
+ * `Schema.decodeUnknownSync` or `Schema.encodeSync`.
  *
  * **Example** (Round-tripping a Document through JSON)
  *
@@ -1758,8 +1766,8 @@ export const MultiDocumentFromJson: Schema.Codec<MultiDocument, Schema.Json> = S
  *
  * **When to use**
  *
- * Use when an API expects a `MultiDocument` but you only have a single
- * `Document`.
+ * Use when you need to pass a single schema representation `Document` where an
+ * API expects a `MultiDocument`.
  *
  * @see {@link Document}
  * @see {@link MultiDocument}
@@ -1801,8 +1809,8 @@ export type Reviver<T> = (declaration: Declaration, recur: (representation: Repr
  *
  * **When to use**
  *
- * Use when passing this as `options.reviver` to {@link toSchema} to reconstruct
- * schemas that use these types.
+ * Use when you need the default `options.reviver` for {@link toSchema} to
+ * reconstruct runtime schemas for built-in Effect declarations.
  *
  * **Details**
  *
@@ -1889,8 +1897,8 @@ export const toSchemaDefaultReviver: Reviver<Schema.Top> = (s, recur) => {
  *
  * **When to use**
  *
- * Use when you have a serialized or computed representation and need a
- * working Schema for decoding/encoding.
+ * Use when you have a serialized or computed schema representation document and
+ * need a runtime Schema for decoding/encoding.
  *
  * **Details**
  *
@@ -2108,7 +2116,7 @@ export function toSchema<S extends Schema.Top = Schema.Top>(document: Document, 
     }
   }
 
-  function toSchemaCheck(check: Check<Meta>): AST.Check<any> {
+  function toSchemaCheck(check: Check<Meta>): SchemaAST.Check<any> {
     switch (check._tag) {
       case "Filter":
         return toSchemaFilter(check)
@@ -2118,7 +2126,7 @@ export function toSchema<S extends Schema.Top = Schema.Top>(document: Document, 
     }
   }
 
-  function toSchemaFilter(filter: Filter<Meta>): AST.Check<any> {
+  function toSchemaFilter(filter: Filter<Meta>): SchemaAST.Check<any> {
     const a = filter.annotations
     switch (filter.meta._tag) {
       // String Meta
@@ -2235,8 +2243,8 @@ export function toSchema<S extends Schema.Top = Schema.Top>(document: Document, 
  *
  * **When to use**
  *
- * Use to produce a standard JSON Schema from an Effect Schema
- * representation.
+ * Use when you need to produce a standard JSON Schema document from a schema
+ * representation `Document`.
  *
  * **Example** (Generating JSON Schema)
  *
@@ -2267,7 +2275,8 @@ export const toJsonSchemaDocument: (
  *
  * **When to use**
  *
- * Use when you have multiple schemas sharing references.
+ * Use when you need to export related schema representation documents together
+ * so shared definitions stay in multi-document JSON Schema form.
  *
  * @see {@link MultiDocument}
  * @see {@link toJsonSchemaDocument}
@@ -2373,8 +2382,8 @@ export type CodeDocument = {
  *
  * **When to use**
  *
- * Use to produce source code for Schema definitions, such as in codegen
- * tools.
+ * Use when you need to produce source code for Effect Schema definitions from a
+ * schema representation `MultiDocument`.
  *
  * **Details**
  *
@@ -3009,8 +3018,8 @@ function toRuntimeRegExp(regExp: RegExp): string {
  *
  * **When to use**
  *
- * Use to import external JSON Schemas into the Effect representation
- * system.
+ * Use when you need to import a Draft 2020-12 JSON Schema document into the
+ * Effect schema representation system.
  *
  * **Details**
  *
@@ -3049,7 +3058,8 @@ export function fromJsonSchemaDocument(document: JsonSchema.Document<"draft-2020
  *
  * **When to use**
  *
- * Use to import multiple JSON Schemas sharing definitions.
+ * Use when you need to import a Draft 2020-12 JSON Schema multi-document whose
+ * schemas share definitions.
  *
  * **Details**
  *
@@ -3709,7 +3719,7 @@ function collectAnnotations(
   return Rec.isEmptyRecord(as) ? undefined : as
 }
 
-function isLiteralValue(value: unknown): value is AST.LiteralValue {
+function isLiteralValue(value: unknown): value is SchemaAST.LiteralValue {
   return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
 }
 

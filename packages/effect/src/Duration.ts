@@ -222,6 +222,11 @@ const DURATION_REGEXP = /^(-?\d+(?:\.\d+)?)\s+(nanos?|micros?|millis?|seconds?|m
 /**
  * Decodes a `Duration.Input` into a `Duration`.
  *
+ * **When to use**
+ *
+ * Use when the input has already been validated or comes from a trusted source
+ * and throwing is acceptable for invalid duration syntax.
+ *
  * **Gotchas**
  *
  * If the input is not a valid `Duration.Input`, it throws an error.
@@ -909,7 +914,12 @@ export const toWeeks = (self: Input): number =>
   })
 
 /**
- * Gets the duration in nanoseconds as a bigint, throwing for infinite durations.
+ * Gets the duration in nanoseconds as a bigint.
+ *
+ * **When to use**
+ *
+ * Use when the duration is known to be finite and you need the nanosecond value
+ * as a `bigint`.
  *
  * **Gotchas**
  *
@@ -1350,6 +1360,11 @@ export const divide: {
  * Divides a `Duration` by a number using fallback rules instead of returning
  * an `Option`.
  *
+ * **When to use**
+ *
+ * Use when dividing a `Duration` should return `Duration.zero` or signed
+ * infinity for invalid cases instead of forcing callers to handle `Option.none`.
+ *
  * **Details**
  *
  * Non-finite divisors return `Duration.zero`. Division by positive or negative
@@ -1443,16 +1458,12 @@ export const times: {
  *
  * **Details**
  *
- * Infinity subtraction follows these rules:
- *
- * - infinity - infinity = 0
- * - infinity - negativeInfinity = infinity
- * - infinity - finite = infinity
- * - negativeInfinity - negativeInfinity = 0
- * - negativeInfinity - infinity = negativeInfinity
- * - negativeInfinity - finite = negativeInfinity
- * - finite - infinity = negativeInfinity
- * - finite - negativeInfinity = infinity
+ * Infinity subtraction follows signed-infinity arithmetic. Subtracting the
+ * same infinity from itself returns zero. Positive infinity minus negative
+ * infinity or any finite duration remains positive infinity. Negative infinity
+ * minus positive infinity or any finite duration remains negative infinity.
+ * Finite durations minus positive infinity produce negative infinity, and
+ * finite durations minus negative infinity produce positive infinity.
  *
  * **Example** (Subtracting durations)
  *

@@ -35,7 +35,7 @@ import { constFalse, constTrue } from "../../Function.ts"
 import * as Option from "../../Option.ts"
 import * as Predicate from "../../Predicate.ts"
 import * as Schema from "../../Schema.ts"
-import * as Getter from "../../SchemaGetter.ts"
+import * as SchemaGetter from "../../SchemaGetter.ts"
 import type * as Scope from "../../Scope.ts"
 import * as Rpc from "../rpc/Rpc.ts"
 import type * as RpcClient from "../rpc/RpcClient.ts"
@@ -77,8 +77,8 @@ export const optionalWithDefault = <S extends Schema.Top & Schema.WithoutConstru
   const effect = Effect.sync(defaultValue)
   return Schema.optionalKey(schema).pipe(
     Schema.decode<Schema.optionalKey<S>>({
-      decode: Getter.withDefault(effect),
-      encode: Getter.passthrough()
+      decode: SchemaGetter.withDefault(effect),
+      encode: SchemaGetter.passthrough()
     }),
     Schema.withConstructorDefault<
       Schema.decodeTo<Schema.toType<Schema.optionalKey<S>>, Schema.optionalKey<S>>
@@ -100,8 +100,8 @@ export const optionalWithDefault = <S extends Schema.Top & Schema.WithoutConstru
 export const optional = <S extends Schema.Top>(schema: S): Schema.decodeTo<Schema.optional<S>, Schema.optionalKey<S>> =>
   Schema.optionalKey(schema).pipe(
     Schema.decodeTo(Schema.optional(schema), {
-      decode: Getter.passthrough() as any,
-      encode: Getter.transformOptional(Option.flatMap(Option.fromUndefinedOr))
+      decode: SchemaGetter.passthrough() as any,
+      encode: SchemaGetter.transformOptional(Option.flatMap(Option.fromUndefinedOr))
     })
   )
 
@@ -484,8 +484,8 @@ export class McpErrorBase extends Schema.Class<McpErrorBase>(
  *
  * **When to use**
  *
- * Use when you need the JSON-RPC error code for requests that are not valid
- * request objects.
+ * Use when building an MCP/JSON-RPC error response for a syntactically parsed
+ * request object that fails request-shape validation.
  *
  * @category constants
  * @since 4.0.0
@@ -497,8 +497,8 @@ export const INVALID_REQUEST_ERROR_CODE = -32600 as const
  *
  * **When to use**
  *
- * Use when you need the JSON-RPC error code for requests whose method does not
- * exist or is not available.
+ * Use when building an MCP/JSON-RPC error response for a request whose
+ * `method` is unknown or unavailable.
  *
  * @category constants
  * @since 4.0.0
@@ -509,7 +509,8 @@ export const METHOD_NOT_FOUND_ERROR_CODE = -32601 as const
  *
  * **When to use**
  *
- * Use when you need the JSON-RPC error code for invalid method parameters.
+ * Use when building an MCP/JSON-RPC error response for decoded request
+ * parameters that fail method-specific validation.
  *
  * @category constants
  * @since 4.0.0
@@ -520,7 +521,8 @@ export const INVALID_PARAMS_ERROR_CODE = -32602 as const
  *
  * **When to use**
  *
- * Use when you need the JSON-RPC error code for internal server errors.
+ * Use when building an MCP/JSON-RPC error response for an unexpected
+ * server-side failure.
  *
  * @category constants
  * @since 4.0.0
@@ -531,8 +533,8 @@ export const INTERNAL_ERROR_CODE = -32603 as const
  *
  * **When to use**
  *
- * Use when you need the JSON-RPC error code for invalid JSON that could not be
- * parsed.
+ * Use when building an MCP/JSON-RPC error response before a request object is
+ * available because the JSON payload could not be parsed.
  *
  * @category constants
  * @since 4.0.0
@@ -1555,8 +1557,8 @@ export class CallToolResult extends Schema.Class<CallToolResult>("@effect/ai/Mcp
  *
  * **When to use**
  *
- * Use when a client already knows the tool name and wants the server to execute
- * it with argument values.
+ * Use when you need to represent a client request that already knows the tool
+ * name and asks the server to execute it with argument values.
  *
  * @see {@link ListTools} for discovering available tools before calling one
  * @see {@link CallToolResult} for the successful tool-call result shape
@@ -1815,8 +1817,8 @@ export class CreateMessageResult extends Schema.Class<CreateMessageResult>(
  *
  * **When to use**
  *
- * Use when an MCP server needs the client to perform model sampling on its
- * behalf.
+ * Use when you need to request model sampling from an MCP client on behalf of a
+ * server.
  *
  * **Details**
  *

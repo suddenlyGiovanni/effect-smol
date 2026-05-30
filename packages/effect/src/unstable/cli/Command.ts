@@ -1046,8 +1046,8 @@ export const withAlias: {
  *
  * **When to use**
  *
- * Use when you use this for experimental or internal subcommands that should be accepted but
- * not advertised on the public CLI surface.
+ * Use when experimental or internal subcommands should be accepted but not advertised on
+ * the public CLI surface.
  *
  * **Example** (Hiding a subcommand)
  *
@@ -1121,7 +1121,8 @@ export const annotate: {
  *
  * **When to use**
  *
- * Use when attaching an already-built `Context.Context` of command annotations.
+ * Use when you need to attach an already-built `Context.Context` of command
+ * annotations.
  *
  * **Details**
  *
@@ -1273,6 +1274,11 @@ export const provide: {
  * Provides the handler of a command with the implementation of a service that
  * optionally depends on the command-line input to be constructed.
  *
+ * **When to use**
+ *
+ * Use when a command handler needs a pure service implementation, optionally
+ * derived from the parsed command input.
+ *
  * @category providing services
  * @since 4.0.0
  */
@@ -1423,9 +1429,8 @@ const showHelp = <Name extends string, Input, E, R, ContextInput>(
  *
  * **When to use**
  *
- * Use when you use `run` at an application entry point when arguments should come from
- * `Stdio`; use `runWith` when you need an explicit argument array, such as in
- * tests.
+ * Use when command-line arguments should come from `Stdio` at the application
+ * entry point.
  *
  * **Example** (Running commands with standard input)
  *
@@ -1445,6 +1450,8 @@ const showHelp = <Name extends string, Input, E, R, ContextInput>(
  *   version: "1.0.0"
  * })
  * ```
+ *
+ * @see {@link runWith} for running a command with an explicit argument array
  *
  * @category command execution
  * @since 4.0.0
@@ -1479,8 +1486,8 @@ export const run: {
  *
  * **When to use**
  *
- * Use when you use this function for testing CLI applications or when you want to
- * programmatically execute commands with specific arguments.
+ * Use when you need to test CLI applications or programmatically execute
+ * commands with specific arguments.
  *
  * **Example** (Running commands with explicit arguments)
  *

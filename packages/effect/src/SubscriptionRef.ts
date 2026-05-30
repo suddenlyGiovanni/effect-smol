@@ -141,7 +141,7 @@ const Proto = {
  *
  * **When to use**
  *
- * Use to create shared mutable state when consumers need to read the latest
+ * Use to create a `SubscriptionRef` when consumers need to read the latest
  * value and subscribe to every update.
  *
  * **Details**
@@ -208,6 +208,11 @@ export const changes = <A>(self: SubscriptionRef<A>): Stream.Stream<A> => Stream
 
 /**
  * Retrieves the current value of the `SubscriptionRef` unsafely.
+ *
+ * **When to use**
+ *
+ * Use when you are in synchronous internals or test setup where concurrent
+ * updates are controlled.
  *
  * **Gotchas**
  *
@@ -372,8 +377,8 @@ export const getAndUpdateEffect: {
  *
  * **When to use**
  *
- * Use to read the old value while applying a synchronous update only when a
- * new value is available.
+ * Use to read the old `SubscriptionRef` value while applying a synchronous
+ * update only when a new value is available.
  *
  * **Details**
  *
@@ -425,8 +430,8 @@ export const getAndUpdateSome: {
  *
  * **When to use**
  *
- * Use to read the old value while applying an effectful update only when a new
- * value is available.
+ * Use to read the old `SubscriptionRef` value while applying an effectful
+ * update only when a new value is available.
  *
  * **Details**
  *
@@ -568,7 +573,7 @@ export const modifyEffect: {
  * **When to use**
  *
  * Use to return a separate result while synchronously deciding whether to
- * publish a new value.
+ * publish a new `SubscriptionRef` value.
  *
  * **Details**
  *
@@ -624,7 +629,7 @@ export const modifySome: {
  * **When to use**
  *
  * Use to return a separate result while effectfully deciding whether to publish
- * a new value.
+ * a new `SubscriptionRef` value.
  *
  * **Details**
  *

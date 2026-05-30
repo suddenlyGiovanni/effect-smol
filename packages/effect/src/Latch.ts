@@ -146,7 +146,8 @@ export interface Latch {
  *
  * **When to use**
  *
- * Use when synchronous allocation is required outside an Effect workflow.
+ * Use when you need to allocate a `Latch` synchronously outside an Effect
+ * workflow.
  *
  * **Details**
  *
@@ -248,8 +249,8 @@ export const open = (self: Latch): Effect.Effect<boolean> => self.open
  *
  * **When to use**
  *
- * Use when synchronous code needs to open a latch immediately and release the
- * fibers waiting on it.
+ * Use when you need synchronous code to open a latch immediately and release
+ * the fibers waiting on it.
  *
  * **Details**
  *

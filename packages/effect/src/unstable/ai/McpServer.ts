@@ -36,7 +36,7 @@ import * as Queue from "../../Queue.ts"
 import * as RcMap from "../../RcMap.ts"
 import { CurrentLogLevel } from "../../References.ts"
 import * as Schema from "../../Schema.ts"
-import * as AST from "../../SchemaAST.ts"
+import * as SchemaAST from "../../SchemaAST.ts"
 import * as Sink from "../../Sink.ts"
 import type { Stdio } from "../../Stdio.ts"
 import * as Stream from "../../Stream.ts"
@@ -808,7 +808,9 @@ export type ResourceCompletions<Schemas extends ReadonlyArray<Schema.Top>> = {
  *
  * **When to use**
  *
- * Use to add a resource to an existing MCP server from an Effect program.
+ * Use when you are already inside an Effect program with an `McpServer`
+ * service and need to add a concrete resource or URI-template resource
+ * directly.
  *
  * @see {@link resource} for the layer-based resource registration wrapper
  *
@@ -1036,7 +1038,8 @@ export const resource: {
  *
  * **When to use**
  *
- * Use to register an MCP prompt from an Effect program.
+ * Use when you are already inside an Effect program with an `McpServer`
+ * service and need to add a prompt handler directly.
  *
  * **Details**
  *
@@ -1071,8 +1074,8 @@ export const registerPrompt = <
   for (const [name, prop] of Object.entries(props)) {
     args.push({
       name,
-      description: AST.resolveDescription(prop.ast),
-      required: !AST.isOptional(prop.ast)
+      description: SchemaAST.resolveDescription(prop.ast),
+      required: !SchemaAST.isOptional(prop.ast)
     })
   }
   const prompt = new Prompt({

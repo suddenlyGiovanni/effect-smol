@@ -61,7 +61,7 @@ import * as Predicate from "../../Predicate.ts"
 import * as Queue from "../../Queue.ts"
 import { CurrentConcurrency } from "../../References.ts"
 import * as Schema from "../../Schema.ts"
-import * as AST from "../../SchemaAST.ts"
+import * as SchemaAST from "../../SchemaAST.ts"
 import * as Sink from "../../Sink.ts"
 import * as Stream from "../../Stream.ts"
 import type { Span } from "../../Tracer.ts"
@@ -758,8 +758,9 @@ export interface ProviderOptions {
  *
  * **When to use**
  *
- * Use to build a `LanguageModel.Service` from provider-specific final and
- * streaming text generation functions.
+ * Use when you are implementing a provider adapter and need to expose the
+ * standard language-model service while keeping provider-specific request hooks
+ * behind it.
  *
  * **Details**
  *
@@ -2209,7 +2210,7 @@ export const getObjectName = <StructuredOutputSchema extends Schema.Top>(
   if ("identifier" in schema && typeof schema.identifier === "string") {
     return schema.identifier
   }
-  const identifier = AST.resolveIdentifier(schema.ast)
+  const identifier = SchemaAST.resolveIdentifier(schema.ast)
   if (typeof identifier === "string") {
     return identifier
   }

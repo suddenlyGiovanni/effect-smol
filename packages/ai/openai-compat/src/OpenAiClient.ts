@@ -125,8 +125,7 @@ const RedactedOpenAiHeaders = {
  *
  * **When to use**
  *
- * Use to construct the OpenAI-compatible client service inside an effect when
- * you need the service value directly.
+ * Use when you need the OpenAI-compatible client service value inside an effect.
  *
  * **Details**
  *
@@ -306,8 +305,8 @@ export const layer = (options: Options): Layer.Layer<OpenAiClient, never, HttpCl
  *
  * **When to use**
  *
- * Use when OpenAI-compatible client settings should be read from Effect
- * `Config` values while providing `OpenAiClient` as a layer.
+ * Use when you need client settings for OpenAI-compatible APIs to be read from
+ * Effect `Config` values while providing `OpenAiClient` as a layer.
  *
  * **Details**
  *
