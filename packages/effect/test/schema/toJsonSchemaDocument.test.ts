@@ -514,14 +514,15 @@ describe("toJsonSchemaDocument", () => {
     })
 
     it("Error", () => {
-      const schema = Schema.Error
+      const schema = Schema.Error()
       assertJsonSchemaDocument(schema, {
         schema: {
           "type": "object",
           "properties": {
             "name": { "type": "string" },
             "message": { "type": "string" },
-            "stack": { "type": "string" }
+            "stack": { "type": "string" },
+            "cause": {}
           },
           "required": ["message"],
           "additionalProperties": false
