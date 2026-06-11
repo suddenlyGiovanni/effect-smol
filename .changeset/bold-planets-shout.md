@@ -1,5 +1,5 @@
 ---
-"effect": minor
+"effect": patch
 ---
 
 add support for merging external events into `Prompt.custom` render loops via an optional `events` dequeue and `receive` handler.
