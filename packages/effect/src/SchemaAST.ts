@@ -2345,7 +2345,7 @@ export function struct<Fields extends Schema.Struct.Fields>(
 }
 
 /** @internal */
-export function getAST<S extends Schema.Top>(self: S): S["ast"] {
+export function getAST<S extends { readonly ast: AST }>(self: S): S["ast"] {
   return self.ast
 }
 
@@ -2358,7 +2358,7 @@ export function tuple<Elements extends Schema.Tuple.Elements>(
 }
 
 /** @internal */
-export function union<Members extends ReadonlyArray<Schema.Top>>(
+export function union<Members extends ReadonlyArray<{ readonly ast: AST }>>(
   members: Members,
   mode: "anyOf" | "oneOf",
   checks: Checks | undefined
@@ -3141,6 +3141,14 @@ export function applyToLastLink(f: (ast: AST) => AST) {
 }
 
 /** @internal */
+export function applyToSelfOrLastLinkEncoding(f: (ast: AST) => AST) {
+  function out(ast: AST): AST {
+    return ast.encoding ? replaceEncoding(ast, updateLastLink(ast.encoding, out)) : f(ast)
+  }
+  return memoize(out)
+}
+
+/** @internal */
 export function middlewareDecoding(
   ast: AST,
   middleware: SchemaTransformation.Middleware<any, any, any, any, any, any>
@@ -3560,15 +3568,7 @@ export const enumsToLiterals = memoize((ast: Enum): Union<Literal> => {
   )
 })
 
-/** @internal */
-export function toCodec(f: (ast: AST) => AST) {
-  function out(ast: AST): AST {
-    return ast.encoding ? replaceEncoding(ast, updateLastLink(ast.encoding, out)) : f(ast)
-  }
-  return memoize(out)
-}
-
-const parameterFromPropertyKey = toCodec((ast) => {
+const parameterFromPropertyKey = applyToSelfOrLastLinkEncoding((ast) => {
   switch (ast._tag) {
     default:
       return ast
@@ -3580,7 +3580,7 @@ const parameterFromPropertyKey = toCodec((ast) => {
 })
 
 /** @internal */
-export const parameterFromString = toCodec((ast) => {
+export const parameterFromString = applyToSelfOrLastLinkEncoding((ast) => {
   switch (ast._tag) {
     default:
       return ast
@@ -3592,7 +3592,7 @@ export const parameterFromString = toCodec((ast) => {
   }
 })
 
-const partFromString = toCodec((ast) => {
+const partFromString = applyToSelfOrLastLinkEncoding((ast) => {
   switch (ast._tag) {
     default:
       return ast
