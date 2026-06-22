@@ -680,7 +680,7 @@ export class Declaration extends Base {
   }
   private _rebuild(recur: (ast: AST) => AST, checks: Checks | undefined, encodingChecks: Checks | undefined) {
     const tps = mapOrSame(this.typeParameters, recur)
-    return tps === this.typeParameters ?
+    return tps === this.typeParameters && checks === this.checks && encodingChecks === this.encodingChecks ?
       this :
       new Declaration(tps, this.run, this.annotations, checks, undefined, this.context, encodingChecks)
   }
@@ -1704,7 +1704,8 @@ export class Arrays extends Base {
   private _rebuild(recur: (ast: AST) => AST, checks: Checks | undefined, encodingChecks: Checks | undefined) {
     const elements = mapOrSame(this.elements, recur)
     const rest = mapOrSame(this.rest, recur)
-    return elements === this.elements && rest === this.rest ?
+    return elements === this.elements && rest === this.rest && checks === this.checks &&
+        encodingChecks === this.encodingChecks ?
       this :
       new Arrays(
         this.isMutable,
@@ -2245,7 +2246,8 @@ export class Objects extends Base {
         : new IndexSignature(p, t, merge)
     })
 
-    return props === this.propertySignatures && indexes === this.indexSignatures
+    return props === this.propertySignatures && indexes === this.indexSignatures && checks === this.checks &&
+        encodingChecks === this.encodingChecks
       ? this
       : new Objects(
         props,
@@ -2661,7 +2663,7 @@ export class Union<A extends AST = AST> extends Base {
   }
   private _rebuild(recur: (ast: AST) => AST, checks: Checks | undefined, encodingChecks: Checks | undefined) {
     const types = mapOrSame(this.types, recur)
-    return types === this.types ?
+    return types === this.types && checks === this.checks && encodingChecks === this.encodingChecks ?
       this :
       new Union(types, this.mode, this.annotations, checks, undefined, this.context, encodingChecks)
   }
@@ -2857,19 +2859,6 @@ export class Suspend extends Base {
   /** @internal */
   getExpected(getExpected: (ast: AST) => string): string {
     return getExpected(this.thunk())
-  }
-}
-
-/** @internal */
-export function getEncodingChecks(ast: AST): Checks | undefined {
-  switch (ast._tag) {
-    case "Declaration":
-    case "Arrays":
-    case "Objects":
-    case "Union":
-      return ast.encodingChecks
-    default:
-      return undefined
   }
 }
 
@@ -3392,9 +3381,13 @@ export const toType = memoize(<A extends AST>(ast: A): A => {
   }
   const out: any = ast
   const type = out.recur?.(toType) ?? out
-  if (getEncodingChecks(type)) {
+  const encodingChecks = type.encodingChecks
+  if (encodingChecks) {
     return modifyOwnPropertyDescriptors(type, (d) => {
       d.encodingChecks.value = undefined
+      if (type === ast) {
+        d.checks.value = combineChecks(type.checks, encodingChecks)
+      }
     })
   }
   return type
